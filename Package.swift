@@ -71,7 +71,8 @@ let package = Package(
             path: "Sources/ScribeCore",
             exclude: [
                 "PersonExtractionController.swift",
-                "ActionItemBackfillController.swift"
+                "ActionItemBackfillController.swift",
+                "MeetingPipelineController.swift"
             ],
             swiftSettings: commonSwiftSettings
         ),
