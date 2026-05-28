@@ -102,7 +102,6 @@ final class AudioRecorder {
         let micURL = audioDir.appendingPathComponent(micName)
         let systemURL = audioDir.appendingPathComponent(systemName)
 
-        let settings = AppSettings.shared
         var errors: [Error] = []
 
         // Surface health changes from each source into the unified callback.
@@ -112,7 +111,7 @@ final class AudioRecorder {
         var enabledMic = false
         var enabledSystem = false
 
-        if settings.captureMic {
+        if AppSettings.captureMic {
             let writer = ChunkedAudioWriter(dir: chunksDir, label: "mic-seg\(segment)", chunkSeconds: 300)
             writer.onChunkReady = { [weak self] url, idx, s, e in
                 self?.onMicChunk?(url, idx, s, e)
@@ -129,7 +128,7 @@ final class AudioRecorder {
                 micChunkWriter = nil
             }
         }
-        if settings.captureSystem {
+        if AppSettings.captureSystem {
             let writer = ChunkedAudioWriter(dir: chunksDir, label: "system-seg\(segment)", chunkSeconds: 300)
             writer.onChunkReady = { [weak self] url, idx, s, e in
                 self?.onSystemChunk?(url, idx, s, e)
@@ -147,7 +146,7 @@ final class AudioRecorder {
             }
         }
 
-        if !settings.captureMic && !settings.captureSystem {
+        if !AppSettings.captureMic && !AppSettings.captureSystem {
             throw NSError(domain: "MeetingScribe", code: 10,
                           userInfo: [NSLocalizedDescriptionKey: "Both mic and system capture are disabled."])
         }

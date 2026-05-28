@@ -79,7 +79,6 @@ struct UnifiedMeetingDetail: View {
                 case .transcript: transcriptBody
                 case .notes:      notesEditor
                 case .summary:    summaryBody
-                case .coach:      coachBody
                 case .chat:       chatBody
                 }
             }

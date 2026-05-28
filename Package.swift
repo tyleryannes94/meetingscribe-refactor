@@ -72,7 +72,9 @@ let package = Package(
             exclude: [
                 "PersonExtractionController.swift",
                 "ActionItemBackfillController.swift",
-                "MeetingPipelineController.swift"
+                "MeetingPipelineController.swift",
+                "Calendar/CalendarService.swift",
+                "Calendar/CalendarStoreActor.swift"
             ],
             swiftSettings: commonSwiftSettings
         ),

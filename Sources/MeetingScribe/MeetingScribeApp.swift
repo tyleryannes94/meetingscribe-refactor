@@ -113,9 +113,9 @@ struct MeetingScribeApp: App {
 
     private var menuBarIcon: String {
         switch manager.state {
-        case .recording: return "record.circle.fill"
+        case .recording, .stopping: return "record.circle.fill"
         case .error: return "exclamationmark.triangle"
-        case .idle:
+        case .idle, .starting:
             return manager.transcribingMeetingIDs.isEmpty ? "waveform" : "waveform.circle"
         }
     }

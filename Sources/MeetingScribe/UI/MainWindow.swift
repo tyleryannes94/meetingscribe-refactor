@@ -493,14 +493,14 @@ struct PersistentToolbarButtons: View {
         // the background and no longer blocks new recordings — so the only
         // toolbar states are "start" and "stop".
         switch manager.state {
-        case .idle, .error:
+        case .idle, .error, .starting:
             Button {
                 Task { await manager.startRecording(for: nil) }
             } label: {
                 Label("Ad-hoc Recording", systemImage: "record.circle")
             }
             .help("Start an ad-hoc meeting recording")
-        case .recording:
+        case .recording, .stopping:
             Button(role: .destructive) {
                 Task { await manager.stopRecording() }
             } label: {

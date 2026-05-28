@@ -57,6 +57,9 @@ enum AppSettings {
            let u = URL(string: s) { return u }
         return URL(string: "http://127.0.0.1:11434")!
     }
+    static var ollamaModel: String {
+        UserDefaults.standard.string(forKey: "ollamaModel") ?? "llama3"
+    }
     static var captureMic: Bool {
         UserDefaults.standard.object(forKey: "captureMic") as? Bool ?? true
     }

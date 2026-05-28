@@ -1,6 +1,7 @@
 import Foundation
 import OSLog
 import os
+import VaultKit
 
 /// Talks to a local Ollama instance (default http://127.0.0.1:11434) to summarize
 /// transcripts. Uses `/api/generate` with streaming disabled for simplicity.
@@ -174,16 +175,15 @@ final class OllamaService {
     func generate(prompt: String,
                   temperature: Double = 0.2,
                   numCtx: Int = 8192) async throws -> String {
-        let settings = AppSettings.shared
         if !(await isReachable()) {
             guard Self.binaryPath != nil else { throw SummaryError.notInstalled }
             _ = await ensureRunning()
             guard await isReachable() else { throw SummaryError.unreachable("auto-start timed out") }
         }
 
-        let url = settings.ollamaURL.appendingPathComponent("api/generate")
+        let url = AppSettings.ollamaURL.appendingPathComponent("api/generate")
         let body = GenerateRequest(
-            model: settings.ollamaModel,
+            model: AppSettings.ollamaModel,
             prompt: prompt,
             stream: false,
             options: .init(temperature: temperature, num_ctx: numCtx)
@@ -208,9 +208,7 @@ final class OllamaService {
         return decoded.response.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func summarize(meeting: Meeting, transcript: String) async throws -> String {
-        let settings = AppSettings.shared
-
+    func summarize(meeting: MeetingDTO, transcript: String) async throws -> String {
         // Make sure Ollama is up. Cheap if it already is, otherwise auto-launches.
         if !(await isReachable()) {
             guard Self.binaryPath != nil else { throw SummaryError.notInstalled }
@@ -220,11 +218,11 @@ final class OllamaService {
             }
         }
 
-        let url = settings.ollamaURL.appendingPathComponent("api/generate")
+        let url = AppSettings.ollamaURL.appendingPathComponent("api/generate")
 
         let prompt = Self.buildPrompt(meeting: meeting, transcript: transcript)
         let body = GenerateRequest(
-            model: settings.ollamaModel,
+            model: AppSettings.ollamaModel,
             prompt: prompt,
             stream: false,
             options: .init(temperature: 0.2, num_ctx: 8192)
@@ -257,7 +255,7 @@ final class OllamaService {
         }
     }
 
-    private static func buildPrompt(meeting: Meeting, transcript: String) -> String {
+    private static func buildPrompt(meeting: MeetingDTO, transcript: String) -> String {
         let attendees = meeting.attendees.isEmpty ? "Unknown" : meeting.attendees.joined(separator: ", ")
         let formatter = DateFormatter()
         formatter.dateStyle = .medium

@@ -168,7 +168,7 @@ final class SecondBrainDB {
         exec("DELETE FROM encounters_idx;")
         exec("DELETE FROM search_index;")
         exec("DELETE FROM vault_content WHERE entity_kind='person';")
-        let counts = encounterCounts(encounters)
+        let counts = Dictionary(encounters.map { ($0.personID, 1) }, uniquingKeysWith: +)
         for p in people { insertPerson(p, encounterCount: counts[p.id] ?? 0, tagName: tagName) }
         for e in encounters { insertEncounter(e) }
         exec("COMMIT;")

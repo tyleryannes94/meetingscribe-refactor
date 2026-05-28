@@ -102,7 +102,7 @@ struct MenuBarView: View {
     @ViewBuilder
     private var statusRow: some View {
         switch manager.state {
-        case .idle:
+        case .idle, .starting:
             if manager.transcribingMeetingIDs.isEmpty {
                 Label("Idle", systemImage: "circle").font(.headline)
             } else {
@@ -122,6 +122,12 @@ struct MenuBarView: View {
                 }
                 .keyboardShortcut(.return)
                 .padding(.top, 4)
+            }
+        case .stopping:
+            // Teardown in progress — show recording UI until idle.
+            VStack(alignment: .leading, spacing: 2) {
+                Label("Stopping…", systemImage: "stop.circle")
+                    .foregroundStyle(.red).font(.headline)
             }
         case .error(let msg):
             VStack(alignment: .leading, spacing: 2) {

@@ -154,14 +154,13 @@ struct LiveTranscriptScroll: View {
 }
 
 enum DetailTab: String, CaseIterable, Identifiable {
-    case transcript, notes, summary, coach, chat
+    case transcript, notes, summary, chat
     var id: String { rawValue }
     var label: String {
         switch self {
         case .transcript: return "Transcript"
         case .notes:      return "My Notes"
         case .summary:    return "Summary"
-        case .coach:      return "Coach"
         case .chat:       return "Chat"
         }
     }
