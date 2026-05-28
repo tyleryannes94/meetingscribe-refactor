@@ -25,7 +25,7 @@ enum TranscriptionLog {
 
     /// Path the log is written to. Public so Settings can offer "Reveal log".
     static var fileURL: URL {
-        AppSettings.shared.storageDir
+        AppSettings.storageDir
             .appendingPathComponent("logs", isDirectory: true)
             .appendingPathComponent("transcription.log")
     }

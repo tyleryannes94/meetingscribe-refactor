@@ -110,7 +110,3 @@ final class WhisperTranscriber {
         return String(format: "%d:%02d", m, r)
     }
 }
-
-extension WhisperTranscriber.TranscribeError: Reportable {
-    var userMessage: String { errorDescription ?? String(describing: self) }
-}

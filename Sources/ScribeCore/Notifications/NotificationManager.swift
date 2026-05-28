@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 import AppKit
 import OSLog
 
@@ -19,9 +19,10 @@ final class NotificationManager: NSObject, ObservableObject {
     static let actionDismiss = "DISMISS"
 
     /// Called when the user taps "Join & Record" on a meeting notification.
-    var onJoinAndRecord: ((Meeting) -> Void)?
+    /// Payload dict contains the keys from the encoded meeting (e.g. "id", "title", "conferenceURL").
+    var onJoinAndRecord: (([String: String]) -> Void)?
     /// Called when the user taps "Record" (without joining) on a meeting notification.
-    var onRecordMeeting: ((Meeting) -> Void)?
+    var onRecordMeeting: (([String: String]) -> Void)?
     /// Called when the user taps "Record impromptu" on a detection notification.
     var onRecordImpromptu: ((_ source: String) -> Void)?
 
@@ -75,8 +76,14 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Schedules a one-shot notification ~10s before each upcoming meeting's
     /// start time. Clears prior scheduled notifications for meetings no longer
     /// in the list. Safe to call repeatedly.
-    func syncScheduled(for meetings: [Meeting]) async {
-        guard AppSettings.shared.notifyAtMeetingStart else {
+    ///
+    /// Each stub dict must contain:
+    ///   - "id": String (unique meeting identifier)
+    ///   - "title": String (display title)
+    ///   - "startDate": String (ISO 8601)
+    ///   - "conferenceURL": String? (optional, presence enables "Join & Record")
+    func syncScheduled(for meetingStubs: [[String: Any]]) async {
+        guard AppSettings.notifyAtMeetingStart else {
             await UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
             scheduledMeetingIDs.removeAll()
             return
@@ -86,30 +93,38 @@ final class NotificationManager: NSObject, ObservableObject {
         let existingIDs = Set(existing.map { $0.identifier })
 
         // Cancel anything we previously scheduled that's no longer relevant.
-        let liveIDs = Set(meetings.map { "meeting-\($0.id)" })
+        let liveIDs = Set(meetingStubs.compactMap { $0["id"] as? String }.map { "meeting-\($0)" })
         let toCancel = existingIDs.subtracting(liveIDs).filter { $0.hasPrefix("meeting-") }
         if !toCancel.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: Array(toCancel))
         }
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        let isoParser = ISO8601DateFormatter()
 
-        for m in meetings {
-            let id = "meeting-\(m.id)"
+        for stub in meetingStubs {
+            guard let meetingID = stub["id"] as? String,
+                  let startDateStr = stub["startDate"] as? String,
+                  let startDate = isoParser.date(from: startDateStr) else { continue }
+            let displayTitle = stub["title"] as? String ?? "Meeting"
+            let conferenceURL = stub["conferenceURL"] as? String ?? ""
+
+            let id = "meeting-\(meetingID)"
             if existingIDs.contains(id) { continue }
-            let triggerDate = m.startDate.addingTimeInterval(-10)
+            let triggerDate = startDate.addingTimeInterval(-10)
             if triggerDate.timeIntervalSinceNow < 0 { continue }
 
             let content = UNMutableNotificationContent()
-            content.title = m.displayTitle
+            content.title = displayTitle
             content.subtitle = "Starting now"
-            content.body = (m.conferenceURL ?? "").isEmpty
+            content.body = conferenceURL.isEmpty
                 ? "Tap Record to start capturing this meeting."
                 : "Tap Join & Record to join and start capturing."
             content.categoryIdentifier = Self.categoryMeeting
-            if let payload = try? encoder.encode(m),
-               let str = String(data: payload, encoding: .utf8) {
+            // Store a simple payload dict so handleAction can reconstruct key fields.
+            var payload: [String: String] = ["id": meetingID, "title": displayTitle, "startDate": startDateStr]
+            if !conferenceURL.isEmpty { payload["conferenceURL"] = conferenceURL }
+            if let data = try? JSONSerialization.data(withJSONObject: payload),
+               let str = String(data: data, encoding: .utf8) {
                 content.userInfo[meetingPayloadKey] = str
             }
             content.sound = .default
@@ -120,9 +135,9 @@ final class NotificationManager: NSObject, ObservableObject {
             let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
             do {
                 try await center.add(req)
-                scheduledMeetingIDs.insert(m.id)
+                scheduledMeetingIDs.insert(meetingID)
             } catch {
-                log.error("schedule failed for \(m.displayTitle, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                log.error("schedule failed for \(displayTitle, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -162,31 +177,32 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
     @MainActor
     private func handleAction(_ actionID: String, userInfo: [AnyHashable: Any]) {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let meeting: Meeting? = {
+        // Decode the lightweight payload dict (id, title, startDate, conferenceURL?).
+        let payload: [String: String]? = {
             guard let str = userInfo[meetingPayloadKey] as? String,
-                  let data = str.data(using: .utf8) else { return nil }
-            return try? decoder.decode(Meeting.self, from: data)
+                  let data = str.data(using: .utf8),
+                  let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+            else { return nil }
+            return dict
         }()
 
         switch actionID {
         case Self.actionJoinAndRecord:
-            if let m = meeting {
-                if let urlStr = m.conferenceURL, let url = URL(string: urlStr) {
+            if let p = payload {
+                if let urlStr = p["conferenceURL"], let url = URL(string: urlStr) {
                     NSWorkspace.shared.open(url)
                 }
-                onJoinAndRecord?(m)
+                onJoinAndRecord?(p)
             }
         case Self.actionRecordOnly:
-            if let m = meeting { onRecordMeeting?(m) }
+            if let p = payload { onRecordMeeting?(p) }
         case Self.actionRecordImpromptu:
             let source = (userInfo[sourcePayloadKey] as? String) ?? "Impromptu"
             onRecordImpromptu?(source)
         case UNNotificationDefaultActionIdentifier:
             // Tap on the notification body — open the app window.
             NSApp.activate(ignoringOtherApps: true)
-            if let m = meeting { onRecordMeeting?(m) }
+            if let p = payload { onRecordMeeting?(p) }
         default:
             break
         }

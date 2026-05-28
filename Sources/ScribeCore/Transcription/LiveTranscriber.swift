@@ -64,10 +64,7 @@ final class LiveTranscriber: ObservableObject {
             if self.pendingCount >= self.maxPending {
                 self.droppedChunkCount += 1
                 self.lastError = "Live transcription falling behind by \(self.pendingCount) chunks. Dropped \(self.droppedChunkCount) live previews; full transcript will be generated at stop."
-                AppLog.warn("LiveTranscriber", "Dropped chunk (backpressure)",
-                            ["pending": "\(self.pendingCount)",
-                             "speaker": speaker,
-                             "audio": url.path])
+                self.log.warning("Dropped chunk (backpressure) pending=\(self.pendingCount, privacy: .public) speaker=\(speaker, privacy: .public) audio=\(url.path, privacy: .public)")
                 try? FileManager.default.removeItem(at: url)
                 return
             }
@@ -132,15 +129,13 @@ final class LiveTranscriber: ObservableObject {
             let msg = Self.summarizeRunnerError(e)
             log.error("\(msg, privacy: .public)")
             await MainActor.run {
-                ErrorReporter.shared.report(e, category: .transcription,
-                                            context: ["speaker": speaker, "audio": url.path])
+                self.log.error("Transcription error (runner): \(msg, privacy: .public) speaker=\(speaker, privacy: .public)")
                 self.lastError = msg
             }
         } catch {
             log.error("Unexpected transcription error: \(error.localizedDescription, privacy: .public)")
             await MainActor.run {
-                ErrorReporter.shared.report(error, category: .transcription,
-                                            context: ["speaker": speaker, "audio": url.path])
+                self.log.error("Transcription error (unexpected): \(error.localizedDescription, privacy: .public) speaker=\(speaker, privacy: .public)")
                 self.lastError = error.localizedDescription
             }
         }

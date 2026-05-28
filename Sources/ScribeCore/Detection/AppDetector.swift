@@ -56,7 +56,7 @@ final class AppDetector: ObservableObject {
         onStatusUpdate?(source)
 
         // Only push the "Record impromptu?" notification when the setting is on.
-        guard AppSettings.shared.detectZoomImpromptu else {
+        guard AppSettings.detectZoomImpromptu else {
             lastDetectedSource = source
             return
         }

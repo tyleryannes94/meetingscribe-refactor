@@ -93,7 +93,7 @@ final class OllamaService {
            Date().timeIntervalSince(at) < Self.freshnessWindow {
             return true
         }
-        let url = AppSettings.shared.ollamaURL.appendingPathComponent("api/tags")
+        let url = AppSettings.ollamaURL.appendingPathComponent("api/tags")
         var req = URLRequest(url: url)
         req.timeoutInterval = 1.5
         do {
@@ -122,7 +122,7 @@ final class OllamaService {
         // world-readable on macOS — a security smell even though Ollama's
         // stdout rarely contains anything sensitive). NSTemporaryDirectory()
         // resolves to /var/folders/.../T/ which is per-user 700.
-        let logDir = AppSettings.shared.storageDir.appendingPathComponent("logs", isDirectory: true)
+        let logDir = AppSettings.storageDir.appendingPathComponent("logs", isDirectory: true)
         try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
         let logPath = logDir.appendingPathComponent("ollama.log").path
 

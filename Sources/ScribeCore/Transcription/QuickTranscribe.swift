@@ -71,7 +71,3 @@ final class QuickTranscribe {
         }
     }
 }
-
-extension QuickTranscribe.QError: Reportable {
-    var userMessage: String { errorDescription ?? String(describing: self) }
-}

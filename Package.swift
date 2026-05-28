@@ -69,6 +69,10 @@ let package = Package(
             name: "ScribeCore",
             dependencies: ["VaultKit"],
             path: "Sources/ScribeCore",
+            exclude: [
+                "PersonExtractionController.swift",
+                "ActionItemBackfillController.swift"
+            ],
             swiftSettings: commonSwiftSettings
         ),
         .executableTarget(

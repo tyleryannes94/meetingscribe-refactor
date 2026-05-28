@@ -29,7 +29,7 @@ final class CalendarService: ObservableObject {
     @Published var authorized: Bool = false
 
     private var cacheURL: URL {
-        AppSettings.shared.storageDir.appendingPathComponent(".upcoming-cache.json")
+        AppSettings.storageDir.appendingPathComponent(".upcoming-cache.json")
     }
 
     static let cacheSchemaVersion = 1
@@ -82,7 +82,7 @@ final class CalendarService: ObservableObject {
     /// URL are returned. Async because EventKit reads now happen on the actor.
     func meetings(from: Date, to: Date, filterConferenceURLs: Bool) async -> [Meeting] {
         guard authorized else { return [] }
-        let enabledIDs = AppSettings.shared.enabledCalendarIDs
+        let enabledIDs = AppSettings.enabledCalendarIDs
         return await CalendarStoreActor.shared.meetings(from: from, to: to,
                                                         enabledIDs: enabledIDs,
                                                         filterConferenceURLs: filterConferenceURLs)
@@ -107,8 +107,8 @@ final class CalendarService: ObservableObject {
         let startWindow = cal.startOfDay(for: now)
         let endWindow = cal.date(byAdding: .day, value: 8, to: startWindow) ?? now.addingTimeInterval(7 * 86400)
         let from = now.addingTimeInterval(-30 * 60)
-        let enabledIDs = AppSettings.shared.enabledCalendarIDs
-        let filter = AppSettings.shared.filterToConferenceLinks
+        let enabledIDs = AppSettings.enabledCalendarIDs
+        let filter = AppSettings.filterToConferenceLinks
         Task {
             let result = await CalendarStoreActor.shared.meetings(from: from, to: endWindow,
                                                                   enabledIDs: enabledIDs,

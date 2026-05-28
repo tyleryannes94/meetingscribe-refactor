@@ -90,8 +90,8 @@ struct WhisperRunner {
     /// for cleanup (or for picking a temp dir that gets nuked).
     let workDir: URL
 
-    init(binary: String = AppSettings.shared.whisperBinary,
-         model: String = AppSettings.shared.whisperModel,
+    init(binary: String = AppSettings.whisperBinary,
+         model: String = AppSettings.whisperModel,
          workDir: URL) {
         self.binary = binary
         self.model = model
@@ -104,7 +104,7 @@ struct WhisperRunner {
     func run(audio: URL, output: Output) async throws -> RunResult {
         try await preflight(audio: audio)
 
-        let useGPUFirst = AppSettings.shared.whisperUseGPU
+        let useGPUFirst = AppSettings.whisperUseGPU
         let firstResult = try runOnce(audio: audio, output: output, forceCPU: !useGPUFirst)
         if !firstResult.result.isEmpty { return firstResult.result }
 
@@ -199,7 +199,6 @@ struct WhisperRunner {
     /// so it can never get lost: this is the one place argv is built.
     static func argv(audio: URL, model: String, prefix: URL, forceCPU: Bool) -> [String] {
         let cores = max(2, ProcessInfo.processInfo.activeProcessorCount - 1)
-        let settings = AppSettings.shared
         var args = [
             "-m", model,
             "-f", audio.path,
@@ -212,13 +211,13 @@ struct WhisperRunner {
             "--threads", "\(cores)"
         ]
         // flash-attn off by default — empty transcripts on pre-M5 Apple Silicon.
-        if !settings.whisperFlashAttention { args.append("--no-flash-attn") }
-        if forceCPU || !settings.whisperUseGPU { args.append("--no-gpu") }
+        if !AppSettings.whisperFlashAttention { args.append("--no-flash-attn") }
+        if forceCPU || !AppSettings.whisperUseGPU { args.append("--no-gpu") }
         // Speaker diarization (opt-in). whisper.cpp emits `[SPEAKER_NN]` turn
         // markers in segment text; SpeakerDiarization.parse() maps those into a
         // DiarizedTranscript. Standard ggml models ignore the flag, so passing
         // it is harmless when the model doesn't support tinydiarize.
-        if settings.whisperDiarizationEnabled { args.append("--diarize") }
+        if AppSettings.whisperDiarizationEnabled { args.append("--diarize") }
         return args
     }
 
@@ -366,8 +365,4 @@ struct WhisperRunner {
                               extra: ["bytes": "\(size)", "path": path])
         return true
     }
-}
-
-extension WhisperRunner.RunnerError: Reportable {
-    var userMessage: String { errorDescription ?? String(describing: self) }
 }

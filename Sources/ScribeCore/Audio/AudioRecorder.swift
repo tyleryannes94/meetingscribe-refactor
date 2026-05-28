@@ -230,8 +230,8 @@ final class AudioRecorder {
         }
         let micBytes = bytes(micURL)
         let sysBytes = bytes(systemURL)
-        let captureMic = AppSettings.shared.captureMic
-        let captureSystem = AppSettings.shared.captureSystem
+        let captureMic = AppSettings.captureMic
+        let captureSystem = AppSettings.captureSystem
 
         var warnings: [String] = []
         if captureMic, micSnap.samplesAppended == 0 {
