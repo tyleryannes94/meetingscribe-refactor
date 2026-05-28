@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>MeetingScribe</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.tyleryannes.MeetingScribe</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MeetingScribe</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>805a8f5-dirty</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Used only to detect when you're in a Google Meet tab in your browser.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>MeetingScribe reads your calendar so it can label recordings with meeting titles and attendees.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>MeetingScribe reads your calendar so it can label recordings with meeting titles and attendees.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>MeetingScribe imports your contacts (one-way, read-only) so the people you know appear in your second brain.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MeetingScribe records your microphone during meetings to transcribe what you say.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>MeetingScribe captures system audio so it can record the other side of your meetings.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/tyleryannes94/meetingscribe/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>GCIpTbWk74teq495LgRn+iun5hYafph8EnGklNL6pFM=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<!-- Informational: Phase 2 XPC mach service name for ScribeCore daemon -->
+	<key>NSXPCClientEntitlementRequirements</key>
+	<dict>
+		<key>com.tyleryannes.scribecore.xpc</key>
+		<dict/>
+	</dict>
+</dict>
+</plist>

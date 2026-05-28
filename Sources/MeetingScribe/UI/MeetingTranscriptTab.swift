@@ -1,0 +1,182 @@
+import SwiftUI
+import AppKit
+
+@available(macOS 14.0, *)
+extension UnifiedMeetingDetail {
+    // MARK: - Audio
+
+    @ViewBuilder
+var audioBar: some View {
+        if !audioURLs.isEmpty {
+            AudioPlayerView(title: audioURLs.count > 1 ? "Audio (mic + system)" : "Audio",
+                            urls: audioURLs)
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+        }
+    }
+
+    @ViewBuilder
+var transcriptBody: some View {
+        switch mode {
+        case .live:
+            LiveTranscriptScroll(transcriber: manager.liveTranscriber,
+                                 recordingStartedAt: liveStartedAt)
+        case .upcoming:
+            placeholder(systemImage: "waveform",
+                        title: "No transcript yet",
+                        message: "Start a recording to capture this meeting.")
+        case .past:
+            if transcript.isEmpty {
+                placeholder(systemImage: "waveform",
+                            title: "No transcript",
+                            message: "This meeting didn't capture audio, or transcription failed.")
+            } else {
+                ScrollView {
+                    MarkdownText(transcript)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+
+    /// When recording started (used by the live transcript pane to count down
+    /// to the next 5-minute chunk).
+var liveStartedAt: Date? {
+        if case .recording(_, let at) = manager.state { return at }
+        return nil
+    }
+}
+
+/// Auto-scrolling live transcript pane. Shows the finalized 5-minute chunks
+/// plus a footer with the countdown to the next chunk.
+@available(macOS 14.0, *)
+struct LiveTranscriptScroll: View {
+    @ObservedObject var transcriber: LiveTranscriber
+    let recordingStartedAt: Date?
+    @State private var now: Date = Date()
+
+    /// 5 minutes — must match `chunkSeconds` in AudioRecorder.swift.
+    private let chunkSeconds: TimeInterval = 300
+
+    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    if let err = transcriber.lastError {
+                        errorBanner(err)
+                    }
+
+                    if transcriber.segments.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Recording — first transcript chunk in \(countdownString())")
+                                .font(.callout).foregroundStyle(.secondary)
+                            Text("MeetingScribe transcribes the call in 5-minute chunks. The first chunk drops in once 5 minutes of audio is captured.")
+                                .font(.caption).foregroundStyle(.tertiary)
+                        }
+                        .padding()
+                    } else {
+                        ForEach(transcriber.segments) { seg in
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(seg.speaker)
+                                    .font(.caption.bold())
+                                    .frame(width: 50, alignment: .leading)
+                                    .foregroundStyle(seg.speaker == "Me" ? .blue : .green)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(seg.text).font(.body)
+                                    Text("\(LiveTranscriber.format(seg.startSec)) – \(LiveTranscriber.format(seg.endSec))")
+                                        .font(.caption2).foregroundStyle(.tertiary)
+                                }
+                            }
+                            .id(seg.id)
+                            .padding(.horizontal)
+                        }
+                        // Live "currently buffering" footer
+                        HStack(spacing: 8) {
+                            if transcriber.isProcessing {
+                                ProgressView().controlSize(.small)
+                                Text("Transcribing chunk…").font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                Image(systemName: "waveform")
+                                    .foregroundStyle(.secondary).font(.caption)
+                                Text("Next chunk in \(countdownString())")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 4)
+                        Color.clear.frame(height: 1).id("bottom")
+                    }
+                }
+                .padding(.vertical)
+            }
+            .onChange(of: transcriber.segments.count) { _, _ in
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+        }
+        .onReceive(tick) { now = $0 }
+    }
+
+    private func errorBanner(_ err: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Live transcription error").font(.caption.bold())
+                Text(err).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+        }
+        .padding(8)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        .padding(.horizontal)
+    }
+
+    private func countdownString() -> String {
+        guard let start = recordingStartedAt else { return "5:00" }
+        let elapsed = now.timeIntervalSince(start)
+        // Time since last chunk close. If we have N transcribed segments, the
+        // recording-elapsed-seconds at the last chunk boundary is the max endSec
+        // of all transcribed segments. Otherwise the chunk count is 0.
+        let lastBoundary = transcriber.lastTranscribedSecond > 0
+            ? transcriber.lastTranscribedSecond
+            : 0
+        let intoCurrentChunk = max(0, elapsed - lastBoundary)
+        let remaining = max(0, chunkSeconds - intoCurrentChunk)
+        let m = Int(remaining) / 60
+        let s = Int(remaining) % 60
+        return String(format: "%d:%02d", m, s)
+    }
+}
+
+enum DetailTab: String, CaseIterable, Identifiable {
+    case transcript, notes, summary, coach, chat
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .transcript: return "Transcript"
+        case .notes:      return "My Notes"
+        case .summary:    return "Summary"
+        case .coach:      return "Coach"
+        case .chat:       return "Chat"
+        }
+    }
+}
+
+@available(macOS 14.0, *)
+struct MarkdownText: View {
+    let raw: String
+    init(_ raw: String) { self.raw = raw }
+    var body: some View {
+        if let attr = try? AttributedString(markdown: raw,
+                                            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            Text(attr).font(.body)
+        } else {
+            Text(raw).font(.body.monospaced())
+        }
+    }
+}

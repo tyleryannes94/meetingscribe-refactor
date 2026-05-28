@@ -1,0 +1,259 @@
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+/// One detail view that handles every kind of call — upcoming, currently
+/// recording, or past. The header (title, time, attendees, link, tags) and
+/// the tabs (Transcript / My Notes / Summary) are always present. The audio
+/// player appears whenever audio files exist.
+@available(macOS 14.0, *)
+struct UnifiedMeetingDetail: View {
+    enum Mode: Equatable {
+        case live
+        case upcoming(Meeting)
+        case past(Meeting)
+    }
+
+    let mode: Mode
+
+    @EnvironmentObject var manager: MeetingManager
+    @EnvironmentObject var tagStore: TagStore
+    @EnvironmentObject var recordingMonitor: RecordingMonitor
+    @ObservedObject var drive = GoogleDriveService.shared
+
+    @StateObject var meetingChat = ChatSession()
+
+    @State var tab: DetailTab = .notes
+    @State var chatAttached = false
+    /// In the My Notes tab for a recurring series: which occurrence's notes are
+    /// shown. nil = the current call (editable); otherwise a prior meeting id
+    /// (read-only).
+    @State var selectedOccurrenceID: String?
+    @State var noteDraft: String = ""
+    @State var lastSavedDraft: String = ""
+    @State var saveTimer: Timer?
+    @State var transcript: String = ""
+    @State var summary: String = ""
+    @State var titleDraft: String = ""
+    @State var descriptionDraft: String = ""
+    @State var editingHeader: Bool = false
+    @State var previousPrimaryTagID: String?
+    @State var audioURLs: [URL] = []
+    /// In-flight body refresh — cancelled when the user switches meetings
+    /// so a slow disk read on meeting A doesn't overwrite meeting B's
+    /// freshly-painted state.
+    @State var bodyLoadTask: Task<Void, Never>?
+    @State var backlinks: [WorkspaceEntity] = []
+    /// Failsafe upload flows (manual audio / transcript into this meeting).
+    @State var showAudioImporter = false
+    @State var showTranscriptImporter = false
+
+    var meeting: Meeting? {
+        switch mode {
+        case .live: return manager.activeMeeting
+        case .upcoming(let m): return m
+        case .past(let m): return m
+        }
+    }
+
+    /// A recurring series (set from the calendar event's recurrence rules).
+    var isRecurring: Bool { (meeting?.seriesID?.isEmpty == false) }
+
+    /// Past recorded occurrences of the same recurring series, newest first.
+    /// Each keeps its own notes — they are never merged.
+    var priorOccurrences: [Meeting] {
+        guard let m = meeting, let sid = m.seriesID, !sid.isEmpty else { return [] }
+        return manager.pastMeetings
+            .filter { $0.seriesID == sid && $0.id != m.id && $0.startDate < m.startDate }
+            .sorted { $0.startDate > $1.startDate }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            audioBar
+            Divider().opacity(audioURLs.isEmpty ? 0 : 1)
+            tabPicker
+            Group {
+                switch tab {
+                case .transcript: transcriptBody
+                case .notes:      notesEditor
+                case .summary:    summaryBody
+                case .coach:      coachBody
+                case .chat:       chatBody
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            reload()
+            attachChatIfNeeded()
+        }
+        .onChange(of: meeting?.id) { _, _ in reload() }
+        .onChange(of: noteDraft) { _, _ in scheduleNoteSave() }
+        .onChange(of: meeting.flatMap { tagStore.tagIDs(for: $0) }) { _, _ in handleTagChange() }
+        .onChange(of: manager.state) { _, _ in reloadIfLiveFinished() }
+        .onChange(of: manager.transcribingMeetingIDs) { _, ids in
+            // Re-read transcript + summary the moment the Transcribe Now job
+            // for THIS meeting drops out of the in-flight set.
+            if let m = meeting, !ids.contains(m.id) {
+                reload()
+            }
+        }
+        .onDisappear {
+            flushNoteSave()
+            bodyLoadTask?.cancel()
+            bodyLoadTask = nil
+        }
+        .fileImporter(isPresented: $showAudioImporter,
+                      allowedContentTypes: [.audio, .mpeg4Audio, .wav, .mp3, .movie],
+                      allowsMultipleSelection: false) { result in
+            guard case .success(let urls) = result, let src = urls.first, let m = meeting else { return }
+            let scoped = src.startAccessingSecurityScopedResource()
+            defer { if scoped { src.stopAccessingSecurityScopedResource() } }
+            manager.importAudioFile(src, into: m)
+        }
+        .fileImporter(isPresented: $showTranscriptImporter,
+                      allowedContentTypes: [.plainText, .text, .utf8PlainText],
+                      allowsMultipleSelection: false) { result in
+            guard case .success(let urls) = result, let src = urls.first, let m = meeting else { return }
+            let scoped = src.startAccessingSecurityScopedResource()
+            defer { if scoped { src.stopAccessingSecurityScopedResource() } }
+            manager.importTranscriptFile(src, into: m)
+        }
+    }
+    // MARK: - Tabs
+
+    var tabPicker: some View {
+        Picker("", selection: $tab) {
+            ForEach(DetailTab.allCases) { t in Text(t.label).tag(t) }
+        }
+        .pickerStyle(.segmented)
+        .padding([.horizontal, .top], 8)
+        .padding(.bottom, 4)
+    }
+    func placeholder(systemImage: String, title: String, message: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: systemImage).font(.system(size: 36)).foregroundStyle(.secondary)
+            Text(title).font(.headline)
+            Text(message).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+    // MARK: - State sync
+
+    /// Sync paint (from in-memory cache) + async refresh (from disk).
+    /// Replaces the previous three-synchronous-disk-reads-on-main pattern
+    /// that made clicking into a meeting hitch perceptibly. The cache
+    /// returns whatever it has instantly; the in-flight refresh task
+    /// fills in the freshest copy a frame or two later.
+    func reload() {
+        // Cancel any in-flight reload from a prior meeting click.
+        bodyLoadTask?.cancel()
+
+        guard let m = meeting else {
+            transcript = ""; summary = ""; noteDraft = ""; lastSavedDraft = ""
+            audioURLs = []; backlinks = []; return
+        }
+
+        // 1. Synchronous cache snapshot — instant first paint.
+        let cached = manager.bodyCache.cached(m.id)
+        transcript = cached.transcript
+        summary = cached.summary
+        noteDraft = cached.notes
+        lastSavedDraft = cached.notes
+        titleDraft = m.userTitle ?? m.title
+        descriptionDraft = m.userDescription ?? ""
+        previousPrimaryTagID = manager.tagStore.primaryTag(for: m)?.id
+        selectedOccurrenceID = nil
+
+        // Audio URLs are cheap (fileExists on a known set) but still off-main.
+        // Stale audioURLs from a prior meeting will be replaced when the
+        // task finishes; until then we show the previous list — usually
+        // close enough to suppress a flash.
+        let bodyCache = manager.bodyCache
+        let storeRef = manager.store
+        let primary = manager.tagStore.primaryTag(for: m)
+        let viewedID = m.id
+
+        bodyLoadTask = Task { [weak manager] in
+            // 2. Async body refresh (cancellable; only commits if we're
+            //    still showing the same meeting).
+            let fresh = await bodyCache.load(m)
+            guard !Task.isCancelled, meeting?.id == viewedID else { return }
+            transcript = fresh.transcript
+            summary = fresh.summary
+            if noteDraft == lastSavedDraft {
+                // Don't clobber in-progress edits.
+                noteDraft = fresh.notes
+                lastSavedDraft = fresh.notes
+            }
+            // 3. Audio URL discovery off-main.
+            let dir = storeRef.directory(for: m, primaryTag: primary)
+            let urls = await Task.detached(priority: .userInitiated) {
+                Self.discoverAudioURLs(in: dir)
+            }.value
+            guard !Task.isCancelled, meeting?.id == viewedID else { return }
+            audioURLs = urls
+            // 4. Backlinks last — most expensive, least time-critical.
+            if let mgr = manager {
+                let found = await mgr.backlinks(toMeetingID: viewedID)
+                guard !Task.isCancelled, meeting?.id == viewedID else { return }
+                backlinks = found
+            }
+        }
+    }
+
+    nonisolated private static func discoverAudioURLs(in dir: URL) -> [URL] {
+        let fm = FileManager.default
+        let mic = dir.appendingPathComponent("mic.m4a")
+        let sys = dir.appendingPathComponent("system.m4a")
+        var urls: [URL] = []
+        if fm.fileExists(atPath: mic.path) { urls.append(mic) }
+        if fm.fileExists(atPath: sys.path) { urls.append(sys) }
+        if !urls.isEmpty { return urls }
+        let audioDir = dir.appendingPathComponent("audio", isDirectory: true)
+        if fm.fileExists(atPath: audioDir.path),
+           let contents = try? fm.contentsOfDirectory(at: audioDir, includingPropertiesForKeys: nil) {
+            return contents.filter { $0.pathExtension.lowercased() == "m4a" }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
+        return []
+    }
+
+    // (Backlinks are now loaded inside `reload()`'s body refresh task so
+    // they cancel along with the rest when the user switches meetings.)
+
+    func reloadIfLiveFinished() {
+        if case .idle = manager.state, case .live = mode { reload() }
+        // After summary finishes for any mode, refresh files.
+        if case .idle = manager.state, case .past = mode {
+            reload()
+        }
+    }
+    func handleTagChange() {
+        guard let m = meeting else { return }
+        let newPrimaryID = manager.tagStore.primaryTag(for: m)?.id
+        if newPrimaryID != previousPrimaryTagID {
+            let prev = previousPrimaryTagID.flatMap { manager.tagStore.tag(by: $0) }
+            manager.handleTagChange(for: m, previousPrimary: prev)
+            previousPrimaryTagID = newPrimaryID
+            audioURLs = manager.audioURLs(for: m)
+        }
+    }
+
+    func scheduleNoteSave() {
+        saveTimer?.invalidate()
+        saveTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { _ in
+            Task { @MainActor in flushNoteSave() }
+        }
+    }
+
+    func flushNoteSave() {
+        saveTimer?.invalidate(); saveTimer = nil
+        guard let m = meeting, noteDraft != lastSavedDraft else { return }
+        manager.saveUserNotes(noteDraft, for: m)
+        lastSavedDraft = noteDraft
+    }
+}

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#
+# Refuse to commit personal MeetingScribe data — audio recordings, individual
+# meeting/note JSON files, or whisper model binaries. Catches the case where
+# a contributor accidentally points storageDir into the repo and then stages
+# everything.
+#
+# To install:
+#   git config core.hooksPath .githooks
+#
+# Override (e.g. you're committing a synthetic fixture intentionally):
+#   git commit --no-verify
+set -e
+
+banned_patterns=(
+    '\.m4a$'
+    '\.wav$'
+    '/(transcript|summary|notes|note|meeting)\.json$'
+    '/transcript\.md$'
+    '/summary\.md$'
+    '/notes\.md$'
+    '/ggml-.*\.bin$'
+    '\.p12$'
+    '\.pem$'
+    '\.cer$'
+    'MeetingNotes/.+'
+)
+
+# Files staged for this commit.
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+
+violations=()
+for f in $staged; do
+    for p in "${banned_patterns[@]}"; do
+        if echo "$f" | grep -E -q "$p"; then
+            violations+=("$f")
+            break
+        fi
+    done
+done
+
+if [ ${#violations[@]} -gt 0 ]; then
+    echo "✗ Refusing to commit — these look like personal MeetingScribe data:" >&2
+    printf '   %s\n' "${violations[@]}" >&2
+    echo "" >&2
+    echo "If these are legitimate test fixtures, commit with --no-verify." >&2
+    exit 1
+fi
+exit 0

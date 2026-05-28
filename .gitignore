@@ -1,0 +1,59 @@
+# Swift Package Manager build artifacts
+.build/
+.swiftpm/
+Package.resolved
+
+# Bundled .app produced by `make app` / `make install`
+build/
+
+# Xcode (if anyone opens this in Xcode)
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+DerivedData/
+
+# macOS junk
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Logs / temp
+*.log
+*.tmp
+/tmp/
+
+# Personal data — under no circumstances commit these.
+# (They live in ~/Documents/MeetingNotes by default but if someone points
+# storageDir into the repo, the patterns below catch it.)
+#
+# NOTE: Patterns are deliberately conservative — `**/audio/` would case-
+# insensitively match `Sources/MeetingScribe/Audio/` on APFS and silently
+# omit source code from the repo. We rely on the file-extension patterns
+# (*.m4a, *.wav) and the top-level MeetingNotes/ dir instead.
+MeetingNotes/
+**/transcript.md
+**/summary.md
+**/notes.md
+**/polished.md
+**/meeting.json
+**/note.json
+**/*.m4a
+**/*.wav
+**/models/ggml-*.bin
+# NOTE: deliberately NO bare `**/QuickNotes/` here. It case-insensitively
+# matched the SOURCE dir `Sources/MeetingScribe/QuickNotes/` on APFS (the exact
+# trap called out for `**/audio/` above) and silently dropped
+# QuickNotesController.swift from the repo, breaking fresh clones + CI. Runtime
+# voice-note data is already covered by the per-file patterns above plus the
+# top-level MeetingNotes/ dir.
+**/chunks/__rolling/   # only matches the literal recording-chunks subfolder
+
+# Cert artifacts that should never be checked in
+*.p12
+*.pem
+*.cer
+*.key
+
+# Local Claude Code worktree tooling state
+.claude/

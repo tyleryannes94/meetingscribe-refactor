@@ -1,0 +1,367 @@
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+
+/// The home view. Single column on the left:
+///   1. Header (date + quick actions).
+///   2. Action items from today + yesterday (compact widget).
+///   3. NOW — the active recording, if any.
+///   4. TODAY — today's calls only (past + upcoming).
+///   5. Quick link to the Calendar tab for past/future calls.
+///
+/// A narrow Chat sidebar lives on the right. Sidebar is intentionally
+/// secondary — action items and meeting cards are the primary focus.
+@available(macOS 14.0, *)
+struct TodayView: View {
+    @EnvironmentObject var calendar: CalendarService
+    @EnvironmentObject var manager: MeetingManager
+    @EnvironmentObject var tagStore: TagStore
+
+    /// Hosted (the MainWindow owns the selected top-level section) so the
+    /// "open all action items" button can flip to that tab.
+    @Binding var section: TopLevelSection
+    @State private var expandedMeetingID: String?
+
+    var body: some View {
+        feed
+        .background(NDS.bg)
+        .onAppear {
+            calendar.refreshUpcoming()
+            manager.refreshPastMeetings()
+            manager.backfillActionItemsIfNeeded()
+            manager.backfillPeopleIfNeeded()
+        }
+    }
+
+    // MARK: - Feed (left column)
+
+    private var feed: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                header
+                quickActions
+
+                ActionItemsWidget(store: manager.actionItems) {
+                    section = .actions
+                }
+
+                SuggestedPeopleView()
+
+                if isRecording { liveSection }
+
+                if !todayUpcoming.isEmpty || !todayPast.isEmpty {
+                    todaySection
+                } else if !isRecording {
+                    emptyState
+                }
+
+                calendarLink
+            }
+            .padding(.horizontal, 28).padding(.vertical, 24)
+            .frame(maxWidth: 920, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Sections
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(todayLong())
+                    .font(.system(size: 30, weight: .bold, design: .default))
+                    .foregroundStyle(.primary)
+                Text(subtitleString())
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: - Quick actions
+
+    /// Direction A — a tight, wrapping pill row instead of the old adaptive
+    /// 5-card grid (which collapsed to a single-column wall at narrow widths).
+    private var quickActions: some View {
+        FlowLayout(spacing: 8) {
+            QuickPill(title: "Record meeting", systemImage: "record.circle.fill",
+                      tint: .red, enabled: !isRecording) {
+                Task { await manager.startRecording(for: nil) }
+            }
+            QuickPill(title: "Join & record", systemImage: "video.fill",
+                      tint: NDS.selectColor("blue"), enabled: nextMeeting != nil) {
+                if let m = nextMeeting { Task { await manager.switchToRecording(m) } }
+            }
+            QuickPill(title: "Voice note", systemImage: "mic.fill",
+                      tint: NDS.selectColor("orange")) {
+                Task { await manager.startQuickNote() }
+            }
+            QuickPill(title: "New task", systemImage: "checklist",
+                      tint: NDS.selectColor("green")) {
+                manager.actionItems.createTask(title: "New task")
+                section = .actions
+            }
+            QuickPill(title: "New page", systemImage: "doc.badge.plus",
+                      tint: NDS.brand) {
+                _ = manager.actionItems.createProject(name: "Untitled")
+                section = .actions
+            }
+        }
+    }
+
+    /// The soonest upcoming meeting (prefers one with a conference link).
+    private var nextMeeting: Meeting? {
+        let future = calendar.upcoming
+            .filter { $0.startDate > Date().addingTimeInterval(-5 * 60) }
+            .sorted { $0.startDate < $1.startDate }
+        return future.first { $0.conferenceURL != nil } ?? future.first
+    }
+
+    private var liveSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionLabel("Recording now")
+            if let m = manager.activeMeeting {
+                cardWithDetail(meeting: m, variant: .live)
+            } else {
+                MeetingCard(meeting: adhocPlaceholder(), variant: .live, onOpen: {})
+                    .environmentObject(manager)
+                    .environmentObject(tagStore)
+            }
+        }
+    }
+
+    private var todaySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionLabel("Today")
+            ForEach(todayUpcoming) { m in
+                cardWithDetail(meeting: m, variant: .upcoming)
+            }
+            ForEach(todayPast) { m in
+                cardWithDetail(meeting: m, variant: .past)
+            }
+        }
+    }
+
+    private var calendarLink: some View {
+        Button {
+            section = .calendar
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.title3)
+                    .foregroundStyle(NDS.brand)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("All past + upcoming calls")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(NDS.textPrimary)
+                    Text("Open the Calendar tab for the full list + month view")
+                        .font(.caption).foregroundStyle(NDS.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(NDS.textTertiary)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(NDS.fieldBg)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(NDS.hairline, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A meeting card + (when expanded) the inline detail panel below it.
+    @ViewBuilder
+    private func cardWithDetail(meeting: Meeting, variant: MeetingCard.Variant) -> some View {
+        let expanded = expandedMeetingID == meeting.id
+        VStack(spacing: 0) {
+            MeetingCard(meeting: meeting,
+                        variant: variant,
+                        isExpanded: expanded,
+                        onOpen: { toggle(meeting) })
+                .environmentObject(manager)
+                .environmentObject(tagStore)
+            if expanded {
+                inlineDetail(for: meeting, variant: variant)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal:   .opacity.combined(with: .move(edge: .top))))
+            }
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: expanded)
+    }
+
+    @ViewBuilder
+    private func inlineDetail(for meeting: Meeting, variant: MeetingCard.Variant) -> some View {
+        let isLive = (variant == .live) ||
+            (manager.activeMeeting?.id == meeting.id)
+        let mode: UnifiedMeetingDetail.Mode = isLive
+            ? .live
+            : (variant == .upcoming ? .upcoming(meeting) : .past(meeting))
+
+        VStack(spacing: 0) {
+            UnifiedMeetingDetail(mode: mode)
+                .environmentObject(manager)
+                .environmentObject(tagStore)
+                .environmentObject(calendar)
+            HStack {
+                Spacer()
+                Button {
+                    toggle(meeting)
+                } label: {
+                    Label("Collapse", systemImage: "chevron.up")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .padding(.vertical, 6).padding(.trailing, 10)
+            }
+        }
+        .frame(minHeight: 520)
+        .padding(.top, 8).padding(.horizontal, 4)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "calendar.badge.checkmark")
+                .font(.system(size: 36)).foregroundStyle(.secondary)
+            Text("Nothing on today's calendar").font(.headline)
+            Text("Use a quick action above, or import an existing recording.")
+                .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button {
+                importMeeting()
+            } label: { Label("Import meeting recording", systemImage: "square.and.arrow.down") }
+            .buttonStyle(UntitledSecondaryButtonStyle())
+            .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 28)
+    }
+
+    private func importMeeting() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.audio]
+        panel.message = "Choose a meeting audio file to import, transcribe, and summarize"
+        panel.prompt = "Import"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await manager.importMeeting(from: url) }
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .tracking(0.6)
+    }
+
+    // MARK: - Expand / collapse
+
+    private func toggle(_ m: Meeting) {
+        expandedMeetingID = (expandedMeetingID == m.id) ? nil : m.id
+    }
+
+    // MARK: - Data
+
+    private var isRecording: Bool {
+        if case .recording = manager.state { return true }
+        return false
+    }
+
+    private var todayUpcoming: [Meeting] {
+        let cal = Calendar.current
+        return calendar.upcoming
+            .filter { cal.isDateInToday($0.startDate) && $0.startDate > Date().addingTimeInterval(-60) }
+            .sorted { $0.startDate < $1.startDate }
+    }
+
+    private var todayPast: [Meeting] {
+        let cal = Calendar.current
+        return manager.pastMeetings
+            .filter { cal.isDateInToday($0.startDate) }
+            .sorted { $0.startDate > $1.startDate }
+    }
+
+    private func todayLong() -> String {
+        let f = DateFormatter(); f.dateFormat = "EEEE, MMM d"
+        return f.string(from: Date())
+    }
+
+    private func subtitleString() -> String {
+        let parts = [
+            todayUpcoming.count > 0 ? "\(todayUpcoming.count) upcoming today" : nil,
+            todayPast.count > 0 ? "\(todayPast.count) earlier today" : nil
+        ].compactMap { $0 }
+        if parts.isEmpty {
+            return "Nothing on the calendar today"
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func adhocPlaceholder() -> Meeting {
+        Meeting(id: UUID().uuidString,
+                title: "Ad-hoc Recording",
+                startDate: Date(),
+                endDate: Date().addingTimeInterval(3600),
+                attendees: [], notes: nil, location: nil,
+                conferenceURL: nil, calendarName: nil, seriesID: nil,
+                userDescription: nil, userTitle: nil,
+                isImpromptu: true, segmentCount: 0)
+    }
+}
+
+// MARK: - Pill button used in the header
+
+@available(macOS 14.0, *)
+struct ToolbarPillButton: View {
+    enum Prominence { case primary, secondary }
+    let label: String
+    let systemImage: String
+    let prominence: Prominence
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage).font(.callout.weight(.semibold))
+                Text(label).font(.callout.weight(.semibold))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .background(background, in: Capsule())
+            .overlay(Capsule().strokeBorder(borderColor, lineWidth: 0.5))
+            .foregroundStyle(foreground)
+            .shadow(color: shadow, radius: 1, y: 0.5)
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(hovering ? 1.02 : 1)
+        .animation(.spring(response: 0.15, dampingFraction: 0.85), value: hovering)
+        .onHover { hovering = $0 }
+    }
+
+    private var background: AnyShapeStyle {
+        switch prominence {
+        case .primary:   return AnyShapeStyle(Color.accentColor)
+        case .secondary: return AnyShapeStyle(Color(NSColor.controlBackgroundColor))
+        }
+    }
+    private var foreground: Color {
+        prominence == .primary ? .white : .primary
+    }
+    private var borderColor: Color {
+        prominence == .primary ? .clear : Color(NSColor.separatorColor)
+    }
+    private var shadow: Color {
+        prominence == .primary ? Color.accentColor.opacity(0.2) : .clear
+    }
+}

@@ -1,0 +1,132 @@
+name: Release
+
+# Cuts a release whenever you push a version tag (e.g. v0.2.0). The job builds
+# the app, embeds + signs Sparkle, EdDSA-signs the archive, generates the
+# Sparkle appcast, and publishes a GitHub Release with both assets. The app's
+# SUFeedURL points at .../releases/latest/download/appcast.xml, so installed
+# copies auto-discover the new version.
+#
+# One-time setup is in RELEASING.md (generate the EdDSA keys, paste the public
+# key into Resources/Info.plist, add the private key as the SPARKLE_PRIVATE_KEY
+# repo secret).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 0.2.0) — used when run manually"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        run: swift test
+        env:
+          CI: "true"
+
+  release:
+    # Don't cut a release unless the test suite passes first.
+    needs: [test]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ github.event.inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Releasing version $V"
+
+      - name: Verify Sparkle public key is not the placeholder
+        run: |
+          if grep -q 'REPLACE_WITH_SPARKLE_PUBLIC_ED_KEY' Resources/Info.plist; then
+            echo "::error::SUPublicEDKey is still the placeholder. Run RELEASING.md setup before tagging."
+            exit 1
+          fi
+
+      # Sanity-check that SUFeedURL in Info.plist actually points at THIS
+      # repo. A typo here would silently ship a build whose auto-updater
+      # checks a feed that doesn't exist, and Sparkle would never offer the
+      # next release. Easier to fail loudly here than to debug from a 404.
+      - name: Verify SUFeedURL slug matches this repo
+        run: |
+          FEED=$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' Resources/Info.plist)
+          EXPECTED_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/"
+          echo "SUFeedURL:        $FEED"
+          echo "Expected prefix:  $EXPECTED_PREFIX"
+          case "$FEED" in
+            "$EXPECTED_PREFIX"*) ;;
+            *)
+              echo "::error::SUFeedURL ($FEED) doesn't start with $EXPECTED_PREFIX."
+              echo "::error::Installed copies would check a 404 feed and never auto-update."
+              echo "::error::Fix Resources/Info.plist :SUFeedURL and re-tag."
+              exit 1
+              ;;
+          esac
+
+      - name: Stamp version into Info.plist
+        run: |
+          P=Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.ver.outputs.version }}" "$P"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.ver.outputs.version }}" "$P"
+
+      - name: Build app (embeds + signs Sparkle, ad-hoc)
+        run: make app
+        env:
+          CI: "true"
+
+      - name: Package archive
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent build/MeetingScribe.app dist/MeetingScribe.zip
+
+      - name: Locate Sparkle CLI tools
+        id: sparkle
+        run: |
+          BIN=$(find .build -path '*/Sparkle/bin' -type d 2>/dev/null | head -1)
+          if [ -z "$BIN" ]; then
+            BIN=$(find ~/Library/Developer -path '*/Sparkle/bin' -type d 2>/dev/null | head -1)
+          fi
+          echo "Using Sparkle tools at: $BIN"
+          echo "bin=$BIN" >> "$GITHUB_OUTPUT"
+
+      - name: EdDSA-sign archive + generate appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::SPARKLE_PRIVATE_KEY secret is not set. See RELEASING.md."
+            exit 1
+          fi
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_ed_key
+          PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${{ steps.ver.outputs.version }}/"
+          "${{ steps.sparkle.outputs.bin }}/generate_appcast" \
+            --ed-key-file /tmp/sparkle_ed_key \
+            --download-url-prefix "$PREFIX" \
+            dist/
+          rm -f /tmp/sparkle_ed_key
+          echo "Generated appcast:"; cat dist/appcast.xml
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: MeetingScribe ${{ steps.ver.outputs.version }}
+          files: |
+            dist/MeetingScribe.zip
+            dist/appcast.xml
+          generate_release_notes: true

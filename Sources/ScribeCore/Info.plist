@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Scribe Core</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.tyleryannes.ScribeCore</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MeetingScribe needs microphone access to record meeting audio.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>MeetingScribe reads your calendar to detect and auto-start meeting recordings.</string>
+</dict>
+</plist>

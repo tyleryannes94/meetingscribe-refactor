@@ -1,0 +1,300 @@
+import SwiftUI
+import AppKit
+import Combine
+import ServiceManagement
+
+@available(macOS 14.0, *)
+@main
+struct MeetingScribeApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var calendar = CalendarService()
+    @StateObject private var manager = MeetingManager()
+    @StateObject private var notifications = NotificationManager()
+    @StateObject private var appDetector = AppDetector()
+    @StateObject private var overlay = FloatingOverlayController()
+    @StateObject private var chatSession = ChatSession()
+    @StateObject private var updater = UpdaterController()
+    @StateObject private var vaultMigrator = VaultMigrationManager()
+    @State private var calendarTimer: Timer?
+    @State private var hotkey = GlobalHotkey()
+    @State private var swapHotkey = GlobalHotkey()
+    @State private var settingsObserver: AnyCancellable?
+
+    var body: some Scene {
+        Window("MeetingScribe", id: "main") {
+            MainWindow()
+                .environmentObject(calendar)
+                .environmentObject(manager)
+                .environmentObject(manager.recordingMonitor)
+                .environmentObject(notifications)
+                .environmentObject(appDetector)
+                .environmentObject(manager.tagStore)
+                .environmentObject(PeopleStore.shared)
+                .environmentObject(PeopleTagStore.shared)
+                .environmentObject(chatSession)
+                // Scoped sub-controllers (audit 6.3 wiring). Views that
+                // only care about one concern can `@EnvironmentObject` the
+                // narrower object — they then re-render only when THAT
+                // controller publishes, not when the manager's unrelated
+                // state changes.
+                .environmentObject(manager.quickNotesController)
+                .environmentObject(manager.pipelineController)
+                .environmentObject(manager.actionItemBackfill)
+                .environmentObject(manager.personExtraction)
+                .environmentObject(manager.actionItems)
+                .frame(minWidth: 720, minHeight: 560)
+                .task {
+                    startServices()
+                }
+                // Vault layout migration — shown once when the vault is still
+                // in the old tag-grouped layout. VaultMigrationManager sets
+                // needsLayoutMigration = false after a successful migration and
+                // persists the completed flag to UserDefaults so the sheet never
+                // reappears.
+                .sheet(isPresented: $vaultMigrator.needsLayoutMigration) {
+                    VaultMigrationSheet(
+                        migrator: vaultMigrator,
+                        vaultURL: AppSettings.shared.storageDir
+                    ) {
+                        vaultMigrator.needsLayoutMigration = false
+                    }
+                }
+        }
+        .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesCommand(updater: updater)
+            }
+            CommandGroup(after: .toolbar) {
+                Button("Search Everything…") {
+                    NotificationCenter.default.post(name: .meetingScribeOpenSearch, object: nil)
+                }
+                .keyboardShortcut("K", modifiers: [.command])
+            }
+            CommandGroup(after: .newItem) {
+                Button("Start Ad-hoc Meeting Recording") {
+                    Task { await manager.startRecording(for: nil) }
+                }
+                .keyboardShortcut("R", modifiers: [.command])
+                Button("Stop Recording") {
+                    Task { await manager.stopRecording() }
+                }
+                .keyboardShortcut("R", modifiers: [.command, .shift])
+                Divider()
+                Button("New Voice Note") {
+                    Task { await manager.startQuickNote() }
+                }
+                .keyboardShortcut("N", modifiers: [.command, .shift])
+                Button("New Person") {
+                    NotificationCenter.default.post(name: .meetingScribeAddPerson, object: nil)
+                }
+                .keyboardShortcut("P", modifiers: [.command, .shift])
+            }
+        }
+
+        MenuBarExtra {
+            MenuBarView()
+                .environmentObject(calendar)
+                .environmentObject(manager)
+                .environmentObject(manager.tagStore)
+        } label: {
+            Label("MeetingScribe", systemImage: menuBarIcon)
+        }
+        .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView()
+                .environmentObject(calendar)
+                .environmentObject(manager)
+                .environmentObject(manager.tagStore)
+                .frame(width: 560, height: 580)
+        }
+    }
+
+    private var menuBarIcon: String {
+        switch manager.state {
+        case .recording: return "record.circle.fill"
+        case .error: return "exclamationmark.triangle"
+        case .idle:
+            return manager.transcribingMeetingIDs.isEmpty ? "waveform" : "waveform.circle"
+        }
+    }
+
+    private func startServices() {
+        // FAST PATH (synchronous, must happen before any UI interaction):
+        //   - Wire callbacks so they're not nil when the first user event fires
+        //   - Register the global hotkey
+        //   - One-time settings migrations (cheap; UserDefaults reads)
+        // Everything else is async/detached — the window is already on screen
+        // and we don't want to block its first paint on Ollama probes or
+        // disk walks.
+        AppSettings.shared.migrateOllamaModelIfNeeded()
+        registerScribeCoreLoginItem()
+        wireNotifications()
+        wireDetector()
+        // Ambient mic-based meeting detection (off unless enabled in Settings).
+        AmbientMeetingDetector.shared.startIfEnabled()
+        registerHotkey()
+        overlay.attach(to: manager)
+        chatSession.attach(manager: manager)
+        observeSettingsChanges()
+
+        // BACKGROUND: prime the meeting index from disk so the first
+        // `listPastMeetings()` from a tab is instant. JSON decode of 200+
+        // meetings on a detached task is still milliseconds.
+        manager.store.preloadIndex()
+
+        // BACKGROUND: keychain migration. Was sync at the top but each
+        // SecItem lookup can take a few ms on first-keychain-unlock; we
+        // don't want to pay that on the path to first paint.
+        Task.detached(priority: .utility) {
+            KeychainStore.migrateAllFromUserDefaults()
+        }
+
+        // BACKGROUND: notifications + Ollama. Neither blocks the UI.
+        Task { await notifications.requestAuthorization() }
+        Task.detached(priority: .utility) { [manager] in
+            await manager.ensureOllamaRunning()
+        }
+
+        // BACKGROUND: orphaned chunks cleanup. Hourly throttle would be
+        // nicer but per-launch is fine — it's a tree walk that aborts
+        // quickly when no chunks/ subdirs exist.
+        Task.detached(priority: .background) { [store = manager.store] in
+            store.cleanupOrphanedChunks()
+        }
+
+        // FOREGROUND (but staggered): the 60s calendar timer fires its
+        // first refresh after a small delay so we don't compete with the
+        // first paint.
+        startCalendarTimerDeferred()
+
+        // BACKGROUND: warm the top-N meeting body cache so the first few
+        // clicks-into-detail come from RAM. Runs after a brief pause to
+        // let the index load first.
+        Task.detached(priority: .utility) { [manager] in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            await MainActor.run { manager.prefetchTopMeetingBodies(limit: 10) }
+        }
+    }
+
+    /// Like `startCalendarTimer` but defers the first call so it doesn't
+    /// race the first paint.
+    private func startCalendarTimerDeferred() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            startCalendarTimer()
+        }
+    }
+
+    private func startCalendarTimer() {
+        guard calendarTimer == nil else { return }
+        let t = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            Task { @MainActor in
+                calendar.refreshUpcoming()
+                await notifications.syncScheduled(for: calendar.upcoming)
+                if AppSettings.shared.autoRecord { autoStartIfNeeded() }
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        calendarTimer = t
+        Task { @MainActor in
+            await notifications.syncScheduled(for: calendar.upcoming)
+        }
+    }
+
+    private func autoStartIfNeeded() {
+        guard case .idle = manager.state else { return }
+        guard let live = calendar.upcoming.first(where: { $0.isLive }) else { return }
+        // Only auto-start if the user has actually joined a call — i.e.
+        // AppDetector sees them in a Zoom meeting window or a browser tab
+        // on meet.google.com. This avoids surprise recordings of calendar
+        // events that turned out to be just time blocks.
+        guard appDetector.currentCallSource != nil else { return }
+        Task { await manager.startRecording(for: live) }
+    }
+
+    private func wireNotifications() {
+        notifications.onJoinAndRecord = { meeting in
+            Task { await manager.switchToRecording(meeting) }
+        }
+        notifications.onRecordMeeting = { meeting in
+            Task { await manager.startRecording(for: meeting) }
+        }
+        notifications.onRecordImpromptu = { source in
+            Task { @MainActor in manager.startImpromptu(source: source) }
+        }
+    }
+
+    private func wireDetector() {
+        appDetector.isRecording = {
+            if case .recording = manager.state { return true }
+            return false
+        }
+        appDetector.onImpromptuDetected = { source in
+            // Skip if there's already a live calendar meeting that covers this.
+            if calendar.upcoming.contains(where: { $0.isLive }) { return }
+            notifications.notifyImpromptuDetected(source: source)
+        }
+        appDetector.start()
+    }
+
+    private func registerHotkey() {
+        let s = AppSettings.shared
+        hotkey.onTrigger = { [weak manager] in
+            manager?.dictation.toggle()
+        }
+        hotkey.register(keyCode: s.dictationHotkeyKeyCode,
+                        modifiers: s.dictationHotkeyModifiers)
+        swapHotkey.onTrigger = { [weak manager] in
+            manager?.dictation.swapVersion()
+        }
+        swapHotkey.register(keyCode: s.dictationSwapHotkeyKeyCode,
+                            modifiers: s.dictationSwapHotkeyModifiers)
+    }
+
+    // MARK: - Login Item registration
+
+    /// Registers ScribeCore as a Login Item so it starts automatically on login.
+    /// Safe to call repeatedly — SMAppService is idempotent when already registered.
+    private func registerScribeCoreLoginItem() {
+        if #available(macOS 13.0, *) {
+            do {
+                try SMAppService.mainApp.register()
+            } catch {
+                print("Failed to register ScribeCore login item: \(error)")
+            }
+        }
+    }
+
+    private func observeSettingsChanges() {
+        settingsObserver = NotificationCenter.default
+            .publisher(for: .meetingScribeSettingsChanged)
+            .sink { _ in
+                let s = AppSettings.shared
+                hotkey.register(keyCode: s.dictationHotkeyKeyCode,
+                                modifiers: s.dictationHotkeyModifiers)
+                swapHotkey.register(keyCode: s.dictationSwapHotkeyKeyCode,
+                                    modifiers: s.dictationSwapHotkeyModifiers)
+                Task { @MainActor in
+                    calendar.refreshUpcoming(force: true)
+                    await notifications.syncScheduled(for: calendar.upcoming)
+                }
+            }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        for window in sender.windows where window.canBecomeKey {
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
+}

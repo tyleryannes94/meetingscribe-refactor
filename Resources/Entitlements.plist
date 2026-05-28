@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Microphone capture (AVAudioEngine). -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <!-- Calendar read (EventKit). -->
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
+    <!-- Contacts read (Phase C — Apple/iCloud contact import, one-way). -->
+    <key>com.apple.security.personal-information.addressbook</key>
+    <true/>
+    <!-- Apple Events: required so a hardened-runtime app can control Notes via
+         AppleScript (Phase 7-B — import people from an iCloud-synced Notes
+         folder). Without this entitlement, sending Apple events fails with
+         errAEEventNotPermitted (-1743) and the app never even appears in
+         System Settings → Privacy & Security → Automation. -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    <!-- Hardened runtime: Sparkle.framework is a runtime-loaded third-party
+         library that lives inside our bundle. With hardened runtime enabled
+         (now required by the Makefile sign step so notarization remains a
+         viable upgrade path), library-validation would otherwise reject the
+         load. Limited to bundle-local frameworks; we don't load anything from
+         outside the bundle. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
