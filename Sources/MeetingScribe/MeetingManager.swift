@@ -338,7 +338,13 @@ final class MeetingManager: ObservableObject {
         // the persisted transcript and from the summary/action items derived from it.
         await liveTranscriber.flush()
         let live = liveTranscriber.renderMarkdown()
-        try? store.writeTranscript(live, for: meeting, primaryTag: primary)
+        do { try store.writeTranscript(live, for: meeting, primaryTag: primary) }
+        catch {
+            log.error("Failed to write live transcript: \(error.localizedDescription, privacy: .public)")
+            ErrorReporter.shared.report(error, category: .storage,
+                                        context: ["phase": "write-live-transcript", "meeting": meeting.id])
+            lastError = "Couldn't save the transcript: \(error.localizedDescription)"
+        }
 
         // Claim this meeting in the pipeline synchronously (main actor) BEFORE
         // publishing lastStoppedMeetingID / dispatching finalize — otherwise a

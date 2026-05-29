@@ -102,7 +102,13 @@ final class MeetingPipelineController: ObservableObject {
                 }
             }
         }
-        try? store.writeTranscript(transcript, for: workingMeeting, primaryTag: primary)
+        do { try store.writeTranscript(transcript, for: workingMeeting, primaryTag: primary) }
+        catch {
+            log.error("Failed to write transcript: \(error.localizedDescription, privacy: .public)")
+            ErrorReporter.shared.report(error, category: .storage,
+                                        context: ["phase": "write-transcript", "meeting": meeting.id])
+            lastError = "Couldn't save the transcript: \(error.localizedDescription)"
+        }
 
         // 3. Summarize.
         let summary: String
@@ -114,7 +120,13 @@ final class MeetingPipelineController: ObservableObject {
                                         context: ["meeting": meeting.id])
             summary = "# Summary\n\n_Summary unavailable: \(error.localizedDescription)_\n"
         }
-        try? store.writeSummary(summary, for: workingMeeting, primaryTag: primary)
+        do { try store.writeSummary(summary, for: workingMeeting, primaryTag: primary) }
+        catch {
+            log.error("Failed to write summary: \(error.localizedDescription, privacy: .public)")
+            ErrorReporter.shared.report(error, category: .storage,
+                                        context: ["phase": "write-summary", "meeting": meeting.id])
+            lastError = "Couldn't save the summary: \(error.localizedDescription)"
+        }
         store.cleanChunks(for: workingMeeting, primaryTag: primary)
 
         // Persist health alongside the meeting.
