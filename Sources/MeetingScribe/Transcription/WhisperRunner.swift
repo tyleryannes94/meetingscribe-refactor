@@ -235,7 +235,7 @@ struct WhisperRunner {
         let transcription: [Segment]
     }
 
-    private static func parse(_ data: Data, mode: Output) throws -> RunResult {
+    static func parse(_ data: Data, mode: Output) throws -> RunResult {
         let decoded: WhisperJSON
         do { decoded = try JSONDecoder().decode(WhisperJSON.self, from: data) }
         catch { throw RunnerError.jsonParse(error.localizedDescription) }
@@ -255,6 +255,29 @@ struct WhisperRunner {
                 .joined(separator: " ")
             return .text(joined)
         }
+    }
+
+    // MARK: - Model checksum (ENG-D)
+
+    /// Known-good SHA-256 of `ggml-base.en.bin` from the whisper.cpp HF repo.
+    /// A downloaded model whose bytes don't hash to this is rejected so a
+    /// truncated / MITM'd / garbage-but-large file can't install as the model
+    /// and silently break all transcription. Update only if the upstream
+    /// artifact is intentionally revved.
+    static let baseEnModelSHA256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
+
+    /// SHA-256 the file at `url`, returning lowercase hex, or nil if unreadable.
+    static func sha256Hex(of url: URL) -> String? {
+        guard let bytes = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// True iff the file at `url` hashes to `expectedHex` (case-insensitive).
+    /// Extracted from the download path so the rejection logic is unit-testable
+    /// without a 140 MB network fetch.
+    static func fileMatchesSHA256(_ url: URL, expectedHex: String) -> Bool {
+        guard let hex = sha256Hex(of: url) else { return false }
+        return hex.caseInsensitiveCompare(expectedHex) == .orderedSame
     }
 
     // MARK: - Pre-flight
@@ -356,21 +379,12 @@ struct WhisperRunner {
         // Verify the bytes against the known-good SHA-256 so a truncated /
         // MITM'd / garbage-but-large file can't install as the model and
         // silently break all transcription. (ENG-D)
-        // Source: SHA-256 of ggml-base.en.bin from the whisper.cpp HF repo,
-        // matching the locally-validated model. Update if the upstream
-        // artifact is intentionally revved.
-        let expectedSHA256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
-        guard let bytes = try? Data(contentsOf: scratch, options: .mappedIfSafe) else {
-            log.error("Could not read downloaded model for checksum verification")
-            try? fm.removeItem(at: scratch)
-            return false
-        }
-        let hex = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
-        guard hex.caseInsensitiveCompare(expectedSHA256) == .orderedSame else {
-            log.error("Whisper model checksum mismatch — rejecting. got=\(hex, privacy: .public)")
+        guard Self.fileMatchesSHA256(scratch, expectedHex: Self.baseEnModelSHA256) else {
+            let got = Self.sha256Hex(of: scratch) ?? "<unreadable>"
+            log.error("Whisper model checksum mismatch — rejecting. got=\(got, privacy: .public)")
             TranscriptionLog.note(tag: "WhisperRunner",
                                   message: "Whisper model checksum mismatch — rejected",
-                                  extra: ["expected": expectedSHA256, "got": hex])
+                                  extra: ["expected": Self.baseEnModelSHA256, "got": got])
             try? fm.removeItem(at: scratch)
             return false
         }
