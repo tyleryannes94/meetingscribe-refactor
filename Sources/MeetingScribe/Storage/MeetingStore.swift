@@ -91,12 +91,21 @@ final class MeetingStore {
 
     // MARK: - Directory resolution
 
-    /// Returns the folder where this meeting *should* live based on its
-    /// primary tag (or Untagged). Does not create the folder.
+    /// Returns the folder where this meeting *should* live: a date-partitioned
+    /// layout `meetings/yyyy/yyyy-MM/<slug>`, independent of tag (tag is metadata,
+    /// not a path component). This matches the v2 migration target, so NEW and
+    /// retagged meetings land in the same layout migrated ones use instead of the
+    /// old tag-grouped `<TagFolder>/<slug>` — the two no longer diverge. Existing
+    /// tag-layout meetings keep resolving via their persisted `relativeFolderPath`
+    /// and the (now layout-agnostic) tree-walk, so nothing has to move. (ENG-B)
     func desiredDirectory(for meeting: Meeting, primaryTag: MeetingTag?) -> URL {
-        let group = primaryTag?.folderName ?? Self.untaggedFolder
+        let cal = Calendar.current
+        let year = cal.component(.year, from: meeting.startDate)
+        let month = cal.component(.month, from: meeting.startDate)
         return root
-            .appendingPathComponent(group, isDirectory: true)
+            .appendingPathComponent("meetings", isDirectory: true)
+            .appendingPathComponent(String(year), isDirectory: true)
+            .appendingPathComponent(String(format: "%d-%02d", year, month), isDirectory: true)
             .appendingPathComponent(meeting.slug, isDirectory: true)
     }
 
@@ -568,26 +577,29 @@ final class MeetingStore {
     /// identical walks. Any future layout change goes in one place.
     private func enumerateMeetingDirectories(_ body: (URL) -> Void) {
         let fm = FileManager.default
-        let topLevel = (try? fm.contentsOfDirectory(at: root,
-                                                    includingPropertiesForKeys: [.isDirectoryKey],
-                                                    options: [.skipsHiddenFiles])) ?? []
-        for url in topLevel {
-            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-            if Self.reservedFolders.contains(url.lastPathComponent) { continue }
-            if fm.fileExists(atPath: url.appendingPathComponent("meeting.json").path) {
-                body(url)
-                continue
-            }
-            let inner = (try? fm.contentsOfDirectory(at: url,
-                                                     includingPropertiesForKeys: [.isDirectoryKey],
-                                                     options: [.skipsHiddenFiles])) ?? []
-            for sub in inner {
-                guard (try? sub.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-                if fm.fileExists(atPath: sub.appendingPathComponent("meeting.json").path) {
-                    body(sub)
+        // Depth-limited recursive walk so a meeting.json dir is found in ANY
+        // supported layout: top-level `<slug>/`, the old `<TagFolder>/<slug>/`,
+        // and the date-partitioned `meetings/<yyyy>/<yyyy-MM>/<slug>/` (3 deep).
+        // The previous walk only checked 2 levels, so date-partitioned meetings
+        // were invisible to the fallback — the core ENG-B resolution hazard.
+        // This is the safety net that guarantees no meeting "vanishes" even if a
+        // persisted relativeFolderPath is stale.
+        func walk(_ dir: URL, depth: Int) {
+            let entries = (try? fm.contentsOfDirectory(at: dir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles])) ?? []
+            for url in entries {
+                guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+                let name = url.lastPathComponent
+                if Self.reservedFolders.contains(name) || name == "chunks" { continue }
+                if fm.fileExists(atPath: url.appendingPathComponent("meeting.json").path) {
+                    body(url)
+                    continue  // a meeting dir won't contain nested meeting dirs
                 }
+                if depth > 0 { walk(url, depth: depth - 1) }
             }
         }
+        walk(root, depth: 3)
     }
 
     /// Public read-only enumerator (used by startup cleanup tasks and tests).
