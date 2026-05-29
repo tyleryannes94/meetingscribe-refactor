@@ -163,6 +163,13 @@ struct PersonDetailView: View {
     var onDeleted: () -> Void
 
     @State private var showEdit = false
+    // Inline identity editing — change name/role/company in place instead of
+    // opening the full AddPersonSheet modal for a one-field fix (req #2: easier
+    // CRM editing). The modal stays available (ellipsis) for contact fields/tags.
+    @State private var editingIdentity = false
+    @State private var draftName = ""
+    @State private var draftRole = ""
+    @State private var draftCompany = ""
     @State private var showAddEncounter = false
     @State private var showAddRelationship = false
     @State private var confirmDelete = false
@@ -274,7 +281,9 @@ struct PersonDetailView: View {
                         if rightTab == .notes { provenanceFooter }
                     }
                     .padding(24)
-                    .frame(maxWidth: 720, alignment: .leading)
+                    // Was 720 — left a wide dead gutter on large displays (req #5).
+                    // Raised so the People detail uses more of the available width.
+                    .frame(maxWidth: 1000, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .background(NDS.bg)
@@ -311,6 +320,24 @@ struct PersonDetailView: View {
         }
     }
 
+    // MARK: - Inline identity editing
+
+    private func beginIdentityEdit() {
+        draftName = current.displayName
+        draftRole = current.role
+        draftCompany = current.company
+        editingIdentity = true
+    }
+
+    private func saveIdentityEdit() {
+        var u = current
+        u.displayName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        u.role = draftRole.trimmingCharacters(in: .whitespacesAndNewlines)
+        u.company = draftCompany.trimmingCharacters(in: .whitespacesAndNewlines)
+        people.updatePerson(u)
+        editingIdentity = false
+    }
+
     // MARK: - Identity panel (left column)
 
     private var identityPanel: some View {
@@ -325,28 +352,64 @@ struct PersonDetailView: View {
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(.white)
                     )
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(current.displayName)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(NDS.textPrimary)
-                    if !subtitle.isEmpty {
-                        Text(subtitle)
+                if editingIdentity {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("Name", text: $draftName)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 15, weight: .semibold))
+                            .onSubmit { saveIdentityEdit() }
+                        TextField("Role", text: $draftRole)
+                            .textFieldStyle(.roundedBorder)
                             .font(.system(size: 12))
-                            .foregroundStyle(NDS.textSecondary)
+                            .onSubmit { saveIdentityEdit() }
+                        TextField("Company", text: $draftCompany)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12))
+                            .onSubmit { saveIdentityEdit() }
                     }
+                } else {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(current.displayName)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(NDS.textPrimary)
+                        if !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.system(size: 12))
+                                .foregroundStyle(NDS.textSecondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { beginIdentityEdit() }
+                    .help("Click to edit name, role, and company")
                 }
             }
 
             // Action buttons
-            HStack(spacing: 6) {
-                Button { showEdit = true } label: {
-                    Label("Edit", systemImage: "pencil")
+            if editingIdentity {
+                HStack(spacing: 6) {
+                    Button { saveIdentityEdit() } label: {
+                        Label("Save", systemImage: "checkmark")
+                    }
+                    .buttonStyle(MSPrimaryButtonStyle())
+                    Button { editingIdentity = false } label: { Text("Cancel") }
+                        .buttonStyle(MSSecondaryButtonStyle())
                 }
-                .buttonStyle(MSSecondaryButtonStyle())
-                Button(role: .destructive) { confirmDelete = true } label: {
-                    Image(systemName: "trash")
+            } else {
+                HStack(spacing: 6) {
+                    Button { beginIdentityEdit() } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
+                    Button { showEdit = true } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
+                    .help("Edit all fields — email, phone, address, tags…")
+                    Button(role: .destructive) { confirmDelete = true } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
                 }
-                .buttonStyle(MSSecondaryButtonStyle())
             }
 
             // Tags
