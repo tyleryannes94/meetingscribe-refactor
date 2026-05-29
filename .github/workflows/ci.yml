@@ -1,10 +1,20 @@
 name: CI
 
 # Gates day-to-day development — runs on every push to main and every PR, so a
-# regression is caught immediately instead of only at release time (the existing
-# release.yml runs tests solely on tag pushes). Build warnings are allowed
-# (the package opts into StrictConcurrency=targeted, which surfaces many);
-# only hard errors and failing tests block.
+# regression is caught immediately instead of only at release time (release.yml
+# runs tests solely on tag pushes). Build warnings are allowed (the package opts
+# into StrictConcurrency=targeted, which surfaces many); only hard errors and
+# failing tests block.
+#
+# Toolchain: build on Swift 6.x via the macos-15 runner's default Xcode 16. This
+# matches the toolchain the app is developed against locally, where the package's
+# StrictConcurrency=targeted items remain *warnings*. Earlier revisions pinned
+# Xcode 15.4 / Swift 5.10, but that toolchain (a) escalates two Timer-closure
+# concurrency items in ScribeCore/Detection to hard errors under the macOS 14 SDK
+# and (b) hits a frontend `fatalError` crash compiling TranscriptionLog. Both are
+# gone on Swift 6.x, so CI tracks the same compiler used locally rather than an
+# older pinned one. (Do not re-pin an older Xcode here without checking it builds
+# clean — the previous path-glob pin silently selected 5.10 and turned CI red.)
 on:
   push:
     branches: [main]
@@ -17,30 +27,19 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-
-      # Pin to Swift 5.10 (Xcode 15.4). The package is swift-tools 5.10 and opts
-      # into StrictConcurrency=targeted, which produces concurrency *warnings*
-      # under Swift 5.10 — matching the local `make dev` build that passes.
-      # Newer default runner toolchains escalate some of those to errors, which
-      # is what turned the first CI run red despite a clean local build.
-      # Select the newest Swift 5.10 toolchain (Xcode 15.x) available on the
-      # runner, rather than a hardcoded path that may not exist. Swift 5.10
-      # keeps the package's StrictConcurrency=targeted items as warnings, which
-      # is the behavior the local `make dev` build passes under.
-      - name: Select Swift 5.10 toolchain (Xcode 15.x)
-        run: |
-          echo "== Installed Xcodes =="; ls -d /Applications/Xcode*.app || true
-          XC=$(ls -d /Applications/Xcode_15*.app 2>/dev/null | sort -V | tail -1)
-          if [ -n "$XC" ]; then echo "Selecting $XC"; sudo xcode-select -s "$XC"; else echo "No Xcode 15.x present — using default toolchain"; fi
 
       - name: Swift version
         run: swift --version
 
-      - name: Build (release — matches `make dev`)
+      - name: Build (release — matches local `make dev`)
         run: swift build -c release
+        env:
+          CI: "true"
 
       - name: Test
         run: swift test
+        env:
+          CI: "true"

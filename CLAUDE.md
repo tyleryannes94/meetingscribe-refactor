@@ -2,8 +2,8 @@
 
 ## Repo
 
-- GitHub: https://github.com/tyleryannes94/meetingscribe (private)
-- Local: `~/MeetingScribe`
+- GitHub: https://github.com/tyleryannes94/meetingscribe-refactor (private)
+- Local: `~/MeetingScribeRefactor`
 - Default branch: `main`
 
 ## Workflow rules
@@ -13,7 +13,7 @@
 After applying ANY code/config edit in this repo, ask the user once whether to
 commit and push. Phrasing should be a yes/no question, e.g.:
 
-> "Push these changes to `tyleryannes94/meetingscribe`?"
+> "Push these changes to `tyleryannes94/meetingscribe-refactor`?"
 
 If they reply yes (or any clear affirmative), do all three of:
 1. `git add -A`
