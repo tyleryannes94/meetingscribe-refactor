@@ -132,6 +132,13 @@ extension ActionItemsView {
                     guard let due = item.dueDate, item.status != .completed else { return false }
                     let weekOut = cal.date(byAdding: .day, value: 7, to: today) ?? today
                     return due >= today && due <= weekOut
+                case .thisWeek:
+                    guard item.status != .completed else { return false }
+                    let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)) ?? today
+                    let endOfWeek = cal.date(byAdding: .day, value: 7, to: startOfWeek) ?? today
+                    let createdThisWeek = item.createdAt >= startOfWeek && item.createdAt < endOfWeek
+                    let dueThisWeek = item.dueDate.map { $0 >= startOfWeek && $0 < endOfWeek } ?? false
+                    return createdThisWeek || dueThisWeek
                 case .overdue:
                     guard let due = item.dueDate else { return false }
                     return due < today && item.status != .completed

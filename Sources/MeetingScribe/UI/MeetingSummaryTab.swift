@@ -164,9 +164,8 @@ private struct InlineActionItemRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Button {
-                var updated = item
-                updated.status = item.status == .completed ? .open : .completed
-                store.update(updated)
+                store.setStatus(item.id,
+                                status: item.status == .completed ? .open : .completed)
             } label: {
                 Image(systemName: item.status == .completed
                     ? "checkmark.circle.fill" : "circle")
@@ -207,7 +206,6 @@ private struct InlineActionItemRow: View {
         case .high:   return .orange
         case .medium: return .yellow
         case .low:    return .secondary.opacity(0.4)
-        case .none:   return .clear
         }
     }
 }
