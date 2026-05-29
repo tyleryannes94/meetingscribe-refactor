@@ -151,6 +151,15 @@ final class MeetingPipelineController: ObservableObject {
         transcribingIDs.contains(meeting.id)
     }
 
+    /// Synchronously mark a meeting as "in the pipeline" from the main actor,
+    /// BEFORE the detached `finalize` task actually starts. Closes the window
+    /// where a user hitting "Transcribe Now" between stop and finalize's own
+    /// insert would launch a second pipeline that clobbers transcript.md /
+    /// summary.md for the same meeting. Idempotent with finalize's insert. (ENG-C)
+    func beginPipeline(_ meetingID: String) {
+        transcribingIDs.insert(meetingID)
+    }
+
     func transcribeNow(meeting: Meeting, regenerateSummary: Bool = true) {
         guard !transcribingIDs.contains(meeting.id) else { return }
         transcribingIDs.insert(meeting.id)

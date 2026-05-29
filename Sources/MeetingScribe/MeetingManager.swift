@@ -340,6 +340,12 @@ final class MeetingManager: ObservableObject {
         let live = liveTranscriber.renderMarkdown()
         try? store.writeTranscript(live, for: meeting, primaryTag: primary)
 
+        // Claim this meeting in the pipeline synchronously (main actor) BEFORE
+        // publishing lastStoppedMeetingID / dispatching finalize — otherwise a
+        // "Transcribe Now" tap in that window starts a 2nd pipeline that races
+        // finalize on transcript.md / summary.md. (ENG-C)
+        pipelineController.beginPipeline(meeting.id)
+
         state = .idle
         activeMeeting = nil
         lastStoppedMeetingID = meeting.id
