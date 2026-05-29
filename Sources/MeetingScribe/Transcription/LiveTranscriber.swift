@@ -146,6 +146,32 @@ final class LiveTranscriber: ObservableObject {
         }
     }
 
+    /// Awaits all in-flight per-source transcription so the final chunk(s)
+    /// flushed by `AudioRecorder.stop()` are included before `renderMarkdown()`.
+    /// Without this, the last 0–5 minutes of a meeting (the chunk still running
+    /// whisper at stop time) were silently dropped from the persisted transcript,
+    /// and every downstream summary / action-item extraction inherited the gap.
+    /// Safe to call when idle — with no pending work it returns immediately.
+    func flush() async {
+        // Chunks finalized during AudioRecorder.stop() reach us via submitChunk,
+        // whose MainActor hop assigns the tail task. Yield once so those hops run
+        // before we snapshot the chains.
+        await Task.yield()
+        // Drain until nothing is in flight. processChunk's `defer` always
+        // decrements pendingCount (even on error), so this terminates; the
+        // safety cap is belt-and-suspenders against an unexpected stuck counter.
+        var safety = 0
+        while pendingCount > 0, safety < 10_000 {
+            await lastMicTask?.value
+            await lastSystemTask?.value
+            await Task.yield()
+            safety += 1
+        }
+        // Final await in case a tail task is completing as pendingCount hits 0.
+        await lastMicTask?.value
+        await lastSystemTask?.value
+    }
+
     /// Render the current segments as a single Markdown transcript with speaker labels.
     func renderMarkdown() -> String {
         var out = "# Transcript\n\n"

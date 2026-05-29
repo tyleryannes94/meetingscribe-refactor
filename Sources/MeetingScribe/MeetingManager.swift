@@ -137,6 +137,7 @@ final class MeetingManager: ObservableObject {
                 guard let self, case .stopping = self.state else { return }
                 let meeting = self.activeMeeting ?? Self.adhocMeeting()
                 let primary = self.tagStore.primaryTag(for: meeting)
+                await self.liveTranscriber.flush()
                 let live = self.liveTranscriber.renderMarkdown()
                 try? self.store.writeTranscript(live, for: meeting, primaryTag: primary)
                 self.state = .idle
@@ -332,6 +333,10 @@ final class MeetingManager: ObservableObject {
         // Clean stop — clear the crash marker so the launch sweep doesn't flag
         // this finished recording for recovery.
         AudioRecovery.clearRecordingMarker(in: store.directory(for: meeting, primaryTag: primary))
+        // Wait for the final in-flight chunk(s) before rendering — otherwise the
+        // last 0–5 min of audio (still running whisper at stop) is dropped from
+        // the persisted transcript and from the summary/action items derived from it.
+        await liveTranscriber.flush()
         let live = liveTranscriber.renderMarkdown()
         try? store.writeTranscript(live, for: meeting, primaryTag: primary)
 
