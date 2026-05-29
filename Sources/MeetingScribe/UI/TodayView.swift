@@ -20,11 +20,23 @@ struct TodayView: View {
     /// Hosted (the MainWindow owns the selected top-level section) so the
     /// "open all action items" button can flip to that tab.
     @Binding var section: TopLevelSection
-    @State private var expandedMeetingID: String?
+    /// The meeting the user clicked into — drives a NavigationStack push to the
+    /// full meeting detail (with a system back arrow). Replaces inline expand/collapse.
+    @State private var selectedMeeting: Meeting?
 
     var body: some View {
-        feed
-        .background(NDS.bg)
+        NavigationStack {
+            feed
+                .background(NDS.bg)
+                // Click a card → push the full detail page with a back arrow.
+                // No more inline 520pt expansion that shoved the feed around.
+                .navigationDestination(isPresented: Binding(
+                    get: { selectedMeeting != nil },
+                    set: { if !$0 { selectedMeeting = nil } }
+                )) {
+                    if let m = selectedMeeting { meetingDetail(for: m) }
+                }
+        }
         .onAppear {
             calendar.refreshUpcoming()
             manager.refreshPastMeetings()
@@ -149,7 +161,7 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionLabel("Recording now")
             if let m = manager.activeMeeting {
-                cardWithDetail(meeting: m, variant: .live)
+                meetingCard(m, variant: .live)
             } else {
                 MeetingCard(meeting: adhocPlaceholder(), variant: .live, onOpen: {})
                     .environmentObject(manager)
@@ -162,10 +174,10 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionLabel("Today")
             ForEach(todayUpcoming) { m in
-                cardWithDetail(meeting: m, variant: .upcoming)
+                meetingCard(m, variant: .upcoming)
             }
             ForEach(todayPast) { m in
-                cardWithDetail(meeting: m, variant: .past)
+                meetingCard(m, variant: .past)
             }
         }
     }
@@ -203,55 +215,33 @@ struct TodayView: View {
         .buttonStyle(.plain)
     }
 
-    /// A meeting card + (when expanded) the inline detail panel below it.
-    @ViewBuilder
-    private func cardWithDetail(meeting: Meeting, variant: MeetingCard.Variant) -> some View {
-        let expanded = expandedMeetingID == meeting.id
-        VStack(spacing: 0) {
-            MeetingCard(meeting: meeting,
-                        variant: variant,
-                        isExpanded: expanded,
-                        onOpen: { toggle(meeting) })
-                .environmentObject(manager)
-                .environmentObject(tagStore)
-            if expanded {
-                inlineDetail(for: meeting, variant: variant)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal:   .opacity.combined(with: .move(edge: .top))))
-            }
-        }
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: expanded)
+    /// A tappable meeting card. Clicking it pushes the full meeting detail onto
+    /// the navigation stack (with a back arrow) instead of expanding inline.
+    private func meetingCard(_ meeting: Meeting, variant: MeetingCard.Variant) -> some View {
+        MeetingCard(meeting: meeting,
+                    variant: variant,
+                    onOpen: { selectedMeeting = meeting })
+            .environmentObject(manager)
+            .environmentObject(tagStore)
     }
 
+    /// Full-page meeting detail pushed onto the Today navigation stack. Matches
+    /// the environment objects the Meetings tab injects so the detail behaves
+    /// identically from either entry point.
     @ViewBuilder
-    private func inlineDetail(for meeting: Meeting, variant: MeetingCard.Variant) -> some View {
-        let isLive = (variant == .live) ||
-            (manager.activeMeeting?.id == meeting.id)
-        let mode: UnifiedMeetingDetail.Mode = isLive
-            ? .live
-            : (variant == .upcoming ? .upcoming(meeting) : .past(meeting))
+    private func meetingDetail(for meeting: Meeting) -> some View {
+        UnifiedMeetingDetail(mode: detailMode(for: meeting))
+            .environmentObject(manager)
+            .environmentObject(manager.recordingMonitor)
+            .environmentObject(tagStore)
+            .environmentObject(calendar)
+            .environmentObject(manager.actionItems)
+            .environmentObject(manager.pipelineController)
+    }
 
-        VStack(spacing: 0) {
-            UnifiedMeetingDetail(mode: mode)
-                .environmentObject(manager)
-                .environmentObject(tagStore)
-                .environmentObject(calendar)
-            HStack {
-                Spacer()
-                Button {
-                    toggle(meeting)
-                } label: {
-                    Label("Collapse", systemImage: "chevron.up")
-                        .font(.caption)
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .padding(.vertical, 6).padding(.trailing, 10)
-            }
-        }
-        .frame(minHeight: 520)
-        .padding(.top, 8).padding(.horizontal, 4)
+    private func detailMode(for m: Meeting) -> UnifiedMeetingDetail.Mode {
+        if manager.activeMeeting?.id == m.id { return .live }
+        return m.startDate > Date() ? .upcoming(m) : .past(m)
     }
 
     private var emptyState: some View {
@@ -289,12 +279,6 @@ struct TodayView: View {
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .tracking(0.6)
-    }
-
-    // MARK: - Expand / collapse
-
-    private func toggle(_ m: Meeting) {
-        expandedMeetingID = (expandedMeetingID == m.id) ? nil : m.id
     }
 
     // MARK: - Data
