@@ -17,16 +17,17 @@ final class ActionItemsViewModel {
     // MARK: - Enums (lift out the inline types so per-view files can share)
 
     enum Filter: String, CaseIterable, Identifiable, Hashable {
-        case all, open, inProgress, completed, upcoming, overdue
+        case all, thisWeek, open, inProgress, completed, upcoming, overdue
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .all: return "All"
-            case .open: return "Open"
+            case .all:        return "All"
+            case .thisWeek:   return "This Week"
+            case .open:       return "Open"
             case .inProgress: return "In Progress"
-            case .completed: return "Completed"
-            case .upcoming: return "Upcoming"
-            case .overdue: return "Overdue"
+            case .completed:  return "Done"
+            case .upcoming:   return "Upcoming"
+            case .overdue:    return "Overdue"
             }
         }
     }
@@ -125,9 +126,19 @@ final class ActionItemsViewModel {
 
         // Status filter
         let cal = Calendar.current
+        let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+        let endOfWeek = cal.date(byAdding: .day, value: 7, to: startOfWeek) ?? now
         let endOfToday = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now
         switch filter {
         case .all: break
+        case .thisWeek:
+            // Items created this week OR due this week (and not completed).
+            working = working.filter { item in
+                guard item.status != .completed else { return false }
+                let createdThisWeek = item.createdAt >= startOfWeek && item.createdAt < endOfWeek
+                let dueThisWeek = item.dueDate.map { $0 >= startOfWeek && $0 < endOfWeek } ?? false
+                return createdThisWeek || dueThisWeek
+            }
         case .open: working = working.filter { $0.status == .open }
         case .inProgress: working = working.filter { $0.status == .inProgress }
         case .completed: working = working.filter { $0.status == .completed }

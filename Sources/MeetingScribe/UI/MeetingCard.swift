@@ -183,31 +183,50 @@ struct MeetingCard: View {
         case .upcoming:
             HStack(spacing: 8) {
                 if meeting.conferenceURL != nil {
-                    Button {
-                        if let url = meeting.conferenceURL.flatMap(URL.init(string:)) {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: { Label("Join", systemImage: "video") }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
+                    // Primary: Join & Record (the 95% action) with a
+                    // chevron dropdown for the rare "join without recording" case.
+                    // Replaces the old 3-button layout that required a decision
+                    // under time pressure.
+                    Menu {
+                        Button {
+                            if let url = meeting.conferenceURL.flatMap(URL.init(string:)) {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: { Label("Join (no recording)", systemImage: "video") }
 
-                    Button {
+                        Divider()
+
+                        Button {
+                            Task {
+                                if case .recording = manager.state {
+                                    await manager.stopRecording()
+                                    try? await Task.sleep(nanoseconds: 300_000_000)
+                                }
+                                await manager.startRecording(for: meeting)
+                            }
+                        } label: { Label("Record only (no join)", systemImage: "record.circle") }
+                    } label: {
+                        Label("Join & Record", systemImage: "video.fill")
+                    } primaryAction: {
                         Task { await manager.switchToRecording(meeting) }
-                    } label: { Label("Join & Record", systemImage: "video.fill") }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                } else {
+                    // No conference URL: just a Record button.
+                    Button {
+                        Task {
+                            if case .recording = manager.state {
+                                await manager.stopRecording()
+                                try? await Task.sleep(nanoseconds: 300_000_000)
+                            }
+                            await manager.startRecording(for: meeting)
+                        }
+                    } label: { Label("Record", systemImage: "record.circle") }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
                 }
-                Button {
-                    Task {
-                        if case .recording = manager.state {
-                            await manager.stopRecording()
-                            try? await Task.sleep(nanoseconds: 300_000_000)
-                        }
-                        await manager.startRecording(for: meeting)
-                    }
-                } label: { Label("Record", systemImage: "record.circle") }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
             }
         case .past:
             HStack(spacing: 8) {

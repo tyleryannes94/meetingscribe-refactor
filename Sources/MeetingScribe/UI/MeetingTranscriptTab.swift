@@ -21,10 +21,12 @@ var transcriptBody: some View {
         case .live:
             LiveTranscriptScroll(transcriber: manager.liveTranscriber,
                                  recordingStartedAt: liveStartedAt)
-        case .upcoming:
-            placeholder(systemImage: "waveform",
-                        title: "No transcript yet",
-                        message: "Start a recording to capture this meeting.")
+        case .upcoming(let m):
+            // Pre-meeting brief: prior meetings with same attendees + open
+            // action items from those meetings. Far more useful than the
+            // old "No transcript yet" placeholder.
+            PreMeetingBriefView(meeting: m)
+                .environmentObject(manager)
         case .past:
             if transcript.isEmpty {
                 placeholder(systemImage: "waveform",
@@ -153,29 +155,41 @@ struct LiveTranscriptScroll: View {
     }
 }
 
+/// Tab order is intentional: Summary first (post-meeting review),
+/// then Transcript, then My Notes, then Ask AI.
+/// For live/upcoming meetings the default is Transcript or My Notes
+/// (see UnifiedMeetingDetail.applySmartTabDefault).
 enum DetailTab: String, CaseIterable, Identifiable {
-    case transcript, notes, summary, chat
+    case summary, transcript, notes, chat
     var id: String { rawValue }
     var label: String {
         switch self {
+        case .summary:    return "Summary"
         case .transcript: return "Transcript"
         case .notes:      return "My Notes"
-        case .summary:    return "Summary"
-        case .chat:       return "Chat"
+        case .chat:       return "Ask AI"
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .summary:    return "sparkles"
+        case .transcript: return "text.alignleft"
+        case .notes:      return "note.text"
+        case .chat:       return "bubble.left.and.sparkles"
         }
     }
 }
 
+/// Renders markdown for the transcript/summary tabs.
+/// Uses MarkdownEditor in read-only mode so block-level constructs
+/// (## headings, --- dividers, indented lists) render correctly.
+/// For long transcripts this is significantly more performant than
+/// AttributedString.init(markdown:) which blocks synchronously.
 @available(macOS 14.0, *)
 struct MarkdownText: View {
     let raw: String
     init(_ raw: String) { self.raw = raw }
     var body: some View {
-        if let attr = try? AttributedString(markdown: raw,
-                                            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-            Text(attr).font(.body)
-        } else {
-            Text(raw).font(.body.monospaced())
-        }
+        MarkdownEditor(text: .constant(raw), isEditable: false)
     }
 }

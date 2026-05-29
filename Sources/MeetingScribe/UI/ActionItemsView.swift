@@ -50,16 +50,28 @@ struct ActionItemsView: View {
     static let homeSentinel = "__home__"
 
     enum Filter: String, CaseIterable, Identifiable {
-        case all, open, inProgress, completed, upcoming, overdue
+        case all, thisWeek, open, inProgress, completed, upcoming, overdue
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .all: return "All"
-            case .open: return "Open"
+            case .all:        return "All"
+            case .thisWeek:   return "This Week"
+            case .open:       return "Open"
             case .inProgress: return "In Progress"
-            case .completed: return "Done"
-            case .upcoming: return "Upcoming"
-            case .overdue: return "Overdue"
+            case .completed:  return "Done"
+            case .upcoming:   return "Upcoming"
+            case .overdue:    return "Overdue"
+            }
+        }
+        var systemImage: String {
+            switch self {
+            case .all:        return "tray.full"
+            case .thisWeek:   return "calendar.badge.clock"
+            case .open:       return "circle"
+            case .inProgress: return "arrow.triangle.2.circlepath"
+            case .completed:  return "checkmark.circle.fill"
+            case .upcoming:   return "clock"
+            case .overdue:    return "exclamationmark.circle.fill"
             }
         }
     }

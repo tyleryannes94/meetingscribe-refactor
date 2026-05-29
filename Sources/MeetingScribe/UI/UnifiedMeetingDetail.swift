@@ -22,7 +22,7 @@ struct UnifiedMeetingDetail: View {
 
     @StateObject var meetingChat = ChatSession()
 
-    @State var tab: DetailTab = .notes
+    @State var tab: DetailTab = .summary
     /// Whether we've applied the smart tab default for this meeting yet.
     /// Prevents tab from jumping when the user has already made a selection.
     @State private var hasAppliedTabDefault = false
@@ -49,6 +49,7 @@ struct UnifiedMeetingDetail: View {
     /// Failsafe upload flows (manual audio / transcript into this meeting).
     @State var showAudioImporter = false
     @State var showTranscriptImporter = false
+    @State var showFollowUp = false
 
     var meeting: Meeting? {
         switch mode {
@@ -79,9 +80,9 @@ struct UnifiedMeetingDetail: View {
             tabPicker
             Group {
                 switch tab {
+                case .summary:    summaryBody
                 case .transcript: transcriptBody
                 case .notes:      notesEditor
-                case .summary:    summaryBody
                 case .chat:       chatBody
                 }
             }
@@ -247,9 +248,9 @@ struct UnifiedMeetingDetail: View {
                 if hasSummary { tab = .summary }
             }
         case .live:
-            tab = .notes  // Always start in notes so you can type while recording.
+            tab = .notes  // Notes while recording so you can type alongside the transcript.
         case .upcoming:
-            tab = .notes
+            tab = .transcript  // Transcript placeholder for upcoming — no notes to show yet.
         }
     }
 
