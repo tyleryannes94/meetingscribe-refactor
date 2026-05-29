@@ -70,7 +70,9 @@ struct TodayView: View {
                 SuggestedPeopleView()
             }
             .padding(.horizontal, 28).padding(.vertical, 24)
-            .frame(maxWidth: 920, alignment: .leading)
+            // Was 920 — left wide empty gutters on large displays (req #5).
+            // Widened so Today fills more of the window without going full-bleed.
+            .frame(maxWidth: 1180, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
     }
