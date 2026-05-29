@@ -52,6 +52,7 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 quickActions
+                upNextCard
 
                 if isRecording { liveSection }
 
@@ -125,12 +126,6 @@ struct TodayView: View {
 
             // Secondary actions — compact pills
             FlowLayout(spacing: 8) {
-                if let m = nextMeeting {
-                    QuickPill(title: "Join & record", systemImage: "video.fill",
-                              tint: NDS.selectColor("blue")) {
-                        Task { await manager.switchToRecording(m) }
-                    }
-                }
                 QuickPill(title: "Voice note", systemImage: "mic.fill",
                           tint: NDS.selectColor("orange")) {
                     Task { await manager.startQuickNote() }
@@ -146,6 +141,41 @@ struct TodayView: View {
                     section = .actions
                 }
             }
+        }
+    }
+
+    /// "Up next" hero — the soonest upcoming meeting as a prominent glance with
+    /// a one-tap Join & Record (req #3: make Today a better central hub).
+    @ViewBuilder
+    private var upNextCard: some View {
+        if !isRecording, let m = nextMeeting {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("UP NEXT")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(NDS.brand).tracking(0.6)
+                    Text(m.displayTitle)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                    Text(relativeStart(m))
+                        .font(.system(size: 12)).foregroundStyle(NDS.textSecondary)
+                }
+                Spacer()
+                if m.conferenceURL != nil {
+                    Button { Task { await manager.switchToRecording(m) } } label: {
+                        Label("Join & record", systemImage: "video.fill")
+                    }
+                    .buttonStyle(MSPrimaryButtonStyle())
+                }
+                Button { selectedMeeting = m } label: {
+                    Label("Open", systemImage: "chevron.right")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NDS.fieldBg))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(NDS.brand.opacity(0.3), lineWidth: 1))
         }
     }
 
@@ -300,6 +330,12 @@ struct TodayView: View {
         return manager.pastMeetings
             .filter { cal.isDateInToday($0.startDate) }
             .sorted { $0.startDate > $1.startDate }
+    }
+
+    private func relativeStart(_ m: Meeting) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return "Starts " + f.localizedString(for: m.startDate, relativeTo: Date())
     }
 
     private func todayLong() -> String {

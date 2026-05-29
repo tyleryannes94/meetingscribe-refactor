@@ -33,17 +33,15 @@ extension UnifiedMeetingDetail {
                     // indented lists, monospaced code. MarkdownEditor on
                     // macOS is significantly more performant than
                     // AttributedString for long documents.
+                    // Draft follow-up is the #1 post-meeting action — surface it
+                    // at the TOP of the summary instead of buried below it (DEF-3).
+                    followUpButton
+                        .padding(.horizontal)
+                        .padding(.top, 4)
+                        .padding(.bottom, 10)
+
                     MarkdownEditor(text: .constant(summary), isEditable: false)
                         .padding(.bottom, 8)
-
-                    // Follow-up draft button — surfaces FollowUpView which
-                    // was previously dead code. Lives at the bottom of the
-                    // summary so it's the natural next action after reading.
-                    if !summary.isEmpty {
-                        followUpButton
-                            .padding(.horizontal)
-                            .padding(.bottom, 8)
-                    }
 
                     // Extracted action items from this meeting — inline
                     // so users don't have to navigate to the Tasks tab
@@ -105,7 +103,7 @@ extension UnifiedMeetingDetail {
             Label("Draft follow-up…", systemImage: "paperplane")
                 .font(.callout)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.borderedProminent)
         .controlSize(.regular)
         .sheet(isPresented: $showFollowUp) {
             if let m = meeting {
