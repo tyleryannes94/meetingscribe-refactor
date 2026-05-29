@@ -321,6 +321,7 @@ struct PersonDetailView: View {
     }
 
     // MARK: - Inline identity editing
+    // (req #2 — edit core fields in place; full sheet stays behind the ellipsis)
 
     private func beginIdentityEdit() {
         draftName = current.displayName
