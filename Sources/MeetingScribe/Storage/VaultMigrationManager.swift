@@ -45,6 +45,7 @@ final class VaultMigrationManager: ObservableObject {
 
             let total = Double(meetingDirs.count)
             var moved = 0
+            var failures = 0
 
             for dir in meetingDirs {
                 // Parse the meeting.json to get the date
@@ -52,6 +53,11 @@ final class VaultMigrationManager: ObservableObject {
                 guard let data = try? Data(contentsOf: jsonURL),
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       let startStr = json["startDate"] as? String else {
+                    // Can't determine the date → can't place it. Count it as a
+                    // failure so the migration isn't marked complete and we
+                    // retry next launch instead of stranding it. (ENG-B)
+                    failures += 1
+                    log.error("Skipping unparseable meeting.json at \(dir.lastPathComponent)")
                     continue
                 }
 
@@ -70,25 +76,41 @@ final class VaultMigrationManager: ObservableObject {
                     .appendingPathComponent(monthStr, isDirectory: true)
                     .appendingPathComponent(dir.lastPathComponent, isDirectory: true)
 
-                // Skip if already in the right place
-                if dir.path == destDir.path { moved += 1; continue }
+                // Skip if already in the right place (idempotent re-run).
+                if dir.path == destDir.path {
+                    moved += 1
+                    migrationProgress = Double(moved + failures) / total
+                    continue
+                }
 
                 do {
                     try fm.createDirectory(at: destDir.deletingLastPathComponent(),
                                           withIntermediateDirectories: true)
                     try fm.moveItem(at: dir, to: destDir)
+                    moved += 1
                 } catch {
+                    // Previously the failure was swallowed AND counted as
+                    // moved, so a partial migration was marked complete and the
+                    // unmoved meetings were stranded in the old layout. (ENG-B)
+                    failures += 1
                     log.error("Failed to move \(dir.lastPathComponent): \(error.localizedDescription)")
                 }
 
-                moved += 1
-                migrationProgress = Double(moved) / total
+                migrationProgress = Double(moved + failures) / total
                 migrationStatus = "Moved \(moved) of \(Int(total)) meetings…"
             }
 
-            UserDefaults.standard.set(true, forKey: migratedKey)
-            needsLayoutMigration = false
-            migrationStatus = "Migration complete."
+            // Only mark the migration complete when EVERY discovered meeting
+            // landed at its desired location. On any failure leave the flag
+            // false so the next launch retries (the move is idempotent: an
+            // already-moved meeting hits the dir.path == destDir.path path). (ENG-B)
+            if failures == 0 {
+                UserDefaults.standard.set(true, forKey: migratedKey)
+                needsLayoutMigration = false
+                migrationStatus = "Migration complete."
+            } else {
+                migrationStatus = "Migration incomplete — \(failures) item(s) couldn't be moved. Will retry on next launch."
+            }
         }
 
         isMigrating = false
