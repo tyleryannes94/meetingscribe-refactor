@@ -229,6 +229,7 @@ private struct InlineActionItemRow: View {
             }
             .menuStyle(.borderlessButton).fixedSize().padding(.top, 4)
             .help("Set priority")
+            .accessibilityLabel("Set priority")
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

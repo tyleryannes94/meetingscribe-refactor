@@ -413,10 +413,12 @@ struct PersonDetailView: View {
                     }
                     .buttonStyle(MSSecondaryButtonStyle())
                     .help("Edit all fields — email, phone, address, tags…")
+                    .accessibilityLabel("Edit all fields")
                     Button(role: .destructive) { confirmDelete = true } label: {
                         Image(systemName: "trash")
                     }
                     .buttonStyle(MSSecondaryButtonStyle())
+                    .accessibilityLabel("Delete person")
                 }
             }
 
