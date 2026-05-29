@@ -1,0 +1,31 @@
+name: CI
+
+# Gates day-to-day development — runs on every push to main and every PR, so a
+# regression is caught immediately instead of only at release time (the existing
+# release.yml runs tests solely on tag pushes). Build warnings are allowed
+# (the package opts into StrictConcurrency=targeted, which surfaces many);
+# only hard errors and failing tests block.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Test
+        run: swift test
