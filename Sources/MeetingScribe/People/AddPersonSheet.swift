@@ -14,13 +14,13 @@ struct AddPersonSheet: View {
     @State private var displayName: String
     @State private var company: String
     @State private var role: String
-    @State private var email: String
-    @State private var phone: String
+    @State private var emails: [String]
+    @State private var phones: [String]
     @State private var bio: String
     @State private var tagIDs: Set<String>
     @State private var hasBirthday: Bool
     @State private var birthday: Date
-    @State private var address: String
+    @State private var addresses: [String]
     @State private var favorites: String
 
     init(editing: Person? = nil) {
@@ -28,13 +28,13 @@ struct AddPersonSheet: View {
         _displayName = State(initialValue: editing?.displayName ?? "")
         _company = State(initialValue: editing?.company ?? "")
         _role = State(initialValue: editing?.role ?? "")
-        _email = State(initialValue: editing?.primaryEmail ?? "")
-        _phone = State(initialValue: editing?.primaryPhone ?? "")
+        _emails = State(initialValue: (editing?.emails.isEmpty == false) ? editing!.emails : [""])
+        _phones = State(initialValue: (editing?.phones.isEmpty == false) ? editing!.phones : [""])
         _bio = State(initialValue: editing?.bio ?? "")
         _tagIDs = State(initialValue: editing?.tagIDs ?? [])
         _hasBirthday = State(initialValue: editing?.birthday != nil)
         _birthday = State(initialValue: editing?.birthday ?? Date())
-        _address = State(initialValue: editing?.primaryAddress ?? "")
+        _addresses = State(initialValue: (editing?.addresses.isEmpty == false) ? editing!.addresses : [""])
         _favorites = State(initialValue: (editing?.favorites ?? []).joined(separator: ", "))
     }
 
@@ -64,11 +64,9 @@ struct AddPersonSheet: View {
                         field("Company", text: $company, prompt: "Acme")
                         field("Role", text: $role, prompt: "Engineer")
                     }
-                    HStack(spacing: 12) {
-                        field("Email", text: $email, prompt: "jane@acme.com")
-                        field("Phone", text: $phone, prompt: "(555) 123-4567")
-                    }
-                    field("Address", text: $address, prompt: "123 Main St, City")
+                    multiField("Email", $emails, prompt: "jane@acme.com")
+                    multiField("Phone", $phones, prompt: "(555) 123-4567")
+                    multiField("Address", $addresses, prompt: "123 Main St, City")
                     field("Favorite things", text: $favorites, prompt: "coffee, hiking, sci-fi (comma-separated)")
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -114,9 +112,9 @@ struct AddPersonSheet: View {
 
     private func save() {
         guard !trimmedName.isEmpty else { return }
-        let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-        let address = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmails = emails.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let cleanPhones = phones.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let cleanAddresses = addresses.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         let favs = favorites.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
 
@@ -126,9 +124,9 @@ struct AddPersonSheet: View {
         person.displayName = trimmedName
         person.company = company.trimmingCharacters(in: .whitespacesAndNewlines)
         person.role = role.trimmingCharacters(in: .whitespacesAndNewlines)
-        person.emails = Self.replacingFirst(person.emails, with: email)
-        person.phones = Self.replacingFirst(person.phones, with: phone)
-        person.addresses = Self.replacingFirst(person.addresses, with: address)
+        person.emails = cleanEmails
+        person.phones = cleanPhones
+        person.addresses = cleanAddresses
         person.favorites = favs
         person.bio = bio
         person.tagIDs = tagIDs
@@ -138,18 +136,42 @@ struct AddPersonSheet: View {
         dismiss()
     }
 
-    /// Replaces the first element (the field the sheet edits) while keeping any
-    /// additional values that came from an import. Empty input clears the first.
-    private static func replacingFirst(_ list: [String], with value: String) -> [String] {
-        var out = list
-        if value.isEmpty {
-            if !out.isEmpty { out.removeFirst() }
-        } else if out.isEmpty {
-            out = [value]
-        } else {
-            out[0] = value
+    /// Repeatable list of text rows (email/phone/address) with add + remove, so
+    /// a person can hold multiple values. The model already stores arrays; the
+    /// sheet previously edited only the first via `replacingFirst` (PPL-2).
+    @ViewBuilder
+    private func multiField(_ label: String, _ values: Binding<[String]>, prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+            ForEach(values.wrappedValue.indices, id: \.self) { i in
+                HStack(spacing: 6) {
+                    TextField(prompt, text: Binding(
+                        get: { i < values.wrappedValue.count ? values.wrappedValue[i] : "" },
+                        set: { newValue in
+                            var arr = values.wrappedValue
+                            if i < arr.count { arr[i] = newValue; values.wrappedValue = arr }
+                        }))
+                        .textFieldStyle(.roundedBorder)
+                    Button {
+                        var arr = values.wrappedValue
+                        if i < arr.count { arr.remove(at: i) }
+                        if arr.isEmpty { arr = [""] }
+                        values.wrappedValue = arr
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(NDS.textTertiary)
+                    .help("Remove")
+                }
+            }
+            Button {
+                values.wrappedValue.append("")
+            } label: {
+                Label("Add \(label.lowercased())", systemImage: "plus.circle").font(.caption)
+            }
+            .buttonStyle(.borderless)
         }
-        return out
     }
 }
 
