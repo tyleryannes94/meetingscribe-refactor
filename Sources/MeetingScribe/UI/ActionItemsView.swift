@@ -18,7 +18,9 @@ struct ActionItemsView: View {
     @State var groupBy: GroupBy = .none
     @State var viewMode: ViewMode = .list
     /// "__home__" = dashboard; nil = All tasks; "__none__" = No project; else a project id.
-    @State var selectedProjectID: String? = ActionItemsView.homeSentinel
+    // Default to nil (All Tasks) so the first click into Tasks shows every
+    // open item immediately, not the dashboard. Dashboard is one click away.
+    @State var selectedProjectID: String? = nil
     /// When set, the right pane shows that meeting's notes page instead of
     /// the task database.
     @State var selectedMeetingID: String?

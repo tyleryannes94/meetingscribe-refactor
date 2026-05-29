@@ -384,7 +384,11 @@ struct InitiativeNode: View {
             .background(isSelected ? NDS.brand.opacity(0.14) : (hovering ? NDS.rowHover : .clear),
                         in: RoundedRectangle(cornerRadius: NDS.rowRadius))
             .contentShape(Rectangle())
-            .onTapGesture { selectedMeetingID = nil; selectedProjectID = nil; selectedInitiativeID = initiative.id }
+            // Single tap selects AND auto-expands children — no separate chevron needed.
+            .onTapGesture {
+                selectedMeetingID = nil; selectedProjectID = nil; selectedInitiativeID = initiative.id
+                if !isOpen { expandedInitiatives.insert(initiative.id) }
+            }
             .onHover { hovering = $0 }
             .contextMenu {
                 Button(role: .destructive) {

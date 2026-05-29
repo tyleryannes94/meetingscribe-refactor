@@ -8,34 +8,42 @@ import AppKit
 enum NDS {
     // MARK: Layout
     static let pagePadding: CGFloat = 56
-    static let contentMaxWidth: CGFloat = 760
-    static let radius: CGFloat = 6
-    static let rowRadius: CGFloat = 6
+    static let contentMaxWidth: CGFloat = 720
+    static let radius: CGFloat = 8       // increased from 6
+    static let rowRadius: CGFloat = 8
+    static let cardRadius: CGFloat = 12  // card-level rounding (was hardcoded 14)
+
+    // MARK: Button dimension tokens
+    // Minimum 44pt invisible tap target via .minTap() extension below
+    static let buttonPrimaryH:   CGFloat = 34
+    static let buttonSecondaryH: CGFloat = 30
+    static let buttonTertiaryH:  CGFloat = 28
+    static let buttonIconSide:   CGFloat = 30
+    static let buttonHPadLg:     CGFloat = 16
+    static let buttonHPadMd:     CGFloat = 14
+    static let buttonHPadSm:     CGFloat = 12
 
     // MARK: Color
-    /// Untitled UI brand (primary). Used for the active nav item, primary
-    /// buttons, and the app accent tint.
+    /// Brand accent — kept as the familiar purple.
     static let brand = Color(hex: "#7F56D9") ?? .purple
     static let brandHover = Color(hex: "#9E77ED") ?? .purple
 
-    /// Direction A — Refined Current. The dark palette is **blue-tinted** (deep
-    /// navy/indigo) rather than neutral gray, so the whole window reads as a
-    /// cool, dim workspace. Light mode stays clean and slightly cool to match.
-    /// Each token is a single dynamic color that resolves against the view's
-    /// effective appearance, so existing call sites pick up the tint for free.
-    static let bg          = dyn(dark: (13, 19, 32, 1),    light: (251, 252, 254, 1))   // #0d1320 / #fbfcfe
-    static let sidebarBg   = dyn(dark: (18, 26, 44, 1),    light: (241, 244, 250, 1))   // #121a2c / #f1f4fa
-    static let rightRailBg = dyn(dark: (15, 22, 38, 1),    light: (246, 248, 252, 1))   // #0f1626 / #f6f8fc
-    static let rowHover    = dyn(dark: (140, 175, 240, 0.08), light: (28, 52, 108, 0.05))
-    static let rowSelected = brand.opacity(0.14)
-    static let divider     = dyn(dark: (140, 175, 240, 0.09), light: (28, 52, 108, 0.07))
-    static let hairline    = dyn(dark: (140, 175, 240, 0.13), light: (28, 52, 108, 0.10))
-    static let textPrimary   = dyn(dark: (232, 237, 247, 1), light: (29, 29, 31, 1))    // #e8edf7 / #1d1d1f
-    static let textSecondary = dyn(dark: (206, 218, 242, 0.62), light: (0, 0, 0, 0.55))
-    static let textTertiary  = dyn(dark: (206, 218, 242, 0.40), light: (0, 0, 0, 0.38))
-    static let fieldBg       = dyn(dark: (140, 175, 240, 0.06), light: (28, 52, 108, 0.04))
-    /// Background of the active segment in the appearance toggle.
-    static let segmentActiveBg = dyn(dark: (140, 175, 240, 0.14), light: (255, 255, 255, 1))
+    /// Warm neutral palette — replaces the cold blue-navy.
+    /// Dark: warm near-black (#1C1B19). Light: warm off-white (#F8F7F5).
+    /// All interactive surfaces use warm-tinted grays for a more premium,
+    /// less eye-straining feel compared to the previous blue-navy system.
+    static let bg          = dyn(dark: (28, 27, 25, 1),     light: (248, 247, 245, 1))   // #1c1b19 / #f8f7f5
+    static let sidebarBg   = dyn(dark: (22, 21, 19, 1),     light: (240, 238, 233, 1))   // #161513 / #f0eee9
+    static let rightRailBg = dyn(dark: (25, 24, 22, 1),     light: (244, 242, 238, 1))   // #191816 / #f4f2ee
+    static let rowHover    = dyn(dark: (255, 245, 225, 0.06), light: (100, 80, 40, 0.06))
+    static let rowSelected = brand.opacity(0.13)
+    static let divider     = dyn(dark: (255, 245, 225, 0.09), light: (100, 80, 40, 0.10))
+    static let hairline    = dyn(dark: (255, 245, 225, 0.13), light: (100, 80, 40, 0.14))
+    static let textPrimary   = dyn(dark: (242, 239, 230, 1),  light: (26, 25, 23, 1))    // #f2efe6 / #1a1917
+    static let textSecondary = dyn(dark: (210, 204, 190, 0.72), light: (26, 25, 23, 0.58))
+    static let textTertiary  = dyn(dark: (210, 204, 190, 0.42), light: (26, 25, 23, 0.38))
+    static let fieldBg       = dyn(dark: (255, 245, 225, 0.055), light: (100, 80, 40, 0.045))
+    static let segmentActiveBg = dyn(dark: (255, 245, 225, 0.13), light: (255, 255, 255, 1))
 
     /// Builds a single SwiftUI `Color` backed by a dynamic `NSColor` that
     /// resolves to the `dark` or `light` sRGB tuple (r, g, b in 0–255, a in
@@ -52,7 +60,7 @@ enum NDS {
     // MARK: Type
     static let title = Font.system(size: 32, weight: .heavy)
     static let pageTitle = Font.system(size: 26, weight: .bold)
-    static let sectionLabel = Font.system(size: 11, weight: .semibold)
+    static let sectionLabel = Font.system(size: 12, weight: .semibold)  // increased from 11
     static let body = Font.system(size: 14)
     static let small = Font.system(size: 12)
     static let tiny = Font.system(size: 11)
@@ -160,8 +168,12 @@ struct NotionIconButton: View {
             Image(systemName: systemName)
                 .font(.system(size: 13))
                 .foregroundStyle(NDS.textSecondary)
-                .frame(width: 28, height: 26)
-                .background(hovering ? NDS.rowHover : .clear, in: RoundedRectangle(cornerRadius: 5))
+                .frame(width: NDS.buttonIconSide, height: NDS.buttonIconSide)
+                .background(hovering ? NDS.rowHover : .clear, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(hovering ? NDS.hairline : .clear, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -196,6 +208,76 @@ struct UntitledSecondaryButtonStyle: ButtonStyle {
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(NDS.hairline, lineWidth: 1))
+            .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Full button system (replaces ad-hoc controlSize + bordered patterns)
+
+/// Primary filled action button (36pt tall, brand fill).
+struct MSPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, NDS.buttonHPadLg)
+            .frame(height: NDS.buttonPrimaryH)
+            .background(NDS.brand.opacity(configuration.isPressed ? 0.80 : 1),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+/// Secondary outlined button (32pt tall, border + field bg).
+struct MSSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(NDS.textPrimary)
+            .padding(.horizontal, NDS.buttonHPadMd)
+            .frame(height: NDS.buttonSecondaryH)
+            .background(configuration.isPressed ? NDS.rowHover : NDS.fieldBg,
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(NDS.hairline, lineWidth: 1))
+            .contentShape(Rectangle())
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+/// Danger/destructive button (36pt tall, red fill).
+struct MSDangerButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, NDS.buttonHPadLg)
+            .frame(height: NDS.buttonPrimaryH)
+            .background(Color.red.opacity(configuration.isPressed ? 0.72 : 0.88),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+/// Ghost/tertiary button (no border, accent label, 28pt tall).
+struct MSTertiaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .regular))
+            .foregroundStyle(configuration.isPressed ? NDS.textPrimary : NDS.textSecondary)
+            .padding(.horizontal, NDS.buttonHPadSm)
+            .frame(height: NDS.buttonTertiaryH)
+            .contentShape(Rectangle())
+    }
+}
+
+/// Invisible tap-target expander: ensures a 44pt hit area without
+/// changing the visual size. Apply to any icon-only button.
+extension View {
+    func minTap() -> some View {
+        frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
     }
 }

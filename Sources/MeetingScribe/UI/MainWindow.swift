@@ -2,31 +2,43 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+/// Top-level navigation sections. Collapsed from 7 → 5:
+/// - Calendar absorbed into Meetings (accessible via the Upcoming tab)
+/// - Integrations moved to Settings (⚙️ gear icon at bottom of rail)
+/// - Notes kept as Voice Notes (distinct enough from Meetings to warrant its own slot)
 enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
-    case today, meetings, people, actions, calendar, notes, integrations
+    case today, meetings, people, actions, notes
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .today:        return "Today"
-        case .meetings:     return "Meetings"
-        case .people:       return "People"
-        case .actions:      return "Tasks"
-        case .calendar:     return "Calendar"
-        case .notes:        return "Notes"
-        case .integrations: return "Integrations"
+        case .today:    return "Today"
+        case .meetings: return "Meetings"
+        case .people:   return "People"
+        case .actions:  return "Tasks"
+        case .notes:    return "Voice Notes"
         }
     }
     var systemImage: String {
         switch self {
-        case .today:        return "sun.max.fill"
-        case .meetings:     return "person.2.fill"
-        case .people:       return "person.2"
-        case .actions:      return "checklist"
-        case .calendar:     return "calendar"
-        case .notes:        return "waveform.badge.plus"
-        case .integrations: return "puzzlepiece.extension.fill"
+        case .today:    return "sun.max.fill"
+        case .meetings: return "person.2.fill"
+        case .people:   return "person.2"
+        case .actions:  return "checklist"
+        case .notes:    return "waveform.badge.plus"
         }
     }
+    /// Which nav group this section belongs to (for section headers in the rail).
+    var group: NavGroup {
+        switch self {
+        case .today, .meetings, .people: return .workspace
+        case .actions, .notes:           return .organize
+        }
+    }
+}
+
+enum NavGroup: String {
+    case workspace = "WORKSPACE"
+    case organize  = "ORGANIZE"
 }
 
 @available(macOS 14.0, *)
@@ -90,45 +102,73 @@ struct MainWindow: View {
     // MARK: - Left navigation rail
 
     private var navRail: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
+            // App wordmark
             HStack(spacing: 8) {
                 Image(systemName: "waveform")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(NDS.brand)
-                Text("MeetingScribe").font(.system(size: 15, weight: .bold))
+                Text("MeetingScribe").font(.system(size: 14, weight: .bold))
                 Spacer()
             }
-            .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 12)
+            .padding(.horizontal, 14).padding(.top, 16).padding(.bottom, 14)
 
-            ForEach(TopLevelSection.allCases) { s in
+            // WORKSPACE group
+            navGroupLabel(NavGroup.workspace.rawValue)
+            ForEach(TopLevelSection.allCases.filter { $0.group == .workspace }) { s in
                 navItem(s)
             }
+
+            Spacer().frame(height: 8)
+
+            // ORGANIZE group
+            navGroupLabel(NavGroup.organize.rawValue)
+            ForEach(TopLevelSection.allCases.filter { $0.group == .organize }) { s in
+                navItem(s)
+            }
+
             Spacer()
-            Divider().overlay(NDS.divider).padding(.horizontal, 10).padding(.bottom, 8)
-            // Appearance toggle (bottom-left) + a compact ⌘K search affordance.
-            HStack(spacing: 8) {
+            Divider().overlay(NDS.divider).padding(.horizontal, 10).padding(.bottom, 6)
+
+            // Bottom row: appearance toggle + search + settings
+            HStack(spacing: 6) {
                 AppearanceToggle(dark: $appearanceDark)
-                    .frame(width: 140)
+                    .frame(width: 124)
                 Spacer(minLength: 0)
                 Button { activeSheet = .search } label: {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         Image(systemName: "magnifyingglass").font(.system(size: 11))
                         Text("⌘K").font(NDS.tiny)
                     }
                     .foregroundStyle(NDS.textSecondary)
-                    .padding(.horizontal, 9).padding(.vertical, 6)
-                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .strokeBorder(NDS.hairline, lineWidth: 1))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Search everything (⌘K)")
+
+                // Settings gear (replaces the old Integrations nav item)
+                NotionIconButton(systemName: "gearshape", help: "Settings") {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                }
             }
             .padding(.horizontal, 12).padding(.bottom, 12)
         }
-        .frame(width: 216)
+        .frame(width: 240)  // increased from 216
         .frame(maxHeight: .infinity, alignment: .top)
         .background(NDS.sidebarBg)
+    }
+
+    private func navGroupLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .tracking(0.8)
+            .foregroundStyle(NDS.textTertiary)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 2)
     }
 
     private func navItem(_ s: TopLevelSection) -> some View {
@@ -152,26 +192,22 @@ struct MainWindow: View {
 
     private func contextLabel(_ s: TopLevelSection) -> String {
         switch s {
-        case .today:        return "The Today home — today's meetings, quick actions, and open action items."
-        case .meetings:     return "The Meetings list — all past and upcoming meetings/calls."
-        case .people:       return "People — your second-brain contacts, searchable by name and event tag."
-        case .actions:      return "The Tasks workspace — initiatives, projects (pages), and tasks."
-        case .calendar:     return "The Calendar — month view of meetings."
-        case .notes:        return "Voice Notes — recorded/imported notes with transcripts."
-        case .integrations: return "The Integrations settings — Linear, Notion, Google Drive, Ollama, Calendar, MCP."
+        case .today:    return "The Today home — today's meetings, quick actions, and open action items."
+        case .meetings: return "The Meetings list — all past and upcoming meetings/calls."
+        case .people:   return "People — your second-brain contacts, searchable by name and event tag."
+        case .actions:  return "The Tasks workspace — initiatives, projects (pages), and tasks."
+        case .notes:    return "Voice Notes — recorded/imported notes with transcripts."
         }
     }
 
     @ViewBuilder
     private func tabView(for s: TopLevelSection) -> some View {
         switch s {
-        case .today:        TodayView(section: sectionBinding)
-        case .meetings:     MeetingsView()
-        case .people:       PeopleListView()
-        case .actions:      ActionItemsView(store: manager.actionItems)
-        case .calendar:     CalendarTabView()
-        case .notes:        QuickNotesView()
-        case .integrations: IntegrationsView()
+        case .today:    TodayView(section: sectionBinding)
+        case .meetings: MeetingsView()
+        case .people:   PeopleListView()
+        case .actions:  ActionItemsView(store: manager.actionItems)
+        case .notes:    QuickNotesView()
         }
     }
 

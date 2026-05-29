@@ -33,12 +33,9 @@ var transcriptBody: some View {
                             title: "No transcript",
                             message: "This meeting didn't capture audio, or transcription failed.")
             } else {
-                ScrollView {
-                    MarkdownText(transcript)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .textSelection(.enabled)
-                }
+                // Use the navigable sync view when transcript has structured
+                // speaker/timestamp data. Falls back gracefully if format is plain prose.
+                TranscriptSyncView(rawTranscript: transcript)
             }
         }
     }

@@ -71,22 +71,18 @@ struct MeetingScribeApp: App {
                 }
                 .keyboardShortcut("K", modifiers: [.command])
             }
-            // ⌘1–⌘7: jump to each top-level section.
+            // ⌘1–⌘5: jump to each top-level section (5 sections, Calendar+Integrations removed from nav).
             CommandMenu("Navigate") {
-                Button("Today")        { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.today) }
+                Button("Today")       { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.today) }
                     .keyboardShortcut("1", modifiers: .command)
-                Button("Meetings")     { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.meetings) }
+                Button("Meetings")    { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.meetings) }
                     .keyboardShortcut("2", modifiers: .command)
-                Button("People")       { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.people) }
+                Button("People")      { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.people) }
                     .keyboardShortcut("3", modifiers: .command)
-                Button("Tasks")        { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.actions) }
+                Button("Tasks")       { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.actions) }
                     .keyboardShortcut("4", modifiers: .command)
-                Button("Calendar")     { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.calendar) }
+                Button("Voice Notes") { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.notes) }
                     .keyboardShortcut("5", modifiers: .command)
-                Button("Voice Notes")  { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.notes) }
-                    .keyboardShortcut("6", modifiers: .command)
-                Button("Integrations") { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.integrations) }
-                    .keyboardShortcut("7", modifiers: .command)
             }
             CommandGroup(after: .newItem) {
                 Button("Start Ad-hoc Meeting Recording") {

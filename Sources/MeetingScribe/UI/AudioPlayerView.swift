@@ -49,10 +49,17 @@ struct AudioPlayerView: View {
                 .disabled(!controller.ready)
                 .accessibilityLabel("Skip forward 15 seconds")
 
+                // FIX: scrub(to:) updates the display only — no AVPlayer seek
+                // during drag (which was calling removeAllItems() every frame,
+                // causing the restart-on-scrub bug). commitScrub() fires once
+                // when the drag ends via onEditingChanged.
                 Slider(value: Binding(get: { controller.currentTime },
                                       set: { controller.scrub(to: $0) }),
                        in: 0...max(0.01, controller.duration),
-                       onEditingChanged: { editing in controller.scrubbing = editing })
+                       onEditingChanged: { editing in
+                           controller.scrubbing = editing
+                           if !editing { controller.commitScrub() }
+                       })
                     .disabled(!controller.ready)
                     .accessibilityLabel("Playback position")
                     .accessibilityValue("\(format(controller.currentTime)) of \(format(controller.duration))")
@@ -158,9 +165,17 @@ final class AudioPlayerController: ObservableObject {
         seekAbsolute(max(0, min(duration, absoluteCurrentTime() + seconds)))
     }
 
+    /// Visual-only update during drag — no AVPlayer interaction.
+    /// This prevents the queue rebuild (removeAllItems + reinsert) from
+    /// firing on every slider tick, which was the root cause of the
+    /// "audio restarts when scrubbing" bug.
     func scrub(to time: TimeInterval) {
         currentTime = time
-        seekAbsolute(time)
+    }
+
+    /// Commit the seek when the drag ends. Called once per scrub gesture.
+    func commitScrub() {
+        seekAbsolute(currentTime)
     }
 
     func stop() {

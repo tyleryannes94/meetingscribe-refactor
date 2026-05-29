@@ -61,6 +61,33 @@ struct ActionItemRow: View {
         }
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
+        // Quick-move context menu — right-click or long-press to move task
+        // to another project without navigating to the task detail.
+        .contextMenu {
+            Button { onStatus(item.status == .completed ? .open : .completed) } label: {
+                Label(item.status == .completed ? "Mark open" : "Mark done",
+                      systemImage: item.status == .completed ? "circle" : "checkmark.circle.fill")
+            }
+            Menu("Set priority") {
+                ForEach(ActionItem.Priority.allCases) { p in
+                    Button(p.label) { onPriority(p) }
+                }
+            }
+            Divider()
+            if !projects.isEmpty {
+                Menu("Move to project") {
+                    Button("No project") { onProject(nil) }
+                    Divider()
+                    ForEach(projects) { proj in
+                        Button(proj.name) { onProject(proj.id) }
+                    }
+                }
+            }
+            Divider()
+            Button(role: .destructive) { onDelete() } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 
     @ViewBuilder

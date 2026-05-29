@@ -41,12 +41,6 @@ struct TodayView: View {
                 header
                 quickActions
 
-                ActionItemsWidget(store: manager.actionItems) {
-                    section = .actions
-                }
-
-                SuggestedPeopleView()
-
                 if isRecording { liveSection }
 
                 if !todayUpcoming.isEmpty || !todayPast.isEmpty {
@@ -55,7 +49,12 @@ struct TodayView: View {
                     emptyState
                 }
 
-                calendarLink
+                ActionItemsWidget(store: manager.actionItems) {
+                    section = .actions
+                }
+
+                // People suggestions below meetings — they're context, not actions
+                SuggestedPeopleView()
             }
             .padding(.horizontal, 28).padding(.vertical, 24)
             .frame(maxWidth: 920, alignment: .leading)
@@ -84,28 +83,45 @@ struct TodayView: View {
     /// Direction A — a tight, wrapping pill row instead of the old adaptive
     /// 5-card grid (which collapsed to a single-column wall at narrow widths).
     private var quickActions: some View {
-        FlowLayout(spacing: 8) {
-            QuickPill(title: "Record meeting", systemImage: "record.circle.fill",
-                      tint: .red, enabled: !isRecording) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Primary action — full-width filled button (most common intent)
+            Button {
                 Task { await manager.startRecording(for: nil) }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isRecording ? "stop.circle.fill" : "record.circle.fill")
+                        .font(.system(size: 16))
+                    Text(isRecording ? "Recording in progress…" : "Record Meeting")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 42)
             }
-            QuickPill(title: "Join & record", systemImage: "video.fill",
-                      tint: NDS.selectColor("blue"), enabled: nextMeeting != nil) {
-                if let m = nextMeeting { Task { await manager.switchToRecording(m) } }
-            }
-            QuickPill(title: "Voice note", systemImage: "mic.fill",
-                      tint: NDS.selectColor("orange")) {
-                Task { await manager.startQuickNote() }
-            }
-            QuickPill(title: "New task", systemImage: "checklist",
-                      tint: NDS.selectColor("green")) {
-                manager.actionItems.createTask(title: "New task")
-                section = .actions
-            }
-            QuickPill(title: "New page", systemImage: "doc.badge.plus",
-                      tint: NDS.brand) {
-                _ = manager.actionItems.createProject(name: "Untitled")
-                section = .actions
+            .buttonStyle(isRecording ? MSDangerButtonStyle() : MSPrimaryButtonStyle())
+            .disabled(isRecording)
+
+            // Secondary actions — compact pills
+            FlowLayout(spacing: 8) {
+                if let m = nextMeeting {
+                    QuickPill(title: "Join & record", systemImage: "video.fill",
+                              tint: NDS.selectColor("blue")) {
+                        Task { await manager.switchToRecording(m) }
+                    }
+                }
+                QuickPill(title: "Voice note", systemImage: "mic.fill",
+                          tint: NDS.selectColor("orange")) {
+                    Task { await manager.startQuickNote() }
+                }
+                QuickPill(title: "New task", systemImage: "checklist",
+                          tint: NDS.selectColor("green")) {
+                    manager.actionItems.createTask(title: "New task")
+                    section = .actions
+                }
+                QuickPill(title: "New page", systemImage: "doc.badge.plus",
+                          tint: NDS.brand) {
+                    _ = manager.actionItems.createProject(name: "Untitled")
+                    section = .actions
+                }
             }
         }
     }
@@ -145,7 +161,7 @@ struct TodayView: View {
 
     private var calendarLink: some View {
         Button {
-            section = .calendar
+            section = .meetings  // Calendar absorbed into Meetings tab
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "calendar")
