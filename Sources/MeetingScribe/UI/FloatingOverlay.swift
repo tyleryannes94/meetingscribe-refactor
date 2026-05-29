@@ -285,6 +285,7 @@ private struct RecordingPill: View {
                     .background(Color.secondary.opacity(0.08), in: Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Hide overlay")
             .help("Hide overlay (recording continues)")
         }
         .onReceive(timer) { now = $0 }
@@ -318,6 +319,7 @@ private struct TranscribingPill: View {
                     .background(Color.secondary.opacity(0.08), in: Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Hide overlay")
         }
     }
 }
@@ -363,6 +365,7 @@ private struct DonePill: View {
                     .background(Color.secondary.opacity(0.08), in: Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Hide overlay")
         }
     }
 }

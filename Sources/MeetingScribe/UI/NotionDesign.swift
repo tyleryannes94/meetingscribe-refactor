@@ -178,6 +178,11 @@ struct NotionIconButton: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .help(help)
+        // Icon-only button → give VoiceOver the same text as the tooltip
+        // (fall back to a humanized symbol name if no help was supplied).
+        .accessibilityLabel(help.isEmpty
+            ? systemName.replacingOccurrences(of: ".", with: " ")
+            : help)
     }
 }
 

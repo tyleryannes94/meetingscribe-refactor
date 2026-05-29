@@ -159,6 +159,7 @@ struct MenuBarView: View {
                 .buttonStyle(.borderless)
                 .help(isIdle ? "Join & Record"
                              : "Join & Record (stops current recording first)")
+                .accessibilityLabel("Join and record meeting")
             } else {
                 Button {
                     Task {
@@ -174,6 +175,7 @@ struct MenuBarView: View {
                 .buttonStyle(.borderless)
                 .help(isIdle ? "Start recording"
                              : "Start recording (stops current recording first)")
+                .accessibilityLabel("Start recording")
             }
         }
         .padding(.vertical, 2)

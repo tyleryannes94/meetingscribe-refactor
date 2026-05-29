@@ -149,6 +149,7 @@ struct PeopleListView: View {
                 if !query.isEmpty {
                     Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                        .accessibilityLabel("Clear search")
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 7)

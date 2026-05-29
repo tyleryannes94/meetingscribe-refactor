@@ -134,6 +134,7 @@ struct TranscriptSyncView: View {
                         Image(systemName: "xmark.circle.fill").font(.system(size: 11))
                             .foregroundStyle(NDS.textTertiary)
                     }.buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 5)

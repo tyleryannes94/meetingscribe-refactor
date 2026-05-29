@@ -708,6 +708,7 @@ struct PersonDetailView: View {
                             } label: { Image(systemName: "plus.circle") }
                                 .buttonStyle(.borderless)
                                 .help("Log this meeting as an encounter")
+                                .accessibilityLabel("Log this meeting as an encounter")
                         }
                     }
                 }
@@ -844,6 +845,7 @@ struct PersonDetailView: View {
                     } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless).font(NDS.tiny)
                         .help("Dismiss")
+                        .accessibilityLabel("Dismiss analysis output")
                 }
                 Text(output.body)
                     .font(NDS.small)
@@ -1155,6 +1157,7 @@ private struct EncounterRow: View {
             Spacer(minLength: 0)
             Button { onDelete() } label: { Image(systemName: "xmark.circle.fill") }
                 .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                .accessibilityLabel("Delete encounter")
         }
         .padding(10)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
