@@ -22,6 +22,18 @@ struct MeetingsView: View {
     // visits (was a transient `.all` @State that reset every time the tab
     // was rebuilt). Scope is a String-backed enum so @AppStorage can persist it.
     @AppStorage("meetings.scope") private var scope: Scope = .upcoming
+    // List vs Month view inside the Meetings tab — re-exposes the month grid
+    // (option B). Month mode is wired to `selectedMeeting`, not inline expand.
+    @State private var listMode: ListMode = .list
+    @State private var monthCursor = Calendar.current.startOfDay(for: Date())
+    @State private var selectedDay = Calendar.current.startOfDay(for: Date())
+
+    enum ListMode: String, CaseIterable, Identifiable {
+        case list, month
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
+        var systemImage: String { self == .list ? "list.bullet" : "calendar" }
+    }
 
     enum Scope: String, CaseIterable, Identifiable {
         case all, upcoming, past
@@ -35,7 +47,7 @@ struct MeetingsView: View {
             VStack(spacing: 0) {
                 listHeader
                 Divider().overlay(NDS.divider)
-                meetingList
+                if listMode == .list { meetingList } else { monthView }
             }
             .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
             .background(NDS.sidebarBg)
@@ -97,6 +109,16 @@ struct MeetingsView: View {
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(NDS.hairline, lineWidth: 1))
             .padding(.horizontal, 12)
+
+            // List / Month view toggle — re-exposes the month grid (option B).
+            Picker("", selection: $listMode) {
+                ForEach(ListMode.allCases) { m in
+                    Label(m.label, systemImage: m.systemImage).tag(m)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 12).padding(.bottom, 2)
 
             // Scope filter pills
             HStack(spacing: 6) {
@@ -231,6 +253,153 @@ struct MeetingsView: View {
     private func detailMode(_ m: Meeting, variant: MeetingCard.Variant) -> UnifiedMeetingDetail.Mode {
         if variant == .live { return .live }
         return variant == .upcoming ? .upcoming(m) : .past(m)
+    }
+
+    // MARK: - Month view (option B — re-exposed calendar)
+
+    /// All meetings (past + upcoming, deduped), honoring the search box. Month
+    /// mode ignores the scope pills — it always shows the whole calendar.
+    private var calendarMeetings: [Meeting] {
+        var seen = Set<String>()
+        var out: [Meeting] = []
+        for m in calendar.upcoming + manager.pastMeetings where seen.insert(m.id).inserted {
+            if matches(m) { out.append(m) }
+        }
+        return out
+    }
+
+    private var monthView: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                monthHeader
+                weekdayRow
+                monthGrid
+                Divider().overlay(NDS.divider).padding(.vertical, 10)
+                selectedDayList
+            }
+            .padding(.bottom, 16)
+        }
+    }
+
+    private var monthHeader: some View {
+        HStack {
+            Button { shiftMonth(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
+            Spacer()
+            Text(monthTitle).font(.system(size: 14, weight: .semibold)).foregroundStyle(NDS.textPrimary)
+            Spacer()
+            Button { shiftMonth(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
+            Button {
+                let t = Calendar.current.startOfDay(for: Date()); monthCursor = t; selectedDay = t
+            } label: { Text("Today").font(.caption) }
+                .buttonStyle(.plain).foregroundStyle(NDS.brand)
+        }
+        .foregroundStyle(NDS.textSecondary)
+        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 6)
+    }
+
+    private var weekdayRow: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, s in
+                Text(s).font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(NDS.textTertiary)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 10)
+    }
+    private var weekdaySymbols: [String] {
+        DateFormatter().veryShortWeekdaySymbols ?? ["S", "M", "T", "W", "T", "F", "S"]
+    }
+
+    private var monthGrid: some View {
+        let days = daysGrid(for: monthCursor)
+        let cal = Calendar.current
+        return VStack(spacing: 3) {
+            ForEach(0..<6, id: \.self) { row in
+                HStack(spacing: 3) {
+                    ForEach(0..<7, id: \.self) { col in
+                        let idx = row * 7 + col
+                        if idx < days.count {
+                            dayCell(days[idx],
+                                    inMonth: cal.isDate(days[idx], equalTo: monthCursor, toGranularity: .month))
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10).padding(.top, 4)
+    }
+
+    private func dayCell(_ day: Date, inMonth: Bool) -> some View {
+        let cal = Calendar.current
+        let isToday = cal.isDateInToday(day)
+        let isSelected = cal.isDate(day, inSameDayAs: selectedDay)
+        let hasMeetings = calendarMeetings.contains { cal.isDate($0.startDate, inSameDayAs: day) }
+        return Button {
+            selectedDay = cal.startOfDay(for: day)
+            if !cal.isDate(day, equalTo: monthCursor, toGranularity: .month) { monthCursor = day }
+        } label: {
+            VStack(spacing: 2) {
+                Text("\(cal.component(.day, from: day))")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(inMonth ? (isToday ? NDS.brand : NDS.textPrimary)
+                                             : NDS.textTertiary.opacity(0.6))
+                Circle().fill(hasMeetings ? NDS.brand : .clear).frame(width: 4, height: 4)
+            }
+            .frame(maxWidth: .infinity, minHeight: 32)
+            .background(RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? NDS.brand.opacity(0.18)
+                                 : (isToday ? NDS.brand.opacity(0.06) : .clear)))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var selectedDayList: some View {
+        let cal = Calendar.current
+        let items = calendarMeetings
+            .filter { cal.isDate($0.startDate, inSameDayAs: selectedDay) }
+            .sorted { $0.startDate < $1.startDate }
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(dayTitle).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(NDS.textSecondary)
+                .padding(.horizontal, 14).padding(.bottom, 4)
+            if items.isEmpty {
+                Text("No meetings this day").font(.caption)
+                    .foregroundStyle(NDS.textTertiary)
+                    .padding(.horizontal, 14).padding(.vertical, 6)
+            } else {
+                ForEach(items) { m in
+                    Button { selectedMeeting = m } label: {
+                        MeetingListRow(meeting: m,
+                                       isSelected: selectedMeeting?.id == m.id,
+                                       isLive: manager.activeMeeting?.id == m.id)
+                            .environmentObject(tagStore)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func shiftMonth(_ delta: Int) {
+        if let n = Calendar.current.date(byAdding: .month, value: delta, to: monthCursor) { monthCursor = n }
+    }
+    private var monthTitle: String {
+        let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; return f.string(from: monthCursor)
+    }
+    private var dayTitle: String {
+        let cal = Calendar.current
+        if cal.isDateInToday(selectedDay) { return "Today" }
+        if cal.isDateInTomorrow(selectedDay) { return "Tomorrow" }
+        if cal.isDateInYesterday(selectedDay) { return "Yesterday" }
+        let f = DateFormatter(); f.dateFormat = "EEE, MMM d"; return f.string(from: selectedDay)
+    }
+    private func daysGrid(for month: Date) -> [Date] {
+        let cal = Calendar.current
+        guard let firstOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: month)) else { return [] }
+        let leadDays = cal.component(.weekday, from: firstOfMonth) - 1
+        guard let gridStart = cal.date(byAdding: .day, value: -leadDays, to: firstOfMonth) else { return [] }
+        return (0..<42).compactMap { cal.date(byAdding: .day, value: $0, to: gridStart) }
     }
 }
 
