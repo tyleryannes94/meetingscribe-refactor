@@ -59,7 +59,10 @@ struct MainWindow: View {
         Binding(get: { section }, set: { section = $0 })
     }
     @State private var activeSheet: ActiveSheet?
-    @AppStorage("chatRailVisible") private var chatVisible = true
+    // Default the assistant rail CLOSED — new users land on a full-width app
+    // instead of a chat panel that crowds content (and confuses first-run users
+    // with an empty assistant). Existing users keep their stored preference.
+    @AppStorage("chatRailVisible") private var chatVisible = false
     /// Follow the system appearance by default (nil = system). Stored as a
     /// Bool for toggle simplicity; false = light, true = dark. We default to
     /// false (light/system) rather than forcing dark on every first-launch user.

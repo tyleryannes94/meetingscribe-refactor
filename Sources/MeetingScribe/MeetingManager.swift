@@ -203,7 +203,11 @@ final class MeetingManager: ObservableObject {
                 let dir = store.directory(for: m, primaryTag: primary)
                 try await audio.start(in: dir, segment: m.segmentCount)
                 AudioRecovery.markRecordingStarted(in: dir)
-                state = .recording(meeting: meeting, startedAt: Date())
+                // Use the resolved meeting `m` (which is `activeMeeting`), not the
+                // `meeting` parameter — that param is nil for ad-hoc recordings, so
+                // publishing it left `.recording(meeting:)` empty on the direct path
+                // while `activeMeeting` was set. (ScribeCore path already used `m`.)
+                state = .recording(meeting: m, startedAt: Date())
             }
             // When ScribeCore is handling recording, state is updated via the
             // DarwinNotifier.recordingStarted signal observed in init().

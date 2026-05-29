@@ -18,7 +18,10 @@ struct MeetingsView: View {
 
     @State private var selectedMeeting: Meeting?
     @State private var search: String = ""
-    @State private var scope: Scope = .all
+    // Default to upcoming-first and remember the user's last choice across
+    // visits (was a transient `.all` @State that reset every time the tab
+    // was rebuilt). Scope is a String-backed enum so @AppStorage can persist it.
+    @AppStorage("meetings.scope") private var scope: Scope = .upcoming
 
     enum Scope: String, CaseIterable, Identifiable {
         case all, upcoming, past
