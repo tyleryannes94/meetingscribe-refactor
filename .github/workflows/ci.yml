@@ -21,11 +21,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin to Swift 5.10 (Xcode 15.4). The package is swift-tools 5.10 and opts
+      # into StrictConcurrency=targeted, which produces concurrency *warnings*
+      # under Swift 5.10 — matching the local `make dev` build that passes.
+      # Newer default runner toolchains escalate some of those to errors, which
+      # is what turned the first CI run red despite a clean local build.
+      - name: Select Xcode 15.4 (Swift 5.10)
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
       - name: Swift version
         run: swift --version
 
-      - name: Build (debug)
-        run: swift build
+      - name: Build (release — matches `make dev`)
+        run: swift build -c release
 
       - name: Test
         run: swift test
