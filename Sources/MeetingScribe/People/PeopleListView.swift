@@ -116,11 +116,15 @@ struct PeopleListView: View {
                 Text("People").font(.title2).bold()
                 Spacer()
                 if importer.isWorking { ProgressView().controlSize(.small) }
-                Button { graphMode = true } label: {
-                    Label("Graph View", systemImage: "circle.hexagongrid")
+                // Graph view is available but demoted — it's rarely useful
+                // with 500+ contacts and is just decorative at large scale.
+                // Accessible via a compact icon button, not a primary action.
+                if !people.people.isEmpty {
+                    NotionIconButton(systemName: "circle.hexagongrid",
+                                     help: "Graph view (experimental)") {
+                        graphMode = true
+                    }
                 }
-                .help("Switch to the interactive mindmap")
-                .disabled(people.people.isEmpty)
             }
             // Top padding bumped from default (~16pt) so the title and the
             // action row underneath aren't clipped by the window toolbar

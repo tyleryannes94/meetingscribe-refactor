@@ -175,6 +175,26 @@ struct PersonDetailView: View {
     @State private var customPromptDraft = ""
     @State private var showCustomPrompt = false
     @State private var noteExpansion: [String: Bool] = [:]
+    @State private var rightTab: PersonRightTab = .notes
+
+    enum PersonRightTab: String, CaseIterable, Identifiable {
+        case notes, meetings, messages
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .notes:    return "Notes"
+            case .meetings: return "Meetings"
+            case .messages: return "Messages"
+            }
+        }
+        var systemImage: String {
+            switch self {
+            case .notes:    return "note.text"
+            case .meetings: return "person.2.fill"
+            case .messages: return "message.fill"
+            }
+        }
+    }
 
     /// Display container for a finished analysis. Holds the preset (so we
     /// know what kind chip to show) and the rendered text the user can
@@ -196,44 +216,74 @@ struct PersonDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                if !tags.isEmpty { tagRow }
-                photosSection
-                contactRows
-                if !current.favorites.isEmpty { favoritesSection }
-                if !current.bio.isEmpty { notes }
-                memoriesSection
-                attachedNotesSection
-                relationshipsSection
-                encountersSection
-                messagesSection
-                if !current.meetingMentions.isEmpty { mentionedInSection }
-                provenanceFooter
+        HStack(spacing: 0) {
+            // ── LEFT COLUMN: Identity panel (fixed 280pt) ──────────────────
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    identityPanel
+                }
+                .padding(20)
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            // Asymmetric padding: keep the comfortable 28pt on left/right
-            // and bottom, but the top needs significantly more clearance
-            // for macOS Tahoe's translucent toolbar (which overlays the
-            // scroll view's content area). 48pt left the Edit/Delete
-            // buttons partially clipped — 72pt is the sweet spot where
-            // the title row is fully visible without feeling overpadded.
-            .padding(.horizontal, 28)
-            .padding(.top, 72)
-            .padding(.bottom, 28)
+            .frame(width: 280)
+            .background(NDS.sidebarBg)
+
+            Divider().overlay(NDS.divider)
+
+            // ── RIGHT COLUMN: Tabbed content (flex) ────────────────────────
+            VStack(spacing: 0) {
+                // Tab bar
+                HStack(spacing: 0) {
+                    ForEach(PersonRightTab.allCases) { tab in
+                        Button {
+                            rightTab = tab
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: tab.systemImage).font(.system(size: 11))
+                                Text(tab.label).font(.system(size: 13, weight: rightTab == tab ? .semibold : .regular))
+                            }
+                            .foregroundStyle(rightTab == tab ? NDS.brand : NDS.textSecondary)
+                            .padding(.vertical, 10).padding(.horizontal, 14)
+                            .overlay(alignment: .bottom) {
+                                if rightTab == tab {
+                                    Rectangle().fill(NDS.brand).frame(height: 2)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
+                }
+                .background(NDS.sidebarBg)
+                Divider().overlay(NDS.divider)
+
+                // Tab content
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        switch rightTab {
+                        case .notes:
+                            if !current.bio.isEmpty { notes }
+                            memoriesSection
+                            attachedNotesSection
+                        case .meetings:
+                            encountersSection
+                            if !current.meetingMentions.isEmpty { mentionedInSection }
+                            meetingHistorySection
+                        case .messages:
+                            messagesSection
+                        }
+                        if rightTab == .notes { provenanceFooter }
+                    }
+                    .padding(24)
+                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .background(NDS.bg)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // Tell the chat which person the user is currently looking at so
-        // questions like "what about the trip to California?" can resolve
-        // without the user re-typing the name every time. We pass enough
-        // for the model to use as the `id` argument to person tools.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { updateChatContext() }
         .onChange(of: current.id) { _, _ in updateChatContext() }
         .onDisappear {
-            // Restore the generic "you're in People" context so the chat
-            // doesn't keep using a stale person id after the user navigates
-            // away. MainWindow's onChange resets this again on tab change.
             chatSession.setContext("The People tab — the user's second-brain contacts.")
         }
         .sheet(isPresented: $showEdit) {
@@ -258,6 +308,126 @@ struct PersonDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes the person and all their encounters. This can't be undone.")
+        }
+    }
+
+    // MARK: - Identity panel (left column)
+
+    private var identityPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Avatar + name
+            HStack(alignment: .center, spacing: 12) {
+                Circle()
+                    .fill(NDS.selectColor(current.displayName))
+                    .frame(width: 52, height: 52)
+                    .overlay(
+                        Text(initials(for: current.displayName))
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(current.displayName)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(NDS.textPrimary)
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(NDS.textSecondary)
+                    }
+                }
+            }
+
+            // Action buttons
+            HStack(spacing: 6) {
+                Button { showEdit = true } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+                Button(role: .destructive) { confirmDelete = true } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+            }
+
+            // Tags
+            if !tags.isEmpty {
+                FlowLayout(spacing: 5) {
+                    ForEach(tags) { t in TagChip(tag: t, removable: false, onRemove: nil) }
+                }
+            }
+
+            Divider().overlay(NDS.divider)
+
+            // Photos (first one shown)
+            if !current.photoRelativePaths.isEmpty {
+                photosSection
+                Divider().overlay(NDS.divider)
+            }
+
+            // Contact rows
+            contactRows
+
+            // Relationships
+            if !current.relationships.isEmpty {
+                Divider().overlay(NDS.divider)
+                relationshipsSection
+            }
+
+            // Favorites
+            if !current.favorites.isEmpty {
+                Divider().overlay(NDS.divider)
+                favoritesSection
+            }
+        }
+    }
+
+    private func initials(for name: String) -> String {
+        let parts = name.components(separatedBy: " ").filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return "?" }
+        if parts.count >= 2 { return String(parts[0].prefix(1)) + String(parts[1].prefix(1)) }
+        return String(parts[0].prefix(2))
+    }
+
+    // MARK: - Meeting history (right column, Meetings tab)
+
+    /// All past meetings from MeetingManager where this person was an attendee.
+    private var meetingHistorySection: some View {
+        let email = current.emails.first?.lowercased() ?? ""
+        let personName = current.displayName.lowercased()
+        let matches = manager.pastMeetings.filter { m in
+            // Match by email (most reliable) or display name in attendees
+            m.attendees.contains {
+                let a = $0.lowercased()
+                return (!email.isEmpty && a.contains(email))
+                    || a.contains(personName)
+            }
+        }
+        .sorted { $0.startDate > $1.startDate }
+
+        return Group {
+            if !matches.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    NotionEyebrow(text: "In your recordings", count: matches.count)
+                    ForEach(matches.prefix(20)) { m in
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(m.displayTitle)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(NDS.textPrimary)
+                                Text(m.startDate, style: .date)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(NDS.textTertiary)
+                            }
+                            Spacer()
+                            if m.health?.status == .ok {
+                                Circle().fill(Color.green.opacity(0.6)).frame(width: 6, height: 6)
+                            }
+                        }
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
         }
     }
 

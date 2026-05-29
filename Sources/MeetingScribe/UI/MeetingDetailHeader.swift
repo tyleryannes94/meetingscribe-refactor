@@ -5,134 +5,260 @@ import AppKit
 extension UnifiedMeetingDetail {
     // MARK: - Header
 
-var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
+    var header: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Main title row
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
                     titleAndDescription
-                    HStack(spacing: 8) {
-                        Text(timeRange()).font(.caption).foregroundStyle(.secondary)
-                        // Full-width health badge for the detail view —
-                        // hover popover lists the recorder's specific
-                        // warnings (audit 8.1).
-                        if case .past = mode {
-                            MeetingHealthBadge(health: meeting?.health)
-                        }
-                    }
-                    if let cal = meeting?.calendarName {
-                        Text("Calendar: \(cal)").font(.caption2).foregroundStyle(.tertiary)
-                    }
-                    if isRecurring {
-                        HStack(spacing: 6) {
-                            NotionChip("Recurring", color: NDS.selectColor("purple"), systemImage: "repeat")
-                            if !priorOccurrences.isEmpty {
-                                Text("\(priorOccurrences.count) previous call\(priorOccurrences.count == 1 ? "" : "s")")
-                                    .font(.caption2).foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.top, 2)
-                    }
+                    metaLine
+                    chipRow
                 }
-                Spacer()
-                headerButtons
+                Spacer(minLength: 12)
+                actionButtons
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+
+            // Attendees line — full width, below title
             if let m = meeting, !m.attendees.isEmpty {
-                Text(m.attendees.joined(separator: ", "))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            }
-            if let url = meeting?.conferenceURL, let u = URL(string: url) {
-                Link(destination: u) {
-                    Label(url, systemImage: "link").font(.caption)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(m.attendees.prefix(12), id: \.self) { a in
+                            AttendeeChip(attendee: a)
+                        }
+                        if m.attendees.count > 12 {
+                            Text("+\(m.attendees.count - 12)")
+                                .font(.system(size: 11))
+                                .foregroundStyle(NDS.textTertiary)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(NDS.fieldBg, in: Capsule())
+                        }
+                    }
+                    .padding(.horizontal, 20)
                 }
+                .padding(.bottom, 8)
             }
+
+            // Conference URL — prominent, tappable
+            if let url = meeting?.conferenceURL, let u = URL(string: url) {
+                HStack(spacing: 6) {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(NDS.brand)
+                    Link(url, destination: u)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+            }
+
+            // Tags
             if let m = meeting {
                 TagPicker(meeting: m, propagateToSeries: m.seriesID != nil)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
             }
+
+            // Upcoming action bar
             if case .upcoming = mode, let m = meeting {
                 upcomingActionRow(m)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
             }
-            statusBanner
+
+            // Status/warning banner
+            if showStatusBanner {
+                statusBanner
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+            }
+
+            Divider().overlay(NDS.divider)
         }
-        .padding()
     }
 
+    // MARK: - Title + description
+
     @ViewBuilder
-var titleAndDescription: some View {
-        if editingHeader, let _ = meeting {
-            TextField("Title", text: $titleDraft)
-                .textFieldStyle(.roundedBorder)
-                .font(.title3)
-            TextField("Quick description (optional)", text: $descriptionDraft, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .font(.caption)
-                .lineLimit(2...4)
+    var titleAndDescription: some View {
+        if editingHeader {
+            VStack(alignment: .leading, spacing: 6) {
+                TextField("Title", text: $titleDraft)
+                    .font(.system(size: 22, weight: .bold))
+                    .textFieldStyle(.plain)
+                    .padding(6)
+                    .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 6))
+                TextField("Quick description (optional)", text: $descriptionDraft, axis: .vertical)
+                    .font(.system(size: 13))
+                    .foregroundStyle(NDS.textSecondary)
+                    .textFieldStyle(.plain)
+                    .padding(6)
+                    .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 6))
+                    .lineLimit(2...4)
+                HStack(spacing: 8) {
+                    Button("Save") { saveHeader() }
+                        .buttonStyle(MSPrimaryButtonStyle())
+                        .keyboardShortcut(.defaultAction)
+                    Button("Cancel") { editingHeader = false; resetDrafts() }
+                        .buttonStyle(MSSecondaryButtonStyle())
+                }
+            }
         } else {
-            Text(meeting?.displayTitle ?? "Untitled").font(.title2).bold()
+            // Title — large, prominent
+            Text(meeting?.displayTitle ?? "Untitled")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(NDS.textPrimary)
+                .textSelection(.enabled)
             if let d = meeting?.userDescription, !d.isEmpty {
-                Text(d).font(.caption).foregroundStyle(.secondary)
+                Text(d)
+                    .font(.system(size: 13))
+                    .foregroundStyle(NDS.textSecondary)
             }
         }
     }
 
-    @ViewBuilder
-var headerButtons: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            if editingHeader {
-                HStack {
-                    Button("Cancel") { editingHeader = false; resetDrafts() }.controlSize(.small)
-                    Button("Save") { saveHeader() }.controlSize(.small).keyboardShortcut(.defaultAction)
-                }
-            } else if meeting != nil {
-                Button {
-                    editingHeader = true
-                } label: { Label("Edit", systemImage: "pencil") }
-                .controlSize(.small)
+    // MARK: - Meta line (date/time + health)
+
+    private var metaLine: some View {
+        HStack(spacing: 8) {
+            Text(timeRange())
+                .font(.system(size: 12))
+                .foregroundStyle(NDS.textSecondary)
+            if case .past = mode {
+                MeetingHealthBadge(health: meeting?.health)
             }
-            switch mode {
-            case .live:
-                if case .recording = manager.state {
-                    Button(role: .destructive) {
-                        Task { await manager.stopRecording() }
-                    } label: {
-                        Label("Stop", systemImage: "stop.fill")
-                    }
-                    .controlSize(.small)
+            if let m = meeting, manager.isTranscribingMeeting(m) {
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text("Processing…")
+                        .font(.system(size: 11))
+                        .foregroundStyle(NDS.textTertiary)
                 }
-            case .past(let m):
-                if manager.isTranscribingMeeting(m) {
-                    HStack(spacing: 4) {
-                        ProgressView().controlSize(.small)
-                        Text("Transcribing…").font(.caption).foregroundStyle(.secondary)
-                    }
-                } else {
+            }
+        }
+    }
+
+    // MARK: - Chip row (recurring, calendar)
+
+    @ViewBuilder
+    private var chipRow: some View {
+        HStack(spacing: 6) {
+            if isRecurring {
+                NotionChip("Recurring", color: NDS.selectColor("purple"), systemImage: "repeat")
+                if !priorOccurrences.isEmpty {
+                    Text("\(priorOccurrences.count) previous")
+                        .font(.caption2)
+                        .foregroundStyle(NDS.textTertiary)
+                }
+            }
+            if let cal = meeting?.calendarName {
+                NotionChip(cal, color: NDS.selectColor("blue"), systemImage: "calendar")
+            }
+        }
+    }
+
+    // MARK: - Action buttons (primary CTA + overflow menu)
+
+    @ViewBuilder
+    var actionButtons: some View {
+        if editingHeader { EmptyView() }
+        else {
+            HStack(spacing: 8) {
+                primaryCTA
+                overflowMenu
+            }
+        }
+    }
+
+    /// One context-aware primary button. Only the most likely next action.
+    @ViewBuilder
+    private var primaryCTA: some View {
+        switch mode {
+        case .live:
+            if case .recording = manager.state {
+                Button(role: .destructive) {
+                    Task { await manager.stopRecording() }
+                } label: {
+                    Label("Stop Recording", systemImage: "stop.fill")
+                }
+                .buttonStyle(MSDangerButtonStyle())
+            }
+
+        case .past(let m):
+            if manager.isTranscribingMeeting(m) {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Processing…").font(.system(size: 12)).foregroundStyle(NDS.textSecondary)
+                }
+            } else if manager.hasAudio(for: m) && (transcript.isEmpty) {
+                Button { manager.transcribeNow(meeting: m) } label: {
+                    Label("Transcribe Now", systemImage: "text.bubble")
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
+            } else if m.conferenceURL != nil {
+                Button {
+                    Task { await manager.switchToRecording(m) }
+                } label: {
+                    Label("Record Again", systemImage: "video.fill")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+            }
+
+        case .upcoming(let m):
+            if m.conferenceURL != nil {
+                Button {
+                    Task { await manager.switchToRecording(m) }
+                } label: {
+                    Label("Join & Record", systemImage: "video.fill")
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
+            } else {
+                Button {
+                    Task { await manager.startRecording(for: m) }
+                } label: {
+                    Label("Record", systemImage: "record.circle.fill")
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
+            }
+        }
+    }
+
+    /// All secondary actions in a single ··· overflow menu.
+    private var overflowMenu: some View {
+        Menu {
+            // Edit title/description
+            Button { editingHeader = true } label: {
+                Label("Edit title…", systemImage: "pencil")
+            }
+
+            if case .past(let m) = mode {
+                Divider()
+
+                // Transcription
+                if !manager.isTranscribingMeeting(m) {
                     Button {
                         manager.transcribeNow(meeting: m)
                     } label: {
                         Label("Transcribe Now", systemImage: "text.bubble")
                     }
-                    .controlSize(.small)
                     .disabled(!manager.hasAudio(for: m))
-                    .help(manager.hasAudio(for: m)
-                          ? "Re-merges all audio segments and re-runs whisper + summary."
-                          : "No audio recorded for this meeting yet.")
                 }
-                // Past detail's join + re-record actions — never disabled even
-                // if a different recording is active; that's intentional, the
-                // join flow auto-switches recordings.
+
+                // Join actions (if URL exists)
                 if m.conferenceURL != nil {
                     Button {
                         if let url = m.conferenceURL.flatMap(URL.init(string:)) {
                             NSWorkspace.shared.open(url)
                         }
-                    } label: { Label("Join Call", systemImage: "video") }
-                    .controlSize(.small)
-                    .help("Re-open the meeting link without starting a recording.")
-                    Button {
-                        Task { await manager.switchToRecording(m) }
-                    } label: { Label("Join & Record Again", systemImage: "video.fill") }
-                    .controlSize(.small)
-                    .help("Open the link AND start a new recording for this meeting (stops any current recording).")
+                    } label: {
+                        Label("Join Call (no recording)", systemImage: "video")
+                    }
                 }
+
+                // Add new recording
                 Button {
                     Task {
                         if case .recording = manager.state {
@@ -144,131 +270,79 @@ var headerButtons: some View {
                 } label: {
                     Label("Add New Recording", systemImage: "plus.circle")
                 }
-                .controlSize(.small)
-                .help("Appends a new audio segment. Stops any currently-running recording first. The transcript merges all segments.")
+                .help("Appends a new audio segment to this meeting.")
+
+                Divider()
+
+                // File operations
                 Button {
                     manager.revealInFinder(m)
-                } label: { Label("Reveal", systemImage: "folder") }
-                .controlSize(.small)
-                recoverMenu(for: m)
-                exportMenu(for: m)
-            case .upcoming:
-                EmptyView()
-            }
-        }
-    }
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
 
-    /// Failsafe actions: recover audio from the meeting folder (e.g. after a
-    /// crash or iCloud eviction), or manually upload an audio/transcript file.
-func recoverMenu(for m: Meeting) -> some View {
-        Menu {
-            Button {
-                manager.recoverAudio(for: m)
-            } label: { Label("Recover Audio from Folder", systemImage: "arrow.clockwise.icloud") }
-                .help("Re-download (from iCloud if needed), re-scan this meeting's folder, and transcribe any audio found.")
-            Divider()
-            Button {
-                showAudioImporter = true
-            } label: { Label("Upload Audio…", systemImage: "waveform.badge.plus") }
-            Button {
-                showTranscriptImporter = true
-            } label: { Label("Upload Transcript…", systemImage: "doc.badge.plus") }
+                // Recover submenu
+                Menu("Recover…") {
+                    Button {
+                        manager.recoverAudio(for: m)
+                    } label: { Label("Recover audio from folder", systemImage: "arrow.clockwise.icloud") }
+                    Divider()
+                    Button { showAudioImporter = true } label: {
+                        Label("Upload audio file…", systemImage: "waveform.badge.plus")
+                    }
+                    Button { showTranscriptImporter = true } label: {
+                        Label("Upload transcript…", systemImage: "doc.badge.plus")
+                    }
+                }
+
+                // Export submenu
+                Menu("Export…") {
+                    Button {
+                        MeetingExporter.exportMarkdown(exportDocument(for: m), suggestedName: m.slug)
+                    } label: { Label("Markdown (.md)", systemImage: "doc.plaintext") }
+                    Button {
+                        MeetingExporter.exportPDF(exportDocument(for: m), suggestedName: m.slug)
+                    } label: { Label("PDF (.pdf)", systemImage: "doc.richtext") }
+                    Divider()
+                    Button { exportToDrive(m) } label: {
+                        Label(drive.isConnected
+                              ? "Google Drive"
+                              : "Google Drive (connect in Settings)",
+                              systemImage: "arrow.up.doc")
+                    }
+                    Button { exportToObsidian(m) } label: {
+                        Label("Obsidian vault", systemImage: "doc.text.below.ecg")
+                    }
+                }
+            }
+
         } label: {
-            Label("Recover", systemImage: "stethoscope")
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: NDS.buttonIconSide, height: NDS.buttonSecondaryH)
+                .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(NDS.hairline, lineWidth: 1))
         }
         .menuStyle(.borderlessButton)
-        .controlSize(.small)
         .fixedSize()
-        .help("Recover or manually add audio/transcript for this meeting.")
+        .help("More actions")
     }
 
-func exportMenu(for m: Meeting) -> some View {
-        Menu {
-            Button {
-                MeetingExporter.exportMarkdown(exportDocument(for: m), suggestedName: m.slug)
-            } label: { Label("Markdown (.md)", systemImage: "doc.plaintext") }
-            Button {
-                MeetingExporter.exportPDF(exportDocument(for: m), suggestedName: m.slug)
-            } label: { Label("PDF (.pdf)", systemImage: "doc.richtext") }
-            Divider()
-            Button {
-                exportToDrive(m)
-            } label: { Label(drive.isConnected ? "Google Drive" : "Google Drive (connect in Settings)",
-                             systemImage: "arrow.up.doc") }
-            Button {
-                exportToObsidian(m)
-            } label: { Label("Obsidian (vault)", systemImage: "doc.text.below.ecg") }
-        } label: {
-            if drive.isWorking {
-                ProgressView().controlSize(.small)
-            } else {
-                Label("Export", systemImage: "square.and.arrow.up")
-            }
-        }
-        .menuStyle(.borderlessButton)
-        .controlSize(.small)
-        .fixedSize()
-        .help("Export this meeting's summary, notes, and transcript.")
-    }
+    // MARK: - Upcoming action row
 
-func exportToDrive(_ m: Meeting) {
-        guard drive.isConnected else {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            return
-        }
-        let doc = exportDocument(for: m)
-        Task { try? await drive.exportMarkdown(filename: m.slug, content: doc) }
-    }
-
-func exportToObsidian(_ m: Meeting) {
-        // Meeting tags make the most useful Obsidian #tags; falls back to just
-        // the default "meeting" tag when none are set.
-        let tagNames = tagStore.tagIDs(for: m).compactMap { tagStore.tag(by: $0)?.name }
-        let md = ObsidianExporter.markdown(
-            for: m,
-            summary: manager.summaryMarkdown(for: m),
-            notes: noteDraft.isEmpty ? manager.userNotes(for: m) : noteDraft,
-            transcript: manager.transcriptMarkdown(for: m),
-            tags: tagNames)
-        ObsidianExporter.export(md, filename: m.slug)
-    }
-
-func exportDocument(for m: Meeting) -> String {
-        MeetingExporter.combinedMarkdown(
-            title: m.displayTitle,
-            dateString: timeRange(),
-            attendees: m.attendees,
-            summary: manager.summaryMarkdown(for: m),
-            notes: noteDraft.isEmpty ? manager.userNotes(for: m) : noteDraft,
-            transcript: manager.transcriptMarkdown(for: m))
-    }
-
-func upcomingActionRow(_ m: Meeting) -> some View {
-        // Buttons are intentionally NEVER disabled. If a recording is already
-        // in progress, joining a new meeting auto-stops the old one and
-        // starts the new one (via MeetingManager.switchToRecording).
+    func upcomingActionRow(_ m: Meeting) -> some View {
         HStack(spacing: 8) {
             if m.conferenceURL != nil {
+                // Join only (no recording)
                 Button {
                     if let url = m.conferenceURL.flatMap(URL.init(string:)) {
                         NSWorkspace.shared.open(url)
                     }
                 } label: {
                     Label("Join Call", systemImage: "video")
-                        .padding(.horizontal, 6)
                 }
-                .controlSize(.large)
-                .help("Open the meeting link without starting a recording.")
-
-                Button {
-                    Task { await manager.switchToRecording(m) }
-                } label: {
-                    Label("Join Call & Start Recording", systemImage: "video.fill")
-                        .padding(.horizontal, 6)
-                }
-                .controlSize(.large)
-                .help(isAppIdle ? "Join the call and start recording."
-                                : "Join the call — current recording will stop and a new one will start.")
+                .buttonStyle(MSSecondaryButtonStyle())
+                .help("Open the meeting link without recording.")
             }
             Button {
                 Task {
@@ -279,66 +353,70 @@ func upcomingActionRow(_ m: Meeting) -> some View {
                     await manager.startRecording(for: m)
                 }
             } label: {
-                Label("Record Only", systemImage: "record.circle").padding(.horizontal, 6)
+                Label("Record Only", systemImage: "record.circle")
             }
-            .controlSize(.large)
+            .buttonStyle(MSSecondaryButtonStyle())
         }
     }
 
+    // MARK: - Status banner
+
+    private var showStatusBanner: Bool {
+        if case .live = mode, case .recording = manager.state { return true }
+        if let m = meeting, manager.wasInterrupted(m) { return true }
+        return false
+    }
+
     @ViewBuilder
-var statusBanner: some View {
+    var statusBanner: some View {
         if case .live = mode, case .recording = manager.state {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 10) {
-                    Image(systemName: "record.circle.fill").foregroundStyle(.red)
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "record.circle.fill")
+                        .foregroundStyle(.red)
+                        .symbolEffect(.pulse, options: .repeating)
                     Text("Recording")
-                        .font(.callout).bold()
-                    AudioLevelMeter(micLevel: recordingMonitor.recordingHealth.micLevel,
-                                    systemLevel: recordingMonitor.recordingHealth.systemLevel,
-                                    bars: 14, height: 22)
-                        .frame(maxWidth: 200)
-                    Spacer()
-                    if manager.liveTranscriber.pendingCount > 0 {
-                        Label("\(manager.liveTranscriber.pendingCount) chunk\(manager.liveTranscriber.pendingCount == 1 ? "" : "s") processing",
-                              systemImage: "hourglass")
-                            .font(.caption2).foregroundStyle(.secondary)
-                    }
+                        .font(.callout.bold())
                 }
+                AudioLevelMeter(micLevel: recordingMonitor.recordingHealth.micLevel,
+                                systemLevel: recordingMonitor.recordingHealth.systemLevel,
+                                bars: 14, height: 20)
+                    .frame(maxWidth: 160)
+                Spacer()
                 recordingHealthRow
             }
-        } else if let m = meeting, manager.isTranscribingMeeting(m) {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Finalizing transcript + summary…")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            .padding(10)
+            .background(Color.red.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: NDS.radius))
         } else if let m = meeting, manager.wasInterrupted(m) {
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Recording may be incomplete").font(.callout).bold()
-                    Text("This recording didn't finish cleanly (the app may have quit). Its audio is on disk — recover it to transcribe.")
+                    Text("Recording may be incomplete").font(.callout.bold())
+                    Text("The app may have quit mid-recording. Recover the audio to transcribe.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button {
                     manager.recoverAudio(for: m)
-                } label: { Label("Recover Audio", systemImage: "arrow.clockwise.icloud") }
-                .controlSize(.small)
-                .buttonStyle(.borderedProminent)
+                } label: { Label("Recover", systemImage: "arrow.clockwise.icloud") }
+                .buttonStyle(MSPrimaryButtonStyle())
             }
-            .padding(8)
-            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: NDS.radius))
+            .padding(10)
+            .background(Color.orange.opacity(0.10),
+                        in: RoundedRectangle(cornerRadius: NDS.radius))
         }
     }
 
-func resetDrafts() {
+    // MARK: - Helpers (unchanged from original)
+
+    func resetDrafts() {
         guard let m = meeting else { return }
         titleDraft = m.userTitle ?? m.title
         descriptionDraft = m.userDescription ?? ""
     }
 
-func saveHeader() {
+    func saveHeader() {
         guard let m = meeting else { return }
         let t = titleDraft.trimmingCharacters(in: .whitespaces)
         let d = descriptionDraft.trimmingCharacters(in: .whitespaces)
@@ -348,7 +426,7 @@ func saveHeader() {
         editingHeader = false
     }
 
-func timeRange() -> String {
+    func timeRange() -> String {
         guard let m = meeting else { return "" }
         let f = DateFormatter()
         f.dateFormat = "EEE, MMM d  ·  h:mm a"
@@ -359,51 +437,109 @@ func timeRange() -> String {
         return "\(start) – \(end)  (\(mins) min)"
     }
 
-var isAppIdle: Bool {
+    var isAppIdle: Bool {
         if case .idle = manager.state { return true }
         if case .error = manager.state { return true }
         return false
     }
 
-    /// Inline indicator: green dot when both sources are flowing, yellow/red
-    /// when a source has stalled. Surfaces the underlying error if any source
-    /// restarted because of a problem (mic disconnect, SCStream stop, etc).
+    func exportToDrive(_ m: Meeting) {
+        guard drive.isConnected else {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            return
+        }
+        let doc = exportDocument(for: m)
+        Task { try? await drive.exportMarkdown(filename: m.slug, content: doc) }
+    }
+
+    func exportToObsidian(_ m: Meeting) {
+        let tagNames = tagStore.tagIDs(for: m).compactMap { tagStore.tag(by: $0)?.name }
+        let md = ObsidianExporter.markdown(
+            for: m,
+            summary: manager.summaryMarkdown(for: m),
+            notes: noteDraft.isEmpty ? manager.userNotes(for: m) : noteDraft,
+            transcript: manager.transcriptMarkdown(for: m),
+            tags: tagNames)
+        ObsidianExporter.export(md, filename: m.slug)
+    }
+
+    func exportDocument(for m: Meeting) -> String {
+        MeetingExporter.combinedMarkdown(
+            title: m.displayTitle,
+            dateString: timeRange(),
+            attendees: m.attendees,
+            summary: manager.summaryMarkdown(for: m),
+            notes: noteDraft.isEmpty ? manager.userNotes(for: m) : noteDraft,
+            transcript: manager.transcriptMarkdown(for: m))
+    }
+
     @ViewBuilder
-var recordingHealthRow: some View {
+    var recordingHealthRow: some View {
         let h = recordingMonitor.recordingHealth
-        let micAge = Int(h.micSecondsSinceLastSample)
-        let sysAge = Int(h.systemSecondsSinceLastSample)
-        HStack(spacing: 12) {
-            healthDot(label: "Mic",
-                      ageSeconds: micAge,
-                      hasData: h.micSamples > 0,
-                      restartCount: h.micRestarts)
-            healthDot(label: "System",
-                      ageSeconds: sysAge,
-                      hasData: h.systemSamples > 0,
-                      restartCount: h.systemRestarts)
+        HStack(spacing: 10) {
+            healthDot(label: "Mic", ageSeconds: Int(h.micSecondsSinceLastSample),
+                      hasData: h.micSamples > 0, restartCount: h.micRestarts)
+            healthDot(label: "Sys", ageSeconds: Int(h.systemSecondsSinceLastSample),
+                      hasData: h.systemSamples > 0, restartCount: h.systemRestarts)
             if let err = h.lastError {
-                Text(err)
-                    .font(.caption2).foregroundStyle(.orange).lineLimit(1)
-                    .help(err)
+                Text(err).font(.caption2).foregroundStyle(.orange).lineLimit(1).help(err)
             }
-            Spacer()
         }
     }
 
-func healthDot(label: String, ageSeconds: Int, hasData: Bool, restartCount: Int) -> some View {
-        let color: Color = !hasData ? .secondary
-                           : ageSeconds > 8 ? .red
-                           : ageSeconds > 3 ? .yellow
-                           : .green
+    func healthDot(label: String, ageSeconds: Int, hasData: Bool, restartCount: Int) -> some View {
+        let color: Color = !hasData ? .secondary : ageSeconds > 8 ? .red : ageSeconds > 3 ? .yellow : .green
         return HStack(spacing: 3) {
             Circle().fill(color).frame(width: 6, height: 6)
-            Text("\(label) — \(hasData ? "\(ageSeconds)s ago" : "no samples yet")")
+            Text("\(label): \(hasData ? "\(ageSeconds)s" : "—")")
                 .font(.caption2).foregroundStyle(.secondary)
             if restartCount > 0 {
-                Text("· \(restartCount) restart\(restartCount == 1 ? "" : "s")")
-                    .font(.caption2).foregroundStyle(.orange)
+                Text("·\(restartCount)↺").font(.caption2).foregroundStyle(.orange)
             }
         }
+    }
+}
+
+// MARK: - Attendee chip
+
+private struct AttendeeChip: View {
+    let attendee: String
+
+    private var initials: String {
+        // Extract display name (before <email>)
+        let name = attendee.components(separatedBy: "<").first?
+            .trimmingCharacters(in: .whitespaces) ?? attendee
+        let parts = name.components(separatedBy: " ").filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return "?" }
+        if parts.count >= 2 {
+            return String(parts[0].prefix(1)) + String(parts[1].prefix(1))
+        }
+        return String(parts[0].prefix(2))
+    }
+
+    private var displayName: String {
+        attendee.components(separatedBy: "<").first?
+            .trimmingCharacters(in: .whitespaces)
+            .components(separatedBy: " ").first ?? attendee
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(NDS.selectColor(displayName))
+                .frame(width: 20, height: 20)
+                .overlay(
+                    Text(initials.uppercased())
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                )
+            Text(displayName)
+                .font(.system(size: 12))
+                .foregroundStyle(NDS.textSecondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(NDS.fieldBg, in: Capsule())
+        .help(attendee)
     }
 }
