@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import CryptoKit
 
 /// One place that knows how to invoke `whisper-cli`. Consolidates the three
 /// near-identical implementations that used to live in `WhisperTranscriber`,
@@ -351,6 +352,29 @@ struct WhisperRunner {
             try? fm.removeItem(at: scratch)
             return false
         }
+
+        // Verify the bytes against the known-good SHA-256 so a truncated /
+        // MITM'd / garbage-but-large file can't install as the model and
+        // silently break all transcription. (ENG-D)
+        // Source: SHA-256 of ggml-base.en.bin from the whisper.cpp HF repo,
+        // matching the locally-validated model. Update if the upstream
+        // artifact is intentionally revved.
+        let expectedSHA256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
+        guard let bytes = try? Data(contentsOf: scratch, options: .mappedIfSafe) else {
+            log.error("Could not read downloaded model for checksum verification")
+            try? fm.removeItem(at: scratch)
+            return false
+        }
+        let hex = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        guard hex.caseInsensitiveCompare(expectedSHA256) == .orderedSame else {
+            log.error("Whisper model checksum mismatch — rejecting. got=\(hex, privacy: .public)")
+            TranscriptionLog.note(tag: "WhisperRunner",
+                                  message: "Whisper model checksum mismatch — rejected",
+                                  extra: ["expected": expectedSHA256, "got": hex])
+            try? fm.removeItem(at: scratch)
+            return false
+        }
+
         do {
             // _moveItem_ instead of replaceItem so we don't depend on dest
             // already existing.
