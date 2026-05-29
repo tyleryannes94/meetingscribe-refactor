@@ -153,13 +153,27 @@ sign:
 
 install: app
 	@echo "→ Installing to $(INSTALL_DIR)"
+	@# Quit any running instance before replacing — avoids "file busy" errors
+	@osascript -e 'tell application "$(APP_NAME)" to quit' 2>/dev/null || true
+	@sleep 1
+	@# rm -rf first: cp -R into an existing .app merges instead of replacing,
+	@# leaving stale old files. Always delete then copy.
 	@rm -rf $(INSTALL_DIR)/$(APP_NAME).app
-	@cp -R $(APP_DIR) $(INSTALL_DIR)/
-	@# Register the freshly-signed bundle with LaunchServices. Without this, a
-	@# re-signed copy can leave `bundleProxyForCurrentProcess` nil, which makes
-	@# `UNUserNotificationCenter.current()` assert and crash the app at launch.
-	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f $(INSTALL_DIR)/$(APP_NAME).app || true
+	@cp -R $(APP_DIR) $(INSTALL_DIR)/$(APP_NAME).app
+	@# Register the freshly-signed bundle with LaunchServices so the Dock
+	@# and Spotlight pick up the new version immediately.
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -f $(INSTALL_DIR)/$(APP_NAME).app 2>/dev/null || \
+		/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f $(INSTALL_DIR)/$(APP_NAME).app || true
 	@echo "  + registered with LaunchServices"
+	@echo "✓ Installed $(INSTALL_DIR)/$(APP_NAME).app"
+
+# dev: build, install, and relaunch in one command.
+# Use this instead of 'make app' for day-to-day development.
+dev: install
+	@echo "→ Launching $(APP_NAME)"
+	@sleep 0.5
+	@/usr/bin/open $(INSTALL_DIR)/$(APP_NAME).app
+	@echo "✓ $(APP_NAME) launched"
 
 run: app
 	/usr/bin/open $(APP_DIR)
