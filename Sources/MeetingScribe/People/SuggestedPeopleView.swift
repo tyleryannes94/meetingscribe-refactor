@@ -77,3 +77,72 @@ private struct SuggestionRow: View {
         .padding(.vertical, 4)
     }
 }
+
+/// Today-tab "stay in touch" nudges — people you haven't interacted with in a
+/// while (by `lastInteractionAt`). Renders nothing when nobody is overdue.
+@available(macOS 14.0, *)
+struct ReconnectView: View {
+    @EnvironmentObject var people: PeopleStore
+    var onOpen: (Person) -> Void
+
+    /// Surface someone you haven't talked to in this long.
+    private static let threshold: TimeInterval = 30 * 24 * 3600
+
+    private var candidates: [(person: Person, last: Date)] {
+        let now = Date()
+        return people.people
+            .compactMap { p -> (Person, Date)? in
+                guard let last = p.lastInteractionAt,
+                      now.timeIntervalSince(last) > Self.threshold else { return nil }
+                return (p, last)
+            }
+            .sorted { $0.1 < $1.1 }   // most overdue first
+            .prefix(4)
+            .map { (person: $0.0, last: $0.1) }
+    }
+
+    var body: some View {
+        let items = candidates
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.wave.2").foregroundStyle(NDS.brand)
+                    Text("Stay in touch").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                    Spacer()
+                }
+                ForEach(items, id: \.person.id) { item in
+                    Button { onOpen(item.person) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "person.circle")
+                                .font(.system(size: 22)).foregroundStyle(NDS.textTertiary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.person.displayName)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(NDS.textPrimary)
+                                Text(Self.lastText(item.last))
+                                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            }
+                            Spacer(minLength: 4)
+                            Image(systemName: "chevron.right")
+                                .font(.caption).foregroundStyle(NDS.textTertiary)
+                        }
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(14)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(NDS.hairline, lineWidth: 1))
+        }
+    }
+
+    private static func lastText(_ date: Date) -> String {
+        let days = Int(Date().timeIntervalSince(date) / 86_400)
+        if days >= 365 { return "Last talked over a year ago" }
+        if days >= 60  { return "Last talked \(days / 30) months ago" }
+        return "Last talked \(days) days ago"
+    }
+}

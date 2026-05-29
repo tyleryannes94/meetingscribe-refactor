@@ -68,6 +68,9 @@ struct TodayView: View {
 
                 // People suggestions below meetings — they're context, not actions
                 SuggestedPeopleView()
+
+                // "Stay in touch" — people you're drifting from (by last interaction).
+                ReconnectView { p in openPerson(p) }
             }
             .padding(.horizontal, 28).padding(.vertical, 24)
             // Was 920 — left wide empty gutters on large displays (req #5).
@@ -354,6 +357,17 @@ struct TodayView: View {
             return "Nothing on the calendar today"
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// Jump to the People tab and open a specific person (used by the
+    /// "Stay in touch" nudges). Small delay lets the People tab mount and
+    /// register its notification listener before we post.
+    private func openPerson(_ p: Person) {
+        section = .people
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            NotificationCenter.default.post(name: .meetingScribeOpenPerson,
+                                            object: nil, userInfo: ["id": p.id])
+        }
     }
 
     private func adhocPlaceholder() -> Meeting {
