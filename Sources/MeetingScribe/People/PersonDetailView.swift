@@ -229,7 +229,10 @@ struct PersonDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     identityPanel
                 }
-                .padding(20)
+                // Top inset clears the translucent window toolbar (Tahoe) — the
+                // identity panel was sliding under it (avatar cut off). Matches
+                // the People list column's 60pt so the two panes line up. (req #1)
+                .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, 60)
             }
             .frame(width: 280)
             .background(NDS.sidebarBg)
@@ -260,6 +263,10 @@ struct PersonDetailView: View {
                     }
                     Spacer()
                 }
+                // Same 60pt toolbar inset as the identity panel + list column —
+                // the Notes/Meetings/Messages tab bar was hidden under the
+                // window title bar. Background fills the inset strip. (req #1)
+                .padding(.top, 60)
                 .background(NDS.sidebarBg)
                 Divider().overlay(NDS.divider)
 
