@@ -85,20 +85,31 @@ struct TodayView: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Primary action — full-width filled button (most common intent)
-            Button {
-                Task { await manager.startRecording(for: nil) }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: isRecording ? "stop.circle.fill" : "record.circle.fill")
-                        .font(.system(size: 16))
-                    Text(isRecording ? "Recording in progress…" : "Record Meeting")
-                        .font(.system(size: 14, weight: .semibold))
+            if isRecording {
+                Button {
+                    Task { await manager.stopRecording() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "stop.circle.fill").font(.system(size: 16))
+                        Text("Stop recording")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity).frame(height: 42)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 42)
+                .buttonStyle(MSDangerButtonStyle())
+            } else {
+                Button {
+                    Task { await manager.startRecording(for: nil) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "record.circle.fill").font(.system(size: 16))
+                        Text("Record Meeting")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity).frame(height: 42)
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
             }
-            .buttonStyle(isRecording ? MSDangerButtonStyle() : MSPrimaryButtonStyle())
-            .disabled(isRecording)
 
             // Secondary actions — compact pills
             FlowLayout(spacing: 8) {
