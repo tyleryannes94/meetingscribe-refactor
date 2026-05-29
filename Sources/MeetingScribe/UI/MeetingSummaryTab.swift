@@ -159,6 +159,15 @@ private struct InlineActionItemRow: View {
     let item: ActionItem
     @ObservedObject var store: ActionItemStore
 
+    @State private var titleDraft: String
+    @FocusState private var titleFocused: Bool
+
+    init(item: ActionItem, store: ActionItemStore) {
+        self.item = item
+        self.store = store
+        _titleDraft = State(initialValue: item.title)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Button {
@@ -172,30 +181,72 @@ private struct InlineActionItemRow: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 1)
+            .accessibilityLabel(item.status == .completed ? "Mark as open" : "Mark as done")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
+                // Editable title — type to rename; commits on Enter or blur (no
+                // need to jump to the Tasks tab for a quick fix).
+                TextField("Task", text: $titleDraft)
+                    .textFieldStyle(.plain)
                     .font(.callout)
                     .strikethrough(item.status == .completed)
                     .foregroundStyle(item.status == .completed ? .secondary : .primary)
-                    .lineLimit(2)
-                if let owner = item.owner, !owner.isEmpty {
-                    Text(owner)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .focused($titleFocused)
+                    .onSubmit { commitTitle() }
+                    .onChange(of: titleFocused) { _, focused in if !focused { commitTitle() } }
+
+                HStack(spacing: 10) {
+                    if let owner = item.owner, !owner.isEmpty {
+                        Text(owner).font(.caption).foregroundStyle(.secondary)
+                    }
+                    // Due-date quick-set menu.
+                    Menu {
+                        Button("Today")     { store.setDueDate(item.id, dueDate: startOfToday) }
+                        Button("Tomorrow")  { store.setDueDate(item.id, dueDate: day(after: 1)) }
+                        Button("Next week") { store.setDueDate(item.id, dueDate: day(after: 7)) }
+                        if item.dueDate != nil {
+                            Divider()
+                            Button("Clear due date") { store.setDueDate(item.id, dueDate: nil) }
+                        }
+                    } label: {
+                        Label(dueLabel, systemImage: "calendar").font(.caption)
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .foregroundStyle(.secondary)
                 }
             }
 
             Spacer(minLength: 0)
 
-            // Priority dot
-            Circle()
-                .fill(priorityColor)
-                .frame(width: 7, height: 7)
-                .padding(.top, 5)
+            // Priority dot — click to set.
+            Menu {
+                Button("Urgent") { store.setPriority(item.id, priority: .urgent) }
+                Button("High")   { store.setPriority(item.id, priority: .high) }
+                Button("Medium") { store.setPriority(item.id, priority: .medium) }
+                Button("Low")    { store.setPriority(item.id, priority: .low) }
+            } label: {
+                Circle().fill(priorityColor).frame(width: 9, height: 9)
+            }
+            .menuStyle(.borderlessButton).fixedSize().padding(.top, 4)
+            .help("Set priority")
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+
+    private func commitTitle() {
+        let t = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty, t != item.title { store.setTitle(item.id, title: t) }
+    }
+
+    private var startOfToday: Date { Calendar.current.startOfDay(for: Date()) }
+    private func day(after days: Int) -> Date? {
+        Calendar.current.date(byAdding: .day, value: days, to: startOfToday)
+    }
+    private var dueLabel: String {
+        guard let d = item.dueDate else { return "Due" }
+        let f = DateFormatter(); f.dateFormat = "MMM d"
+        return f.string(from: d)
     }
 
     private var priorityColor: Color {
