@@ -188,12 +188,14 @@ struct CalendarTabView: View {
                 Spacer()
                 Button { shiftWeek(-1) } label: { Image(systemName: "chevron.left") }
                     .buttonStyle(.plain).foregroundStyle(NDS.textSecondary)
+                    .accessibilityLabel("Previous week")
                 Button { selectedDay = Calendar.current.startOfDay(for: Date()); monthCursor = selectedDay } label: {
                     Text("This week").font(.caption)
                 }
                 .buttonStyle(.plain).foregroundStyle(NDS.brand)
                 Button { shiftWeek(1) } label: { Image(systemName: "chevron.right") }
                     .buttonStyle(.plain).foregroundStyle(NDS.textSecondary)
+                    .accessibilityLabel("Next week")
             }
             .padding(.horizontal, 16).padding(.top, 12)
 
@@ -292,6 +294,7 @@ struct CalendarTabView: View {
                         monthCursor = prev
                     }
                 } label: { Image(systemName: "chevron.left") }
+                .accessibilityLabel("Previous month")
                 Spacer()
                 Text(monthTitle).font(.title3.weight(.semibold))
                 Spacer()
@@ -300,6 +303,7 @@ struct CalendarTabView: View {
                         monthCursor = next
                     }
                 } label: { Image(systemName: "chevron.right") }
+                .accessibilityLabel("Next month")
                 Button("Today") {
                     monthCursor = Calendar.current.startOfDay(for: Date())
                     selectedDay = Calendar.current.startOfDay(for: Date())

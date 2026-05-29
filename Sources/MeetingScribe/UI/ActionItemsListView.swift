@@ -43,12 +43,14 @@ extension ActionItemsView {
                     selectedTaskID = t.id
                 } label: { Image(systemName: "plus") }
                 .buttonStyle(.borderless).help("Add a task to this section")
+                .accessibilityLabel("Add a task to this section")
                 if let sectionID {
                     Menu {
                         Button("Rename…") { renameSectionID = sectionID; renameSectionDraft = name }
                         Button(role: .destructive) { store.deleteSection(sectionID) } label: { Text("Delete section") }
                     } label: { Image(systemName: "ellipsis") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .accessibilityLabel("Section options")
                 }
             }
             .padding(.vertical, 2)

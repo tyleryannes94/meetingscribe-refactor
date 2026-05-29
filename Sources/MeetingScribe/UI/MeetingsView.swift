@@ -284,10 +284,12 @@ struct MeetingsView: View {
     private var monthHeader: some View {
         HStack {
             Button { shiftMonth(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
+                .accessibilityLabel("Previous month")
             Spacer()
             Text(monthTitle).font(.system(size: 14, weight: .semibold)).foregroundStyle(NDS.textPrimary)
             Spacer()
             Button { shiftMonth(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
+                .accessibilityLabel("Next month")
             Button {
                 let t = Calendar.current.startOfDay(for: Date()); monthCursor = t; selectedDay = t
             } label: { Text("Today").font(.caption) }

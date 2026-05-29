@@ -44,6 +44,7 @@ extension ActionItemsView {
                     viewMode = .list
                 } label: { Image(systemName: "plus") }
                 .buttonStyle(.borderless).help("Add a task to \(status.label)")
+                .accessibilityLabel("Add a task to \(status.label)")
             }
             .padding(.horizontal, 4)
             ForEach(items) { item in
