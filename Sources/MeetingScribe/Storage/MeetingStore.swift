@@ -386,9 +386,9 @@ final class MeetingStore {
             log.info("Renamed tag folder \(oldFolderName, privacy: .public) → \(newFolderName, privacy: .public)")
         } catch {
             log.error("Failed to rename tag folder: \(error.localizedDescription, privacy: .public)")
-            ErrorReporter.shared.report(error, category: .storage,
-                                        context: ["phase": "rename-tag-folder",
-                                                  "old": oldFolderName, "new": newFolderName])
+            ErrorReporter.shared.reportAsync(error, category: .storage,
+                                             context: ["phase": "rename-tag-folder",
+                                                       "old": oldFolderName, "new": newFolderName])
         }
     }
 
