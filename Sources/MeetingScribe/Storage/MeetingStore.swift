@@ -369,6 +369,29 @@ final class MeetingStore {
         upsertInIndex(updated)
     }
 
+    /// Renames the on-disk tag folder when a tag's display name changes.
+    /// The old `folderName` and the new one may differ (both are sanitized,
+    /// so only filesystem-safe chars). If no folder exists with the old name
+    /// this is a no-op (the tag may never have had any meetings).
+    func renameTagFolder(oldFolderName: String, newFolderName: String) {
+        guard oldFolderName != newFolderName else { return }
+        let oldURL = root.appendingPathComponent(oldFolderName, isDirectory: true)
+        let newURL = root.appendingPathComponent(newFolderName, isDirectory: true)
+        guard FileManager.default.fileExists(atPath: oldURL.path) else { return }
+        do {
+            try FileManager.default.moveItem(at: oldURL, to: newURL)
+            // Invalidate all cached paths under the old folder so they
+            // resolve to the new location on next access.
+            clearCache()
+            log.info("Renamed tag folder \(oldFolderName, privacy: .public) → \(newFolderName, privacy: .public)")
+        } catch {
+            log.error("Failed to rename tag folder: \(error.localizedDescription, privacy: .public)")
+            ErrorReporter.shared.report(error, category: .storage,
+                                        context: ["phase": "rename-tag-folder",
+                                                  "old": oldFolderName, "new": newFolderName])
+        }
+    }
+
     // MARK: - Discovery
 
     /// Versioned index file. Format:

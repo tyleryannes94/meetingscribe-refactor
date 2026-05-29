@@ -51,6 +51,9 @@ final class AppSettings {
         /// to qwen2.5:7b, which actually emits proper `tool_calls` and
         /// doesn't hallucinate spurious safety refusals on benign messages.
         static let migratedToQwen2_5 = "migratedToQwen2_5"
+        /// BCP-47 language code passed to whisper-cli via --language.
+        /// "auto" = let whisper detect; "en", "es", "fr", etc. for forced lang.
+        static let whisperLanguage = "whisperLanguage"
     }
 
     /// The recommended local model. Qwen 2.5 7B is the strongest small
@@ -139,6 +142,15 @@ final class AppSettings {
             defaults.set(Self.recommendedOllamaModel, forKey: Keys.ollamaModel)
         }
         defaults.set(true, forKey: Keys.migratedToQwen2_5)
+    }
+
+    /// BCP-47 language hint for whisper-cli (--language flag).
+    /// "auto" lets whisper detect; "en", "es", "fr", etc. force a language.
+    /// Default "auto" — detection is fast and avoids broken output when the
+    /// user switches languages.
+    var whisperLanguage: String {
+        get { defaults.string(forKey: Keys.whisperLanguage) ?? "auto" }
+        set { defaults.set(newValue, forKey: Keys.whisperLanguage) }
     }
 
     var autoRecord: Bool {

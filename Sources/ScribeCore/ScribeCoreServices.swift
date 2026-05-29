@@ -38,8 +38,10 @@ final class ScribeCoreServices {
             self?.log.info("transcribeNow signal received (handled by UI process)")
         }
 
-        // Notify UI that core is running
-        DarwinNotifier.post(DarwinNotifier.recordingStopped) // use as "ready" signal
+        // Notify UI that core is running and ready to accept recording commands.
+        // Uses the dedicated coreReady signal — NOT recordingStopped, which would
+        // incorrectly trigger the UI's finalize-recording path.
+        DarwinNotifier.post(DarwinNotifier.coreReady)
         log.info("Scribe Core ready. Vault: \(vaultURL.path)")
     }
 

@@ -200,13 +200,14 @@ struct WhisperRunner {
     static func argv(audio: URL, model: String, prefix: URL, forceCPU: Bool) -> [String] {
         let cores = max(2, ProcessInfo.processInfo.activeProcessorCount - 1)
         let settings = AppSettings.shared
+        let lang = settings.whisperLanguage
         var args = [
             "-m", model,
             "-f", audio.path,
             "--output-json",
             "--output-file", prefix.path,
             "--no-prints",
-            "--language", "en",
+            "--language", lang,
             "--best-of", "1",
             "--beam-size", "1",
             "--threads", "\(cores)"

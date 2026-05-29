@@ -52,13 +52,20 @@ enum AppSettings {
         UserDefaults.standard.object(forKey: "autoExtractPeople") as? Bool ?? true
     }
 
+    /// BCP-47 language hint for whisper-cli. "auto" = detect, or e.g. "en", "es".
+    static var whisperLanguage: String {
+        UserDefaults.standard.string(forKey: "whisperLanguage") ?? "auto"
+    }
+
     static var ollamaURL: URL {
         if let s = UserDefaults.standard.string(forKey: "ollamaURL"),
            let u = URL(string: s) { return u }
         return URL(string: "http://127.0.0.1:11434")!
     }
     static var ollamaModel: String {
-        UserDefaults.standard.string(forKey: "ollamaModel") ?? "llama3"
+        // Default matches the main app's recommendedOllamaModel so both processes
+        // agree on which model to use when the user hasn't overridden it.
+        UserDefaults.standard.string(forKey: "ollamaModel") ?? "qwen2.5:7b"
     }
     static var captureMic: Bool {
         UserDefaults.standard.object(forKey: "captureMic") as? Bool ?? true

@@ -13,6 +13,10 @@ public struct DarwinNotifier {
     public static let startRecording    = "com.tyleryannes.ScribeCore.startRecording"
     public static let stopRecording     = "com.tyleryannes.ScribeCore.stopRecording"
     public static let transcribeNow     = "com.tyleryannes.ScribeCore.transcribeNow"
+    /// Posted by ScribeCore once its services are running and it can accept
+    /// startRecording commands. Distinct from recordingStopped so the UI
+    /// doesn't prematurely finalize an in-flight recording.
+    public static let coreReady         = "com.tyleryannes.ScribeCore.coreReady"
 
     public static func post(_ name: String) {
         CFNotificationCenterPostNotification(

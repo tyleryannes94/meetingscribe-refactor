@@ -223,6 +223,11 @@ final class QuickNotesController: ObservableObject {
         updated.snippet = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(150))
         try? store.writeNote(updated)
         refresh()
+        // Index into vault FTS so GlobalSearch can find this voice note.
+        PeopleStore.shared.indexVoiceNote(id: note.id,
+                                          title: note.title,
+                                          transcript: text.isEmpty ? nil : text,
+                                          createdAt: note.createdAt)
     }
 
     func savePolished(_ text: String, for note: QuickNote) {

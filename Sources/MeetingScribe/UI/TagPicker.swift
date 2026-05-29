@@ -26,6 +26,7 @@ struct TagPicker: View {
                 Image(systemName: "plus.circle")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel("Add tag")
             .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
                 tagListPopover
                     .frame(width: 260)
@@ -59,6 +60,10 @@ struct TagPicker: View {
                             .padding(.vertical, 2)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(assigned.contains(t.id)
+                            ? "Remove tag \(t.name)"
+                            : "Add tag \(t.name)")
+                        .accessibilityValue(assigned.contains(t.id) ? "selected" : "not selected")
                     }
                 }
                 .padding(.horizontal)

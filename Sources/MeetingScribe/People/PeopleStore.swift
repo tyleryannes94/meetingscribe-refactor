@@ -97,6 +97,37 @@ final class PeopleStore: ObservableObject {
         db.upsertPerson(person, encounterCount: encounterCount(for: person.id), tagName: tagNameResolver)
     }
 
+    // MARK: - Unified vault FTS (meetings + voice notes)
+
+    /// Index a meeting into vault_fts so GlobalSearch can find it.
+    /// Call after the pipeline finishes (transcript + summary ready).
+    func indexMeeting(_ meeting: Meeting, summary: String, tags: String?) {
+        let epoch = Int64(meeting.startDate.timeIntervalSince1970)
+        let body = summary.isEmpty ? nil : summary
+        db.upsertVaultContent(entityID: meeting.id,
+                              entityKind: "meeting",
+                              title: meeting.displayTitle,
+                              body: body,
+                              dateEpoch: epoch,
+                              tags: tags)
+    }
+
+    /// Index a voice note into vault_fts.
+    func indexVoiceNote(id: String, title: String, transcript: String?, createdAt: Date) {
+        let epoch = Int64(createdAt.timeIntervalSince1970)
+        db.upsertVaultContent(entityID: id,
+                              entityKind: "voice_note",
+                              title: title,
+                              body: transcript,
+                              dateEpoch: epoch,
+                              tags: nil)
+    }
+
+    /// Remove a meeting from vault_fts (e.g. on delete).
+    func deindexMeeting(id: String) {
+        db.deleteVaultContent(entityID: id, entityKind: "meeting")
+    }
+
     // MARK: - Paths
 
     private var peopleRoot: URL {

@@ -26,6 +26,10 @@ final class MeetingPipelineController: ObservableObject {
     /// Most recent pipeline error surfaced to the user.
     @Published var lastError: String?
 
+    /// Called on the main actor when a pipeline run (finalize OR transcribeNow)
+    /// completes successfully. Wire this to show a notification.
+    var onComplete: ((Meeting) -> Void)?
+
     private let store: MeetingStore
     private let tagStore: TagStore
     private let actionItems: ActionItemStore
@@ -125,7 +129,20 @@ final class MeetingPipelineController: ObservableObject {
         // 5. Write in-folder markdown snapshot.
         let finalDir = store.directory(for: workingMeeting, primaryTag: primary)
         ObsidianExporter.writeMarkdownFile(for: workingMeeting, to: finalDir)
+
+        // 6. Index into vault FTS so GlobalSearch finds this meeting.
+        let tagNames = tagStore.tagIDs(for: workingMeeting)
+            .compactMap { tagStore.tag(by: $0)?.name }
+            .joined(separator: " ")
+        PeopleStore.shared.indexMeeting(workingMeeting,
+                                        summary: summary,
+                                        tags: tagNames.isEmpty ? nil : tagNames)
+
         liveResetIfStillIdle()
+
+        // Notify interested parties (e.g. NotificationManager) that the
+        // pipeline for this meeting has finished.
+        onComplete?(workingMeeting)
     }
 
     // MARK: - Transcribe Now
@@ -207,6 +224,13 @@ final class MeetingPipelineController: ObservableObject {
                     let extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
                     actionItems.reconcileExtracted(extracted, for: meeting.id)
                     ObsidianExporter.writeMarkdownFile(for: meeting, to: dir)
+                    // Index into vault FTS.
+                    let tagNames = tagStore.tagIDs(for: meeting)
+                        .compactMap { tagStore.tag(by: $0)?.name }
+                        .joined(separator: " ")
+                    PeopleStore.shared.indexMeeting(meeting,
+                                                    summary: summary,
+                                                    tags: tagNames.isEmpty ? nil : tagNames)
                 }
             } catch {
                 log.error("transcribeNow summary failed: \(error.localizedDescription, privacy: .public)")
@@ -217,6 +241,9 @@ final class MeetingPipelineController: ObservableObject {
             // Even without a summary regeneration, refresh the markdown snapshot.
             await MainActor.run { ObsidianExporter.writeMarkdownFile(for: meeting, to: dir) }
         }
+
+        // Signal completion to registered observers.
+        await MainActor.run { self.onComplete?(meeting) }
     }
 
     // MARK: - Disk helpers (nonisolated; called from detached tasks)

@@ -61,6 +61,8 @@ struct AudioLevelMeter: View {
                 }
             }
             .frame(height: height)
+            // Purely decorative — VoiceOver should skip the individual bars.
+            .accessibilityHidden(true)
         }
     }
 

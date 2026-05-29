@@ -24,7 +24,10 @@ struct SettingsView: View {
     @State private var dictationUsePolished: Bool = AppSettings.shared.dictationUsePolished
     @State private var whisperUseGPU: Bool = AppSettings.shared.whisperUseGPU
     @State private var whisperFlashAttn: Bool = AppSettings.shared.whisperFlashAttention
+    @State private var whisperLanguage: String = AppSettings.shared.whisperLanguage
     @State private var autoExtractPeople: Bool = AppSettings.shared.autoExtractPeople
+    @State private var obsidianVaultPath: String = ExportSettings().vaultPath
+    @State private var obsidianTemplate: String = ExportSettings().filenameTemplate
 
     @StateObject private var mcp = MCPInstaller()
     @State private var mcpStatus: String = ""
@@ -309,6 +312,28 @@ struct SettingsView: View {
                 Section("Whisper.cpp") {
                     TextField("whisper-cli binary", text: $whisperBinary)
                     TextField("GGML model path", text: $whisperModel)
+                    HStack {
+                        Text("Language")
+                        Spacer()
+                        Picker("", selection: $whisperLanguage) {
+                            Text("Auto-detect").tag("auto")
+                            Text("English (en)").tag("en")
+                            Text("Spanish (es)").tag("es")
+                            Text("French (fr)").tag("fr")
+                            Text("German (de)").tag("de")
+                            Text("Italian (it)").tag("it")
+                            Text("Portuguese (pt)").tag("pt")
+                            Text("Japanese (ja)").tag("ja")
+                            Text("Chinese (zh)").tag("zh")
+                            Text("Korean (ko)").tag("ko")
+                            Text("Dutch (nl)").tag("nl")
+                            Text("Russian (ru)").tag("ru")
+                            Text("Hindi (hi)").tag("hi")
+                        }
+                        .frame(width: 200)
+                    }
+                    Text("Auto-detect works well for most languages. Force a specific language only if detection is wrong.")
+                        .font(.caption2).foregroundStyle(.secondary)
                     Toggle("Use GPU (Metal) acceleration", isOn: $whisperUseGPU)
                     Text("Disable if transcription returns empty output. Some Apple Silicon hardware + recent ggml builds misbehave; CPU mode is slower but always works.")
                         .font(.caption2).foregroundStyle(.secondary)
@@ -359,6 +384,31 @@ struct SettingsView: View {
                     Toggle("Auto-extract people from meetings", isOn: $autoExtractPeople)
                     Text("After a meeting is summarized, a second on-device Ollama pass lists the people mentioned in the transcript. Strong matches link to existing people automatically; uncertain ones appear as suggestions on the Today tab. Nothing leaves your machine.")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+
+                Section("Export to Obsidian") {
+                    HStack {
+                        TextField("Obsidian vault path (leave blank to ask)", text: $obsidianVaultPath)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Choose…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseDirectories = true
+                            panel.canChooseFiles = false
+                            panel.allowsMultipleSelection = false
+                            if panel.runModal() == .OK, let url = panel.url {
+                                obsidianVaultPath = url.path
+                            }
+                        }
+                    }
+                    HStack {
+                        Text("Filename template")
+                        Spacer()
+                        TextField("{date}-{slug}", text: $obsidianTemplate)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 220)
+                    }
+                    Text("Tokens: {date} (YYYY-MM-DD), {title}, {slug}. Each meeting's Summary tab has an 'Export to Obsidian' button that writes a Markdown note to this vault.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
@@ -448,7 +498,11 @@ struct SettingsView: View {
         s.dictationUsePolished = dictationUsePolished
         s.whisperUseGPU = whisperUseGPU
         s.whisperFlashAttention = whisperFlashAttn
+        s.whisperLanguage = whisperLanguage
         s.autoExtractPeople = autoExtractPeople
+        let es = ExportSettings()
+        es.vaultPath = obsidianVaultPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        es.filenameTemplate = obsidianTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
         NotificationCenter.default.post(name: .meetingScribeSettingsChanged, object: nil)
         dismiss()
     }

@@ -127,6 +127,21 @@ final class NotificationManager: NSObject, ObservableObject {
         }
     }
 
+    /// Posts an immediate notification when transcription + summary finishes
+    /// for a meeting. This is the most valuable notification — it closes the
+    /// loop for the user ("your meeting is ready to review").
+    func notifyTranscriptionComplete(meeting: Meeting) {
+        let content = UNMutableNotificationContent()
+        content.title = "Meeting ready: \(meeting.displayTitle)"
+        content.body = "Transcript and summary are ready to review."
+        content.sound = .default
+        let req = UNNotificationRequest(
+            identifier: "transcription-\(meeting.id)",
+            content: content,
+            trigger: nil)
+        UNUserNotificationCenter.current().add(req)
+    }
+
     /// Posts an immediate notification when an impromptu meeting is detected.
     func notifyImpromptuDetected(source: String) {
         let content = UNMutableNotificationContent()

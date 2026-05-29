@@ -23,6 +23,9 @@ struct UnifiedMeetingDetail: View {
     @StateObject var meetingChat = ChatSession()
 
     @State var tab: DetailTab = .notes
+    /// Whether we've applied the smart tab default for this meeting yet.
+    /// Prevents tab from jumping when the user has already made a selection.
+    @State private var hasAppliedTabDefault = false
     @State var chatAttached = false
     /// In the My Notes tab for a recurring series: which occurrence's notes are
     /// shown. nil = the current call (editable); otherwise a prior meeting id
@@ -87,8 +90,12 @@ struct UnifiedMeetingDetail: View {
         .onAppear {
             reload()
             attachChatIfNeeded()
+            applySmartTabDefault()
         }
-        .onChange(of: meeting?.id) { _, _ in reload() }
+        .onChange(of: meeting?.id) { _, _ in
+            hasAppliedTabDefault = false
+            reload()
+        }
         .onChange(of: noteDraft) { _, _ in scheduleNoteSave() }
         .onChange(of: meeting.flatMap { tagStore.tagIDs(for: $0) }) { _, _ in handleTagChange() }
         .onChange(of: manager.state) { _, _ in reloadIfLiveFinished() }
@@ -223,6 +230,28 @@ struct UnifiedMeetingDetail: View {
 
     // (Backlinks are now loaded inside `reload()`'s body refresh task so
     // they cancel along with the rest when the user switches meetings.)
+
+    /// For past meetings that already have a summary, default to the Summary
+    /// tab instead of My Notes — that's what users want to see first.
+    /// Runs once per meeting switch; tab jumps back to Notes for live meetings
+    /// so users can type while recording.
+    func applySmartTabDefault() {
+        guard !hasAppliedTabDefault else { return }
+        hasAppliedTabDefault = true
+        switch mode {
+        case .past:
+            // Defer until the body loads so we know if a summary exists.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                let hasSummary = !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if hasSummary { tab = .summary }
+            }
+        case .live:
+            tab = .notes  // Always start in notes so you can type while recording.
+        case .upcoming:
+            tab = .notes
+        }
+    }
 
     func reloadIfLiveFinished() {
         if case .idle = manager.state, case .live = mode { reload() }

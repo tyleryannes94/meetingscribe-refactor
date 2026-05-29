@@ -32,6 +32,7 @@ struct AudioPlayerView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!controller.ready)
+                .accessibilityLabel("Skip back 15 seconds")
 
                 Button { controller.togglePlay() } label: {
                     Image(systemName: controller.isPlaying ? "pause.circle.fill" : "play.circle.fill")
@@ -39,18 +40,22 @@ struct AudioPlayerView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!controller.ready)
+                .accessibilityLabel(controller.isPlaying ? "Pause" : "Play")
 
                 Button { controller.skip(15) } label: {
                     Image(systemName: "goforward.15").font(.title3)
                 }
                 .buttonStyle(.borderless)
                 .disabled(!controller.ready)
+                .accessibilityLabel("Skip forward 15 seconds")
 
                 Slider(value: Binding(get: { controller.currentTime },
                                       set: { controller.scrub(to: $0) }),
                        in: 0...max(0.01, controller.duration),
                        onEditingChanged: { editing in controller.scrubbing = editing })
                     .disabled(!controller.ready)
+                    .accessibilityLabel("Playback position")
+                    .accessibilityValue("\(format(controller.currentTime)) of \(format(controller.duration))")
 
                 Text("\(format(controller.currentTime)) / \(format(controller.duration))")
                     .font(.caption.monospacedDigit())

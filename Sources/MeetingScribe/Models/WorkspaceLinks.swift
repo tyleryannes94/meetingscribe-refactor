@@ -114,4 +114,7 @@ extension Notification.Name {
     /// Search-palette tag click — userInfo["name"] = the tag to filter
     /// the People list by. PeopleListView listens and sets its filter.
     static let meetingScribeFilterByTag = Notification.Name("MeetingScribeFilterByTag")
+    /// ⌘1–⌘7 keyboard shortcuts — object is a TopLevelSection value
+    /// that MainWindow observes and switches to.
+    static let meetingScribeNavigate = Notification.Name("MeetingScribeNavigate")
 }

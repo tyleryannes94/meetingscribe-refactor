@@ -91,6 +91,10 @@ final class MeetingManager: ObservableObject {
     /// False means the direct AudioRecorder path is active (fallback mode).
     private var usingScribeCore = false
 
+    /// Set to true when ScribeCore posts the `coreReady` Darwin notification.
+    /// Used to skip the full 5-second wait if the daemon is already up.
+    private var scribeCoreReady = false
+
     private let refreshSubject = PassthroughSubject<Bool, Never>()
     private var refreshCancellable: AnyCancellable?
 
@@ -140,6 +144,22 @@ final class MeetingManager: ObservableObject {
                 self.lastStoppedMeetingID = meeting.id
                 self.recordingMonitor.resetToIdle()
                 self.refreshPastMeetings(force: true)
+            }
+        }
+        // When ScribeCore daemon finishes booting it posts coreReady. This
+        // is used by tryStartViaScribeCore() to detect a live daemon faster
+        // than a fixed 5-second timeout.
+        DarwinNotifier.observe(DarwinNotifier.coreReady) { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.scribeCoreReady = true
+            }
+        }
+        // When a tag's display name changes, rename its vault folder on disk
+        // so existing meeting directories stay grouped under the new name.
+        tagStore.onTagRenamed = { [weak self] oldFolder, newFolder in
+            Task.detached(priority: .utility) { [weak self] in
+                self?.store.renameTagFolder(oldFolderName: oldFolder,
+                                            newFolderName: newFolder)
             }
         }
         // Coalesce rapid refreshPastMeetings calls so the @Published array isn't
@@ -198,9 +218,29 @@ final class MeetingManager: ObservableObject {
         }
     }
 
-    /// Attempts to start recording via ScribeCore with a 1-second timeout.
-    /// Returns true if ScribeCore accepted the command within the timeout.
+    /// Attempts to start recording via ScribeCore.
+    ///
+    /// Fast path: if ScribeCore already posted `coreReady` this session the
+    /// command is sent immediately with a 5-second timeout for the response.
+    ///
+    /// Slow path: if coreReady hasn't fired yet we wait up to 5 seconds for
+    /// both the daemon boot AND the command acknowledgement. This handles the
+    /// first recording after login before ScribeCore has fully started.
+    ///
+    /// Returns true if ScribeCore acknowledged the startRecording command.
     private func tryStartViaScribeCore() async -> Bool {
+        // If the daemon hasn't announced itself yet, wait a little for coreReady.
+        if !scribeCoreReady {
+            let deadline = Date().addingTimeInterval(5)
+            while !scribeCoreReady, Date() < deadline {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100 ms polls
+            }
+        }
+        guard scribeCoreReady else {
+            log.info("ScribeCore not ready after 5s — falling back to direct audio")
+            return false
+        }
+
         return await withTaskGroup(of: Bool.self) { group in
             group.addTask {
                 do {
@@ -211,10 +251,9 @@ final class MeetingManager: ObservableObject {
                 }
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 second timeout
                 return false
             }
-            // Return the first result (either success or timeout)
             for await result in group {
                 group.cancelAll()
                 return result

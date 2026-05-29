@@ -71,6 +71,23 @@ struct MeetingScribeApp: App {
                 }
                 .keyboardShortcut("K", modifiers: [.command])
             }
+            // ⌘1–⌘7: jump to each top-level section.
+            CommandMenu("Navigate") {
+                Button("Today")        { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.today) }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Meetings")     { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.meetings) }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("People")       { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.people) }
+                    .keyboardShortcut("3", modifiers: .command)
+                Button("Tasks")        { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.actions) }
+                    .keyboardShortcut("4", modifiers: .command)
+                Button("Calendar")     { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.calendar) }
+                    .keyboardShortcut("5", modifiers: .command)
+                Button("Voice Notes")  { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.notes) }
+                    .keyboardShortcut("6", modifiers: .command)
+                Button("Integrations") { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.integrations) }
+                    .keyboardShortcut("7", modifiers: .command)
+            }
             CommandGroup(after: .newItem) {
                 Button("Start Ad-hoc Meeting Recording") {
                     Task { await manager.startRecording(for: nil) }
@@ -132,12 +149,18 @@ struct MeetingScribeApp: App {
         registerScribeCoreLoginItem()
         wireNotifications()
         wireDetector()
+        wirePipelineNotification()
         // Ambient mic-based meeting detection (off unless enabled in Settings).
         AmbientMeetingDetector.shared.startIfEnabled()
         registerHotkey()
         overlay.attach(to: manager)
         chatSession.attach(manager: manager)
         observeSettingsChanges()
+
+        // Wire the iCloud inbox watcher — processes files dropped by iPhone
+        // Shortcuts into vault/_inbox/. Without this, Shortcut-to-MeetingScribe
+        // flows (quick notes, voice notes, action items) are silently ignored.
+        wireInboxWatcher()
 
         // BACKGROUND: prime the meeting index from disk so the first
         // `listPastMeetings()` from a tab is instant. JSON decode of 200+
@@ -214,6 +237,13 @@ struct MeetingScribeApp: App {
         Task { await manager.startRecording(for: live) }
     }
 
+    /// Post a "Meeting ready" banner when transcription + summary finishes.
+    private func wirePipelineNotification() {
+        manager.pipelineController.onComplete = { [weak notifications] meeting in
+            notifications?.notifyTranscriptionComplete(meeting: meeting)
+        }
+    }
+
     private func wireNotifications() {
         notifications.onJoinAndRecord = { meeting in
             Task { await manager.switchToRecording(meeting) }
@@ -256,15 +286,61 @@ struct MeetingScribeApp: App {
     // MARK: - Login Item registration
 
     /// Registers ScribeCore as a Login Item so it starts automatically on login.
+    /// Must use `loginItem(identifier:)` — `mainApp` registers the calling process
+    /// itself (the UI), not the embedded ScribeCore helper.
     /// Safe to call repeatedly — SMAppService is idempotent when already registered.
     private func registerScribeCoreLoginItem() {
         if #available(macOS 13.0, *) {
             do {
-                try SMAppService.mainApp.register()
+                try SMAppService.loginItem(identifier: "com.tyleryannes.ScribeCore").register()
             } catch {
                 print("Failed to register ScribeCore login item: \(error)")
             }
         }
+    }
+
+    // MARK: - iCloud inbox (iPhone Shortcuts integration)
+
+    private func wireInboxWatcher() {
+        let watcher = iCloudInboxWatcher.shared
+        let mgr = manager
+
+        // Quick text notes created from the iPhone Shortcuts shortcut.
+        // Save as a QuickNote with transcript only (no audio).
+        watcher.onQuickNote = { [weak mgr] envelope in
+            Task { @MainActor in
+                guard let mgr else { return }
+                let now = Date()
+                let note = QuickNote(
+                    id: envelope.id,
+                    title: envelope.title ?? "Quick Note",
+                    createdAt: now,
+                    durationSeconds: 0,
+                    snippet: String((envelope.body ?? "").prefix(150)),
+                    wasDictation: false
+                )
+                mgr.quickNotesController.saveTranscript(envelope.body ?? "", for: note)
+            }
+        }
+
+        // Action items manually entered via iPhone Shortcuts.
+        watcher.onActionItem = { [weak mgr] envelope in
+            Task { @MainActor in
+                guard let mgr else { return }
+                let title = envelope.title ?? envelope.body ?? "Action Item"
+                mgr.actionItems.createTask(title: title)
+            }
+        }
+
+        // Voice notes recorded on iPhone and synced via iCloud Drive.
+        watcher.onVoiceNote = { [weak mgr] audioURL, _ in
+            Task { @MainActor in
+                guard let mgr else { return }
+                await mgr.importVoiceNote(from: audioURL)
+            }
+        }
+
+        watcher.start(vaultURL: AppSettings.shared.storageDir)
     }
 
     private func observeSettingsChanges() {

@@ -48,8 +48,10 @@ struct MainWindow: View {
     }
     @State private var activeSheet: ActiveSheet?
     @AppStorage("chatRailVisible") private var chatVisible = true
-    /// Direction A — dark mode is the default; the nav-rail toggle flips it.
-    @AppStorage("appearanceDark") private var appearanceDark = true
+    /// Follow the system appearance by default (nil = system). Stored as a
+    /// Bool for toggle simplicity; false = light, true = dark. We default to
+    /// false (light/system) rather than forcing dark on every first-launch user.
+    @AppStorage("appearanceDark") private var appearanceDark = false
     /// First-launch onboarding — pre-explains every macOS permission BEFORE
     /// the system dialog so a "Don't Allow" tap doesn't silently strand the
     /// user (audit 8.3). Shown once and then never again per `hasCompletedOnboarding`.
@@ -65,12 +67,14 @@ struct MainWindow: View {
 
     /// Keep-alive tabs: each section is built lazily the first time it's
     /// opened, then kept in the hierarchy and shown/hidden via opacity.
+    /// A short cross-fade (0.15 s) smooths the transition.
     private var tabContent: some View {
         ZStack {
             ForEach(TopLevelSection.allCases) { s in
                 if visited.contains(s) {
                     tabView(for: s)
                         .opacity(section == s ? 1 : 0)
+                        .animation(.easeOut(duration: 0.15), value: sectionRaw)
                         .allowsHitTesting(section == s)
                         .zIndex(section == s ? 1 : 0)
                 }
@@ -128,27 +132,7 @@ struct MainWindow: View {
     }
 
     private func navItem(_ s: TopLevelSection) -> some View {
-        let selected = section == s
-        return Button {
-            section = s
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: s.systemImage)
-                    .font(.system(size: 14))
-                    .foregroundStyle(selected ? NDS.brand : NDS.textSecondary)
-                    .frame(width: 18)
-                Text(s.label)
-                    .font(.system(size: 13.5, weight: selected ? .semibold : .regular))
-                    .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(selected ? NDS.brand.opacity(0.14) : .clear,
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 8)
+        NavRailItem(section: s, selected: section == s) { section = s }
     }
 
     private func navActionRow(_ title: String, systemImage: String, _ action: @escaping () -> Void) -> some View {
@@ -359,6 +343,11 @@ struct MainWindow: View {
                   let parsed = WorkspaceLink.parse(url) else { return }
             routeEntity(kind: parsed.kind, id: parsed.id)
         }
+        // ⌘1–⌘7 keyboard shortcuts posted by CommandMenu("Navigate")
+        .onReceive(NotificationCenter.default.publisher(for: .meetingScribeNavigate)) { note in
+            guard let target = note.object as? TopLevelSection else { return }
+            section = target
+        }
     }
 
     @ViewBuilder
@@ -438,6 +427,45 @@ struct MainWindow: View {
         } else {
             present()
         }
+    }
+}
+
+// MARK: - Nav rail item with hover state
+
+@available(macOS 14.0, *)
+private struct NavRailItem: View {
+    let section: TopLevelSection
+    let selected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: section.systemImage)
+                    .font(.system(size: 14))
+                    .foregroundStyle(selected ? NDS.brand : NDS.textSecondary)
+                    .frame(width: 18)
+                Text(section.label)
+                    .font(.system(size: 13.5, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(
+                selected
+                    ? NDS.brand.opacity(0.14)
+                    : isHovered ? NDS.brand.opacity(0.07) : .clear,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .accessibilityLabel(section.label)
     }
 }
 

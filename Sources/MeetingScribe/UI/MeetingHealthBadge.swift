@@ -36,6 +36,7 @@ struct MeetingHealthBadge: View {
         .background(color.opacity(0.12),
                     in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         .help(helpText(for: health))
+        .accessibilityLabel(Text("\(label) recording quality: \(helpText(for: health))"))
     }
 
     private func style(for status: MeetingHealthDTO.Status) -> (String, String, Color) {

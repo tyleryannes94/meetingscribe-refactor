@@ -24,6 +24,10 @@ final class TagStore: ObservableObject {
     private var meetingTags: [String: [String]] = [:]
     private var seriesTags: [String: [String]] = [:]
 
+    /// Called when a tag is renamed — arguments are (oldFolderName, newFolderName).
+    /// Wire this in MeetingManager to rename the corresponding vault folder on disk.
+    var onTagRenamed: ((_ oldFolderName: String, _ newFolderName: String) -> Void)?
+
     private var fileURL: URL { AppSettings.shared.storageDir.appendingPathComponent("tags.json") }
 
     init() {
@@ -89,8 +93,16 @@ final class TagStore: ObservableObject {
 
     func renameTag(id: String, to newName: String) {
         guard let idx = allTags.firstIndex(where: { $0.id == id }) else { return }
+        let oldFolderName = allTags[idx].folderName
         allTags[idx].name = newName
+        let newFolderName = allTags[idx].folderName
         persist()
+        // Rename the vault folder on disk so existing meeting dirs travel
+        // with the tag. Runs on the background thread via the callback wired
+        // in MeetingManager so the UI never stalls on the FM move.
+        if oldFolderName != newFolderName {
+            onTagRenamed?(oldFolderName, newFolderName)
+        }
     }
 
     func deleteTag(id: String) {
