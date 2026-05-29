@@ -9,6 +9,11 @@ public struct DarwinNotifier {
     public static let vaultChanged      = "com.tyleryannes.meetingscribe.vaultChanged"
     public static let inboxChanged      = "com.tyleryannes.meetingscribe.inboxChanged"
 
+    // ScribeCore internal command signals
+    public static let startRecording    = "com.tyleryannes.ScribeCore.startRecording"
+    public static let stopRecording     = "com.tyleryannes.ScribeCore.stopRecording"
+    public static let transcribeNow     = "com.tyleryannes.ScribeCore.transcribeNow"
+
     public static func post(_ name: String) {
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
@@ -17,13 +22,55 @@ public struct DarwinNotifier {
         )
     }
 
+    /// Global registry: maps notification name → handler closure.
+    /// CFNotificationCenter callbacks cannot capture Swift closures directly, so
+    /// we store handlers here and look them up by name inside the C callback.
+    private static var _handlers: [String: () -> Void] = [:]
+    private static let _lock = NSLock()
+
+    /// Registers `handler` to be called whenever `name` is posted on the Darwin
+    /// notification center. The returned token is an opaque object; the caller
+    /// may discard it if the observation should last for the process lifetime.
+    @discardableResult
     public static func observe(_ name: String, using handler: @escaping () -> Void) -> NSObjectProtocol {
+        _lock.lock()
+        _handlers[name] = handler
+        _lock.unlock()
+
         let center = CFNotificationCenterGetDarwinNotifyCenter()
-        let observer = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
-        CFNotificationCenterAddObserver(center, observer, { _, _, name, _, _ in
-            // Note: handler is captured via a global registry; see DarwinObserverRegistry
-        }, name as CFString, nil, .deliverImmediately)
-        // Return a token the caller can use to remove observation
+        // We use the notification name string itself (bridged to CFString) as
+        // the observer pointer so the C callback can recover the name without
+        // any extra bookkeeping.
+        let nameRef = (name as NSString).copy() as! NSString
+        let observer = Unmanaged.passRetained(nameRef).toOpaque()
+
+        CFNotificationCenterAddObserver(
+            center,
+            observer,
+            { _, observerPtr, cfName, _, _ in
+                // Recover the name string from the observer pointer.
+                guard let observerPtr else { return }
+                let nameStr: String
+                if let cfName {
+                    nameStr = cfName.rawValue as String
+                } else {
+                    let ns = Unmanaged<NSString>.fromOpaque(observerPtr).takeUnretainedValue()
+                    nameStr = ns as String
+                }
+                DarwinNotifier._lock.lock()
+                let h = DarwinNotifier._handlers[nameStr]
+                DarwinNotifier._lock.unlock()
+                h?()
+            },
+            name as CFString,
+            nil,
+            .deliverImmediately
+        )
+
+        // Wrap the observer pointer in an NSObject so the caller gets back an
+        // opaque token (the type contract). The retained NSString above keeps
+        // the string alive for the process lifetime, which is fine for daemon-
+        // style observations.
         return NSObject()
     }
 }

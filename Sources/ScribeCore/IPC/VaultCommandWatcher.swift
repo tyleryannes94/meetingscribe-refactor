@@ -68,29 +68,36 @@ final class VaultCommandWatcher {
 
         switch cmd.command {
         case "start-recording":
-            DarwinNotifier.post(DarwinNotifier.recordingStarted)
-            // TODO: wire to AudioRecorder when moved to ScribeCore
+            DarwinNotifier.post(DarwinNotifier.startRecording)
             writeResponse(requestID: cmd.requestID, success: true, error: nil)
         case "stop-recording":
-            DarwinNotifier.post(DarwinNotifier.recordingStopped)
-            // TODO: wire to AudioRecorder when moved to ScribeCore
+            DarwinNotifier.post(DarwinNotifier.stopRecording)
+            writeResponse(requestID: cmd.requestID, success: true, error: nil)
+        case "transcribe-now":
+            DarwinNotifier.post(DarwinNotifier.transcribeNow)
             writeResponse(requestID: cmd.requestID, success: true, error: nil)
         default:
             log.warning("Unknown command: \(cmd.command)")
             writeResponse(requestID: cmd.requestID, success: false, error: "unknown command")
         }
 
-        // Remove processed command file
-        try? FileManager.default.removeItem(at: url)
+        // Move processed command file to _commands/processed/
+        let processedDir = commandsURL.appendingPathComponent("processed", isDirectory: true)
+        try? FileManager.default.createDirectory(at: processedDir, withIntermediateDirectories: true)
+        let dest = processedDir.appendingPathComponent(url.lastPathComponent)
+        if (try? FileManager.default.moveItem(at: url, to: dest)) == nil {
+            // Fallback: just remove it so we don't reprocess
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     private func writeResponse(requestID: String, success: Bool, error: String?) {
-        let response: [String: Any] = [
+        var response: [String: Any] = [
+            "status": success ? "ok" : "error",
             "requestID": requestID,
-            "success": success,
-            "error": error as Any,
             "respondedAt": ISO8601DateFormatter().string(from: Date())
         ]
+        if let error { response["error"] = error }
         guard let data = try? JSONSerialization.data(withJSONObject: response) else { return }
         let dest = commandsURL.appendingPathComponent("\(requestID)-response.json")
         try? data.write(to: dest, options: .atomic)
@@ -101,4 +108,6 @@ struct VaultCommand: Codable {
     let command: String
     let requestedAt: String
     let requestID: String
+    /// Optional key/value payload (e.g. meeting ID for transcribe-now).
+    let payload: [String: String]?
 }

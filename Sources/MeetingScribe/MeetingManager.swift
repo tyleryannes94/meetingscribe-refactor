@@ -87,6 +87,10 @@ final class MeetingManager: ObservableObject {
     private let batchTranscriber = WhisperTranscriber()
     private let summarizer = OllamaService()
 
+    /// True when the current recording was started via ScribeCore (IPC).
+    /// False means the direct AudioRecorder path is active (fallback mode).
+    private var usingScribeCore = false
+
     private let refreshSubject = PassthroughSubject<Bool, Never>()
     private var refreshCancellable: AnyCancellable?
 
@@ -115,6 +119,29 @@ final class MeetingManager: ObservableObject {
         // Failsafe: detect recordings interrupted by a crash on the previous run
         // and flag them for recovery. Deferred so it runs after init completes.
         DispatchQueue.main.async { [weak self] in self?.scanForInterruptedRecordings() }
+        // Listen for ScribeCore signals so state stays in sync when recording
+        // is owned by the daemon (usingScribeCore == true).
+        DarwinNotifier.observe(DarwinNotifier.recordingStarted) { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, case .starting = self.state else { return }
+                self.state = .recording(meeting: self.activeMeeting, startedAt: Date())
+                self.lastError = nil
+            }
+        }
+        DarwinNotifier.observe(DarwinNotifier.recordingStopped) { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, case .stopping = self.state else { return }
+                let meeting = self.activeMeeting ?? Self.adhocMeeting()
+                let primary = self.tagStore.primaryTag(for: meeting)
+                let live = self.liveTranscriber.renderMarkdown()
+                try? self.store.writeTranscript(live, for: meeting, primaryTag: primary)
+                self.state = .idle
+                self.activeMeeting = nil
+                self.lastStoppedMeetingID = meeting.id
+                self.recordingMonitor.resetToIdle()
+                self.refreshPastMeetings(force: true)
+            }
+        }
         // Coalesce rapid refreshPastMeetings calls so the @Published array isn't
         // replaced on every individual call site (audit bug 4).
         refreshCancellable = refreshSubject
@@ -140,27 +167,59 @@ final class MeetingManager: ObservableObject {
             let primary = tagStore.primaryTag(for: m)
             try store.writeMeeting(m, primaryTag: primary)
 
-            audio.onMicChunk = { [weak self] url, _, s, e in
-                self?.liveTranscriber.submitChunk(url: url, speaker: "Me", startSec: s, endSec: e)
-            }
-            audio.onSystemChunk = { [weak self] url, _, s, e in
-                self?.liveTranscriber.submitChunk(url: url, speaker: "Them", startSec: s, endSec: e)
-            }
+            // --- ScribeCore delegation with 1-second timeout fallback ---
+            let scribeCoreSucceeded = await tryStartViaScribeCore()
+            usingScribeCore = scribeCoreSucceeded
 
-            let dir = store.directory(for: m, primaryTag: primary)
-            try await audio.start(in: dir, segment: m.segmentCount)
-            // Failsafe marker: cleared on a clean stop. If the app crashes mid
-            // recording it survives, and the launch sweep flags this meeting for
-            // recovery instead of silently losing the audio.
-            AudioRecovery.markRecordingStarted(in: dir)
-            state = .recording(meeting: meeting, startedAt: Date())
+            if !scribeCoreSucceeded {
+                // Fallback: direct AudioRecorder path
+                audio.onMicChunk = { [weak self] url, _, s, e in
+                    self?.liveTranscriber.submitChunk(url: url, speaker: "Me", startSec: s, endSec: e)
+                }
+                audio.onSystemChunk = { [weak self] url, _, s, e in
+                    self?.liveTranscriber.submitChunk(url: url, speaker: "Them", startSec: s, endSec: e)
+                }
+
+                let dir = store.directory(for: m, primaryTag: primary)
+                try await audio.start(in: dir, segment: m.segmentCount)
+                AudioRecovery.markRecordingStarted(in: dir)
+                state = .recording(meeting: meeting, startedAt: Date())
+            }
+            // When ScribeCore is handling recording, state is updated via the
+            // DarwinNotifier.recordingStarted signal observed in init().
             lastError = nil
         } catch {
+            usingScribeCore = false
             log.error("Start failed: \(error.localizedDescription, privacy: .public)")
             ErrorReporter.shared.report(error, category: .audio,
                                         context: ["phase": "start-recording"])
             lastError = error.localizedDescription
             state = .error(error.localizedDescription)
+        }
+    }
+
+    /// Attempts to start recording via ScribeCore with a 1-second timeout.
+    /// Returns true if ScribeCore accepted the command within the timeout.
+    private func tryStartViaScribeCore() async -> Bool {
+        return await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                do {
+                    try await ScribeCoreXPCClient.shared.startRecording()
+                    return true
+                } catch {
+                    return false
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                return false
+            }
+            // Return the first result (either success or timeout)
+            for await result in group {
+                group.cancelAll()
+                return result
+            }
+            return false
         }
     }
 
@@ -213,6 +272,17 @@ final class MeetingManager: ObservableObject {
     func stopRecording() async {
         guard case .recording = state else { return }
         state = .stopping
+
+        if usingScribeCore {
+            // Delegate stop to ScribeCore; finalization is triggered when we
+            // receive the DarwinNotifier.recordingStopped signal (observed in init).
+            usingScribeCore = false
+            try? await ScribeCoreXPCClient.shared.stopRecording()
+            return
+        }
+
+        // Direct path (ScribeCore not running or timed out during start)
+        usingScribeCore = false
         let meeting = activeMeeting ?? Self.adhocMeeting()
         let result = await audio.stop()
         let primary = tagStore.primaryTag(for: meeting)

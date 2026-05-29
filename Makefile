@@ -10,7 +10,11 @@ KEYCHAIN      := $(HOME)/Library/Keychains/login.keychain-db
 # hash and re-prompts for every permission after every build.
 DESIGNATED_REQ := designated => identifier "$(BUNDLE_ID)" and certificate leaf[subject.CN] = "$(SIGN_IDENTITY)"
 
-.PHONY: all build app sign install run clean cert check-sparkle-key check-version
+SCRIBECORE_NAME     := ScribeCore
+SCRIBECORE_BUNDLE_ID := com.tyleryannes.ScribeCore
+SCRIBECORE_APP_DIR  := build/$(SCRIBECORE_NAME).app
+
+.PHONY: all build app scribecore sign sign-scribecore install run clean cert check-sparkle-key check-version
 
 all: app
 
@@ -50,7 +54,34 @@ check-version:
 		/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $$V" Resources/Info.plist 2>/dev/null || true; \
 	fi
 
-app: build check-sparkle-key check-version
+scribecore: build
+	@echo "→ Bundling $(SCRIBECORE_NAME).app"
+	@rm -rf $(SCRIBECORE_APP_DIR)
+	@mkdir -p $(SCRIBECORE_APP_DIR)/Contents/MacOS
+	@cp $(BUILD_DIR)/$(SCRIBECORE_NAME) $(SCRIBECORE_APP_DIR)/Contents/MacOS/$(SCRIBECORE_NAME)
+	@cp Sources/ScribeCore/Info.plist $(SCRIBECORE_APP_DIR)/Contents/Info.plist
+	@$(MAKE) sign-scribecore
+
+sign-scribecore:
+	@if security find-identity -p basic "$(KEYCHAIN)" 2>/dev/null | grep -q "$(SIGN_IDENTITY)"; then \
+		ID="$(SIGN_IDENTITY)"; \
+	else \
+		ID="-"; \
+		echo "⚠  No stable signing identity found for ScribeCore — using ad-hoc."; \
+	fi; \
+	if [ "$$ID" = "-" ]; then \
+		codesign --force --options runtime --sign - $(SCRIBECORE_APP_DIR); \
+	else \
+		codesign --force \
+			--options runtime \
+			--sign "$$ID" \
+			--identifier $(SCRIBECORE_BUNDLE_ID) \
+			--entitlements Sources/ScribeCore/ScribeCore.entitlements \
+			$(SCRIBECORE_APP_DIR); \
+	fi
+	@echo "→ Built $(SCRIBECORE_APP_DIR)"
+
+app: scribecore check-sparkle-key check-version
 	@echo "→ Bundling $(APP_NAME).app"
 	@rm -rf $(APP_DIR)
 	@mkdir -p $(APP_DIR)/Contents/MacOS
@@ -80,6 +111,11 @@ app: build check-sparkle-key check-version
 	else \
 		echo "  ! Sparkle.framework not found in .build (auto-update disabled)"; \
 	fi
+	@echo "→ Embedding ScribeCore.app as LoginItem"
+	@mkdir -p $(APP_DIR)/Contents/Library/LoginItems
+	@rm -rf $(APP_DIR)/Contents/Library/LoginItems/$(SCRIBECORE_NAME).app
+	@cp -R $(SCRIBECORE_APP_DIR) $(APP_DIR)/Contents/Library/LoginItems/$(SCRIBECORE_NAME).app
+	@echo "  + embedded $(SCRIBECORE_NAME).app in LoginItems"
 	@$(MAKE) sign
 
 sign:
