@@ -102,6 +102,13 @@ struct MeetingScribeApp: App {
                     NotificationCenter.default.post(name: .meetingScribeAddPerson, object: nil)
                 }
                 .keyboardShortcut("P", modifiers: [.command, .shift])
+                Button("New Task") {
+                    // Quick-add a task and jump to Tasks so it's ready to rename.
+                    _ = manager.actionItems.createTask(title: "New task")
+                    NotificationCenter.default.post(name: .meetingScribeNavigate,
+                                                    object: TopLevelSection.actions)
+                }
+                .keyboardShortcut("n", modifiers: [.command])
             }
         }
 
