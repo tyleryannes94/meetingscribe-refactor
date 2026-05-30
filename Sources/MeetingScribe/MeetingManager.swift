@@ -314,7 +314,7 @@ final class MeetingManager: ObservableObject {
     }
 
     func stopRecording() async {
-        guard case .recording = state else { return }
+        guard case let .recording(_, startedAt) = state else { return }
         state = .stopping
 
         if usingScribeCore {
