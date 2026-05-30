@@ -6,7 +6,7 @@ Local-first macOS app for recording, transcribing, and summarizing meetings — 
 - **Transcription**: whisper.cpp running locally, in 5-minute rolling chunks during a call + a high-quality final pass on stop.
 - **Summarization**: Ollama (default: `llama3.1:8b`) running locally — auto-started if not.
 - **Calendar**: EventKit reads any calendar already in macOS Calendar (Google, iCloud, Outlook).
-- **MCP**: Bundled `MeetingScribeMCP` server exposes 7 tools to Claude over JSON-RPC stdio.
+- **MCP**: Bundled `MeetingScribeMCP` server exposes 17 tools to Claude over JSON-RPC stdio — read **and** write (Claude can create tasks, add people, append memories, and write meeting notes back into the vault).
 
 ---
 
@@ -118,7 +118,9 @@ The repo bundles a Model Context Protocol server at `MeetingScribe.app/Contents/
 
 **One-click setup**: Open the app → Settings → MCP Server → "Install in Claude Desktop". Restart Claude Desktop. Then ask Claude *"list my last 5 meetings"* or *"what were the action items from yesterday's planning call?"*.
 
-**Tools exposed**:
+**Tools exposed** (17 total — 12 read, 5 write):
+
+_Read:_
 
 | Tool | Args |
 |---|---|
@@ -129,6 +131,21 @@ The repo bundles a Model Context Protocol server at `MeetingScribe.app/Contents/
 | `get_summary` | `id` |
 | `list_voice_notes` | `limit` |
 | `get_voice_note` | `id` |
+| `list_people` | `limit` |
+| `get_person` | `id` / name / email |
+| `list_action_items` | optional `meetingID` |
+| `get_action_item` | `id` |
+| `search_everything` | `query` (people + meetings + action items, recency-boosted) |
+
+_Write_ (patches raw JSON losslessly, append-only for notes, posts `vaultChanged`):
+
+| Tool | Args |
+|---|---|
+| `create_action_item` | `title`, optional `dueDate`, `priority`, `meetingID` |
+| `update_action_item` | `id`, fields to patch |
+| `add_person` | `name`, optional `company`, `email`, `phone`, `role` |
+| `add_memory` | person ref + `text` |
+| `create_meeting_note` | `meetingID`, `text` (appended) |
 
 **Manual install** (Claude Code, Cursor, etc.):
 
