@@ -170,6 +170,10 @@ struct PersonDetailView: View {
     @State private var draftName = ""
     @State private var draftRole = ""
     @State private var draftCompany = ""
+    @State private var draftEmail = ""
+    @State private var draftPhone = ""
+    @State private var draftAddress = ""
+    @State private var draftBio = ""
     @State private var showAddEncounter = false
     @State private var showAddRelationship = false
     @State private var confirmDelete = false
@@ -334,6 +338,10 @@ struct PersonDetailView: View {
         draftName = current.displayName
         draftRole = current.role
         draftCompany = current.company
+        draftEmail = current.emails.first ?? ""
+        draftPhone = current.phones.first ?? ""
+        draftAddress = current.addresses.first ?? ""
+        draftBio = current.bio
         editingIdentity = true
     }
 
@@ -342,8 +350,21 @@ struct PersonDetailView: View {
         u.displayName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         u.role = draftRole.trimmingCharacters(in: .whitespacesAndNewlines)
         u.company = draftCompany.trimmingCharacters(in: .whitespacesAndNewlines)
+        u.bio = draftBio.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Edit the PRIMARY contact value in place but preserve any additional
+        // values the modal added (don't clobber emails[1...]). (PPL-1 / PPL-2)
+        u.emails = setPrimary(draftEmail, in: current.emails)
+        u.phones = setPrimary(draftPhone, in: current.phones)
+        u.addresses = setPrimary(draftAddress, in: current.addresses)
         people.updatePerson(u)
         editingIdentity = false
+    }
+
+    /// Replace the first value with `value` while keeping the rest; drop blanks.
+    private func setPrimary(_ value: String, in arr: [String]) -> [String] {
+        let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rest = arr.dropFirst().filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        return (v.isEmpty ? [] : [v]) + Array(rest)
     }
 
     // MARK: - Identity panel (left column)
@@ -389,6 +410,29 @@ struct PersonDetailView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { beginIdentityEdit() }
                     .help("Click to edit name, role, and company")
+                }
+            }
+
+            // Inline contact + bio editing (PPL-1) — quick edit of the primary
+            // email/phone/address and the bio without opening the full sheet.
+            if editingIdentity {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("Email", text: $draftEmail)
+                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .onSubmit { saveIdentityEdit() }
+                    TextField("Phone", text: $draftPhone)
+                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .onSubmit { saveIdentityEdit() }
+                    TextField("Address", text: $draftAddress)
+                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .onSubmit { saveIdentityEdit() }
+                    TextField("About", text: $draftBio, axis: .vertical)
+                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .lineLimit(2...5)
+                    if current.emails.count > 1 || current.phones.count > 1 || current.addresses.count > 1 {
+                        Text("Editing the first value — use ⋯ for all.")
+                            .font(.caption2).foregroundStyle(NDS.textTertiary)
+                    }
                 }
             }
 
