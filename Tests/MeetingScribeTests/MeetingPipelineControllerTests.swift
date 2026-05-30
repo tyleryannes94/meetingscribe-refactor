@@ -1,6 +1,6 @@
 import XCTest
 @testable import MeetingScribe
-@testable import MeetingScribeShared
+@testable import VaultKit
 
 /// Guards the ENG-C race fix: a meeting id claimed in `transcribingIDs` (which
 /// `MeetingManager.stopRecording` does synchronously via `beginPipeline` before

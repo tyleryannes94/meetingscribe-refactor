@@ -17,39 +17,23 @@ let package = Package(
         .executable(name: "ScribeCore", targets: ["ScribeCore"]),
         .executable(name: "MeetingScribeMCP", targets: ["MeetingScribeMCP"]),
         .executable(name: "NotionMCP", targets: ["NotionMCP"]),
-        .library(name: "MeetingScribeShared", targets: ["MeetingScribeShared"]),
-        // Pure-model "Second Brain" core, free of AppKit/SwiftUI so it can be
-        // shared with a future iOS target.
-        .library(name: "SecondBrainCore", targets: ["SecondBrainCore"]),
-        // Consolidated vault library: merges SecondBrainCore + MeetingScribeShared
-        // plus path helpers and Darwin IPC. Foundation + Combine only — no
-        // AppKit/SwiftUI/UIKit — so it can be used from any target.
+        // Consolidated vault library: the single source of truth for shared
+        // models, JSON helpers, path helpers, and Darwin IPC. Foundation +
+        // Combine only — no AppKit/SwiftUI/UIKit — so it can be used from any
+        // target. (Superseded the former MeetingScribeShared + SecondBrainCore
+        // targets, which were byte-identical orphans imported by nothing.)
         .library(name: "VaultKit", targets: ["VaultKit"])
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0")
     ],
     targets: [
-        // Shared decode-only DTOs and JSON helpers — depended on by both
-        // MCP servers and the main app so we don't carry three copies of
-        // JSONValue or three drift-prone reimplementations of the
-        // persisted model types.
-        .target(
-            name: "MeetingScribeShared",
-            path: "Sources/MeetingScribeShared",
-            swiftSettings: commonSwiftSettings
-        ),
-        // Dependency-free Second Brain models (Person, Encounter) plus the
-        // store interface. No AppKit/SwiftUI/CloudKit imports, so this target
-        // can be lifted wholesale into a future iOS app.
-        .target(
-            name: "SecondBrainCore",
-            dependencies: [],
-            path: "Sources/SecondBrainCore",
-            swiftSettings: commonSwiftSettings
-        ),
-        // Consolidated vault library: merges SecondBrainCore + MeetingScribeShared
-        // plus VaultPaths and DarwinNotifier. Foundation only — no AppKit/SwiftUI.
+        // Consolidated vault library: the shared models (Person, Encounter,
+        // MeetingDTO…), JSONValue, SchemaEnvelope, the SecondBrainStore
+        // interface, plus VaultPaths and DarwinNotifier. Foundation only — no
+        // AppKit/SwiftUI — so it can be lifted into a future iOS app. This is
+        // the single source of truth depended on by the app, the daemon, and
+        // both MCP servers.
         .target(
             name: "VaultKit",
             dependencies: [],
@@ -92,7 +76,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MeetingScribeTests",
-            dependencies: ["MeetingScribe", "MeetingScribeShared"],
+            dependencies: ["MeetingScribe", "VaultKit"],
             path: "Tests/MeetingScribeTests",
             swiftSettings: commonSwiftSettings
         )
