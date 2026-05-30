@@ -414,7 +414,7 @@ API keys (Linear, Notion, Google Drive client ID/secret/refresh token) live in m
 
 ## The MCP servers
 
-`MeetingScribeMCP` is a standalone executable, ~600 lines of Swift, no UI dependencies. It reads (only reads — never writes back) the on-disk meeting / voice note / action item / person / tag files via the shared DTOs.
+`MeetingScribeMCP` is a standalone executable, no UI dependencies. It reads — and, as of the write-tools addition, also writes — the on-disk meeting / voice note / action item / person / tag files via the shared DTOs. Writes patch the raw JSON in place (existing records are never round-tripped through the lossy DTOs), are append-only for notes, and post a `vaultChanged` Darwin notification.
 
 ### Wire protocol
 
@@ -426,14 +426,18 @@ Stdin/stdout JSON-RPC 2.0, one message per line. Three method namespaces:
 
 ### Tools exposed
 
-12 tools as of this writing:
+17 tools (12 read + 5 write) as of this writing:
 
+Read:
 - `list_meetings`, `get_meeting`, `get_transcript`, `get_notes`, `get_summary`
 - `list_voice_notes`, `get_voice_note`
 - `list_action_items`
 - `list_people`, `get_person`, `get_person_messages`, `list_person_meetings`
 
-The People tools were mirrored from the in-app chat (which has more tools, including write tools — those aren't yet in MCP because they need PeopleStore which depends on AppKit). `get_person_messages` does the same two-query split + attributedBody parse + placeholder fallback as the in-app analyzer; the two surfaces report identical numbers.
+Write:
+- `create_action_item`, `update_action_item`, `add_person`, `add_memory`, `create_meeting_note`
+
+The read People tools were mirrored from the in-app chat. `get_person_messages` does the same two-query split + attributedBody parse + placeholder fallback as the in-app analyzer; the two surfaces report identical numbers. The write tools patch the on-disk JSON directly (no PeopleStore/AppKit dependency), so the agent can mutate the vault — create tasks, add people, append memories, write meeting notes — not just read it.
 
 ### Installation flow
 

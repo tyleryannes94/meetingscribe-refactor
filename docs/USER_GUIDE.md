@@ -229,7 +229,7 @@ Integrations tab → Notion → paste your API key and the action-items database
 
 ### "Make Claude Desktop able to query my meetings"
 
-Integrations tab → Claude Desktop (MCP) → "Install in Claude Desktop". This registers the bundled MeetingScribeMCP server in Claude's config. Restart Claude Desktop. Now Claude has tools to list your meetings, read summaries, look up people, query iMessage stats, etc. — all over local JSON-RPC, no network calls.
+Integrations tab → Claude Desktop (MCP) → "Install in Claude Desktop". This registers the bundled MeetingScribeMCP server in Claude's config. Restart Claude Desktop. Now Claude has 17 tools over local JSON-RPC (no network calls): it can list your meetings, read summaries, look up people, and query iMessage stats — and it can also write back, creating tasks, adding people, appending memories, and writing meeting notes ("add a task to follow up with Alice by Friday"). Writes are surgical: they patch the underlying files without rewriting your existing data, and notes are only ever appended.
 
 ---
 

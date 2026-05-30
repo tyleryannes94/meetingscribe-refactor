@@ -133,9 +133,9 @@ _Read:_
 | `get_voice_note` | `id` |
 | `list_people` | `limit` |
 | `get_person` | `id` / name / email |
+| `get_person_messages` | person ref (iMessage stats / analysis) |
+| `list_person_meetings` | person ref (meetings with this person) |
 | `list_action_items` | optional `meetingID` |
-| `get_action_item` | `id` |
-| `search_everything` | `query` (people + meetings + action items, recency-boosted) |
 
 _Write_ (patches raw JSON losslessly, append-only for notes, posts `vaultChanged`):
 
