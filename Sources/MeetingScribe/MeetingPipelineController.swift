@@ -48,11 +48,8 @@ final class MeetingPipelineController: ObservableObject {
         self.summarizer = summarizer
     }
 
-    // MARK: - Finalize after stop
+    // MARK: - ENG-A batch-repair gate
 
-    /// Runs the post-stop pipeline. Caller passes the live transcript so we
-    /// can skip a redundant whisper batch pass when the live one is useful.
-    /// Updates the meeting's `health` field with the recorder's snapshot.
     /// Number of seconds of tolerance (one chunk's worth) allowed between the
     /// live transcript's coverage and the real recording length before we treat
     /// the live transcript as "short" and run a batch repair pass. Chunks close
@@ -76,6 +73,12 @@ final class MeetingPipelineController: ObservableObject {
         return false
     }
 
+    // MARK: - Finalize after stop
+
+    /// Runs the post-stop pipeline. Caller passes the live transcript plus its
+    /// drop count / coverage so we can keep a complete live transcript but fall
+    /// back to a batch whisper pass when it's empty or incomplete. (ENG-A)
+    /// Updates the meeting's `health` field with the recorder's snapshot.
     func finalize(meeting: Meeting,
                   audioResult: AudioRecorder.Result,
                   liveTranscript: String,
