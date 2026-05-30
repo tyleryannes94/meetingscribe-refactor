@@ -96,6 +96,7 @@ struct TranscriptSyncView: View {
     var audioController: AudioPlayerController?
 
     @State private var segments: [TranscriptSegment] = []
+    @State private var isVisible = false
     @State private var speakers: [String] = []
     @State private var speakerColors: [String: Color] = [:]
     @State private var activeSegmentID: UUID?
@@ -113,9 +114,14 @@ struct TranscriptSyncView: View {
                 transcriptScroll
             }
         }
-        .onAppear { parse() }
+        .onAppear { isVisible = true; parse() }
+        .onDisappear { isVisible = false }
         .onChange(of: rawTranscript) { _, _ in parse() }
         .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
+            // ARCH-2: skip work when this tab isn't on-screen (the keep-alive
+            // ZStack keeps hidden tabs mounted) or when audio isn't playing —
+            // updateActiveSegment already no-ops when not playing.
+            guard isVisible else { return }
             updateActiveSegment()
         }
     }
