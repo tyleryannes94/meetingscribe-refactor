@@ -523,6 +523,27 @@ private struct AttendeeChip: View {
             .components(separatedBy: " ").first ?? attendee
     }
 
+    /// Full name (everything before an "<email>"), for creating a Person.
+    private var fullName: String {
+        let n = attendee.components(separatedBy: "<").first?
+            .trimmingCharacters(in: .whitespaces) ?? attendee
+        return n.isEmpty ? attendee : n
+    }
+
+    /// Email inside "Name <email>", if present.
+    private var email: String {
+        guard let lt = attendee.firstIndex(of: "<"),
+              let gt = attendee.firstIndex(of: ">"), lt < gt else { return "" }
+        return String(attendee[attendee.index(after: lt)..<gt]).trimmingCharacters(in: .whitespaces)
+    }
+
+    private var existingPerson: Person? {
+        PeopleStore.shared.people.first {
+            $0.displayName.caseInsensitiveCompare(fullName) == .orderedSame
+            || (!email.isEmpty && $0.emails.contains { $0.caseInsensitiveCompare(email) == .orderedSame })
+        }
+    }
+
     var body: some View {
         HStack(spacing: 5) {
             Circle()
@@ -541,5 +562,14 @@ private struct AttendeeChip: View {
         .padding(.horizontal, 8).padding(.vertical, 3)
         .background(NDS.fieldBg, in: Capsule())
         .help(attendee)
+        .contextMenu {
+            if existingPerson == nil {
+                Button {
+                    _ = PeopleStore.shared.createPerson(displayName: fullName, email: email)
+                } label: { Label("Add to People", systemImage: "person.crop.circle.badge.plus") }
+            } else {
+                Label("Already in People", systemImage: "checkmark")
+            }
+        }
     }
 }

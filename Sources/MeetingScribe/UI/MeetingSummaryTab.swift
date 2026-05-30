@@ -49,9 +49,7 @@ extension UnifiedMeetingDetail {
                     // in the Tasks tab with full CRUD — these are read-
                     // only cards with a quick "mark done" affordance.
                     let items = meeting.map { manager.actionItems.items(for: $0.id) } ?? []
-                    if !items.isEmpty {
-                        actionItemsSection(items)
-                    }
+                    actionItemsSection(items)
                 }
             }
         }
@@ -112,7 +110,8 @@ extension UnifiedMeetingDetail {
                         meetingTitle: m.displayTitle,
                         summary: summary,
                         actionItems: (manager.actionItems.items(for: m.id))
-                            .map(\.title)
+                            .map(\.title),
+                        recipients: attendeeEmails(for: m)
                     )
                     .navigationTitle("Draft follow-up")
                     .toolbar {
@@ -137,18 +136,52 @@ extension UnifiedMeetingDetail {
                 Text("Action Items")
                     .font(.callout.weight(.semibold))
                 Spacer()
-                Text("\(items.filter { $0.status != .completed }.count) open")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if !items.isEmpty {
+                    Text("\(items.filter { $0.status != .completed }.count) open")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button { addActionItem() } label: {
+                    Label("Add", systemImage: "plus")
+                        .labelStyle(.titleAndIcon).font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Add an action item linked to this meeting")
+                .accessibilityLabel("Add action item")
             }
             .padding(.horizontal)
 
-            ForEach(items) { item in
-                InlineActionItemRow(item: item, store: manager.actionItems)
+            if items.isEmpty {
+                Text("No action items yet. Add one, or they appear here automatically after summarization.")
+                    .font(.caption).foregroundStyle(.tertiary)
+                    .padding(.horizontal)
+            } else {
+                ForEach(items) { item in
+                    InlineActionItemRow(item: item, store: manager.actionItems)
+                }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
         }
         .padding(.bottom, 16)
+    }
+
+    /// Create a new action item already linked to this meeting (Req #7).
+    private func addActionItem() {
+        guard let m = meeting else { return }
+        var t = manager.actionItems.createTask(title: "New action item")
+        t.meetingID = m.id
+        t.meetingTitle = m.displayTitle
+        t.meetingDate = m.startDate
+        manager.actionItems.upsert(t)
+    }
+
+    /// Resolve attendee names to known People emails, for prefilling Mail.
+    private func attendeeEmails(for m: Meeting) -> [String] {
+        m.attendees.compactMap { name in
+            PeopleStore.shared.people
+                .first { $0.displayName.caseInsensitiveCompare(name) == .orderedSame }?
+                .emails.first
+        }
     }
 }
 

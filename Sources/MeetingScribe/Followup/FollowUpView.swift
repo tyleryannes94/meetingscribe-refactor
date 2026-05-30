@@ -11,6 +11,8 @@ struct FollowUpView: View {
     let meetingTitle: String
     let summary: String
     let actionItems: [String]
+    /// Email addresses to prefill the "To:" line when opening in Mail.
+    var recipients: [String] = []
 
     @State private var channel: FollowUpSuggestion.Channel = .email
     @State private var suggestion: FollowUpSuggestion?
@@ -83,6 +85,11 @@ struct FollowUpView: View {
                 Button {
                     copy(s.plainText)
                 } label: { Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc") }
+                if channel == .email {
+                    Button {
+                        openInMail(subject: s.subject ?? "Follow-up: \(meetingTitle)", body: s.body)
+                    } label: { Label("Open in Mail", systemImage: "envelope") }
+                }
                 ShareLink(item: s.plainText) { Label("Share", systemImage: "square.and.arrow.up") }
                 Spacer()
             }
@@ -124,5 +131,21 @@ struct FollowUpView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copied = true
+    }
+
+    /// Open the default mail client with a pre-composed draft (recipients +
+    /// subject + body prefilled). "Send the follow-up, don't just copy it."
+    private func openInMail(subject: String, body: String) {
+        var comps = URLComponents()
+        comps.scheme = "mailto"
+        comps.path = recipients.joined(separator: ",")
+        comps.queryItems = [
+            URLQueryItem(name: "subject", value: subject),
+            URLQueryItem(name: "body", value: body)
+        ]
+        // mailto requires %20 (not '+') for spaces in the query.
+        if let url = comps.url ?? URL(string: "mailto:") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
