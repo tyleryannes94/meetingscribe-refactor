@@ -1,8 +1,8 @@
 import SwiftUI
 import AppKit
 import AVFoundation
-import EventKit
-import UserNotifications
+@preconcurrency import EventKit
+@preconcurrency import UserNotifications
 
 /// One-time first-launch onboarding that pre-explains every macOS permission
 /// the app needs BEFORE the system dialog appears. Users who tap "Don't

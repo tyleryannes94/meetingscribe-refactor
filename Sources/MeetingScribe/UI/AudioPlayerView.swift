@@ -1,5 +1,5 @@
 import SwiftUI
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 
 /// Apple Voice Memos-style audio player:

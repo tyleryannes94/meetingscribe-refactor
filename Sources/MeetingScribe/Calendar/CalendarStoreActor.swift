@@ -1,5 +1,5 @@
 import Foundation
-import EventKit
+@preconcurrency import EventKit
 import OSLog
 
 /// Actor-wrapped EventKit store. Replaces the previous pattern of holding
