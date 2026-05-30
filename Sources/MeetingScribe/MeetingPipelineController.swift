@@ -53,9 +53,35 @@ final class MeetingPipelineController: ObservableObject {
     /// Runs the post-stop pipeline. Caller passes the live transcript so we
     /// can skip a redundant whisper batch pass when the live one is useful.
     /// Updates the meeting's `health` field with the recorder's snapshot.
+    /// Number of seconds of tolerance (one chunk's worth) allowed between the
+    /// live transcript's coverage and the real recording length before we treat
+    /// the live transcript as "short" and run a batch repair pass. Chunks close
+    /// on a ~5-minute boundary, so a gap under one chunk is just the in-flight
+    /// tail, not a loss.
+    static let liveCoverageToleranceSeconds: Double = 300
+
+    /// Pure decision for whether the live transcript needs a batch re-transcribe
+    /// over the merged audio. Extracted so it can be unit-tested without
+    /// whisper-cli. Returns true when the live transcript is empty, when chunks
+    /// were dropped under backpressure, or when live coverage falls more than
+    /// one chunk short of the real recording length. (ENG-A)
+    static func needsBatchRepair(liveIsEmpty: Bool,
+                                 droppedChunks: Int,
+                                 coverageSeconds: Double,
+                                 recordedDuration: Double,
+                                 tolerance: Double = liveCoverageToleranceSeconds) -> Bool {
+        if liveIsEmpty { return true }
+        if droppedChunks > 0 { return true }
+        if recordedDuration > 0 && coverageSeconds < (recordedDuration - tolerance) { return true }
+        return false
+    }
+
     func finalize(meeting: Meeting,
                   audioResult: AudioRecorder.Result,
                   liveTranscript: String,
+                  liveDroppedChunks: Int = 0,
+                  liveCoverageSeconds: Double = 0,
+                  recordedDuration: Double = 0,
                   liveResetIfStillIdle: () -> Void) async {
         AppLog.info("Meeting", "Finalize pipeline started", ["meeting": meeting.id])
         transcribingIDs.insert(meeting.id)
@@ -83,20 +109,47 @@ final class MeetingPipelineController: ObservableObject {
             }
         }
 
-        // 2. Decide whether the live transcript is good enough.
+        // 2. Decide whether to keep the live transcript or run a full batch
+        //    re-transcribe over the merged audio.
+        //
+        //    A non-empty live transcript can still be silently incomplete:
+        //      (a) chunks were dropped under backpressure (`liveDroppedChunks > 0`), or
+        //      (b) one or more chunks failed whisper and produced no segment,
+        //          leaving live coverage short of the real recording length.
+        //    In either case the batch pass over the merged audio is the
+        //    authoritative transcript, so we run it and prefer its result.
+        //    Previously the batch fallback only fired when the live transcript
+        //    was *empty*, so a truncated-but-nonempty transcript was persisted
+        //    as-is and every downstream summary / action-item inherited the gap. (ENG-A)
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        let liveIsUseful = !trimmed.isEmpty && trimmed != "# Transcript"
-        if !liveIsUseful {
+        let liveIsEmpty = trimmed.isEmpty || trimmed == "# Transcript"
+        let needsBatch = Self.needsBatchRepair(liveIsEmpty: liveIsEmpty,
+                                               droppedChunks: liveDroppedChunks,
+                                               coverageSeconds: liveCoverageSeconds,
+                                               recordedDuration: recordedDuration)
+        if needsBatch {
             var sources: [WhisperTranscriber.SourceInput] = []
             if let mic = mergedMic { sources.append(.init(label: "Me", url: mic)) }
             if let sys = mergedSys { sources.append(.init(label: "Them", url: sys)) }
             if !sources.isEmpty {
+                if !liveIsEmpty {
+                    log.info("ENG-A repair: live transcript looks incomplete (dropped=\(liveDroppedChunks, privacy: .public), coverage=\(Int(liveCoverageSeconds), privacy: .public)s of \(Int(recordedDuration), privacy: .public)s) — running batch pass")
+                }
                 do {
                     let segs = try await batchTranscriber.transcribe(sources: sources,
                                                                      in: audioResult.directory)
-                    transcript = "# Transcript\n\n" + WhisperTranscriber.render(segs) + "\n"
+                    let batch = "# Transcript\n\n" + WhisperTranscriber.render(segs) + "\n"
+                    let batchTrimmed = batch.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let batchIsEmpty = batchTrimmed.isEmpty || batchTrimmed == "# Transcript"
+                    // Only replace if the batch produced real content — a
+                    // failed/empty batch must never clobber a partial-but-real
+                    // live transcript. When both are non-empty, keep the longer
+                    // (the batch is the complete one in the expected case).
+                    if !batchIsEmpty {
+                        transcript = (liveIsEmpty || batch.count >= transcript.count) ? batch : transcript
+                    }
                 } catch {
-                    log.error("Fallback final transcription failed: \(error.localizedDescription, privacy: .public)")
+                    log.error("Fallback/repair final transcription failed: \(error.localizedDescription, privacy: .public)")
                     ErrorReporter.shared.report(error, category: .transcription,
                                                 context: ["phase": "finalize-batch", "meeting": meeting.id])
                 }
