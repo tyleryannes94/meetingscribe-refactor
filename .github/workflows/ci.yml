@@ -34,6 +34,12 @@ jobs:
       - name: Swift version
         run: swift --version
 
+      # ARCH-1 ratchet: block NEW cross-tree duplication between
+      # Sources/MeetingScribe and Sources/ScribeCore (and force the baseline
+      # allowlist to shrink as files get de-duped into a shared library).
+      - name: Guard — no new cross-tree duplication
+        run: ./scripts/check-cross-tree-dupes.sh
+
       - name: Build (release — matches local `make dev`)
         run: swift build -c release
         env:
