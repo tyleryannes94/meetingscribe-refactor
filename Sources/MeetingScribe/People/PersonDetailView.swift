@@ -294,7 +294,7 @@ struct PersonDetailView: View {
                     .padding(24)
                     // Was 720 — left a wide dead gutter on large displays (req #5).
                     // Raised so the People detail uses more of the available width.
-                    .frame(maxWidth: 1000, alignment: .leading)
+                    .frame(maxWidth: 1280, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .background(NDS.bg)
