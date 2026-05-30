@@ -1,6 +1,6 @@
 import XCTest
 @testable import MeetingScribe
-@testable import MeetingScribeShared
+@testable import VaultKit
 
 /// Placeholder test ensuring the test target compiles. Real high-leverage
 /// tests for ActionItemExtractor, MeetingStore drift detection, and the

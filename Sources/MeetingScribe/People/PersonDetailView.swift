@@ -236,7 +236,7 @@ struct PersonDetailView: View {
                 // Top inset clears the translucent window toolbar (Tahoe) — the
                 // identity panel was sliding under it (avatar cut off). Matches
                 // the People list column's 60pt so the two panes line up. (req #1)
-                .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, 60)
+                .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, NDS.splitPaneTopInset)
             }
             .frame(width: 280)
             .background(NDS.sidebarBg)
@@ -267,10 +267,10 @@ struct PersonDetailView: View {
                     }
                     Spacer()
                 }
-                // Same 60pt toolbar inset as the identity panel + list column —
+                // Same toolbar inset as the identity panel + list column —
                 // the Notes/Meetings/Messages tab bar was hidden under the
                 // window title bar. Background fills the inset strip. (req #1)
-                .padding(.top, 60)
+                .padding(.top, NDS.splitPaneTopInset)
                 .background(NDS.sidebarBg)
                 Divider().overlay(NDS.divider)
 

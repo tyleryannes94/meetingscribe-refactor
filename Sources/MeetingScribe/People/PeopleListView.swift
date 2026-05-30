@@ -130,7 +130,7 @@ struct PeopleListView: View {
             // action row underneath aren't clipped by the window toolbar
             // overlay on macOS Tahoe. Matches the detail pane's 72pt top
             // inset so the two panes line up visually.
-            .padding(.horizontal).padding(.top, 60).padding(.bottom, 6)
+            .padding(.horizontal).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 6)
 
             // Always-visible actions — works whether the list is empty or full.
             actionsRow

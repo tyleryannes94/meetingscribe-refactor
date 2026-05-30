@@ -1,6 +1,6 @@
 import XCTest
 @testable import MeetingScribe
-@testable import MeetingScribeShared
+@testable import VaultKit
 
 /// Tests for MeetingStore's index, O(1) directory cache, and tolerance of
 /// the legacy raw-payload meeting.json shape.

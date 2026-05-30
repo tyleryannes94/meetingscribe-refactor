@@ -314,7 +314,7 @@ final class MeetingManager: ObservableObject {
     }
 
     func stopRecording() async {
-        guard case .recording = state else { return }
+        guard case let .recording(_, startedAt) = state else { return }
         state = .stopping
 
         if usingScribeCore {
@@ -357,11 +357,21 @@ final class MeetingManager: ObservableObject {
         lastStoppedMeetingID = meeting.id
         recordingMonitor.resetToIdle()
 
+        // Snapshot live-transcription health on the main actor (these are
+        // @MainActor-isolated on liveTranscriber) so the detached finalize can
+        // decide whether the live transcript needs a batch repair pass. (ENG-A)
+        let liveDropped = liveTranscriber.droppedChunkCount
+        let liveCoverage = liveTranscriber.lastTranscribedSecond
+        let recordedDuration = Date().timeIntervalSince(startedAt)
+
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             await self.pipelineController.finalize(meeting: meeting,
                                                    audioResult: result,
-                                                   liveTranscript: live) { [weak self] in
+                                                   liveTranscript: live,
+                                                   liveDroppedChunks: liveDropped,
+                                                   liveCoverageSeconds: liveCoverage,
+                                                   recordedDuration: recordedDuration) { [weak self] in
                 Task { @MainActor in
                     if self?.activeMeeting == nil { self?.liveTranscriber.reset() }
                     // Pipeline rewrote transcript.md / summary.md on disk;
