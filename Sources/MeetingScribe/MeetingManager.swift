@@ -362,7 +362,7 @@ final class MeetingManager: ObservableObject {
         // decide whether the live transcript needs a batch repair pass. (ENG-A)
         let liveDropped = liveTranscriber.droppedChunkCount
         let liveCoverage = liveTranscriber.lastTranscribedSecond
-        let recordedDuration = recordingStartDate.map { stoppedAt.timeIntervalSince($0) } ?? 0
+        let recordedDuration = Date().timeIntervalSince(startedAt)
 
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }

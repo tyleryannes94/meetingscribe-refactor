@@ -9,6 +9,10 @@ enum NDS {
     // MARK: Layout
     static let pagePadding: CGFloat = 56
     static let contentMaxWidth: CGFloat = 720
+    /// Top inset that pushes a split-view pane's content clear of the window's
+    /// translucent title-bar / toolbar (macOS Tahoe). Shared by the People list
+    /// and detail panes so they line up instead of repeating a magic 60. (req #1)
+    static let splitPaneTopInset: CGFloat = 60
     static let radius: CGFloat = 8       // increased from 6
     static let rowRadius: CGFloat = 8
     static let cardRadius: CGFloat = 12  // card-level rounding (was hardcoded 14)
