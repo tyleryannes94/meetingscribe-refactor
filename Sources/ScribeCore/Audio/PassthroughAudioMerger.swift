@@ -1,5 +1,5 @@
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 import OSLog
 
 /// Concatenates multiple AAC `.m4a` audio files into one output `.m4a`
