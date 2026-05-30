@@ -42,7 +42,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://github.com/tyleryannes94/meetingscribe/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/tyleryannes94/meetingscribe-refactor/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>GCIpTbWk74teq495LgRn+iun5hYafph8EnGklNL6pFM=</string>
 	<key>SUScheduledCheckInterval</key>
