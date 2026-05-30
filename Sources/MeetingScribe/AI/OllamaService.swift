@@ -258,6 +258,7 @@ final class OllamaService {
     }
 
     private static func buildPrompt(meeting: Meeting, transcript: String) -> String {
+        let userName = AppSettings.shared.userName
         let attendees = meeting.attendees.isEmpty ? "Unknown" : meeting.attendees.joined(separator: ", ")
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -289,9 +290,9 @@ final class OllamaService {
         Bulleted checklist. Each item MUST use this exact format:
         - [ ] <owner> — <action> (due: <date or "unspecified">)
         EVERY item must start with an owner. Use "Me" for the user (the "Me"
-        speaker, named Tyler) — but ONLY assign "Me" when the user explicitly
+        speaker, named \(userName)) — but ONLY assign "Me" when the user explicitly
         committed to the task, or another speaker explicitly delegated it to the
-        user by name (e.g. "Tyler, can you…"). For tasks owned by other
+        user by name (e.g. "\(userName), can you…"). For tasks owned by other
         participants, use their name. Do not invent owners. If no action items,
         write "None.".
 

@@ -7,6 +7,7 @@ final class AppSettings {
 
     private enum Keys {
         static let storageDir = "storageDir"
+        static let userName = "userName"
         static let whisperBinary = "whisperBinary"
         static let whisperModel = "whisperModel"
         static let ollamaURL = "ollamaURL"
@@ -102,6 +103,17 @@ final class AppSettings {
             }
             defaults.set(p, forKey: Keys.storageDir)
         }
+    }
+
+    /// The user's own name, used to attribute "Me" action items in AI prompts
+    /// instead of a hard-coded name. Defaults to "Tyler" to preserve existing
+    /// behavior; surfaced in Settings so anyone else's install reads correctly.
+    var userName: String {
+        get {
+            let v = (defaults.string(forKey: Keys.userName) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return v.isEmpty ? "Tyler" : v
+        }
+        set { defaults.set(newValue, forKey: Keys.userName) }
     }
 
     var whisperBinary: String {
