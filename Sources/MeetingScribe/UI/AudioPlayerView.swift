@@ -69,6 +69,9 @@ struct AudioPlayerView: View {
                     .foregroundStyle(.secondary)
                     .frame(minWidth: 84, alignment: .trailing)
             }
+            if let err = controller.loadError {
+                Text(err).font(.caption2).foregroundStyle(.orange).textSelection(.enabled)
+            }
         }
         .padding(.vertical, 4)
         .onDisappear { controller.release() }
@@ -92,21 +95,19 @@ final class AudioPlayerController: ObservableObject {
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
     @Published var ready: Bool = false
+    @Published var loadError: String?
     var scrubbing = false
 
-    private let player: AVQueuePlayer
+    private let player = AVPlayer()
+    private let urls: [URL]
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
-    private var statusObserver: AnyCancellable?
-    private let items: [AVPlayerItem]
 
     init(urls: [URL]) {
-        self.items = urls.map { AVPlayerItem(url: $0) }
-        self.player = AVQueuePlayer(items: items)
-        self.player.actionAtItemEnd = .advance
-
-        Task { await measureDuration() }
+        self.urls = urls
+        player.volume = 1.0
         attachObservers()
+        Task { await buildComposition() }
     }
 
     deinit {
@@ -114,12 +115,47 @@ final class AudioPlayerController: ObservableObject {
         if let e = endObserver { NotificationCenter.default.removeObserver(e) }
     }
 
+    /// Overlay every source file on ONE composition timeline so a meeting's mic
+    /// + system tracks play together (a real conversation) instead of one after
+    /// the other. A single-file voice note is just a one-track composition.
+    /// Replaces the old sequential AVQueuePlayer and its fragile queue-rebuild
+    /// seeking — and explicitly sets volume so playback is never silent.
+    private func buildComposition() async {
+        let composition = AVMutableComposition()
+        var maxDuration = CMTime.zero
+        for url in urls {
+            let asset = AVURLAsset(url: url)
+            do {
+                guard let src = try await asset.loadTracks(withMediaType: .audio).first else { continue }
+                let dur = try await asset.load(.duration)
+                guard dur.isNumeric, dur > .zero else { continue }
+                guard let dest = composition.addMutableTrack(
+                    withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
+                try dest.insertTimeRange(CMTimeRange(start: .zero, duration: dur), of: src, at: .zero)
+                if dur > maxDuration { maxDuration = dur }
+            } catch {
+                loadError = error.localizedDescription
+            }
+        }
+        let total = CMTimeGetSeconds(maxDuration)
+        guard total > 0 else {
+            ready = false
+            if loadError == nil { loadError = "No playable audio in this recording." }
+            return
+        }
+        player.replaceCurrentItem(with: AVPlayerItem(asset: composition))
+        player.volume = 1.0
+        duration = total
+        ready = true
+    }
+
     private func attachObservers() {
         let interval = CMTime(seconds: 0.1, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] _ in
             guard let self else { return }
             if self.scrubbing { return }
-            self.currentTime = self.absoluteCurrentTime()
+            let t = self.player.currentTime()
+            if t.isNumeric { self.currentTime = CMTimeGetSeconds(t) }
         }
 
         endObserver = NotificationCenter.default.addObserver(
@@ -128,54 +164,38 @@ final class AudioPlayerController: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            // If we ran past the LAST queued item, hop back to start and pause.
-            if self.player.currentItem == nil {
-                self.player.pause()
-                self.isPlaying = false
-                self.seekAbsolute(0)
-            }
-        }
-    }
-
-    private func measureDuration() async {
-        var total: TimeInterval = 0
-        for item in items {
-            do {
-                let asset = item.asset
-                let cm = try await asset.load(.duration)
-                if cm.isNumeric {
-                    total += CMTimeGetSeconds(cm)
-                }
-            } catch {
-                // Skip
-            }
-        }
-        await MainActor.run {
-            self.duration = total
-            self.ready = total > 0
+            self.player.pause()
+            self.isPlaying = false
+            self.seek(to: 0)
         }
     }
 
     func togglePlay() {
+        guard ready else { return }
         if isPlaying { player.pause(); isPlaying = false }
         else { player.play(); isPlaying = true }
     }
 
     func skip(_ seconds: TimeInterval) {
-        seekAbsolute(max(0, min(duration, absoluteCurrentTime() + seconds)))
+        seek(to: max(0, min(duration, currentTime + seconds)))
     }
 
-    /// Visual-only update during drag — no AVPlayer interaction.
-    /// This prevents the queue rebuild (removeAllItems + reinsert) from
-    /// firing on every slider tick, which was the root cause of the
-    /// "audio restarts when scrubbing" bug.
+    /// Visual-only update during drag — no AVPlayer interaction, so the slider
+    /// doesn't fire a seek on every tick.
     func scrub(to time: TimeInterval) {
         currentTime = time
     }
 
     /// Commit the seek when the drag ends. Called once per scrub gesture.
     func commitScrub() {
-        seekAbsolute(currentTime)
+        seek(to: currentTime)
+    }
+
+    /// Single-timeline seek (the composition is one item, so no queue juggling).
+    private func seek(to time: TimeInterval) {
+        let cm = CMTime(seconds: max(0, time), preferredTimescale: 600)
+        player.seek(to: cm, toleranceBefore: .zero, toleranceAfter: .zero)
+        currentTime = time
     }
 
     func stop() {
@@ -183,10 +203,9 @@ final class AudioPlayerController: ObservableObject {
         isPlaying = false
     }
 
-    /// Fully tears down the player: removes observers, empties the queue, and
-    /// drops AVPlayerItem references so their decoded audio buffers can be
-    /// reclaimed by ARC. Call from `.onDisappear` of the view that owns this
-    /// controller so switching meetings doesn't accumulate ghost players.
+    /// Fully tears down the player: removes observers and drops the current
+    /// item so its decoded audio buffers can be reclaimed. Call from
+    /// `.onDisappear` so switching meetings doesn't accumulate ghost players.
     func release() {
         if let t = timeObserver {
             player.removeTimeObserver(t)
@@ -196,54 +215,9 @@ final class AudioPlayerController: ObservableObject {
             NotificationCenter.default.removeObserver(e)
             endObserver = nil
         }
-        statusObserver?.cancel()
-        statusObserver = nil
         player.pause()
-        player.removeAllItems()
+        player.replaceCurrentItem(with: nil)
         isPlaying = false
         ready = false
-    }
-
-    /// Returns the player's time relative to the START of the first queued
-    /// item — accounting for items already finished.
-    private func absoluteCurrentTime() -> TimeInterval {
-        guard let current = player.currentItem,
-              let idx = items.firstIndex(of: current) else { return 0 }
-        var t: TimeInterval = 0
-        for i in 0..<idx {
-            let d = items[i].duration
-            if d.isNumeric { t += CMTimeGetSeconds(d) }
-        }
-        let cur = player.currentTime()
-        if cur.isNumeric { t += CMTimeGetSeconds(cur) }
-        return t
-    }
-
-    /// Seeks to an absolute time across the queue: figures out which item to
-    /// jump to and the offset within it.
-    private func seekAbsolute(_ time: TimeInterval) {
-        var remaining = time
-        for (i, item) in items.enumerated() {
-            let d = item.duration
-            let dSec = d.isNumeric ? CMTimeGetSeconds(d) : 0
-            if remaining <= dSec || i == items.count - 1 {
-                // Tear down the queue and rebuild from item `i` so we land on it.
-                player.removeAllItems()
-                for j in i..<items.count {
-                    // Items can only be inserted once. If they were already in the
-                    // queue, recreate them by URL.
-                    if let urlAsset = items[j].asset as? AVURLAsset {
-                        let fresh = AVPlayerItem(url: urlAsset.url)
-                        player.insert(fresh, after: nil)
-                    } else {
-                        player.insert(items[j], after: nil)
-                    }
-                }
-                let cm = CMTime(seconds: max(0, remaining), preferredTimescale: 600)
-                player.currentItem?.seek(to: cm, toleranceBefore: .zero, toleranceAfter: .zero)
-                return
-            }
-            remaining -= dSec
-        }
     }
 }
