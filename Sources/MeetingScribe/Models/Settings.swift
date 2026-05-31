@@ -13,6 +13,8 @@ final class AppSettings {
         static let ollamaURL = "ollamaURL"
         static let ollamaModel = "ollamaModel"
         static let ollamaEmbeddingModel = "ollamaEmbeddingModel"
+        static let collectMetrics = "collectMetrics"
+        static let dailyBriefEnabled = "dailyBriefEnabled"
         static let autoRecord = "autoRecord"
         static let captureMic = "captureMic"
         static let captureSystem = "captureSystem"
@@ -197,6 +199,19 @@ final class AppSettings {
     var ollamaEmbeddingModel: String {
         get { defaults.string(forKey: Keys.ollamaEmbeddingModel) ?? "nomic-embed-text" }
         set { defaults.set(newValue, forKey: Keys.ollamaEmbeddingModel) }
+    }
+
+    /// Opt-in, local-only usage metrics (P5-1). Default OFF. Counts stay on the
+    /// device (UserDefaults) and are never uploaded.
+    var collectMetrics: Bool {
+        get { defaults.bool(forKey: Keys.collectMetrics) }
+        set { defaults.set(newValue, forKey: Keys.collectMetrics) }
+    }
+
+    /// Opt-in daily 8am "morning brief" notification (P2-5). Default OFF.
+    var dailyBriefEnabled: Bool {
+        get { defaults.bool(forKey: Keys.dailyBriefEnabled) }
+        set { defaults.set(newValue, forKey: Keys.dailyBriefEnabled) }
     }
 
     /// One-time migration: if the stored model is still the old default

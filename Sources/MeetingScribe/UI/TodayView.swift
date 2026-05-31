@@ -17,6 +17,8 @@ struct TodayView: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var decisions: DecisionStore
+    @EnvironmentObject var actionItems: ActionItemStore
+    @State private var showStandup = false
 
     /// Navigation is owned by `WorkspaceRouter` (D1-1): meeting cards route to
     /// the canonical Meetings-tab detail, and the widgets flip sections through
@@ -63,6 +65,12 @@ struct TodayView: View {
                     router.section = .actions
                 }
 
+                // Forgotten follow-ups to send. (P2-6/U3-3)
+                followUpsSection
+
+                // Owe / Owed commitments split by direction. (U3-2/P2-7)
+                commitmentsSection
+
                 // Decision ledger — recent decisions across all meetings. (P1-1)
                 decisionsSection
 
@@ -80,6 +88,111 @@ struct TodayView: View {
             // Full window width (req #5) — the feed is cards/lists, not prose,
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Follow-ups to send (P2-6/U3-3)
+
+    @State private var followUpRefresh = 0   // bump to re-evaluate after marking sent
+
+    private var pendingFollowUps: [Meeting] {
+        let cal = Calendar.current
+        let cutoff = cal.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        _ = followUpRefresh   // dependency so marking sent refreshes the list
+        return manager.pastMeetings
+            .filter { $0.startDate >= cutoff && !cal.isDateInToday($0.startDate) }
+            .filter { !FollowUpStatus.isSent($0.id) }
+            .sorted { $0.startDate > $1.startDate }
+    }
+
+    @ViewBuilder
+    private var followUpsSection: some View {
+        let items = pendingFollowUps
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "paperplane").foregroundStyle(NDS.brand)
+                    Text("Follow-ups to send").font(.system(size: 15, weight: .semibold))
+                }
+                ForEach(items.prefix(4)) { m in
+                    HStack(spacing: 8) {
+                        Button { router.openMeeting(m) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(m.displayTitle).font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                                Text(m.startDate, style: .date).font(.system(size: 11))
+                                    .foregroundStyle(NDS.textTertiary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button("Mark sent") {
+                            FollowUpStatus.setSent(m.id, true)
+                            followUpRefresh += 1
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(.vertical, 6).padding(.horizontal, 10)
+                    .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+
+    // MARK: - Commitments / Owe-Owed (U3-2/P2-7)
+
+    private func isMine(_ owner: String) -> Bool {
+        let o = owner.lowercased().trimmingCharacters(in: .whitespaces)
+        if o == "me" || o == "i" { return true }
+        let name = AppSettings.shared.userName.lowercased()
+        if !name.isEmpty && o.contains(name) { return true }
+        return AppSettings.shared.userNameAliases.contains { !$0.isEmpty && o.contains($0.lowercased()) }
+    }
+
+    @ViewBuilder
+    private var commitmentsSection: some View {
+        let open = actionItems.items.filter { $0.status != .completed && !($0.owner ?? "").isEmpty }
+        let iOwe = open.filter { isMine($0.owner ?? "") }
+        let owed = open.filter { !isMine($0.owner ?? "") }
+        if !iOwe.isEmpty || !owed.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.left.arrow.right").foregroundStyle(NDS.brand)
+                    Text("Commitments").font(.system(size: 15, weight: .semibold))
+                }
+                commitmentColumn("You owe", items: iOwe)
+                commitmentColumn("Owed to you", items: owed)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func commitmentColumn(_ title: String, items: [ActionItem]) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(title) (\(items.count))")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(items.prefix(3)) { item in
+                    Button {
+                        if let m = manager.meeting(forEntityID: item.meetingID) { router.openMeeting(m) }
+                        else { router.section = .actions }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(item.title).font(.system(size: 12))
+                                .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                            Spacer()
+                            if let owner = item.owner, !owner.isEmpty {
+                                Text(owner).font(.caption2).foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.vertical, 5).padding(.horizontal, 10)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 
@@ -203,6 +316,15 @@ struct TodayView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button { showStandup = true } label: {
+                Label("Standup", systemImage: "list.bullet.rectangle")
+            }
+            .help("Generate a daily standup: yesterday, today, open commitments")
+        }
+        .sheet(isPresented: $showStandup) {
+            StandupDigestSheet(
+                markdown: StandupDigest.markdown(manager: manager, calendar: calendar),
+                isPresented: $showStandup)
         }
     }
 

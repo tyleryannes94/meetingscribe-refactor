@@ -211,6 +211,7 @@ final class MeetingManager: ObservableObject {
                 // while `activeMeeting` was set. (ScribeCore path already used `m`.)
                 state = .recording(meeting: m, startedAt: Date())
             }
+            MetricsStore.shared.record(.meetingRecorded)   // local-only metric (P5-1)
             // When ScribeCore is handling recording, state is updated via the
             // DarwinNotifier.recordingStarted signal observed in init().
             lastError = nil
@@ -691,6 +692,31 @@ final class MeetingManager: ObservableObject {
 
     func backfillActionItemsIfNeeded(force: Bool = false) {
         actionItemBackfill.runIfNeeded(meetings: pastMeetings, force: force)
+    }
+
+    /// A short, instant (non-LLM) brief for an upcoming meeting's start
+    /// notification: open commitments + prior-meeting context with the same
+    /// attendees. nil when there's no history. (P2-2)
+    func briefSnippet(for meeting: Meeting) -> String? {
+        func emails(_ attendees: [String]) -> Set<String> {
+            Set(attendees.compactMap { s -> String? in
+                if let lt = s.firstIndex(of: "<"), let gt = s.firstIndex(of: ">"), lt < gt {
+                    return String(s[s.index(after: lt)..<gt]).lowercased()
+                }
+                return s.contains("@") ? s.lowercased() : nil
+            })
+        }
+        let mine = emails(meeting.attendees)
+        guard !mine.isEmpty else { return nil }
+        let prior = pastMeetings.filter { !emails($0.attendees).isDisjoint(with: mine) }
+        guard !prior.isEmpty else { return nil }
+        let open = prior.flatMap { actionItems.items(for: $0.id).filter { $0.status != .completed } }
+        var parts: [String] = []
+        if !open.isEmpty {
+            parts.append("\(open.count) open item\(open.count == 1 ? "" : "s") to follow up")
+        }
+        parts.append("\(prior.count) prior meeting\(prior.count == 1 ? "" : "s") with these attendees")
+        return parts.joined(separator: " · ")
     }
 
     /// Phase B — one-shot per-session pass that extracts people from the most

@@ -28,6 +28,7 @@ final class NotificationManager: NSObject, ObservableObject {
     private var scheduledMeetingIDs: Set<String> = []
     private let meetingPayloadKey = "meetingJSON"
     private let sourcePayloadKey = "source"
+    private let deepLinkKey = "deepLink"
 
     override init() {
         super.init()
@@ -75,7 +76,7 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Schedules a one-shot notification ~10s before each upcoming meeting's
     /// start time. Clears prior scheduled notifications for meetings no longer
     /// in the list. Safe to call repeatedly.
-    func syncScheduled(for meetings: [Meeting]) async {
+    func syncScheduled(for meetings: [Meeting], briefs: [String: String] = [:]) async {
         guard AppSettings.shared.notifyAtMeetingStart else {
             await UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
             scheduledMeetingIDs.removeAll()
@@ -104,9 +105,16 @@ final class NotificationManager: NSObject, ObservableObject {
             let content = UNMutableNotificationContent()
             content.title = m.displayTitle
             content.subtitle = "Starting now"
-            content.body = (m.conferenceURL ?? "").isEmpty
+            let action = (m.conferenceURL ?? "").isEmpty
                 ? "Tap Record to start capturing this meeting."
                 : "Tap Join & Record to join and start capturing."
+            // Prepend a synthesized brief so the user is prepped, not just
+            // pinged. (P2-2)
+            if let brief = briefs[m.id], !brief.isEmpty {
+                content.body = "\(brief)\n\(action)"
+            } else {
+                content.body = action
+            }
             content.categoryIdentifier = Self.categoryMeeting
             if let payload = try? encoder.encode(m),
                let str = String(data: payload, encoding: .utf8) {
@@ -130,16 +138,36 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Posts an immediate notification when transcription + summary finishes
     /// for a meeting. This is the most valuable notification — it closes the
     /// loop for the user ("your meeting is ready to review").
-    func notifyTranscriptionComplete(meeting: Meeting) {
+    func notifyTranscriptionComplete(meeting: Meeting, summarySnippet: String = "") {
         let content = UNMutableNotificationContent()
         content.title = "Meeting ready: \(meeting.displayTitle)"
-        content.body = "Transcript and summary are ready to review."
+        let snippet = summarySnippet.trimmingCharacters(in: .whitespacesAndNewlines)
+        content.body = snippet.isEmpty
+            ? "Transcript and summary are ready to review."
+            : String(snippet.prefix(160))
         content.sound = .default
+        // Deep link so tapping opens the meeting (routed via the registered
+        // scheme, D1-2) instead of just activating the app. (U3-5)
+        content.userInfo[deepLinkKey] = "meetingscribe://meeting/\(meeting.id)"
         let req = UNNotificationRequest(
             identifier: "transcription-\(meeting.id)",
             content: content,
             trigger: nil)
         UNUserNotificationCenter.current().add(req)
+    }
+
+    /// Schedules (or cancels) a repeating 8am "morning brief" nudge. (P2-5)
+    func scheduleDailyBrief() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["daily-brief"])
+        guard AppSettings.shared.dailyBriefEnabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Good morning"
+        content.body = "Your daily brief: yesterday's recap, today's meetings, and open commitments. Open MeetingScribe → Standup."
+        content.sound = .default
+        var when = DateComponents(); when.hour = 8; when.minute = 0
+        let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: true)
+        center.add(UNNotificationRequest(identifier: "daily-brief", content: content, trigger: trigger))
     }
 
     /// Posts an immediate notification when an impromptu meeting is detected.
@@ -199,9 +227,14 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             let source = (userInfo[sourcePayloadKey] as? String) ?? "Impromptu"
             onRecordImpromptu?(source)
         case UNNotificationDefaultActionIdentifier:
-            // Tap on the notification body — open the app window.
+            // Tap on the notification body — open the app window, and follow a
+            // deep link to the meeting if one was attached. (U3-5)
             NSApp.activate(ignoringOtherApps: true)
-            if let m = meeting { onRecordMeeting?(m) }
+            if let link = userInfo[deepLinkKey] as? String, let url = URL(string: link) {
+                NSWorkspace.shared.open(url)
+            } else if let m = meeting {
+                onRecordMeeting?(m)
+            }
         default:
             break
         }

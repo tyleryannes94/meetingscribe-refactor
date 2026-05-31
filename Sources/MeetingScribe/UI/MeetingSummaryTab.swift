@@ -43,6 +43,14 @@ extension UnifiedMeetingDetail {
                     MarkdownEditor(text: .constant(summary), isEditable: false)
                         .padding(.bottom, 8)
 
+                    // 👍/👎 feedback that steers regeneration (P5-3).
+                    if let m = meeting {
+                        SummaryFeedbackRow(meetingID: m.id) {
+                            manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
+                        }
+                        .padding(.horizontal).padding(.bottom, 10)
+                    }
+
                     // Extracted action items from this meeting — inline
                     // so users don't have to navigate to the Tasks tab
                     // to see what was agreed. The same items are shown
@@ -111,7 +119,8 @@ extension UnifiedMeetingDetail {
                         summary: summary,
                         actionItems: (manager.actionItems.items(for: m.id))
                             .map(\.title),
-                        recipients: attendeeEmails(for: m)
+                        recipients: attendeeEmails(for: m),
+                        meetingID: m.id
                     )
                     .navigationTitle("Draft follow-up")
                     .toolbar {
@@ -290,5 +299,62 @@ private struct InlineActionItemRow: View {
         case .medium: return .yellow
         case .low:    return .secondary.opacity(0.4)
         }
+    }
+}
+
+/// 👍/👎 + "why" feedback on a summary; a thumbs-down reason steers the next
+/// regeneration (P5-3).
+@available(macOS 14.0, *)
+struct SummaryFeedbackRow: View {
+    let meetingID: String
+    var onRegenerate: () -> Void
+
+    @State private var up: Bool?
+    @State private var showWhy = false
+    @State private var why = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Text("Was this summary useful?").font(.caption).foregroundStyle(.secondary)
+                Button { rate(true) } label: {
+                    Image(systemName: up == true ? "hand.thumbsup.fill" : "hand.thumbsup")
+                }
+                .buttonStyle(.plain).foregroundStyle(up == true ? Color.green : .secondary)
+                Button { rate(false) } label: {
+                    Image(systemName: up == false ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                }
+                .buttonStyle(.plain).foregroundStyle(up == false ? Color.orange : .secondary)
+                Spacer()
+            }
+            if showWhy {
+                TextField("What was wrong? (e.g. missed action items, too long)", text: $why)
+                    .textFieldStyle(.roundedBorder)
+                HStack(spacing: 8) {
+                    Button("Save & regenerate") {
+                        SummaryFeedback.set(up: false, why: why, for: meetingID)
+                        showWhy = false
+                        onRegenerate()
+                    }
+                    .controlSize(.small)
+                    .disabled(why.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Just save") {
+                        SummaryFeedback.set(up: false, why: why, for: meetingID)
+                        showWhy = false
+                    }
+                    .controlSize(.small)
+                }
+            }
+        }
+        .onAppear {
+            let r = SummaryFeedback.rating(for: meetingID)
+            if r.has { up = r.up; why = r.why ?? "" }
+        }
+    }
+
+    private func rate(_ u: Bool) {
+        up = u
+        SummaryFeedback.set(up: u, why: u ? nil : (why.isEmpty ? nil : why), for: meetingID)
+        showWhy = !u
     }
 }

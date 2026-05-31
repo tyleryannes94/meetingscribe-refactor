@@ -230,6 +230,8 @@ final class MeetingPipelineController: ObservableObject {
         // Lift decisions out of the summary into the cross-meeting ledger. (P1-1)
         decisions.extract(from: summary, meeting: workingMeeting)
 
+        MetricsStore.shared.record(.summaryGenerated)   // local-only metric (P5-1)
+
         liveResetIfStillIdle()
 
         // Notify interested parties (e.g. NotificationManager) that the

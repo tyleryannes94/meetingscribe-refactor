@@ -191,6 +191,7 @@ struct MeetingScribeApp: App {
 
         // BACKGROUND: notifications + Ollama. Neither blocks the UI.
         Task { await notifications.requestAuthorization() }
+        notifications.scheduleDailyBrief()   // morning brief, opt-in (P2-5)
         Task.detached(priority: .utility) { [manager] in
             await manager.ensureOllamaRunning()
         }
@@ -230,14 +231,14 @@ struct MeetingScribeApp: App {
         let t = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             Task { @MainActor in
                 calendar.refreshUpcoming()
-                await notifications.syncScheduled(for: calendar.upcoming)
+                let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
                 if AppSettings.shared.autoRecord { autoStartIfNeeded() }
             }
         }
         RunLoop.main.add(t, forMode: .common)
         calendarTimer = t
         Task { @MainActor in
-            await notifications.syncScheduled(for: calendar.upcoming)
+            let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
         }
     }
 
@@ -254,8 +255,16 @@ struct MeetingScribeApp: App {
 
     /// Post a "Meeting ready" banner when transcription + summary finishes.
     private func wirePipelineNotification() {
-        manager.pipelineController.onComplete = { [weak notifications] meeting in
-            notifications?.notifyTranscriptionComplete(meeting: meeting)
+        manager.pipelineController.onComplete = { [weak notifications, weak manager] meeting in
+            // Pull a clean prose snippet from the summary for the notification
+            // body (skip markdown headings/blank lines). (U3-5)
+            let summary = manager?.summaryMarkdown(for: meeting) ?? ""
+            let snippet = summary
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix(">") }
+                ?? ""
+            notifications?.notifyTranscriptionComplete(meeting: meeting, summarySnippet: snippet)
         }
     }
 
@@ -397,9 +406,10 @@ struct MeetingScribeApp: App {
                                     modifiers: s.dictationSwapHotkeyModifiers)
                 meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
                                              modifiers: s.meetingRecordHotkeyModifiers)
+                notifications.scheduleDailyBrief()
                 Task { @MainActor in
                     calendar.refreshUpcoming(force: true)
-                    await notifications.syncScheduled(for: calendar.upcoming)
+                    let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
                 }
             }
     }

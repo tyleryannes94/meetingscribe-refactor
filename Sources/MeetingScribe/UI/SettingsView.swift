@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var captureSystem: Bool = AppSettings.shared.captureSystem
     @State private var filterToConference: Bool = AppSettings.shared.filterToConferenceLinks
     @State private var notifyAtStart: Bool = AppSettings.shared.notifyAtMeetingStart
+    @State private var dailyBrief: Bool = AppSettings.shared.dailyBriefEnabled
     @State private var detectZoom: Bool = AppSettings.shared.detectZoomImpromptu
     @State private var hotkeyKeyCode: UInt32 = AppSettings.shared.dictationHotkeyKeyCode
     @State private var hotkeyMods: UInt32 = AppSettings.shared.dictationHotkeyModifiers
@@ -31,6 +32,7 @@ struct SettingsView: View {
     @State private var userName: String = AppSettings.shared.userName
     @State private var userNameAliases: String = AppSettings.shared.userNameAliases.joined(separator: ", ")
     @State private var allowRemoteOllama: Bool = AppSettings.shared.allowRemoteOllamaEndpoint
+    @State private var collectMetrics: Bool = AppSettings.shared.collectMetrics
     @State private var obsidianVaultPath: String = ExportSettings().vaultPath
     @State private var obsidianTemplate: String = ExportSettings().filenameTemplate
 
@@ -42,6 +44,7 @@ struct SettingsView: View {
     @State private var showingNotionKeyEditor: Bool = false
     @State private var linearKeyDraft: String = AppSettings.shared.linearAPIKey ?? ""
     @State private var linearSaved: Bool = false
+    @State private var showHealthCheck = false
     @State private var linearTeams: [TaskSyncService.LinearTeamRef] = []
     @State private var linearTeamID: String = AppSettings.shared.linearDefaultTeamID ?? ""
     @State private var linearTeamsLoading: Bool = false
@@ -76,6 +79,13 @@ struct SettingsView: View {
                     }
                     Text("Use this to confirm the installed app matches the latest build (the build id is the git commit).")
                         .font(.caption2).foregroundStyle(.secondary)
+                    Button {
+                        showHealthCheck = true
+                    } label: {
+                        Label("Run a health check", systemImage: "stethoscope")
+                    }
+                    Text("Checks the transcription model, Ollama, disk space, and macOS permissions.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
                 Section("You") {
                     TextField("Your name", text: $userName)
@@ -101,6 +111,11 @@ struct SettingsView: View {
                 Section("Calendar") {
                     Toggle("Only show meetings with a conference link", isOn: $filterToConference)
                     Toggle("Notify me at meeting start time", isOn: $notifyAtStart)
+                    Toggle("Daily morning brief (8am)", isOn: $dailyBrief)
+                        .onChange(of: dailyBrief) { _, v in
+                            AppSettings.shared.dailyBriefEnabled = v
+                            NotificationCenter.default.post(name: .meetingScribeSettingsChanged, object: nil)
+                        }
                     Text("MeetingScribe reads all calendars connected to macOS Calendar.app. To add Google work + personal calendars: System Settings → Internet Accounts → Google → sign in. Below, choose which of those calendars MeetingScribe should pull events from.")
                         .font(.caption).foregroundStyle(.secondary)
                     CalendarPickerSection()
@@ -460,6 +475,18 @@ struct SettingsView: View {
                         .font(.caption2).foregroundStyle(.secondary)
                     DiagnosticsExportRow()
                 }
+                Section("Usage metrics") {
+                    Toggle("Collect local usage metrics", isOn: $collectMetrics)
+                        .onChange(of: collectMetrics) { _, v in AppSettings.shared.collectMetrics = v }
+                    Text("Off by default. Counts stay on this Mac (UserDefaults) and are NEVER uploaded — there's no network code for them. Lets you see how much you use MeetingScribe.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    if collectMetrics {
+                        ForEach(MetricsStore.shared.snapshot(), id: \.0) { event, count in
+                            HStack { Text(event.label); Spacer(); Text("\(count)").foregroundStyle(.secondary).monospacedDigit() }
+                                .font(.caption)
+                        }
+                    }
+                }
                 Section("Ollama") {
                     TextField("Server URL", text: $ollamaURL)
                     TextField("Model", text: $ollamaModel)
@@ -512,6 +539,9 @@ struct SettingsView: View {
         }
         .padding()
         .onAppear { mcp.refreshStatus() }
+        .sheet(isPresented: $showHealthCheck) {
+            HealthCheckSheet(isPresented: $showHealthCheck)
+        }
     }
 
     private struct HotkeyPreset {

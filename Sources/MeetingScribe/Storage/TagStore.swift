@@ -91,9 +91,10 @@ final class TagStore: ObservableObject {
         return tag
     }
 
-    func renameTag(id: String, to newName: String) {
+    func renameTag(id: String, to newName: String, recordUndo: Bool = true) {
         guard let idx = allTags.firstIndex(where: { $0.id == id }) else { return }
         let oldFolderName = allTags[idx].folderName
+        let oldName = allTags[idx].name
         allTags[idx].name = newName
         let newFolderName = allTags[idx].folderName
         persist()
@@ -102,6 +103,12 @@ final class TagStore: ObservableObject {
         // in MeetingManager so the UI never stalls on the FM move.
         if oldFolderName != newFolderName {
             onTagRenamed?(oldFolderName, newFolderName)
+        }
+        // Undoable — this physically moves vault folders. (D4-3)
+        if recordUndo && oldName != newName {
+            ToastCenter.shared.show("Renamed tag to “\(newName)”", undoTitle: "Undo") { [weak self] in
+                self?.renameTag(id: id, to: oldName, recordUndo: false)
+            }
         }
     }
 
