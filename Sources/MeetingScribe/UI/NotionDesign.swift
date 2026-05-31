@@ -8,7 +8,12 @@ import AppKit
 enum NDS {
     // MARK: Layout
     static let pagePadding: CGFloat = 56
-    static let contentMaxWidth: CGFloat = 720
+    /// Max width for page-column surfaces (Tasks list/board/page chrome). Was a
+    /// cramped 720 reading-measure that wasted horizontal space on lists and
+    /// boards; relaxed so content breathes (and so enlarged Dynamic Type can
+    /// reflow — prereq for D5-2). True prose panes keep their own narrower
+    /// measure. (LAY-1)
+    static let contentMaxWidth: CGFloat = 1100
     /// Top inset that pushes a split-view pane's content clear of the window's
     /// translucent title-bar / toolbar (macOS Tahoe). Shared by the People list
     /// and detail panes so they line up instead of repeating a magic 60. (req #1)
@@ -97,6 +102,27 @@ enum NDS {
         var hash = 5381
         for b in key.utf8 { hash = ((hash << 5) &+ hash) &+ Int(b) }
         return palette[abs(hash) % palette.count].color
+    }
+
+    /// Returns `animation` unless Reduce Motion is on, in which case `nil`
+    /// (no animation). Read `@Environment(\.accessibilityReduceMotion)` at the
+    /// call site and pass it as `reduce`. Accessibility: D5-1.
+    static func motion(_ animation: Animation?, reduce: Bool) -> Animation? {
+        reduce ? nil : animation
+    }
+}
+
+@available(macOS 14.0, *)
+extension View {
+    /// Applies a repeating SF Symbol pulse only when motion is allowed.
+    /// With Reduce Motion on, the symbol renders statically. Accessibility: D5-1.
+    @ViewBuilder
+    func pulsingSymbol(active: Bool) -> some View {
+        if active {
+            self.symbolEffect(.pulse, options: .repeating)
+        } else {
+            self
+        }
     }
 }
 

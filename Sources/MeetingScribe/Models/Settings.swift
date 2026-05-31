@@ -20,6 +20,8 @@ final class AppSettings {
         static let detectZoomImpromptu = "detectZoomImpromptu"
         static let dictationHotkeyKeyCode = "dictationHotkeyKeyCode"
         static let dictationHotkeyModifiers = "dictationHotkeyModifiers"
+        static let meetingRecordHotkeyKeyCode = "meetingRecordHotkeyKeyCode"
+        static let meetingRecordHotkeyModifiers = "meetingRecordHotkeyModifiers"
         static let dictationAutoPaste = "dictationAutoPaste"
         static let dictationUsePolished = "dictationUsePolished"
         static let dictationSwapHotkeyKeyCode = "dictationSwapHotkeyKeyCode"
@@ -31,6 +33,8 @@ final class AppSettings {
         static let notionAPIKey = "notionAPIKey"
         static let notionActionItemsDatabaseID = "notionActionItemsDatabaseID"
         static let linearAPIKey = "linearAPIKey"
+        static let linearDefaultTeamID = "linearDefaultTeamID"
+        static let linearDefaultTeamName = "linearDefaultTeamName"
         static let lastTaskSync = "lastTaskSync"
         static let googleClientID = "googleClientID"
         static let googleClientSecret = "googleClientSecret"
@@ -281,6 +285,25 @@ final class AppSettings {
         set { defaults.set(Int(newValue), forKey: Keys.dictationHotkeyModifiers) }
     }
 
+    /// Carbon virtual keycode for the GLOBAL meeting-record toggle (start/stop
+    /// a meeting recording system-wide). Default: R (15). (D4-1)
+    var meetingRecordHotkeyKeyCode: UInt32 {
+        get {
+            let v = defaults.integer(forKey: Keys.meetingRecordHotkeyKeyCode)
+            return v == 0 ? 15 : UInt32(v)
+        }
+        set { defaults.set(Int(newValue), forKey: Keys.meetingRecordHotkeyKeyCode) }
+    }
+
+    /// Carbon modifier mask for the meeting-record toggle. Default: ⌥⌘ (2304).
+    var meetingRecordHotkeyModifiers: UInt32 {
+        get {
+            let v = defaults.object(forKey: Keys.meetingRecordHotkeyModifiers) as? Int
+            return UInt32(v ?? 2304)
+        }
+        set { defaults.set(Int(newValue), forKey: Keys.meetingRecordHotkeyModifiers) }
+    }
+
     /// If true, after transcribing a hotkey-triggered dictation, paste the
     /// text at the cursor in the active app.
     var dictationAutoPaste: Bool {
@@ -406,6 +429,26 @@ final class AppSettings {
     var linearAPIKey: String? {
         get { KeychainStore.read(.linearAPIKey) }
         set { KeychainStore.write(.linearAPIKey, newValue) }
+    }
+
+    /// Default Linear team that "Push to Linear" creates issues under. Team
+    /// IDs are not secrets, so this lives in UserDefaults (not the Keychain).
+    /// Picked once in Settings → Task sync. `nil` until the user chooses.
+    var linearDefaultTeamID: String? {
+        get { optString(Keys.linearDefaultTeamID) }
+        set {
+            if let v = newValue, !v.isEmpty { defaults.set(v, forKey: Keys.linearDefaultTeamID) }
+            else { defaults.removeObject(forKey: Keys.linearDefaultTeamID) }
+        }
+    }
+
+    /// Human-readable name of the default Linear team, for display only.
+    var linearDefaultTeamName: String? {
+        get { optString(Keys.linearDefaultTeamName) }
+        set {
+            if let v = newValue, !v.isEmpty { defaults.set(v, forKey: Keys.linearDefaultTeamName) }
+            else { defaults.removeObject(forKey: Keys.linearDefaultTeamName) }
+        }
     }
 
     var lastTaskSync: Date? {

@@ -286,6 +286,10 @@ extension ActionItemsView {
             onPush: { pushToNotion(item) },
             onOpenNotion: { url in
                 if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+            },
+            onPushLinear: { pushToLinear(item) },
+            onOpenLinear: { url in
+                if let u = URL(string: url) { NSWorkspace.shared.open(u) }
             }
         )
     }

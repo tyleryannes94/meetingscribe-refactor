@@ -10,7 +10,23 @@ Local-first macOS app for recording, transcribing, and summarizing meetings — 
 
 ---
 
-## Install (one command)
+## Install (no Terminal)
+
+Requires **macOS 14 (Sonoma) or newer**.
+
+1. Download `MeetingScribe.dmg` from the latest [Release](https://github.com/tyleryannes94/meetingscribe-refactor/releases/latest).
+2. Double-click it, then drag **MeetingScribe** onto the **Applications** folder.
+3. Open it from Applications. On first launch, an in-app **"Getting things ready"**
+   step downloads the local transcription model and sets up the AI engine — no
+   Homebrew, no shell commands.
+
+The `.dmg` is built with `make dmg`. It's signed with a local identity (not yet
+notarized), so a Mac other than the build machine shows a one-time Gatekeeper
+warning — right-click → Open to bypass it.
+
+---
+
+## Install (one command, from source)
 
 Requires **macOS 14 (Sonoma) or newer**.
 

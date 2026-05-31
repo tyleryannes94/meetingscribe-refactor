@@ -15,9 +15,11 @@ struct MeetingScribeApp: App {
     @StateObject private var chatSession = ChatSession()
     @StateObject private var updater = UpdaterController()
     @StateObject private var vaultMigrator = VaultMigrationManager()
+    @StateObject private var router = WorkspaceRouter()
     @State private var calendarTimer: Timer?
     @State private var hotkey = GlobalHotkey()
     @State private var swapHotkey = GlobalHotkey()
+    @State private var meetingRecordHotkey = GlobalHotkey()
     @State private var settingsObserver: AnyCancellable?
 
     var body: some Scene {
@@ -42,7 +44,16 @@ struct MeetingScribeApp: App {
                 .environmentObject(manager.actionItemBackfill)
                 .environmentObject(manager.personExtraction)
                 .environmentObject(manager.actionItems)
+                .environmentObject(router)
                 .frame(minWidth: 720, minHeight: 560)
+                // Deep links: meetingscribe://<kind>/<id> from MCP, Shortcuts,
+                // Spotlight, or another app. The scheme is registered in
+                // Resources/Info.plist (CFBundleURLTypes). Routes through the
+                // one canonical router. (D1-2)
+                .onOpenURL { url in
+                    guard let parsed = WorkspaceLink.parse(url) else { return }
+                    router.route(kind: parsed.kind, id: parsed.id, manager: manager)
+                }
                 .task {
                     startServices()
                 }
@@ -284,6 +295,22 @@ struct MeetingScribeApp: App {
         }
         swapHotkey.register(keyCode: s.dictationSwapHotkeyKeyCode,
                             modifiers: s.dictationSwapHotkeyModifiers)
+        // Global meeting-record toggle (D4-1): one chord starts an ad-hoc
+        // recording when idle and stops it when recording — works system-wide,
+        // even when MeetingScribe isn't the focused app.
+        meetingRecordHotkey.onTrigger = { [weak manager] in
+            guard let manager else { return }
+            Task { @MainActor in
+                switch manager.state {
+                case .recording, .stopping:
+                    await manager.stopRecording()
+                default:
+                    await manager.startRecording(for: nil)
+                }
+            }
+        }
+        meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
+                                     modifiers: s.meetingRecordHotkeyModifiers)
     }
 
     // MARK: - Login Item registration
@@ -367,6 +394,8 @@ struct MeetingScribeApp: App {
                                 modifiers: s.dictationHotkeyModifiers)
                 swapHotkey.register(keyCode: s.dictationSwapHotkeyKeyCode,
                                     modifiers: s.dictationSwapHotkeyModifiers)
+                meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
+                                             modifiers: s.meetingRecordHotkeyModifiers)
                 Task { @MainActor in
                     calendar.refreshUpcoming(force: true)
                     await notifications.syncScheduled(for: calendar.upcoming)

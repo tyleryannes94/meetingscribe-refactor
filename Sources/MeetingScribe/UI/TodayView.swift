@@ -17,27 +17,15 @@ struct TodayView: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var tagStore: TagStore
 
-    /// Hosted (the MainWindow owns the selected top-level section) so the
-    /// "open all action items" button can flip to that tab.
-    @Binding var section: TopLevelSection
-    /// The meeting the user clicked into — drives a NavigationStack push to the
-    /// full meeting detail (with a system back arrow). Replaces inline expand/collapse.
-    @State private var selectedMeeting: Meeting?
+    /// Navigation is owned by `WorkspaceRouter` (D1-1): meeting cards route to
+    /// the canonical Meetings-tab detail, and the widgets flip sections through
+    /// it. Today no longer keeps its own pushed meeting detail.
+    @EnvironmentObject var router: WorkspaceRouter
 
     var body: some View {
-        NavigationStack {
-            feed
-                .background(NDS.bg)
-                // Click a card → push the full detail page with a back arrow.
-                // No more inline 520pt expansion that shoved the feed around.
-                .navigationDestination(isPresented: Binding(
-                    get: { selectedMeeting != nil },
-                    set: { if !$0 { selectedMeeting = nil } }
-                )) {
-                    if let m = selectedMeeting { meetingDetail(for: m) }
-                }
-        }
-        .onAppear {
+        feed
+            .background(NDS.bg)
+            .onAppear {
             calendar.refreshUpcoming()
             manager.refreshPastMeetings()
             manager.backfillActionItemsIfNeeded()
@@ -58,7 +46,7 @@ struct TodayView: View {
 
                 // Overdue + due-today work, surfaced above meetings (TDY-2).
                 NeedsAttentionWidget(store: manager.actionItems) {
-                    section = .actions
+                    router.section = .actions
                 }
 
                 if !todayUpcoming.isEmpty || !todayPast.isEmpty {
@@ -68,7 +56,7 @@ struct TodayView: View {
                 }
 
                 ActionItemsWidget(store: manager.actionItems) {
-                    section = .actions
+                    router.section = .actions
                 }
 
                 // People suggestions below meetings — they're context, not actions
@@ -142,12 +130,12 @@ struct TodayView: View {
                 QuickPill(title: "New task", systemImage: "checklist",
                           tint: NDS.selectColor("green")) {
                     manager.actionItems.createTask(title: "New task")
-                    section = .actions
+                    router.section = .actions
                 }
                 QuickPill(title: "New page", systemImage: "doc.badge.plus",
                           tint: NDS.brand) {
                     _ = manager.actionItems.createProject(name: "Untitled")
-                    section = .actions
+                    router.section = .actions
                 }
             }
         }
@@ -176,7 +164,7 @@ struct TodayView: View {
                     }
                     .buttonStyle(MSPrimaryButtonStyle())
                 }
-                Button { selectedMeeting = m } label: {
+                Button { router.openMeeting(m) } label: {
                     Label("Open", systemImage: "chevron.right")
                 }
                 .buttonStyle(MSSecondaryButtonStyle())
@@ -223,7 +211,7 @@ struct TodayView: View {
 
     private var calendarLink: some View {
         Button {
-            section = .meetings  // Calendar absorbed into Meetings tab
+            router.section = .meetings  // Calendar absorbed into Meetings tab
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "calendar")
@@ -259,28 +247,9 @@ struct TodayView: View {
     private func meetingCard(_ meeting: Meeting, variant: MeetingCard.Variant) -> some View {
         MeetingCard(meeting: meeting,
                     variant: variant,
-                    onOpen: { selectedMeeting = meeting })
+                    onOpen: { router.openMeeting(meeting) })
             .environmentObject(manager)
             .environmentObject(tagStore)
-    }
-
-    /// Full-page meeting detail pushed onto the Today navigation stack. Matches
-    /// the environment objects the Meetings tab injects so the detail behaves
-    /// identically from either entry point.
-    @ViewBuilder
-    private func meetingDetail(for meeting: Meeting) -> some View {
-        UnifiedMeetingDetail(mode: detailMode(for: meeting))
-            .environmentObject(manager)
-            .environmentObject(manager.recordingMonitor)
-            .environmentObject(tagStore)
-            .environmentObject(calendar)
-            .environmentObject(manager.actionItems)
-            .environmentObject(manager.pipelineController)
-    }
-
-    private func detailMode(for m: Meeting) -> UnifiedMeetingDetail.Mode {
-        if manager.activeMeeting?.id == m.id { return .live }
-        return m.startDate > Date() ? .upcoming(m) : .past(m)
     }
 
     private var emptyState: some View {
@@ -367,7 +336,7 @@ struct TodayView: View {
     /// "Stay in touch" nudges). Small delay lets the People tab mount and
     /// register its notification listener before we post.
     private func openPerson(_ p: Person) {
-        section = .people
+        router.section = .people
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             NotificationCenter.default.post(name: .meetingScribeOpenPerson,
                                             object: nil, userInfo: ["id": p.id])
@@ -418,7 +387,7 @@ struct ToolbarPillButton: View {
 
     private var background: AnyShapeStyle {
         switch prominence {
-        case .primary:   return AnyShapeStyle(Color.accentColor)
+        case .primary:   return AnyShapeStyle(NDS.brand)
         case .secondary: return AnyShapeStyle(Color(NSColor.controlBackgroundColor))
         }
     }
@@ -429,6 +398,6 @@ struct ToolbarPillButton: View {
         prominence == .primary ? .clear : Color(NSColor.separatorColor)
     }
     private var shadow: Color {
-        prominence == .primary ? Color.accentColor.opacity(0.2) : .clear
+        prominence == .primary ? NDS.brand.opacity(0.2) : .clear
     }
 }

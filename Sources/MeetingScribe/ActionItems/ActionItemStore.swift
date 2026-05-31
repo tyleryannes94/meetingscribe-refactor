@@ -508,6 +508,16 @@ final class ActionItemStore: ObservableObject {
             $0.notionURL = url
         }
     }
+    /// Records that this item was pushed to Linear. Mirrors `setNotion` but
+    /// uses the generic external fields, so the imported-vs-pushed dedup model
+    /// in `mergeExternal` keys on `(source, externalID)` as usual.
+    func setLinear(_ id: String, issueID: String?, url: String?) {
+        update(id) {
+            $0.source = "linear"
+            $0.externalID = issueID
+            $0.externalURL = url
+        }
+    }
     func setProject(_ id: String, projectID: String?) {
         update(id) { $0.projectID = projectID }
     }

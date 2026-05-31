@@ -19,6 +19,7 @@ final class FloatingOverlayController: ObservableObject {
     enum State: Equatable {
         case hidden
         case recording(startedAt: Date)
+        case meetingRecording(startedAt: Date)
         case transcribing
         case done(note: QuickNote, transcript: String)
         case error(String)
@@ -58,6 +59,24 @@ final class FloatingOverlayController: ObservableObject {
         manager.quickNotesController.$notes
             .sink { [weak self] notes in self?.handleNotesChange(notes) }
             .store(in: &cancellables)
+
+        // Meeting recording — promote the same floating HUD to full meetings so
+        // stopping isn't buried behind a Zoom window. (D4-1)
+        manager.$state
+            .removeDuplicates()
+            .sink { [weak self] s in self?.handleMeetingState(s) }
+            .store(in: &cancellables)
+    }
+
+    private func handleMeetingState(_ s: RecordingState) {
+        switch s {
+        case .recording(_, let startedAt):
+            transition(to: .meetingRecording(startedAt: startedAt))
+        case .idle, .error, .starting, .stopping:
+            // Only clear the overlay if IT was showing the meeting HUD — a
+            // concurrent voice note keeps its own state.
+            if case .meetingRecording = state { transition(to: .hidden) }
+        }
     }
 
     /// Map the sub-controller's RecordState to the legacy QuickRecordState
@@ -115,7 +134,7 @@ final class FloatingOverlayController: ObservableObject {
         switch next {
         case .hidden:
             window?.orderOut(nil)
-        case .recording, .transcribing, .done, .error:
+        case .recording, .meetingRecording, .transcribing, .done, .error:
             ensureWindow()
             window?.orderFrontRegardless()
         }
@@ -140,6 +159,11 @@ final class FloatingOverlayController: ObservableObject {
 
     func stopRecording() {
         guard let manager else { return }
+        // Meeting HUD: stop the meeting recording.
+        if case .meetingRecording = state {
+            Task { await manager.stopRecording() }
+            return
+        }
         if case .recording = manager.quickRecordState {
             Task { await manager.stopQuickNote() }
         } else if case .recording = manager.dictation.state {
@@ -220,6 +244,8 @@ struct FloatingOverlayView: View {
                 EmptyView()
             case .recording(let startedAt):
                 RecordingPill(startedAt: startedAt, controller: controller)
+            case .meetingRecording(let startedAt):
+                MeetingRecordingPill(startedAt: startedAt, controller: controller)
             case .transcribing:
                 TranscribingPill(controller: controller)
             case .done(_, let transcript):
@@ -300,6 +326,54 @@ private struct RecordingPill: View {
 }
 
 @available(macOS 14.0, *)
+private struct MeetingRecordingPill: View {
+    let startedAt: Date
+    @ObservedObject var controller: FloatingOverlayController
+    @State private var now = Date()
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 14) {
+            PulsingDot()
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Recording meeting")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(elapsedString())
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            AudioLevelMeter(micLevel: controller.manager?.recordingMonitor.recordingHealth.micLevel ?? 0,
+                            systemLevel: 0,
+                            bars: 14, height: 24)
+                .frame(width: 130)
+            Spacer()
+            OverlayButton(label: "Stop",
+                          systemImage: "stop.fill",
+                          tint: .red,
+                          prominent: true,
+                          action: controller.stopRecording)
+            Button(action: controller.cancelOverlay) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 26, height: 26)
+                    .background(Color.secondary.opacity(0.08), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Hide overlay")
+            .help("Hide overlay (recording continues)")
+        }
+        .onReceive(timer) { now = $0 }
+    }
+
+    private func elapsedString() -> String {
+        let s = Int(now.timeIntervalSince(startedAt))
+        return String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+@available(macOS 14.0, *)
 private struct TranscribingPill: View {
     @ObservedObject var controller: FloatingOverlayController
     var body: some View {
@@ -354,7 +428,7 @@ private struct DonePill: View {
             }
             OverlayButton(label: "Open",
                           systemImage: "arrow.up.right",
-                          tint: .accentColor,
+                          tint: NDS.brand,
                           prominent: false,
                           action: controller.goToRecording)
             Button(action: controller.cancelOverlay) {
@@ -393,6 +467,7 @@ private struct ErrorPill: View {
 private struct PulsingDot: View {
     @State private var scale: CGFloat = 1.0
     @State private var glow: Double = 0.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         ZStack {
             Circle().fill(Color.red.opacity(0.18))
@@ -406,6 +481,8 @@ private struct PulsingDot: View {
                 .shadow(color: .red.opacity(0.5), radius: 4)
         }
         .onAppear {
+            // Reduce Motion: keep the dot static (no perpetual pulse/glow).
+            guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
                 scale = 1.18
             }

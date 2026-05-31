@@ -26,11 +26,11 @@ struct HotkeyRecorder: View {
                 .font(.body.monospaced())
                 .frame(minWidth: 120)
                 .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(recording ? Color.accentColor.opacity(0.18)
+                .background(recording ? NDS.brand.opacity(0.18)
                                       : Color.secondary.opacity(0.15),
                             in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(recording ? Color.accentColor : .clear, lineWidth: 1))
+                    .strokeBorder(recording ? NDS.brand : .clear, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .help("Click, then press any key combination to set this shortcut.")

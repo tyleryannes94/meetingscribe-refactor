@@ -15,8 +15,16 @@ struct MeetingsView: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var recordingMonitor: RecordingMonitor
+    @EnvironmentObject var router: WorkspaceRouter
 
-    @State private var selectedMeeting: Meeting?
+    /// The selected meeting is owned by `WorkspaceRouter` (D1-1) so opening a
+    /// meeting from Today, search, a deep link, or a backlink all land in this
+    /// one detail pane. Resolved from the unfiltered sources so an active search
+    /// filter can't blank the open detail.
+    private var selectedMeeting: Meeting? {
+        guard let id = router.selectedMeetingID else { return nil }
+        return (calendar.upcoming + manager.pastMeetings).first { $0.id == id }
+    }
     @State private var search: String = ""
     // Default to upcoming-first and remember the user's last choice across
     // visits (was a transient `.all` @State that reset every time the tab
@@ -166,7 +174,7 @@ struct MeetingsView: View {
         let isSelected = selectedMeeting?.id == m.id
         let isLive = manager.activeMeeting?.id == m.id
         return Button {
-            selectedMeeting = m
+            router.selectedMeetingID = m.id
         } label: {
             MeetingListRow(meeting: m, isSelected: isSelected, isLive: isLive)
                 .environmentObject(tagStore)
@@ -371,7 +379,7 @@ struct MeetingsView: View {
                     .padding(.horizontal, 14).padding(.vertical, 6)
             } else {
                 ForEach(items) { m in
-                    Button { selectedMeeting = m } label: {
+                    Button { router.selectedMeetingID = m.id } label: {
                         MeetingListRow(meeting: m,
                                        isSelected: selectedMeeting?.id == m.id,
                                        isLive: manager.activeMeeting?.id == m.id)
@@ -418,6 +426,7 @@ private struct MeetingListRow: View {
 
     @EnvironmentObject var tagStore: TagStore
     @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -445,7 +454,7 @@ private struct MeetingListRow: View {
                             Image(systemName: "record.circle.fill")
                                 .font(.system(size: 10))
                                 .foregroundStyle(.red)
-                                .symbolEffect(.pulse, options: .repeating)
+                                .pulsingSymbol(active: !reduceMotion)
                         }
                         Text(meeting.displayTitle)
                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))

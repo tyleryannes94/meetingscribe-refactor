@@ -117,8 +117,8 @@ struct TagChip: View {
     }
 
     private var backgroundColor: Color {
-        guard let hex = tag.colorHex else { return .accentColor }
-        return Color(hex: hex) ?? .accentColor
+        guard let hex = tag.colorHex else { return NDS.brand }
+        return Color(hex: hex) ?? NDS.brand
     }
 }
 

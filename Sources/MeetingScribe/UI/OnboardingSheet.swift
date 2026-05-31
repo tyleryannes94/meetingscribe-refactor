@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AVFoundation
+import CoreGraphics
 @preconcurrency import EventKit
 @preconcurrency import UserNotifications
 
@@ -21,6 +22,9 @@ struct OnboardingSheet: View {
     @State private var step: Int = 0
     /// Per-step state — driven by the system check + the user's actions.
     @State private var permissions: [PermissionState] = PermissionKind.allCases.map { .init(kind: $0) }
+    /// Polls CGPreflightScreenCaptureAccess after the user is sent to Settings,
+    /// so the Screen Recording grant is detected without a manual re-check. (D3-6)
+    @State private var screenPollTask: Task<Void, Never>?
 
     /// Current vault path — mirrors AppSettings.shared.storageDir but held in
     /// local state so the picker can show a live preview before confirm.
@@ -166,14 +170,26 @@ struct OnboardingSheet: View {
             HStack(spacing: 12) {
                 Button("Skip", role: .cancel) { advance() }
                 Spacer()
-                if currentPermission.status == .denied {
-                    Button("Open System Settings") { openSystemSettings(for: currentPermission.kind) }
+                if currentPermission.kind == .screenRecording && currentPermission.status == .granted {
+                    // Grant detected — it only takes effect after a relaunch, so
+                    // offer a one-tap Reopen instead of the old "quit and
+                    // relaunch" cliff. (D3-6)
+                    Label("Granted", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.callout.weight(.medium))
+                    Button("Reopen MeetingScribe") { relaunchApp() }
+                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
+                } else {
+                    if currentPermission.status == .denied {
+                        Button("Open System Settings") { openSystemSettings(for: currentPermission.kind) }
+                    }
+                    Button(currentPermission.status.actionLabel) {
+                        Task { await requestPermission(currentPermission.kind) }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                 }
-                Button(currentPermission.status.actionLabel) {
-                    Task { await requestPermission(currentPermission.kind) }
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
             }
             .padding(.horizontal, 24).padding(.vertical, 16)
             .background(.bar)
@@ -188,7 +204,7 @@ struct OnboardingSheet: View {
         HStack(spacing: 6) {
             ForEach(0..<totalSteps, id: \.self) { i in
                 Circle()
-                    .fill(i == step ? Color.accentColor : Color.secondary.opacity(0.3))
+                    .fill(i == step ? NDS.brand : Color.secondary.opacity(0.3))
                     .frame(width: 6, height: 6)
             }
         }
@@ -198,6 +214,8 @@ struct OnboardingSheet: View {
     // MARK: - Navigation
 
     private func advance() {
+        screenPollTask?.cancel()
+        screenPollTask = nil
         if step + 1 < totalSteps {
             step += 1
         } else {
@@ -213,24 +231,63 @@ struct OnboardingSheet: View {
         case .microphone:
             let granted = await AVCaptureDevice.requestAccess(for: .audio)
             await mark(kind: .microphone, granted: granted)
+            advance()
         case .screenRecording:
-            // macOS doesn't expose a one-call API for ScreenCaptureKit grant.
-            // Best we can do: open the pane and let the user toggle it.
-            openSystemSettings(for: .screenRecording)
-            await mark(kind: .screenRecording, granted: false, manual: true)
+            // Prompt + register the app in the Screen Recording list. If it's
+            // already granted this returns true; otherwise we open the pane and
+            // poll for the grant so we can offer a one-tap Reopen. We DON'T
+            // auto-advance — the user stays here until they Reopen or Skip. (D3-6)
+            if CGRequestScreenCaptureAccess() {
+                await mark(kind: .screenRecording, granted: true)
+            } else {
+                openSystemSettings(for: .screenRecording)
+                await mark(kind: .screenRecording, granted: false, manual: true)
+                startScreenRecordingPolling()
+            }
         case .calendar:
             let granted = await (try? EKEventStore().requestFullAccessToEvents()) ?? false
             await mark(kind: .calendar, granted: granted)
+            advance()
         case .notifications:
             let granted = (try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound])) ?? false
             await mark(kind: .notifications, granted: granted)
+            advance()
         case .accessibility:
             // No programmatic API; AXIsProcessTrusted reads, doesn't request.
             openSystemSettings(for: .accessibility)
             await mark(kind: .accessibility, granted: AXIsProcessTrusted(), manual: true)
+            advance()
         }
-        advance()
+    }
+
+    /// Polls the real Screen Recording grant for ~90 s after the user is sent to
+    /// Settings; flips the step to .granted the moment macOS reports access, so
+    /// the "Reopen MeetingScribe" button appears without a manual re-check. (D3-6)
+    private func startScreenRecordingPolling() {
+        screenPollTask?.cancel()
+        screenPollTask = Task {
+            for _ in 0..<90 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+                if CGPreflightScreenCaptureAccess() {
+                    await mark(kind: .screenRecording, granted: true)
+                    return
+                }
+            }
+        }
+    }
+
+    /// Relaunch the app so a freshly-granted Screen Recording permission takes
+    /// effect — launches a new instance, then terminates this one. (D3-6)
+    private func relaunchApp() {
+        screenPollTask?.cancel()
+        let url = Bundle.main.bundleURL
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in
+            Task { @MainActor in NSApp.terminate(nil) }
+        }
     }
 
     private func mark(kind: PermissionKind, granted: Bool, manual: Bool = false) async {
@@ -269,7 +326,7 @@ struct OnboardingSheet: View {
         case .accessibility:
             return AXIsProcessTrusted() ? .granted : .needed
         case .screenRecording:
-            return .needed   // no programmatic check; user must verify
+            return CGPreflightScreenCaptureAccess() ? .granted : .needed
         }
     }
 
@@ -309,7 +366,7 @@ enum PermissionKind: String, CaseIterable {
     var subtitle: String {
         switch self {
         case .microphone: return "Captures your side of the conversation."
-        case .screenRecording: return "Captures the OTHER side of the call via ScreenCaptureKit. After granting, you'll need to quit and relaunch the app once."
+        case .screenRecording: return "Captures the OTHER side of the call via ScreenCaptureKit. Grant it in System Settings — this screen detects it and offers a one-tap Reopen."
         case .calendar: return "Labels recordings with the meeting title and attendees from your calendar."
         case .notifications: return "Notifies you 10 seconds before a calendar meeting starts and offers to join + record."
         case .accessibility: return "Only needed for the F5 global dictation hotkey — lets the app paste the transcript at your cursor."
@@ -319,7 +376,7 @@ enum PermissionKind: String, CaseIterable {
     var bullets: [String] {
         switch self {
         case .microphone: return ["Your voice during recordings", "Voice notes from the Notes tab", "Whispr-Flow-style F5 dictation"]
-        case .screenRecording: return ["Captures meeting audio without a virtual audio device", "Used only for audio — no video, no screenshots", "After granting, quit + relaunch the app"]
+        case .screenRecording: return ["Captures meeting audio without a virtual audio device", "Used only for audio — no video, no screenshots", "After granting, tap Reopen here — no manual relaunch"]
         case .calendar: return ["Reads any calendar already in macOS Calendar (Google, iCloud, Outlook)", "Read-only — never writes to your calendar", "Used for titles, attendees, and auto-record"]
         case .notifications: return ["\"Meeting starting in 10s — Join & Record\" alerts", "Impromptu Zoom / Meet detection", "Pipeline-finished confirmations"]
         case .accessibility: return ["Lets dictation paste at the cursor in any app", "Skip if you don't use F5 dictation — everything else works"]

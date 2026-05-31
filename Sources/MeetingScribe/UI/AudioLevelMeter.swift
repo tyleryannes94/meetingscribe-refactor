@@ -97,7 +97,7 @@ struct AudioLevelMeter: View {
         let pos = Float(i)
         let micShare = 1 - pos / total
         if micShare > 0.7      { return .blue.opacity(0.85) }
-        else if micShare > 0.3 { return .accentColor }
+        else if micShare > 0.3 { return NDS.brand }
         else                   { return .green.opacity(0.85) }
     }
 }

@@ -37,7 +37,7 @@ struct ActionItemsWidget: View {
                             .font(.caption)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NDS.brand)
                 }
             }
         }
@@ -56,7 +56,7 @@ struct ActionItemsWidget: View {
         HStack {
             HStack(spacing: 6) {
                 Image(systemName: "checklist")
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NDS.brand)
                 Text("Action items").font(.headline)
                 Text("today & yesterday").font(.caption).foregroundStyle(.tertiary)
             }

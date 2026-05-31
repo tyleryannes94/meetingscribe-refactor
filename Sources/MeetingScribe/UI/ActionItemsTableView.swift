@@ -107,7 +107,7 @@ extension ActionItemsView {
         } label: {
             if let name = store.project(for: item)?.name {
                 Text(name).font(.caption).lineLimit(1)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NDS.brand)
             } else {
                 Text("—").font(.caption).foregroundStyle(.tertiary)
             }

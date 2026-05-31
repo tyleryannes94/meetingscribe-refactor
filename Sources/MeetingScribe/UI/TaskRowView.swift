@@ -32,6 +32,8 @@ struct ActionItemRow: View {
     let onDelete: () -> Void
     let onPush: () -> Void
     let onOpenNotion: (String) -> Void
+    let onPushLinear: () -> Void
+    let onOpenLinear: (String) -> Void
 
     @State private var hovering = false
     @State private var titleDraft: String = ""
@@ -111,7 +113,7 @@ struct ActionItemRow: View {
                         Label(projectName, systemImage: "folder.fill")
                             .labelStyle(.titleAndIcon)
                             .font(.caption2)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(NDS.brand)
                             .lineLimit(1)
                     }
                     if !item.isManual {
@@ -142,7 +144,7 @@ struct ActionItemRow: View {
             Spacer(minLength: 0)
             priorityPicker
             dueChip
-            notionButton
+            syncButtons
             Menu {
                 Button("Edit details") { onToggleExpand() }
                 Menu("Move to project") {
@@ -300,11 +302,48 @@ struct ActionItemRow: View {
         return Color.secondary.opacity(0.12)
     }
 
+    private var linearURL: String? {
+        item.source == "linear" ? item.externalURL : nil
+    }
+
+    /// Push-to-Linear and Push-to-Notion buttons, side by side. While a push
+    /// is in flight (either target) we collapse to a single spinner.
     @ViewBuilder
-    private var notionButton: some View {
+    private var syncButtons: some View {
         if isPushing {
             ProgressView().controlSize(.small).frame(width: 24)
-        } else if let url = item.notionURL {
+        } else {
+            linearButton
+            notionButton
+        }
+    }
+
+    @ViewBuilder
+    private var linearButton: some View {
+        if let url = linearURL {
+            Button {
+                onOpenLinear(url)
+            } label: {
+                Image(systemName: "l.square.fill")
+                    .foregroundStyle(NDS.brand)
+            }
+            .buttonStyle(.plain)
+            .help("Open in Linear")
+        } else {
+            Button {
+                onPushLinear()
+            } label: {
+                Image(systemName: "l.square")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Push to Linear")
+        }
+    }
+
+    @ViewBuilder
+    private var notionButton: some View {
+        if let url = item.notionURL {
             Button {
                 onOpenNotion(url)
             } label: {
@@ -371,6 +410,19 @@ struct ActionItemRow: View {
                     }
             }
             HStack(spacing: 8) {
+                if let url = linearURL {
+                    Text("Linked to Linear")
+                        .font(.caption2).foregroundStyle(NDS.brand)
+                    Button("Open") { onOpenLinear(url) }
+                        .controlSize(.small)
+                } else {
+                    Button {
+                        onPushLinear()
+                    } label: {
+                        Label("Push to Linear", systemImage: "l.square")
+                    }
+                    .controlSize(.small)
+                }
                 if let url = item.notionURL {
                     Text("Linked to Notion")
                         .font(.caption2).foregroundStyle(.purple)

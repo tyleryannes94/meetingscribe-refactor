@@ -14,7 +14,7 @@ SCRIBECORE_NAME     := ScribeCore
 SCRIBECORE_BUNDLE_ID := com.tyleryannes.ScribeCore
 SCRIBECORE_APP_DIR  := build/$(SCRIBECORE_NAME).app
 
-.PHONY: all build app scribecore sign sign-scribecore install run clean cert check-sparkle-key check-version
+.PHONY: all build app scribecore sign sign-scribecore install run dmg clean cert check-sparkle-key check-version
 
 all: app
 
@@ -177,6 +177,26 @@ dev: install
 
 run: app
 	/usr/bin/open $(APP_DIR)
+
+# No-Terminal installer (U5-1): a double-click .dmg with the app + a
+# drag-to-Applications symlink. Signed with the local identity (self-signed,
+# NOT notarized) — installs cleanly on this Mac; other Macs will warn at first
+# open until a real Developer ID + notarization is wired up.
+DMG_STAGE := build/dmg-stage
+DMG_PATH  := build/$(APP_NAME).dmg
+
+dmg: app
+	@echo "→ Building $(DMG_PATH)"
+	@rm -rf "$(DMG_STAGE)" "$(DMG_PATH)"
+	@mkdir -p "$(DMG_STAGE)"
+	@cp -R "$(APP_DIR)" "$(DMG_STAGE)/$(APP_NAME).app"
+	@ln -s /Applications "$(DMG_STAGE)/Applications"
+	@hdiutil create -volname "$(APP_NAME)" -srcfolder "$(DMG_STAGE)" \
+		-ov -format UDZO "$(DMG_PATH)" >/dev/null
+	@codesign --force --sign "$(SIGN_IDENTITY)" "$(DMG_PATH)" 2>/dev/null || \
+		echo "  (dmg left unsigned — local identity unavailable)"
+	@rm -rf "$(DMG_STAGE)"
+	@echo "✓ Built $(DMG_PATH) — double-click it, then drag $(APP_NAME) to Applications"
 
 clean:
 	swift package clean

@@ -53,7 +53,7 @@ struct ChatSidebar: View {
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "sparkles")
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(NDS.brand)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Chat")
                     .font(.headline)

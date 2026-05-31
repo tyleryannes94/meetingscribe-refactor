@@ -378,7 +378,7 @@ extension UnifiedMeetingDetail {
                 HStack(spacing: 6) {
                     Image(systemName: "record.circle.fill")
                         .foregroundStyle(.red)
-                        .symbolEffect(.pulse, options: .repeating)
+                        .pulsingSymbol(active: !reduceMotion)
                     Text("Recording")
                         .font(.callout.bold())
                 }
@@ -528,6 +528,7 @@ extension UnifiedMeetingDetail {
 
 private struct AttendeeChip: View {
     let attendee: String
+    @EnvironmentObject var router: WorkspaceRouter
 
     private var initials: String {
         // Extract display name (before <email>)
@@ -569,31 +570,54 @@ private struct AttendeeChip: View {
     }
 
     var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(NDS.selectColor(displayName))
-                .frame(width: 20, height: 20)
-                .overlay(
-                    Text(initials.uppercased())
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.white)
-                )
-            Text(displayName)
-                .font(.system(size: 12))
-                .foregroundStyle(NDS.textSecondary)
-                .lineLimit(1)
+        // Left-click opens the linked Person (creating one if needed) instead
+        // of only offering a right-click menu. A filled dot marks attendees who
+        // are already in People. (D1-5)
+        Button(action: openOrCreate) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(NDS.selectColor(displayName))
+                    .frame(width: 20, height: 20)
+                    .overlay(
+                        Text(initials.uppercased())
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+                Text(displayName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(NDS.textSecondary)
+                    .lineLimit(1)
+                if existingPerson != nil {
+                    Circle().fill(Color.green.opacity(0.7)).frame(width: 5, height: 5)
+                }
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(NDS.fieldBg, in: Capsule())
+            .contentShape(Capsule())
         }
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(NDS.fieldBg, in: Capsule())
-        .help(attendee)
+        .buttonStyle(.plain)
+        .help(existingPerson == nil ? "Add \(fullName) to People" : "Open \(fullName)")
         .contextMenu {
             if existingPerson == nil {
-                Button {
-                    _ = PeopleStore.shared.createPerson(displayName: fullName, email: email)
-                } label: { Label("Add to People", systemImage: "person.crop.circle.badge.plus") }
+                Button(action: openOrCreate) {
+                    Label("Add to People", systemImage: "person.crop.circle.badge.plus")
+                }
             } else {
-                Label("Already in People", systemImage: "checkmark")
+                Button(action: openOrCreate) {
+                    Label("Open in People", systemImage: "person.crop.circle")
+                }
             }
+        }
+    }
+
+    /// Open the matching Person, or create one from the attendee string and
+    /// open it. Routes through the canonical router.
+    private func openOrCreate() {
+        if let p = existingPerson {
+            router.openPerson(p.id)
+        } else {
+            let p = PeopleStore.shared.createPerson(displayName: fullName, email: email)
+            router.openPerson(p.id)
         }
     }
 }

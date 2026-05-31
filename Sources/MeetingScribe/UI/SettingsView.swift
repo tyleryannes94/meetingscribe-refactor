@@ -18,6 +18,8 @@ struct SettingsView: View {
     @State private var detectZoom: Bool = AppSettings.shared.detectZoomImpromptu
     @State private var hotkeyKeyCode: UInt32 = AppSettings.shared.dictationHotkeyKeyCode
     @State private var hotkeyMods: UInt32 = AppSettings.shared.dictationHotkeyModifiers
+    @State private var meetingRecKeyCode: UInt32 = AppSettings.shared.meetingRecordHotkeyKeyCode
+    @State private var meetingRecMods: UInt32 = AppSettings.shared.meetingRecordHotkeyModifiers
     @State private var swapKeyCode: UInt32 = AppSettings.shared.dictationSwapHotkeyKeyCode
     @State private var swapMods: UInt32 = AppSettings.shared.dictationSwapHotkeyModifiers
     @State private var dictationAutoPaste: Bool = AppSettings.shared.dictationAutoPaste
@@ -40,6 +42,10 @@ struct SettingsView: View {
     @State private var showingNotionKeyEditor: Bool = false
     @State private var linearKeyDraft: String = AppSettings.shared.linearAPIKey ?? ""
     @State private var linearSaved: Bool = false
+    @State private var linearTeams: [TaskSyncService.LinearTeamRef] = []
+    @State private var linearTeamID: String = AppSettings.shared.linearDefaultTeamID ?? ""
+    @State private var linearTeamsLoading: Bool = false
+    @State private var linearTeamsError: String?
     @ObservedObject private var drive = GoogleDriveService.shared
     @State private var googleClientIDDraft: String = AppSettings.shared.googleClientID ?? ""
     @State private var googleSecretDraft: String = AppSettings.shared.googleClientSecret ?? ""
@@ -80,6 +86,24 @@ struct SettingsView: View {
                 }
                 Section("Impromptu detection") {
                     Toggle("Prompt to record when a Zoom call / Meet tab is detected", isOn: $detectZoom)
+                }
+                Section("Meeting recording") {
+                    HStack {
+                        Text("Global start / stop recording")
+                        Spacer()
+                        HotkeyRecorder(keyCode: $meetingRecKeyCode, modifiers: $meetingRecMods)
+                        Menu("Presets") {
+                            ForEach(quickPresets, id: \.label) { preset in
+                                Button(preset.label) {
+                                    meetingRecKeyCode = preset.key
+                                    meetingRecMods = preset.mods
+                                }
+                            }
+                        }
+                        .frame(width: 90)
+                    }
+                    Text("A system-wide shortcut that starts an ad-hoc recording when idle and stops it when recording — works even when MeetingScribe isn't focused. Default: ⌥⌘R.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
                 Section("Dictation (Whispr Flow)") {
                     HStack {
@@ -258,8 +282,42 @@ struct SettingsView: View {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { linearSaved = false }
                         }
                     }
-                    Text("Linear → Settings → Security & access → Personal API keys → New key. Read access is enough.")
+                    Text("Linear → Settings → Security & access → Personal API keys → New key. Read access is enough; write access is needed for Push to Linear.")
                         .font(.caption2).foregroundStyle(.tertiary)
+
+                    // Default team for "Push to Linear" — issues are created
+                    // under this team. Loaded on demand from the saved key.
+                    HStack {
+                        if linearTeams.isEmpty {
+                            Button(linearTeamsLoading ? "Loading…" : "Choose default team") {
+                                Task { await loadLinearTeams() }
+                            }
+                            .disabled(linearTeamsLoading
+                                      || (AppSettings.shared.linearAPIKey ?? "").isEmpty)
+                            if let name = AppSettings.shared.linearDefaultTeamName, !name.isEmpty {
+                                Text("Current: \(name)").font(.caption2).foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Picker("Default team", selection: $linearTeamID) {
+                                Text("None").tag("")
+                                ForEach(linearTeams) { t in
+                                    Text("\(t.name) (\(t.key))").tag(t.id)
+                                }
+                            }
+                            .onChange(of: linearTeamID) { _, new in
+                                let team = linearTeams.first { $0.id == new }
+                                AppSettings.shared.linearDefaultTeamID = new.isEmpty ? nil : new
+                                AppSettings.shared.linearDefaultTeamName = team?.name
+                            }
+                        }
+                    }
+                    if let err = linearTeamsError {
+                        Text(err).font(.caption2).foregroundStyle(.red)
+                    } else {
+                        Text("Push to Linear creates issues under this team.")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+
                     if let last = AppSettings.shared.lastTaskSync {
                         Text("Last sync: \(last.formatted(date: .abbreviated, time: .shortened)) — sync from the Action Items tab.")
                             .font(.caption2).foregroundStyle(.tertiary)
@@ -464,6 +522,27 @@ struct SettingsView: View {
         }
     }
 
+    /// Fetches the Linear teams for the saved API key so the user can pick a
+    /// default. Pre-selects the previously-chosen team if still present.
+    private func loadLinearTeams() async {
+        guard let key = AppSettings.shared.linearAPIKey, !key.isEmpty else {
+            linearTeamsError = "Save your Linear API key first."
+            return
+        }
+        linearTeamsLoading = true
+        linearTeamsError = nil
+        defer { linearTeamsLoading = false }
+        do {
+            let teams = try await TaskSyncService.fetchLinearTeams(apiKey: key)
+            linearTeams = teams
+            if teams.first(where: { $0.id == linearTeamID }) == nil {
+                linearTeamID = AppSettings.shared.linearDefaultTeamID ?? ""
+            }
+        } catch {
+            linearTeamsError = "Couldn't load teams: \(error.localizedDescription)"
+        }
+    }
+
     private func installNotion() {
         do {
             let trimmed = notionAPIKeyDraft.trimmingCharacters(in: .whitespaces)
@@ -505,6 +584,8 @@ struct SettingsView: View {
         s.detectZoomImpromptu = detectZoom
         s.dictationHotkeyKeyCode = hotkeyKeyCode
         s.dictationHotkeyModifiers = hotkeyMods
+        s.meetingRecordHotkeyKeyCode = meetingRecKeyCode
+        s.meetingRecordHotkeyModifiers = meetingRecMods
         s.dictationSwapHotkeyKeyCode = swapKeyCode
         s.dictationSwapHotkeyModifiers = swapMods
         s.dictationAutoPaste = dictationAutoPaste
@@ -630,7 +711,7 @@ struct CalendarPickerSection: View {
                         Toggle(isOn: bindingFor(cal.id)) {
                             HStack(spacing: 8) {
                                 Circle()
-                                    .fill(Color(hex: cal.color) ?? .accentColor)
+                                    .fill(Color(hex: cal.color) ?? NDS.brand)
                                     .frame(width: 10, height: 10)
                                 Text(cal.title).font(.callout)
                                 if !cal.source.isEmpty {

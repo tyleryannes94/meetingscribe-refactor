@@ -474,4 +474,41 @@ extension ActionItemsView {
             pushingIDs.remove(item.id)
         }
     }
+
+    // MARK: - Linear push
+
+    /// Creates a Linear issue for this action item under the user's default
+    /// team (Settings → Task sync). Stores the resulting issue ID/URL so the
+    /// button flips to "Open in Linear". The backend (`createLinearIssue`)
+    /// already existed and was only reachable through chat before this.
+    func pushToLinear(_ item: ActionItem) {
+        pushingIDs.insert(item.id)
+        lastError = nil
+        Task {
+            do {
+                let settings = AppSettings.shared
+                guard let key = settings.linearAPIKey, !key.isEmpty else {
+                    throw PushError("Linear API key isn't set. Open Settings → Task sync → add your Linear key.")
+                }
+                guard let teamID = settings.linearDefaultTeamID, !teamID.isEmpty else {
+                    throw PushError("No default Linear team chosen. Open Settings → Task sync → Choose default team.")
+                }
+                let projectID = store.project(for: item)?.linearProjectID
+                let result = try await TaskSyncService.createLinearIssue(
+                    apiKey: key, teamID: teamID, title: item.title,
+                    description: item.notes, projectID: projectID)
+                store.setLinear(item.id, issueID: result.id, url: result.url)
+            } catch {
+                lastError = error.localizedDescription
+            }
+            pushingIDs.remove(item.id)
+        }
+    }
+}
+
+/// Lightweight error for user-facing push failures with a ready message.
+struct PushError: LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
 }
