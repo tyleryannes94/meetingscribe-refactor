@@ -421,6 +421,21 @@ final class SecondBrainDB {
         Set(queryIDs("SELECT entity_id FROM vault_embeddings WHERE entity_kind='\(escape(kind))';"))
     }
 
+    /// Meetings most semantically similar to a given meeting, by embedding
+    /// cosine — auto-discovered backlinks so the graph self-assembles from
+    /// capture without manually-pasted links. (C2-3)
+    func relatedMeetings(toID id: String, limit: Int = 5, minScore: Float = 0.45) -> [(id: String, score: Float)] {
+        let all = allEmbeddings()
+        guard let target = all.first(where: { $0.entityID == id && $0.entityKind == "meeting" }) else { return [] }
+        return all
+            .filter { $0.entityKind == "meeting" && $0.entityID != id }
+            .map { (id: $0.entityID, score: EmbeddingService.cosine(target.vector, $0.vector)) }
+            .filter { $0.score >= minScore }
+            .sorted { $0.score > $1.score }
+            .prefix(limit)
+            .map { ($0.id, $0.score) }
+    }
+
     /// Title + date for one indexed entity — used to build a result row for a
     /// semantic-only hit that wasn't in the lexical result set.
     func vaultContentMeta(entityID: String, entityKind: String) -> (title: String?, dateEpoch: Int64?)? {

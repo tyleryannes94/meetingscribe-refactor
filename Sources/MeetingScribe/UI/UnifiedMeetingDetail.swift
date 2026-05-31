@@ -47,6 +47,8 @@ struct UnifiedMeetingDetail: View {
     /// freshly-painted state.
     @State var bodyLoadTask: Task<Void, Never>?
     @State var backlinks: [WorkspaceEntity] = []
+    /// Auto-discovered related meetings (semantic similarity). (C2-3)
+    @State var relatedMeetings: [Meeting] = []
     /// Failsafe upload flows (manual audio / transcript into this meeting).
     @State var showAudioImporter = false
     @State var showTranscriptImporter = false
@@ -214,6 +216,11 @@ struct UnifiedMeetingDetail: View {
                 let found = await mgr.backlinks(toMeetingID: viewedID)
                 guard !Task.isCancelled, meeting?.id == viewedID else { return }
                 backlinks = found
+                // Auto-discovered related meetings via embedding similarity (C2-3).
+                let related = PeopleStore.shared.relatedMeetingIDs(toID: viewedID)
+                    .compactMap { mgr.meeting(forEntityID: $0) }
+                guard !Task.isCancelled, meeting?.id == viewedID else { return }
+                relatedMeetings = related
             }
         }
     }

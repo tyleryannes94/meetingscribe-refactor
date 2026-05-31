@@ -27,6 +27,7 @@ var currentNotesEditor: some View {
                                mentionProvider: { manager.workspaceEntities() })
                 .padding(.horizontal, 8).padding(.bottom, 8)
             backlinksPanel
+            relatedMeetingsPanel
         }
     }
 
@@ -147,6 +148,38 @@ var backlinksPanel: some View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(NDS.fieldBg,
                         in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 8).padding(.bottom, 8)
+        }
+    }
+
+    /// Auto-discovered related meetings via embedding similarity (C2-3) — the
+    /// graph self-assembles from capture, no manually-pasted links needed.
+    @ViewBuilder
+    var relatedMeetingsPanel: some View {
+        if !relatedMeetings.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Related meetings", systemImage: "sparkles")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(relatedMeetings) { m in
+                    Button {
+                        NotificationCenter.default.post(
+                            name: .meetingScribeOpenEntity, object: nil,
+                            userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: m.id).absoluteString])
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "calendar").font(.caption2)
+                            Text(m.displayTitle).font(.caption).lineLimit(1)
+                            Text(m.startDate, style: .date).font(.caption2)
+                                .foregroundStyle(.tertiary).lineLimit(1)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 8).padding(.bottom, 8)
         }
     }
