@@ -78,6 +78,10 @@ let package = Package(
             name: "MeetingScribeTests",
             dependencies: ["MeetingScribe", "VaultKit"],
             path: "Tests/MeetingScribeTests",
+            // Golden-audio fixtures are loaded from disk via #filePath, not
+            // bundled, so keep them out of the build (avoids unhandled-file
+            // warnings). See Fixtures/golden-audio/README.md. (E5-1)
+            exclude: ["Fixtures"],
             swiftSettings: commonSwiftSettings
         )
     ]
