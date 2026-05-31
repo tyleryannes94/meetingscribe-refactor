@@ -15,6 +15,7 @@ struct MeetingScribeApp: App {
     @StateObject private var chatSession = ChatSession()
     @StateObject private var updater = UpdaterController()
     @StateObject private var vaultMigrator = VaultMigrationManager()
+    @StateObject private var router = WorkspaceRouter()
     @State private var calendarTimer: Timer?
     @State private var hotkey = GlobalHotkey()
     @State private var swapHotkey = GlobalHotkey()
@@ -42,6 +43,7 @@ struct MeetingScribeApp: App {
                 .environmentObject(manager.actionItemBackfill)
                 .environmentObject(manager.personExtraction)
                 .environmentObject(manager.actionItems)
+                .environmentObject(router)
                 .frame(minWidth: 720, minHeight: 560)
                 .task {
                     startServices()

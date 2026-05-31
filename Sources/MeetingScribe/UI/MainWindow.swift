@@ -47,16 +47,14 @@ struct MainWindow: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var chatSession: ChatSession
 
-    @AppStorage("mainWindow.lastSelectedSection") private var sectionRaw: String = TopLevelSection.today.rawValue
+    @EnvironmentObject var router: WorkspaceRouter
+    /// The selected top-level section now lives in `WorkspaceRouter` (D1-1) so
+    /// search, deep links, and backlinks all drive one navigation surface. This
+    /// computed accessor keeps the existing `section` / `section = …` call sites
+    /// unchanged.
     private var section: TopLevelSection {
-        get { TopLevelSection(rawValue: sectionRaw) ?? .today }
-        nonmutating set { sectionRaw = newValue.rawValue }
-    }
-    /// Binding forwarded to child views (e.g. TodayView) so they can
-    /// programmatically switch sections. Writes go through sectionRaw and
-    /// are therefore automatically persisted to UserDefaults.
-    private var sectionBinding: Binding<TopLevelSection> {
-        Binding(get: { section }, set: { section = $0 })
+        get { router.section }
+        nonmutating set { router.section = newValue }
     }
     @State private var activeSheet: ActiveSheet?
     // Default the assistant rail CLOSED — new users land on a full-width app
@@ -89,15 +87,14 @@ struct MainWindow: View {
                 if visited.contains(s) {
                     tabView(for: s)
                         .opacity(section == s ? 1 : 0)
-                        .animation(.easeOut(duration: 0.15), value: sectionRaw)
+                        .animation(.easeOut(duration: 0.15), value: section)
                         .allowsHitTesting(section == s)
                         .zIndex(section == s ? 1 : 0)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: sectionRaw) { _, raw in
-            let s = TopLevelSection(rawValue: raw) ?? .today
+        .onChange(of: section) { _, s in
             visited.insert(s)
         }
     }
@@ -206,7 +203,7 @@ struct MainWindow: View {
     @ViewBuilder
     private func tabView(for s: TopLevelSection) -> some View {
         switch s {
-        case .today:    TodayView(section: sectionBinding)
+        case .today:    TodayView()
         case .meetings: MeetingsView()
         case .people:   PeopleListView()
         case .actions:  ActionItemsView(store: manager.actionItems)
@@ -221,15 +218,15 @@ struct MainWindow: View {
     // Combined with the warm `MeetingStore` index cache + `MeetingBodyCache`,
     // a freshly-selected tab is already instant without prewarming.)
 
-    /// Single sheet slot so search and an opened meeting never collide.
+    /// Sheet slot for the global search palette and the add-person sheet.
+    /// Meetings no longer open in a sheet (D1-1) — they route to the Meetings
+    /// tab detail via `WorkspaceRouter`.
     enum ActiveSheet: Identifiable {
         case search
-        case meeting(Meeting)
         case addPerson
         var id: String {
             switch self {
             case .search: return "search"
-            case .meeting(let m): return "meeting:\(m.id)"
             case .addPerson: return "addPerson"
             }
         }
@@ -262,9 +259,18 @@ struct MainWindow: View {
         .tint(NDS.brand)
         .preferredColorScheme(appearanceDark ? .dark : .light)
         .navigationTitle("MeetingScribe")
-        .onAppear { chatSession.setContext(contextLabel(section)) }
-        .onChange(of: sectionRaw) { _, raw in
-            chatSession.setContext(contextLabel(TopLevelSection(rawValue: raw) ?? .today))
+        .onAppear {
+            chatSession.setContext(contextLabel(section))
+            // The router doesn't own the chat rail's visibility, so it calls
+            // back here for a .chatQuery entity: reveal the rail, then dispatch.
+            router.openChat = { query in
+                if !chatVisible { chatVisible = true }
+                NotificationCenter.default.post(name: .meetingScribeRunChat,
+                                                object: nil, userInfo: ["text": query])
+            }
+        }
+        .onChange(of: section) { _, s in
+            chatSession.setContext(contextLabel(s))
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -293,8 +299,6 @@ struct MainWindow: View {
                     set: { if !$0 { activeSheet = nil } }
                 ), onOpen: handleEntity)
                 .environmentObject(manager)
-            case .meeting(let m):
-                meetingSheet(m)
             case .addPerson:
                 AddPersonSheet()
                     .environmentObject(PeopleStore.shared)
@@ -380,7 +384,7 @@ struct MainWindow: View {
             guard let urlString = note.userInfo?["url"] as? String,
                   let url = URL(string: urlString),
                   let parsed = WorkspaceLink.parse(url) else { return }
-            routeEntity(kind: parsed.kind, id: parsed.id)
+            router.route(kind: parsed.kind, id: parsed.id, manager: manager)
         }
         // ⌘1–⌘7 keyboard shortcuts posted by CommandMenu("Navigate")
         .onReceive(NotificationCenter.default.publisher(for: .meetingScribeNavigate)) { note in
@@ -389,82 +393,16 @@ struct MainWindow: View {
         }
     }
 
-    @ViewBuilder
-    private func meetingSheet(_ m: Meeting) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(m.displayTitle).font(.headline).lineLimit(1)
-                Spacer()
-                Button("Done") { activeSheet = nil }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(10)
-            Divider()
-            UnifiedMeetingDetail(mode: .past(m))
-                .environmentObject(manager)
-                .environmentObject(manager.recordingMonitor)
-                .environmentObject(manager.tagStore)
-                .environmentObject(calendar)
-        }
-        .frame(width: 860, height: 680)
-    }
-
-    /// From the search palette: dismiss the search sheet, then route.
+    /// From the search palette: dismiss the search sheet, then route through the
+    /// canonical router. The old dismiss-then-present-SHEET hack is gone — a
+    /// meeting now switches to its tab instead of opening a sheet. We still hop
+    /// one runloop tick so the search sheet finishes dismissing before the
+    /// underlying tab switches (and so a not-yet-built target tab can mount and
+    /// register its open-entity listener before the route fires). (D1-1)
     private func handleEntity(_ e: WorkspaceEntity) {
-        routeEntity(kind: e.kind, id: e.rawID)
-    }
-
-    /// Central navigation. A meeting opens in a sheet; everything else flips to
-    /// the relevant section. Hops to the next runloop tick if a sheet is up so
-    /// the dismiss/present transition doesn't fight itself.
-    private func routeEntity(kind: WorkspaceEntityKind, id: String) {
-        let present: () -> Void = {
-            switch kind {
-            case .meeting:
-                if let m = manager.meeting(forEntityID: id) {
-                    activeSheet = .meeting(m)
-                } else {
-                    manager.refreshPastMeetings(force: true)
-                }
-            case .voiceNote:
-                section = .notes
-                NotificationCenter.default.post(name: .meetingScribeOpenVoiceNote,
-                                                object: nil, userInfo: ["id": id])
-            case .project, .actionItem:
-                section = .actions
-            case .person:
-                section = .people
-                NotificationCenter.default.post(name: .meetingScribeOpenPerson,
-                                                object: nil, userInfo: ["id": id])
-            case .attachedNote:
-                // rawID is "<personId>::<noteId>" — route to the person;
-                // the user can then scroll to the Notes section. We don't
-                // try to scroll-to-note here (no anchor wiring yet), but
-                // opening the right person is the 90 % win.
-                let personId = id.split(separator: "::").first.map(String.init) ?? id
-                section = .people
-                NotificationCenter.default.post(name: .meetingScribeOpenPerson,
-                                                object: nil, userInfo: ["id": personId])
-            case .chatQuery:
-                // Natural-language passthrough: drop the typed query into
-                // the chat sidebar and trigger a send. ChatSession owns
-                // the actual dispatch.
-                if !chatVisible { chatVisible = true }
-                NotificationCenter.default.post(name: .meetingScribeRunChat,
-                                                object: nil,
-                                                userInfo: ["text": id])
-            case .tag:
-                // Plain tag click — route to the People tab pre-filtered.
-                section = .people
-                NotificationCenter.default.post(name: .meetingScribeFilterByTag,
-                                                object: nil, userInfo: ["name": id])
-            }
-        }
-        if activeSheet != nil {
-            activeSheet = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: present)
-        } else {
-            present()
+        activeSheet = nil
+        DispatchQueue.main.async {
+            router.open(e, manager: manager)
         }
     }
 }
