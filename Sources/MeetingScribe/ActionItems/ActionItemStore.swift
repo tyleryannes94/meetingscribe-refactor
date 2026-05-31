@@ -502,6 +502,17 @@ final class ActionItemStore: ObservableObject {
     func setOwner(_ id: String, owner: String?) {
         update(id) { $0.owner = owner }
     }
+    /// Set (or clear) the hard Person link plus the display name in one write.
+    func setOwnerPerson(_ id: String, personID: String?, ownerName: String?) {
+        update(id) {
+            $0.ownerPersonID = personID
+            $0.owner = ownerName
+        }
+    }
+    /// Items hard-linked to a given person.
+    func items(forPerson personID: String) -> [ActionItem] {
+        items.filter { $0.ownerPersonID == personID }
+    }
     func setNotion(_ id: String, pageID: String?, url: String?) {
         update(id) {
             $0.notionPageID = pageID

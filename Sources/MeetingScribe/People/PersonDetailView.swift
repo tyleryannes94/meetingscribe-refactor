@@ -1034,6 +1034,9 @@ struct PersonDetailView: View {
     }
 
     private func ownerMatchesPerson(_ item: ActionItem) -> Bool {
+        // Exact hard link wins; otherwise fall back to owner-string matching for
+        // legacy tasks that predate the Person link.
+        if let pid = item.ownerPersonID { return pid == current.id }
         guard let owner = item.owner?.lowercased().trimmingCharacters(in: .whitespaces),
               !owner.isEmpty else { return false }
         let tokens = ownerTokens(current)
@@ -1057,7 +1060,7 @@ struct PersonDetailView: View {
         let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return }
         let item = actionItems.createTask(title: title)
-        actionItems.setOwner(item.id, owner: current.displayName)
+        actionItems.setOwnerPerson(item.id, personID: current.id, ownerName: current.displayName)
         newTaskTitle = ""
     }
 

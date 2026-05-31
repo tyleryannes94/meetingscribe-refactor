@@ -21,6 +21,11 @@ struct ActionItem: Identifiable, Codable, Hashable {
 
     var title: String
     var owner: String?
+    /// Optional hard link to a Person record (PeopleStore.person(by:)). Kept
+    /// alongside the free-text `owner` so non-person owners still work and old
+    /// JSON decodes (synthesized Codable uses decodeIfPresent). Enables exact,
+    /// bidirectional person↔task navigation.
+    var ownerPersonID: String?
     var notes: String?
     var status: Status
     var priority: Priority
