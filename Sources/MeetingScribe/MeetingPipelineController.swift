@@ -215,6 +215,11 @@ final class MeetingPipelineController: ObservableObject {
         PeopleStore.shared.indexMeeting(workingMeeting,
                                         summary: summary,
                                         tags: tagNames.isEmpty ? nil : tagNames)
+        // Semantic embedding for hybrid recall (C2-1b) — fire-and-forget so the
+        // network round-trip to the local embedding model never blocks finalize.
+        let embedText = workingMeeting.displayTitle + "\n" + summary
+        let embedID = workingMeeting.id
+        Task { await PeopleStore.shared.embedAndStore(entityID: embedID, entityKind: "meeting", text: embedText) }
 
         liveResetIfStillIdle()
 

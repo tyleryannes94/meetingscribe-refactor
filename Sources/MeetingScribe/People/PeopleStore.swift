@@ -123,9 +123,80 @@ final class PeopleStore: ObservableObject {
                               tags: nil)
     }
 
-    /// Remove a meeting from vault_fts (e.g. on delete).
+    /// Remove a meeting from vault_fts + its embedding (e.g. on delete).
     func deindexMeeting(id: String) {
         db.deleteVaultContent(entityID: id, entityKind: "meeting")
+        db.deleteEmbedding(entityID: id, entityKind: "meeting")
+    }
+
+    /// FTS5-backed recall (BM25 + recency) across indexed vault content —
+    /// meetings, voice notes, and people. This is the engine global search now
+    /// runs on instead of an in-memory `contains()` scan. (C2-1)
+    func searchVault(_ query: String, limit: Int = 50) -> [VaultSearchResult] {
+        db.searchAll(query: query, limit: limit)
+    }
+
+    /// How many meetings are currently in the FTS index. 0 with meetings on disk
+    /// signals the index was rebuilt/reset and needs a meeting backfill. (C2-1)
+    func indexedMeetingCount() -> Int { db.vaultContentCount(kind: "meeting") }
+
+    // MARK: - Semantic recall (C2-1b)
+
+    /// Meeting IDs that already have an embedding (for backfill diffing).
+    func embeddedMeetingIDs() -> Set<String> { db.embeddedEntityIDs(kind: "meeting") }
+
+    /// Compute + store an embedding for indexed content. No-op when the
+    /// embedding model / Ollama isn't available (search just stays lexical).
+    func embedAndStore(entityID: String, entityKind: String, text: String) async {
+        guard let vec = await EmbeddingService.embed(text) else { return }
+        db.upsertEmbedding(entityID: entityID, entityKind: entityKind, vector: vec)
+    }
+
+    /// Hybrid recall: lexical BM25/recency (FTS) fused with semantic cosine
+    /// similarity via reciprocal-rank fusion. Falls back to pure lexical when no
+    /// query embedding is available. (C2-1b)
+    func searchVaultHybrid(_ query: String, limit: Int = 50) async -> [VaultSearchResult] {
+        let lexical = db.searchAll(query: query, limit: limit)
+        guard let qvec = await EmbeddingService.embed(query) else { return lexical }
+        let embeddings = db.allEmbeddings()
+        guard !embeddings.isEmpty else { return lexical }
+
+        let semantic = embeddings
+            .map { (id: $0.entityID, kind: $0.entityKind, score: EmbeddingService.cosine(qvec, $0.vector)) }
+            .filter { $0.score > 0.25 }
+            .sorted { $0.score > $1.score }
+            .prefix(limit)
+
+        // Reciprocal-rank fusion (k=60 is the standard constant).
+        let k = 60.0
+        func key(_ id: String, _ kind: String) -> String { "\(kind)\u{1}\(id)" }
+        var score: [String: Double] = [:]
+        for (rank, r) in lexical.enumerated() {
+            score[key(r.entityID, r.entityKind), default: 0] += 1.0 / (k + Double(rank + 1))
+        }
+        for (rank, r) in semantic.enumerated() {
+            score[key(r.id, r.kind), default: 0] += 1.0 / (k + Double(rank + 1))
+        }
+
+        var meta: [String: VaultSearchResult] = [:]
+        for r in lexical { meta[key(r.entityID, r.entityKind)] = r }
+
+        var out: [VaultSearchResult] = []
+        for (kk, s) in score.sorted(by: { $0.value > $1.value }).prefix(limit) {
+            if let r = meta[kk] {
+                out.append(VaultSearchResult(entityID: r.entityID, entityKind: r.entityKind,
+                                             title: r.title, dateEpoch: r.dateEpoch, rankScore: s))
+            } else {
+                let parts = kk.split(separator: "\u{1}", maxSplits: 1)
+                guard parts.count == 2 else { continue }
+                let kind = String(parts[0]), id = String(parts[1])
+                if let m = db.vaultContentMeta(entityID: id, entityKind: kind) {
+                    out.append(VaultSearchResult(entityID: id, entityKind: kind,
+                                                 title: m.title, dateEpoch: m.dateEpoch, rankScore: s))
+                }
+            }
+        }
+        return out
     }
 
     // MARK: - Paths
@@ -460,6 +531,18 @@ final class PeopleStore: ObservableObject {
             people.sort(by: Self.recencyThenName)
         }
         return encounter
+    }
+
+    /// Move a person's `lastInteractionAt` forward to `date` (never backward),
+    /// so the stay-in-touch signal reflects recorded meetings and confirmed
+    /// links — not just manual encounters. (P2-1)
+    func bumpLastInteraction(personID: String, date: Date) {
+        guard let idx = people.firstIndex(where: { $0.id == personID }) else { return }
+        if (people[idx].lastInteractionAt ?? .distantPast) < date {
+            people[idx].lastInteractionAt = date
+            writePerson(people[idx])
+            people.sort(by: Self.recencyThenName)
+        }
     }
 
     func deleteEncounter(_ encounter: Encounter) {
@@ -993,6 +1076,8 @@ final class PeopleStore: ObservableObject {
                     addMeetingMention(meeting.id, toPersonID: match.id)
                     autoLinked += 1
                 }
+                // Recorded-meeting attendance is a real interaction. (P2-1)
+                bumpLastInteraction(personID: match.id, date: meeting.startDate)
                 continue
             }
 
@@ -1039,6 +1124,7 @@ final class PeopleStore: ObservableObject {
                                   bio: suggestion.summary)
         }
         addMeetingMention(suggestion.meetingID, toPersonID: person.id)
+        bumpLastInteraction(personID: person.id, date: suggestion.meetingDate)
         removeSuggestion(suggestion)
         return self.person(by: person.id)
     }

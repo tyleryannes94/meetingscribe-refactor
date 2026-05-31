@@ -85,15 +85,28 @@ struct ReconnectView: View {
     @EnvironmentObject var people: PeopleStore
     var onOpen: (Person) -> Void
 
-    /// Surface someone you haven't talked to in this long.
-    private static let threshold: TimeInterval = 30 * 24 * 3600
+    /// Fallback cadence when there isn't enough history to infer one.
+    private static let defaultCadenceDays: Double = 30
+
+    /// Per-person reconnect cadence (P2-1): infer "how often you usually talk"
+    /// from the median gap between encounters, and flag someone overdue at ~1.5×
+    /// that. Falls back to 30 days for people without enough history. Clamped to
+    /// a sane 7–120 day window.
+    private func cadenceSeconds(for p: Person) -> TimeInterval {
+        let dates = people.encounters(for: p.id).map(\.date).sorted()
+        guard dates.count >= 3 else { return Self.defaultCadenceDays * 86400 }
+        var gaps: [Double] = []
+        for i in 1..<dates.count { gaps.append(dates[i].timeIntervalSince(dates[i - 1]) / 86400) }
+        let median = gaps.sorted()[gaps.count / 2]
+        return min(120, max(7, median * 1.5)) * 86400
+    }
 
     private var candidates: [(person: Person, last: Date)] {
         let now = Date()
         return people.people
             .compactMap { p -> (Person, Date)? in
                 guard let last = p.lastInteractionAt,
-                      now.timeIntervalSince(last) > Self.threshold else { return nil }
+                      now.timeIntervalSince(last) > cadenceSeconds(for: p) else { return nil }
                 return (p, last)
             }
             .sorted { $0.1 < $1.1 }   // most overdue first

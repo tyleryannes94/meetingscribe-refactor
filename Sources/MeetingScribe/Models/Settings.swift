@@ -12,6 +12,7 @@ final class AppSettings {
         static let whisperModel = "whisperModel"
         static let ollamaURL = "ollamaURL"
         static let ollamaModel = "ollamaModel"
+        static let ollamaEmbeddingModel = "ollamaEmbeddingModel"
         static let autoRecord = "autoRecord"
         static let captureMic = "captureMic"
         static let captureSystem = "captureSystem"
@@ -189,6 +190,13 @@ final class AppSettings {
     var ollamaModel: String {
         get { defaults.string(forKey: Keys.ollamaModel) ?? Self.recommendedOllamaModel }
         set { defaults.set(newValue, forKey: Keys.ollamaModel) }
+    }
+
+    /// Local embedding model for semantic recall (C2-1b/C5-10). Small (~274 MB),
+    /// on-device via Ollama. Pulled by the Setup Check.
+    var ollamaEmbeddingModel: String {
+        get { defaults.string(forKey: Keys.ollamaEmbeddingModel) ?? "nomic-embed-text" }
+        set { defaults.set(newValue, forKey: Keys.ollamaEmbeddingModel) }
     }
 
     /// One-time migration: if the stored model is still the old default

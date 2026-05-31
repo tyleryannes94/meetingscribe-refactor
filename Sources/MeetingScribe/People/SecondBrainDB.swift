@@ -155,6 +155,18 @@ final class SecondBrainDB {
             migrateToV2()
         }
 
+        // Embeddings for semantic recall (C2-1b). Idempotent; independent of the
+        // FTS schema version so it lands for existing v2 databases too.
+        exec("""
+        CREATE TABLE IF NOT EXISTS vault_embeddings (
+            entity_id TEXT NOT NULL,
+            entity_kind TEXT NOT NULL,
+            dim INTEGER NOT NULL,
+            vec BLOB NOT NULL,
+            PRIMARY KEY (entity_id, entity_kind)
+        );
+        """)
+
         exec("PRAGMA user_version=\(Self.schemaVersion);")
     }
 
@@ -351,6 +363,77 @@ final class SecondBrainDB {
                                              title: title, dateEpoch: dateEpoch, rankScore: rankScore))
         }
         return results
+    }
+
+    /// Number of rows in vault_content for a given entity kind. Used to detect
+    /// when the index is missing content after a rebuild/reset (the index only
+    /// re-restores people, so meetings/voice notes need a backfill). (C2-1)
+    func vaultContentCount(kind: String) -> Int {
+        scalarInt("SELECT COUNT(*) FROM vault_content WHERE entity_kind='\(escape(kind))';") ?? 0
+    }
+
+    // MARK: - Embeddings (semantic recall, C2-1b)
+
+    /// Store/replace the embedding vector for an entity (Float32 BLOB).
+    func upsertEmbedding(entityID: String, entityKind: String, vector: [Float]) {
+        guard !vector.isEmpty else { return }
+        let sql = "INSERT OR REPLACE INTO vault_embeddings (entity_id, entity_kind, dim, vec) VALUES (?, ?, ?, ?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, entityID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, entityKind, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_int(stmt, 3, Int32(vector.count))
+        vector.withUnsafeBytes { raw in
+            _ = sqlite3_bind_blob(stmt, 4, raw.baseAddress, Int32(raw.count), SQLITE_TRANSIENT)
+        }
+        sqlite3_step(stmt)
+    }
+
+    func deleteEmbedding(entityID: String, entityKind: String) {
+        exec("DELETE FROM vault_embeddings WHERE entity_id='\(escape(entityID))' AND entity_kind='\(escape(entityKind))';")
+    }
+
+    /// All stored embeddings. Held in memory for cosine scoring — even thousands
+    /// of 768-d vectors are only a few MB.
+    func allEmbeddings() -> [(entityID: String, entityKind: String, vector: [Float])] {
+        var out: [(String, String, [Float])] = []
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT entity_id, entity_kind, dim, vec FROM vault_embeddings;", -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id = sqlite3_column_text(stmt, 0).map { String(cString: $0) } ?? ""
+            let kind = sqlite3_column_text(stmt, 1).map { String(cString: $0) } ?? ""
+            let dim = Int(sqlite3_column_int(stmt, 2))
+            guard let blob = sqlite3_column_blob(stmt, 3), dim > 0 else { continue }
+            let bytes = Int(sqlite3_column_bytes(stmt, 3))
+            guard bytes == dim * MemoryLayout<Float>.size else { continue }
+            let vec = [Float](unsafeUninitializedCapacity: dim) { buf, count in
+                memcpy(buf.baseAddress, blob, bytes); count = dim
+            }
+            out.append((id, kind, vec))
+        }
+        return out
+    }
+
+    /// Entity IDs that already have an embedding for a kind (for backfill diff).
+    func embeddedEntityIDs(kind: String) -> Set<String> {
+        Set(queryIDs("SELECT entity_id FROM vault_embeddings WHERE entity_kind='\(escape(kind))';"))
+    }
+
+    /// Title + date for one indexed entity — used to build a result row for a
+    /// semantic-only hit that wasn't in the lexical result set.
+    func vaultContentMeta(entityID: String, entityKind: String) -> (title: String?, dateEpoch: Int64?)? {
+        var stmt: OpaquePointer?
+        let sql = "SELECT title, date_epoch FROM vault_content WHERE entity_id=? AND entity_kind=? LIMIT 1;"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, entityID, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, entityKind, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        let title = sqlite3_column_text(stmt, 0).map { String(cString: $0) }
+        let date = sqlite3_column_type(stmt, 1) != SQLITE_NULL ? sqlite3_column_int64(stmt, 1) : nil
+        return (title, date)
     }
 
     // MARK: - SQLite plumbing

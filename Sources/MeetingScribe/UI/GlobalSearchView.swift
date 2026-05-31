@@ -194,12 +194,42 @@ struct GlobalSearchView: View {
             // workspace-index in-memory match drops contacts.
             results = peopleSearch(query: q)
         } else {
-            // All / scoped: ask WorkspaceIndex for everything, then
-            // filter to the active tab's kind.
-            let all = manager.search(q)
-            results = filteredResults(all)
+            // FTS5-backed recall (BM25 + recency) for the indexed kinds —
+            // meetings, voice notes, people — merged with the in-memory index
+            // for the kinds FTS doesn't cover (tasks, projects, attached notes,
+            // tags) plus the chatQuery "Ask Chat" passthrough. (C2-1: global
+            // search used to fall back to an in-memory contains() scan.)
+            let ftsKinds: Set<WorkspaceEntityKind> = [.meeting, .voiceNote, .person]
+            let other = manager.search(q).filter { !ftsKinds.contains($0.kind) }
+            // Instant lexical results first…
+            results = filteredResults(PeopleStore.shared.searchVault(q).compactMap(ftsEntity) + other)
+            // …then refine with hybrid semantic ranking once the query embedding
+            // returns (no-op if the embedding model isn't available). Guarded
+            // against a stale query so fast typing isn't clobbered. (C2-1b)
+            Task { @MainActor in
+                let hybrid = await PeopleStore.shared.searchVaultHybrid(q)
+                guard q == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+                results = filteredResults(hybrid.compactMap(ftsEntity) + other)
+            }
         }
         selection = 0
+    }
+
+    /// Maps an FTS row to a workspace entity for display/opening. Returns nil
+    /// for kinds we don't render directly here.
+    private func ftsEntity(_ r: VaultSearchResult) -> WorkspaceEntity? {
+        let kind: WorkspaceEntityKind
+        switch r.entityKind {
+        case "meeting":    kind = .meeting
+        case "voice_note": kind = .voiceNote
+        case "person":     kind = .person
+        default:           return nil
+        }
+        let date = r.dateEpoch.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+        let subtitle = date.map { MeetingManager.entityDateString($0) } ?? ""
+        return WorkspaceEntity(kind: kind, rawID: r.entityID,
+                               title: r.title ?? "(untitled)",
+                               subtitle: subtitle, date: date)
     }
 
     /// Reduce the full result set to the kinds the active filter wants.

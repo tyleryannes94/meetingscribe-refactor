@@ -698,6 +698,62 @@ final class MeetingManager: ObservableObject {
         personExtraction.runIfNeeded(meetings: pastMeetings, force: force)
     }
 
+    private var didBackfillSearchIndex = false
+
+    /// Re-index all past meetings into the FTS index if it's missing them — e.g.
+    /// after a `secondbrain.db` rebuild/reset, which only restores people, not
+    /// meetings. Runs at most once per session and only when the index is
+    /// actually empty of meetings, so the common case pays just one COUNT(*).
+    /// Keeps global search (C2-1) trustworthy rather than silently stale.
+    func backfillSearchIndexIfNeeded() {
+        guard !didBackfillSearchIndex else { return }
+        didBackfillSearchIndex = true
+        guard !pastMeetings.isEmpty,
+              PeopleStore.shared.indexedMeetingCount() == 0 else { return }
+        Task { @MainActor in
+            for (i, m) in self.pastMeetings.enumerated() {
+                let primary = self.tagStore.primaryTag(for: m)
+                let summary = self.store.readSummary(for: m, primaryTag: primary)
+                let tagNames = self.tagStore.tagIDs(for: m)
+                    .compactMap { self.tagStore.tag(by: $0)?.name }
+                    .joined(separator: " ")
+                PeopleStore.shared.indexMeeting(m, summary: summary,
+                                                tags: tagNames.isEmpty ? nil : tagNames)
+                if i % 20 == 19 { await Task.yield() }  // keep the UI responsive
+            }
+        }
+    }
+
+    private var didBackfillEmbeddings = false
+
+    /// One-shot per-session pass that computes semantic embeddings for any past
+    /// meetings that don't have one yet (e.g. all of them, the first time the
+    /// embedding model is available). Runs in the background, throttled, and
+    /// no-ops per meeting when the model is unreachable. (C2-1b)
+    func backfillEmbeddingsIfNeeded() {
+        guard !didBackfillEmbeddings else { return }
+        didBackfillEmbeddings = true
+        let meetings = pastMeetings
+        guard !meetings.isEmpty else { return }
+        Task { @MainActor in
+            let have = PeopleStore.shared.embeddedMeetingIDs()
+            let todo = meetings.filter { !have.contains($0.id) }
+            guard !todo.isEmpty else { return }
+            // Ensure the embedding model is present (idempotent; pulls ~274 MB
+            // once). If Ollama is down this throws and we just skip — embeds
+            // no-op and search stays lexical.
+            try? await OllamaChatClient.pullModel(AppSettings.shared.ollamaEmbeddingModel)
+            for m in todo {
+                let primary = self.tagStore.primaryTag(for: m)
+                let summary = self.store.readSummary(for: m, primaryTag: primary)
+                await PeopleStore.shared.embedAndStore(
+                    entityID: m.id, entityKind: "meeting",
+                    text: m.displayTitle + "\n" + summary)
+                await Task.yield()
+            }
+        }
+    }
+
     func userNotes(for meeting: Meeting) -> String {
         let cached = bodyCache.cached(meeting.id)
         if !cached.isEmpty { return cached.notes }
