@@ -1225,7 +1225,18 @@ final class PeopleStore: ObservableObject {
     }
 
     private func markdownMirror(for person: Person) -> String {
-        var lines = ["# \(person.displayName)", ""]
+        // YAML frontmatter so Obsidian resolves [[Display Name]] wikilinks to
+        // this note (by alias, regardless of the person.md filename) and the
+        // relationship graph renders. (C3-2)
+        func yaml(_ s: String) -> String { s.replacingOccurrences(of: "\"", with: "\\\"") }
+        var lines = ["---", "aliases:", "  - \"\(yaml(person.displayName))\""]
+        if !person.role.isEmpty    { lines.append("role: \"\(yaml(person.role))\"") }
+        if !person.company.isEmpty { lines.append("company: \"\(yaml(person.company))\"") }
+        if let email = person.emails.first(where: { !$0.isEmpty }) { lines.append("email: \"\(yaml(email))\"") }
+        lines.append("tags: [person]")
+        lines.append("---")
+        lines.append("")
+        lines.append(contentsOf: ["# \(person.displayName)", ""])
         if !person.role.isEmpty || !person.company.isEmpty {
             let sub = [person.role, person.company].filter { !$0.isEmpty }.joined(separator: " · ")
             lines.append("*\(sub)*"); lines.append("")

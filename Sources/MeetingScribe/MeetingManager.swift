@@ -41,6 +41,7 @@ final class MeetingManager: ObservableObject {
     let store = MeetingStore()
     let tagStore = TagStore()
     let actionItems = ActionItemStore()
+    let decisions = DecisionStore()
     let recordingMonitor = RecordingMonitor()
     @Published var dictation = QuickDictation()
 
@@ -56,7 +57,7 @@ final class MeetingManager: ObservableObject {
 
     /// Post-stop + Transcribe-Now pipeline state.
     lazy var pipelineController = MeetingPipelineController(
-        store: store, tagStore: tagStore, actionItems: actionItems,
+        store: store, tagStore: tagStore, actionItems: actionItems, decisions: decisions,
         batchTranscriber: batchTranscriber, summarizer: summarizer
     )
 
@@ -720,6 +721,32 @@ final class MeetingManager: ObservableObject {
                 PeopleStore.shared.indexMeeting(m, summary: summary,
                                                 tags: tagNames.isEmpty ? nil : tagNames)
                 if i % 20 == 19 { await Task.yield() }  // keep the UI responsive
+            }
+        }
+    }
+
+    private var didBackfillDecisions = false
+
+    /// Extract decisions from one meeting's summary into the ledger. Call when a
+    /// meeting finalizes / re-transcribes. (P1-1)
+    func extractDecisions(for meeting: Meeting) {
+        let summary = store.readSummary(for: meeting, primaryTag: tagStore.primaryTag(for: meeting))
+        guard !summary.isEmpty else { return }
+        decisions.extract(from: summary, meeting: meeting)
+    }
+
+    /// One-shot per-session pass that fills the Decision Ledger from every past
+    /// meeting's summary. (P1-1)
+    func backfillDecisionsIfNeeded() {
+        guard !didBackfillDecisions else { return }
+        didBackfillDecisions = true
+        let meetings = pastMeetings
+        guard !meetings.isEmpty else { return }
+        Task { @MainActor in
+            for (i, m) in meetings.enumerated() {
+                let summary = self.store.readSummary(for: m, primaryTag: self.tagStore.primaryTag(for: m))
+                if !summary.isEmpty { self.decisions.extract(from: summary, meeting: m) }
+                if i % 20 == 19 { await Task.yield() }
             }
         }
     }

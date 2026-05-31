@@ -33,17 +33,20 @@ final class MeetingPipelineController: ObservableObject {
     private let store: MeetingStore
     private let tagStore: TagStore
     private let actionItems: ActionItemStore
+    private let decisions: DecisionStore
     private let batchTranscriber: WhisperTranscriber
     private let summarizer: OllamaService
 
     init(store: MeetingStore,
          tagStore: TagStore,
          actionItems: ActionItemStore,
+         decisions: DecisionStore,
          batchTranscriber: WhisperTranscriber = WhisperTranscriber(),
          summarizer: OllamaService = OllamaService()) {
         self.store = store
         self.tagStore = tagStore
         self.actionItems = actionItems
+        self.decisions = decisions
         self.batchTranscriber = batchTranscriber
         self.summarizer = summarizer
     }
@@ -221,6 +224,12 @@ final class MeetingPipelineController: ObservableObject {
         let embedID = workingMeeting.id
         Task { await PeopleStore.shared.embedAndStore(entityID: embedID, entityKind: "meeting", text: embedText) }
 
+        // Append to the day's note — a linkable temporal spine. (C2-4/C3-3)
+        DailyNoteWriter.appendMeeting(workingMeeting, storageDir: AppSettings.shared.storageDir)
+
+        // Lift decisions out of the summary into the cross-meeting ledger. (P1-1)
+        decisions.extract(from: summary, meeting: workingMeeting)
+
         liveResetIfStillIdle()
 
         // Notify interested parties (e.g. NotificationManager) that the
@@ -323,6 +332,7 @@ final class MeetingPipelineController: ObservableObject {
                     PeopleStore.shared.indexMeeting(meeting,
                                                     summary: summary,
                                                     tags: tagNames.isEmpty ? nil : tagNames)
+                    decisions.extract(from: summary, meeting: meeting)   // ledger (P1-1)
                 }
             } catch {
                 log.error("transcribeNow summary failed: \(error.localizedDescription, privacy: .public)")

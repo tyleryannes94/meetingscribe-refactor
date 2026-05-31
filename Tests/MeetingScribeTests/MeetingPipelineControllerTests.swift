@@ -27,7 +27,7 @@ final class MeetingPipelineControllerTests: XCTestCase {
     private func makeController() -> MeetingPipelineController {
         MeetingPipelineController(store: MeetingStore(),
                                   tagStore: TagStore(),
-                                  actionItems: ActionItemStore())
+                                  actionItems: ActionItemStore(), decisions: DecisionStore())
     }
 
     private func meeting(_ id: String) -> Meeting {

@@ -59,7 +59,7 @@ final class PipelineIntegrationTests: XCTestCase {
         let store = MeetingStore()
         let tagStore = TagStore()
         let pc = MeetingPipelineController(store: store, tagStore: tagStore,
-                                           actionItems: ActionItemStore())
+                                           actionItems: ActionItemStore(), decisions: DecisionStore())
         let m = meeting("e2e-good")
         let live = "# Transcript\n\nAlex: Let's ship the migration on Friday.\n"
         let audioResult = AudioRecorder.Result(directory: tempRoot, segmentIndex: 0,
@@ -93,7 +93,7 @@ final class PipelineIntegrationTests: XCTestCase {
     func testFinalizeCompletesEvenWithEmptyLiveTranscript() async throws {
         let store = MeetingStore()
         let pc = MeetingPipelineController(store: store, tagStore: TagStore(),
-                                           actionItems: ActionItemStore())
+                                           actionItems: ActionItemStore(), decisions: DecisionStore())
         let m = meeting("e2e-empty")
         let audioResult = AudioRecorder.Result(directory: tempRoot, segmentIndex: 0,
                                                micURL: nil, systemURL: nil,
