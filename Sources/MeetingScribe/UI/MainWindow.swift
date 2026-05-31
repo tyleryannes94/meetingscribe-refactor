@@ -263,6 +263,7 @@ struct MainWindow: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .animation(.easeOut(duration: 0.18), value: showChat)
+            .overlay(ToastOverlay())   // undo toasts (D4-3)
         }
         .tint(NDS.brand)
         .preferredColorScheme(appearanceDark ? .dark : .light)
