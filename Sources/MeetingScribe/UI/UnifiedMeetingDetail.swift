@@ -19,6 +19,7 @@ struct UnifiedMeetingDetail: View {
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var recordingMonitor: RecordingMonitor
     @ObservedObject var drive = GoogleDriveService.shared
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     @StateObject var meetingChat = ChatSession()
 

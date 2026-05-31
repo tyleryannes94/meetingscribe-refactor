@@ -378,7 +378,7 @@ extension UnifiedMeetingDetail {
                 HStack(spacing: 6) {
                     Image(systemName: "record.circle.fill")
                         .foregroundStyle(.red)
-                        .symbolEffect(.pulse, options: .repeating)
+                        .pulsingSymbol(active: !reduceMotion)
                     Text("Recording")
                         .font(.callout.bold())
                 }

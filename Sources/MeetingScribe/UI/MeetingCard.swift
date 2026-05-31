@@ -26,6 +26,7 @@ struct MeetingCard: View {
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var recordingMonitor: RecordingMonitor
     @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: onOpen) {
@@ -50,8 +51,8 @@ struct MeetingCard: View {
             .shadow(color: .black.opacity(hovering ? 0.06 : 0.025),
                     radius: hovering ? 8 : 3,
                     y: hovering ? 3 : 1)
-            .scaleEffect(hovering ? 1.005 : 1.0)
-            .animation(.spring(response: 0.18, dampingFraction: 0.85), value: hovering)
+            .scaleEffect(hovering && !reduceMotion ? 1.005 : 1.0)
+            .animation(NDS.motion(.spring(response: 0.18, dampingFraction: 0.85), reduce: reduceMotion), value: hovering)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -67,7 +68,7 @@ struct MeetingCard: View {
                 Image(systemName: "record.circle.fill")
                     .foregroundStyle(.red)
                     .font(.title3)
-                    .symbolEffect(.pulse, options: .repeating)
+                    .pulsingSymbol(active: !reduceMotion)
             default:
                 Text(timeOfDay()).font(.callout.monospacedDigit().weight(.medium))
                     .foregroundStyle(.primary)
@@ -280,7 +281,7 @@ struct MeetingCard: View {
                                  ? AnyShapeStyle(NDS.brand)
                                  : AnyShapeStyle(HierarchicalShapeStyle.tertiary))
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                .animation(.spring(response: 0.22, dampingFraction: 0.85), value: isExpanded)
+                .animation(NDS.motion(.spring(response: 0.22, dampingFraction: 0.85), reduce: reduceMotion), value: isExpanded)
         } else if manager.isTranscribingMeeting(meeting) {
             ProgressView().controlSize(.small)
         }
@@ -329,13 +330,16 @@ struct StatusPulseDot: View {
     var color: Color
     var size: CGFloat = 8
     @State private var on = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Circle()
             .fill(color)
             .frame(width: size, height: size)
             .opacity(on ? 0.35 : 1)
-            .animation(.easeInOut(duration: 0.65).repeatForever(autoreverses: true), value: on)
-            .onAppear { on = true }
+            .animation(NDS.motion(.easeInOut(duration: 0.65).repeatForever(autoreverses: true),
+                                  reduce: reduceMotion), value: on)
+            // With Reduce Motion on, stay static at full opacity (no pulse).
+            .onAppear { if !reduceMotion { on = true } }
     }
 }
 

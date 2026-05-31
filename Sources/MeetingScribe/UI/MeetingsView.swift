@@ -418,6 +418,7 @@ private struct MeetingListRow: View {
 
     @EnvironmentObject var tagStore: TagStore
     @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -445,7 +446,7 @@ private struct MeetingListRow: View {
                             Image(systemName: "record.circle.fill")
                                 .font(.system(size: 10))
                                 .foregroundStyle(.red)
-                                .symbolEffect(.pulse, options: .repeating)
+                                .pulsingSymbol(active: !reduceMotion)
                         }
                         Text(meeting.displayTitle)
                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))

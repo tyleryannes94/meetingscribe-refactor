@@ -98,6 +98,27 @@ enum NDS {
         for b in key.utf8 { hash = ((hash << 5) &+ hash) &+ Int(b) }
         return palette[abs(hash) % palette.count].color
     }
+
+    /// Returns `animation` unless Reduce Motion is on, in which case `nil`
+    /// (no animation). Read `@Environment(\.accessibilityReduceMotion)` at the
+    /// call site and pass it as `reduce`. Accessibility: D5-1.
+    static func motion(_ animation: Animation?, reduce: Bool) -> Animation? {
+        reduce ? nil : animation
+    }
+}
+
+@available(macOS 14.0, *)
+extension View {
+    /// Applies a repeating SF Symbol pulse only when motion is allowed.
+    /// With Reduce Motion on, the symbol renders statically. Accessibility: D5-1.
+    @ViewBuilder
+    func pulsingSymbol(active: Bool) -> some View {
+        if active {
+            self.symbolEffect(.pulse, options: .repeating)
+        } else {
+            self
+        }
+    }
 }
 
 // MARK: - Reusable components

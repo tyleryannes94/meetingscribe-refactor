@@ -393,6 +393,7 @@ private struct ErrorPill: View {
 private struct PulsingDot: View {
     @State private var scale: CGFloat = 1.0
     @State private var glow: Double = 0.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         ZStack {
             Circle().fill(Color.red.opacity(0.18))
@@ -406,6 +407,8 @@ private struct PulsingDot: View {
                 .shadow(color: .red.opacity(0.5), radius: 4)
         }
         .onAppear {
+            // Reduce Motion: keep the dot static (no perpetual pulse/glow).
+            guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
                 scale = 1.18
             }
