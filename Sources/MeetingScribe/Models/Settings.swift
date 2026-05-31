@@ -55,6 +55,11 @@ final class AppSettings {
         /// BCP-47 language code passed to whisper-cli via --language.
         /// "auto" = let whisper detect; "en", "es", "fr", etc. for forced lang.
         static let whisperLanguage = "whisperLanguage"
+        /// Off-by-default kill-switch for the ScribeCore daemon recording path.
+        /// The daemon path does not finalize a meeting (no merge/transcribe/
+        /// summary) and records into an orphan folder → silent total data loss.
+        /// Gated OFF until that path is finished. See E3-1.
+        static let useScribeCoreDaemon = "useScribeCoreDaemon"
     }
 
     /// The recommended local model. Qwen 2.5 7B is the strongest small
@@ -168,6 +173,18 @@ final class AppSettings {
     var autoRecord: Bool {
         get { defaults.object(forKey: Keys.autoRecord) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.autoRecord) }
+    }
+
+    /// Whether to route recording through the embedded ScribeCore daemon.
+    /// Default FALSE — the daemon path captures into an orphan
+    /// `meetings/scribecore-<date>/` folder, never wires live transcription,
+    /// and never calls `finalize()`, so a meeting recorded through it is
+    /// silently and totally lost. Keep OFF until the daemon path records into
+    /// the UI-chosen meeting directory and drives the same finalize entry
+    /// point. See E3-1.
+    var useScribeCoreDaemon: Bool {
+        get { defaults.object(forKey: Keys.useScribeCoreDaemon) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.useScribeCoreDaemon) }
     }
 
     var captureMic: Bool {

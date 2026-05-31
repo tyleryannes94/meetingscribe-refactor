@@ -234,6 +234,10 @@ final class MeetingManager: ObservableObject {
     ///
     /// Returns true if ScribeCore acknowledged the startRecording command.
     private func tryStartViaScribeCore() async -> Bool {
+        // E3-1 kill-switch: the daemon path captures into an orphan folder and
+        // never finalizes the meeting (total silent loss). Hard-disable it
+        // until that path is finished — always record via the direct path.
+        guard AppSettings.shared.useScribeCoreDaemon else { return false }
         // If the daemon hasn't announced itself yet, wait a little for coreReady.
         if !scribeCoreReady {
             let deadline = Date().addingTimeInterval(5)
