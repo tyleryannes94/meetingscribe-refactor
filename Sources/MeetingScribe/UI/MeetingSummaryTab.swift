@@ -119,7 +119,8 @@ extension UnifiedMeetingDetail {
                         summary: summary,
                         actionItems: (manager.actionItems.items(for: m.id))
                             .map(\.title),
-                        recipients: attendeeEmails(for: m)
+                        recipients: attendeeEmails(for: m),
+                        meetingID: m.id
                     )
                     .navigationTitle("Draft follow-up")
                     .toolbar {

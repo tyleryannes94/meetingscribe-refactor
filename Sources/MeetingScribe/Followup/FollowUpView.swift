@@ -13,6 +13,9 @@ struct FollowUpView: View {
     let actionItems: [String]
     /// Email addresses to prefill the "To:" line when opening in Mail.
     var recipients: [String] = []
+    /// When set, enables follow-up sent-state tracking (P2-6).
+    var meetingID: String? = nil
+    @State private var markedSent = false
 
     @State private var channel: FollowUpSuggestion.Channel = .email
     @State private var suggestion: FollowUpSuggestion?
@@ -34,6 +37,7 @@ struct FollowUpView: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .onAppear { if let id = meetingID { markedSent = FollowUpStatus.isSent(id) } }
     }
 
     private var controls: some View {
@@ -92,6 +96,17 @@ struct FollowUpView: View {
                 }
                 ShareLink(item: s.plainText) { Label("Share", systemImage: "square.and.arrow.up") }
                 Spacer()
+                if let id = meetingID {
+                    // Track sent-state so Today stops resurfacing it. (P2-6)
+                    Button {
+                        FollowUpStatus.setSent(id, !markedSent)
+                        markedSent.toggle()
+                    } label: {
+                        Label(markedSent ? "Sent ✓" : "Mark as sent",
+                              systemImage: markedSent ? "checkmark.circle.fill" : "checkmark.circle")
+                    }
+                    .tint(markedSent ? .green : nil)
+                }
             }
             .controlSize(.small)
         }

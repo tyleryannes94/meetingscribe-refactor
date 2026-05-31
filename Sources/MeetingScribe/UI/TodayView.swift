@@ -65,6 +65,9 @@ struct TodayView: View {
                     router.section = .actions
                 }
 
+                // Forgotten follow-ups to send. (P2-6/U3-3)
+                followUpsSection
+
                 // Owe / Owed commitments split by direction. (U3-2/P2-7)
                 commitmentsSection
 
@@ -85,6 +88,55 @@ struct TodayView: View {
             // Full window width (req #5) — the feed is cards/lists, not prose,
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Follow-ups to send (P2-6/U3-3)
+
+    @State private var followUpRefresh = 0   // bump to re-evaluate after marking sent
+
+    private var pendingFollowUps: [Meeting] {
+        let cal = Calendar.current
+        let cutoff = cal.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        _ = followUpRefresh   // dependency so marking sent refreshes the list
+        return manager.pastMeetings
+            .filter { $0.startDate >= cutoff && !cal.isDateInToday($0.startDate) }
+            .filter { !FollowUpStatus.isSent($0.id) }
+            .sorted { $0.startDate > $1.startDate }
+    }
+
+    @ViewBuilder
+    private var followUpsSection: some View {
+        let items = pendingFollowUps
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "paperplane").foregroundStyle(NDS.brand)
+                    Text("Follow-ups to send").font(.system(size: 15, weight: .semibold))
+                }
+                ForEach(items.prefix(4)) { m in
+                    HStack(spacing: 8) {
+                        Button { router.openMeeting(m) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(m.displayTitle).font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                                Text(m.startDate, style: .date).font(.system(size: 11))
+                                    .foregroundStyle(NDS.textTertiary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button("Mark sent") {
+                            FollowUpStatus.setSent(m.id, true)
+                            followUpRefresh += 1
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(.vertical, 6).padding(.horizontal, 10)
+                    .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
         }
     }
 
