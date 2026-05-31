@@ -158,6 +158,7 @@ struct PersonDetailView: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var chatSession: ChatSession
     @EnvironmentObject var router: WorkspaceRouter
+    @EnvironmentObject var calendar: CalendarService
 
     let person: Person
     /// Called after the person is deleted so the list can clear its selection.
@@ -179,6 +180,9 @@ struct PersonDetailView: View {
     @State private var showAddRelationship = false
     @State private var confirmDelete = false
     @State private var newMemory = ""
+    /// Unrecorded calendar meetings with this person (last ~180 days), for the
+    /// unified timeline (U2-1).
+    @State private var calendarMeetings: [Meeting] = []
     @State private var messageStats: MessagesAnalyzer.Stats?
     @State private var messageError: String?
     @State private var analyzingMessages = false
@@ -304,6 +308,7 @@ struct PersonDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { updateChatContext() }
         .onChange(of: current.id) { _, _ in updateChatContext() }
+        .task(id: current.id) { await loadCalendarMeetings() }
         .onDisappear {
             chatSession.setContext("The People tab — the user's second-brain contacts.")
         }
@@ -508,56 +513,90 @@ struct PersonDetailView: View {
 
     // MARK: - Meeting history (right column, Meetings tab)
 
-    /// All past meetings from MeetingManager where this person was an attendee.
-    private var meetingHistorySection: some View {
+    /// True when `m` lists this person as an attendee (by email, most reliable,
+    /// or display name).
+    private func attendeeMatches(_ m: Meeting) -> Bool {
         let email = current.emails.first?.lowercased() ?? ""
         let personName = current.displayName.lowercased()
-        let matches = manager.pastMeetings.filter { m in
-            // Match by email (most reliable) or display name in attendees
-            m.attendees.contains {
-                let a = $0.lowercased()
-                return (!email.isEmpty && a.contains(email))
-                    || a.contains(personName)
-            }
+        return m.attendees.contains {
+            let a = $0.lowercased()
+            return (!email.isEmpty && a.contains(email)) || a.contains(personName)
         }
-        .sorted { $0.startDate > $1.startDate }
+    }
+
+    /// Load unrecorded calendar meetings with this person over the last ~180
+    /// days for the unified timeline (U2-1). Runs off the main actor.
+    private func loadCalendarMeetings() async {
+        let now = Date()
+        let from = Calendar.current.date(byAdding: .day, value: -180, to: now) ?? now
+        let all = await calendar.meetings(from: from, to: now, filterConferenceURLs: false)
+        let mine = all.filter(attendeeMatches)
+        await MainActor.run { self.calendarMeetings = mine }
+    }
+
+    /// Unified person timeline: recorded meetings (clickable) UNIONED with
+    /// unrecorded calendar meetings, deduped, each badged. Previously this only
+    /// showed recordings, so a manager's unrecorded 1:1s read empty. (U2-1, D1-5)
+    private var meetingHistorySection: some View {
+        let recorded = manager.pastMeetings.filter(attendeeMatches)
+        // Drop calendar meetings that line up with a recording (same ~minute).
+        let recordedMinutes = Set(recorded.map { Int($0.startDate.timeIntervalSince1970 / 60) })
+        let calOnly = calendarMeetings.filter {
+            !recordedMinutes.contains(Int($0.startDate.timeIntervalSince1970 / 60))
+        }
+        let rows = (recorded.map { (meeting: $0, recorded: true) }
+                    + calOnly.map { (meeting: $0, recorded: false) })
+            .sorted { $0.meeting.startDate > $1.meeting.startDate }
 
         return Group {
-            if !matches.isEmpty {
+            if !rows.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    NotionEyebrow(text: "In your recordings", count: matches.count)
-                    ForEach(matches.prefix(20)) { m in
-                        // Clickable backlink — routes to the meeting in the
-                        // canonical Meetings-tab detail. Was a dead HStack. (D1-5)
-                        Button {
-                            router.openMeeting(m)
-                        } label: {
-                            HStack(spacing: 10) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(m.displayTitle)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(NDS.textPrimary)
-                                    Text(m.startDate, style: .date)
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(NDS.textTertiary)
-                                }
-                                Spacer()
-                                if m.health?.status == .ok {
-                                    Circle().fill(Color.green.opacity(0.6)).frame(width: 6, height: 6)
-                                }
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(NDS.textTertiary)
-                            }
-                            .padding(.vertical, 6).padding(.horizontal, 10)
-                            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                    NotionEyebrow(text: "Meeting history", count: rows.count)
+                    ForEach(Array(rows.prefix(30).enumerated()), id: \.offset) { _, row in
+                        timelineRow(row.meeting, recorded: row.recorded)
                     }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func timelineRow(_ m: Meeting, recorded: Bool) -> some View {
+        if recorded {
+            // Clickable backlink → canonical Meetings-tab detail (D1-5).
+            Button { router.openMeeting(m) } label: { timelineRowContent(m, recorded: true) }
+                .buttonStyle(.plain)
+        } else {
+            // Calendar-only — no recording to open, so just informational.
+            timelineRowContent(m, recorded: false)
+        }
+    }
+
+    private func timelineRowContent(_ m: Meeting, recorded: Bool) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(m.displayTitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(NDS.textPrimary)
+                Text(m.startDate, style: .date)
+                    .font(.system(size: 11))
+                    .foregroundStyle(NDS.textTertiary)
+            }
+            Spacer()
+            Text(recorded ? "Recorded" : "Calendar")
+                .font(.system(size: 9, weight: .semibold))
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background((recorded ? Color.green : NDS.textTertiary).opacity(0.15), in: Capsule())
+                .foregroundStyle(recorded ? Color.green : NDS.textSecondary)
+            if recorded {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(NDS.textTertiary)
+            }
+        }
+        .padding(.vertical, 6).padding(.horizontal, 10)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+        .contentShape(Rectangle())
     }
 
     private var header: some View {
