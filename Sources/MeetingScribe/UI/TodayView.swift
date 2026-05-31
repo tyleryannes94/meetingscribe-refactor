@@ -30,6 +30,7 @@ struct TodayView: View {
             manager.refreshPastMeetings()
             manager.backfillActionItemsIfNeeded()
             manager.backfillPeopleIfNeeded()
+            manager.backfillSearchIndexIfNeeded()
         }
     }
 

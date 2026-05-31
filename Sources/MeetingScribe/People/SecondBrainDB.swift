@@ -353,6 +353,13 @@ final class SecondBrainDB {
         return results
     }
 
+    /// Number of rows in vault_content for a given entity kind. Used to detect
+    /// when the index is missing content after a rebuild/reset (the index only
+    /// re-restores people, so meetings/voice notes need a backfill). (C2-1)
+    func vaultContentCount(kind: String) -> Int {
+        scalarInt("SELECT COUNT(*) FROM vault_content WHERE entity_kind='\(escape(kind))';") ?? 0
+    }
+
     // MARK: - SQLite plumbing
 
     private enum Value { case text(String), int(Int64), real(Double) }

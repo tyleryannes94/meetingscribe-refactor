@@ -698,6 +698,32 @@ final class MeetingManager: ObservableObject {
         personExtraction.runIfNeeded(meetings: pastMeetings, force: force)
     }
 
+    private var didBackfillSearchIndex = false
+
+    /// Re-index all past meetings into the FTS index if it's missing them — e.g.
+    /// after a `secondbrain.db` rebuild/reset, which only restores people, not
+    /// meetings. Runs at most once per session and only when the index is
+    /// actually empty of meetings, so the common case pays just one COUNT(*).
+    /// Keeps global search (C2-1) trustworthy rather than silently stale.
+    func backfillSearchIndexIfNeeded() {
+        guard !didBackfillSearchIndex else { return }
+        didBackfillSearchIndex = true
+        guard !pastMeetings.isEmpty,
+              PeopleStore.shared.indexedMeetingCount() == 0 else { return }
+        Task { @MainActor in
+            for (i, m) in self.pastMeetings.enumerated() {
+                let primary = self.tagStore.primaryTag(for: m)
+                let summary = self.store.readSummary(for: m, primaryTag: primary)
+                let tagNames = self.tagStore.tagIDs(for: m)
+                    .compactMap { self.tagStore.tag(by: $0)?.name }
+                    .joined(separator: " ")
+                PeopleStore.shared.indexMeeting(m, summary: summary,
+                                                tags: tagNames.isEmpty ? nil : tagNames)
+                if i % 20 == 19 { await Task.yield() }  // keep the UI responsive
+            }
+        }
+    }
+
     func userNotes(for meeting: Meeting) -> String {
         let cached = bodyCache.cached(meeting.id)
         if !cached.isEmpty { return cached.notes }

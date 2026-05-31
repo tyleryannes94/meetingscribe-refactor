@@ -128,6 +128,17 @@ final class PeopleStore: ObservableObject {
         db.deleteVaultContent(entityID: id, entityKind: "meeting")
     }
 
+    /// FTS5-backed recall (BM25 + recency) across indexed vault content —
+    /// meetings, voice notes, and people. This is the engine global search now
+    /// runs on instead of an in-memory `contains()` scan. (C2-1)
+    func searchVault(_ query: String, limit: Int = 50) -> [VaultSearchResult] {
+        db.searchAll(query: query, limit: limit)
+    }
+
+    /// How many meetings are currently in the FTS index. 0 with meetings on disk
+    /// signals the index was rebuilt/reset and needs a meeting backfill. (C2-1)
+    func indexedMeetingCount() -> Int { db.vaultContentCount(kind: "meeting") }
+
     // MARK: - Paths
 
     private var peopleRoot: URL {
