@@ -9,7 +9,7 @@
 #   • Claude Desktop MCP config                     →  KEEP ALL
 #   • UserDefaults plist                            →  KEEP (not asked; defensive)
 #
-# Run with: bash ~/MeetingScribe/clean-reinstall.sh
+# Run with: bash ~/MeetingScribeRefactor/clean-reinstall.sh
 #
 # Read it before you run it. It's intentionally short so you can audit it.
 
@@ -17,10 +17,23 @@ set -euo pipefail
 
 BUNDLE_ID="com.tyleryannes.MeetingScribe"
 APP_PATH="/Applications/MeetingScribe.app"
-STORAGE_DIR="$HOME/Documents/MeetingNotes"
-REPO_DIR="$HOME/MeetingScribe"
+# Rebuild from the REFACTOR repo, never the deprecated ~/MeetingScribe tree.
+# (Rebuilding from the old repo recreates the wrong-repo install bug this
+# script exists to cure. See E5-7.)
+REPO_DIR="$HOME/MeetingScribeRefactor"
+
+# Resolve the meeting library from the app's actual configured storageDir
+# rather than hardcoding the legacy ~/Documents/MeetingNotes location (the
+# current default is the iCloud Drive vault). Fall back to the iCloud default,
+# then the legacy path.
+DEFAULT_STORAGE="$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault"
+LEGACY_STORAGE="$HOME/Documents/MeetingNotes"
+STORAGE_DIR=$(defaults read "$BUNDLE_ID" storageDir 2>/dev/null || true)
+if [ -z "${STORAGE_DIR:-}" ]; then
+    if [ -d "$DEFAULT_STORAGE" ]; then STORAGE_DIR="$DEFAULT_STORAGE"; else STORAGE_DIR="$LEGACY_STORAGE"; fi
+fi
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP_DIR="$HOME/Documents/MeetingNotes.backup-$TIMESTAMP"
+BACKUP_DIR="${STORAGE_DIR}.backup-$TIMESTAMP"
 
 bold() { printf "\033[1m%s\033[0m\n" "$*"; }
 ok()   { printf "  \033[32m✓\033[0m %s\n" "$*"; }
@@ -41,6 +54,19 @@ ok "Repo at $REPO_DIR"
 # local `make app` (build-stamp side effect), which we tolerate. Anything
 # else dirty is a sign the user has uncommitted work — abort to be safe.
 cd "$REPO_DIR"
+
+# Assert origin is the refactor repo before we build anything. Rebuilding from
+# the legacy meetingscribe repo silently downgrades the install (E5-7).
+ORIGIN_URL=$(git remote get-url origin 2>/dev/null || echo "")
+case "$ORIGIN_URL" in
+    *meetingscribe-refactor*) ok "origin is the refactor repo ($ORIGIN_URL)" ;;
+    *)
+        err "origin is '$ORIGIN_URL' — expected a meetingscribe-refactor remote."
+        err "Refusing to rebuild from the wrong repo. Aborting."
+        exit 1
+        ;;
+esac
+
 DIRTY=$(git diff --name-only)
 UNTRACKED=$(git ls-files --others --exclude-standard)
 EXPECTED_DIRTY="Resources/Info.plist"
