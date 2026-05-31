@@ -27,6 +27,20 @@ let storageDir: URL = {
 
 let reservedFolders: Set<String> = ["models", "QuickNotes", "logs", "diagnostics"]
 
+/// Vault containment guard (E4-1). Returns the standardized URL only when it
+/// resolves to a path inside `storageDir`; returns nil if it escapes the vault.
+/// `standardizedFileURL` collapses `..` components, so a corrupt or hostile
+/// `relativeFolderPath` (e.g. `../../../etc`) carried in a meeting.json can't
+/// steer a write outside the vault. Prefix is matched on a path-component
+/// boundary so a sibling like `<vault>-evil` can't masquerade as inside.
+func resolveInsideVault(_ url: URL) -> URL? {
+    let base = storageDir.standardizedFileURL
+    let resolved = url.standardizedFileURL
+    if resolved.path == base.path { return resolved }
+    let prefix = base.path.hasSuffix("/") ? base.path : base.path + "/"
+    return resolved.path.hasPrefix(prefix) ? resolved : nil
+}
+
 // MARK: - Index-first meeting lookup
 
 /// Versioned index file shape mirrored from the app's `MeetingStore.IndexFile`.
@@ -98,7 +112,9 @@ func readMeetingJSON(at dir: URL) -> MeetingDTO? {
 func directoryForMeeting(_ m: MeetingDTO) -> URL {
     if let rel = m.relativeFolderPath, !rel.isEmpty {
         let url = storageDir.appendingPathComponent(rel, isDirectory: true)
-        if FileManager.default.fileExists(atPath: url.path) { return url }
+        // E4-1: reject a stored path that escapes the vault before trusting it.
+        if let safe = resolveInsideVault(url),
+           FileManager.default.fileExists(atPath: safe.path) { return safe }
     }
     // Walk fallback.
     let fm = FileManager.default
@@ -286,6 +302,10 @@ func personSlug(displayName: String, id: String) -> String {
 }
 
 func writePersonEnvelope(_ payload: [String: Any], to dir: URL) throws {
+    // E4-1: never write a person record outside the vault.
+    guard resolveInsideVault(dir) != nil else {
+        throw MCPWriteError.io("refusing to write outside the vault: \(dir.path)")
+    }
     let env: [String: Any] = ["schemaVersion": peopleSchemaVersion, "data": payload]
     guard JSONSerialization.isValidJSONObject(env) else {
         throw MCPWriteError.io("person envelope is not valid JSON")
@@ -1375,6 +1395,10 @@ func tool_createMeetingNote(args: [String: Any]) -> JSONValue {
         return .object(["error": .string("`text` is required")])
     }
     let dir = directoryForMeeting(m)
+    // E4-1: refuse to write if the resolved meeting folder escapes the vault.
+    guard resolveInsideVault(dir) != nil else {
+        return .object(["error": .string("refusing to write outside the vault")])
+    }
     let url = dir.appendingPathComponent("notes.md")
     let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     // Append (never overwrite) so we can't destroy notes the user already
