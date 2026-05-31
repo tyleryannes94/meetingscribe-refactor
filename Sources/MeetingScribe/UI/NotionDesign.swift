@@ -8,7 +8,12 @@ import AppKit
 enum NDS {
     // MARK: Layout
     static let pagePadding: CGFloat = 56
-    static let contentMaxWidth: CGFloat = 720
+    /// Max width for page-column surfaces (Tasks list/board/page chrome). Was a
+    /// cramped 720 reading-measure that wasted horizontal space on lists and
+    /// boards; relaxed so content breathes (and so enlarged Dynamic Type can
+    /// reflow — prereq for D5-2). True prose panes keep their own narrower
+    /// measure. (LAY-1)
+    static let contentMaxWidth: CGFloat = 1100
     /// Top inset that pushes a split-view pane's content clear of the window's
     /// translucent title-bar / toolbar (macOS Tahoe). Shared by the People list
     /// and detail panes so they line up instead of repeating a magic 60. (req #1)
