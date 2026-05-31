@@ -60,8 +60,10 @@ final class MeetingPipelineController: ObservableObject {
     /// Pure decision for whether the live transcript needs a batch re-transcribe
     /// over the merged audio. Extracted so it can be unit-tested without
     /// whisper-cli. Returns true when the live transcript is empty, when chunks
-    /// were dropped under backpressure, or when live coverage falls more than
-    /// one chunk short of the real recording length. (ENG-A)
+    /// were dropped under backpressure, when the recording is shorter than one
+    /// chunk (so the live transcript is only the unvalidated in-flight flush),
+    /// or when live coverage falls more than one chunk short of the real
+    /// recording length. (ENG-A)
     static func needsBatchRepair(liveIsEmpty: Bool,
                                  droppedChunks: Int,
                                  coverageSeconds: Double,
@@ -69,6 +71,12 @@ final class MeetingPipelineController: ObservableObject {
                                  tolerance: Double = liveCoverageToleranceSeconds) -> Bool {
         if liveIsEmpty { return true }
         if droppedChunks > 0 { return true }
+        // Sub-one-chunk recordings never crossed a 5-minute boundary, so the
+        // live transcript is just the in-flight tail flushed at stop — which can
+        // mis-transcribe even good audio (e.g. a 55s call whose single live
+        // chunk produced just "you"). Always run the authoritative batch pass
+        // over the afconvert→16kHz merged audio for short recordings.
+        if recordedDuration > 0 && recordedDuration <= tolerance { return true }
         if recordedDuration > 0 && coverageSeconds < (recordedDuration - tolerance) { return true }
         return false
     }

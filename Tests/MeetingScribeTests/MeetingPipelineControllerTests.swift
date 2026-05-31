@@ -80,6 +80,15 @@ final class MeetingPipelineControllerTests: XCTestCase {
             liveIsEmpty: false, droppedChunks: 0, coverageSeconds: 1200, recordedDuration: 1800))
     }
 
+    /// A short recording (under one 5-minute chunk) must always run the batch
+    /// pass: the live transcript is only the unvalidated in-flight flush, which
+    /// can mis-transcribe good audio (the "you" bug on a 55s ad-hoc recording).
+    func testNeedsBatchRepairForShortRecording() {
+        XCTAssertTrue(MeetingPipelineController.needsBatchRepair(
+            liveIsEmpty: false, droppedChunks: 0, coverageSeconds: 55, recordedDuration: 55),
+            "a sub-5-minute recording must run the authoritative batch pass")
+    }
+
     /// A complete live transcript (full coverage, no drops) must NOT trigger a
     /// redundant batch pass — the whole point of the live path.
     func testNoBatchWhenLiveComplete() {
