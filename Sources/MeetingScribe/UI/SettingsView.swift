@@ -18,6 +18,8 @@ struct SettingsView: View {
     @State private var detectZoom: Bool = AppSettings.shared.detectZoomImpromptu
     @State private var hotkeyKeyCode: UInt32 = AppSettings.shared.dictationHotkeyKeyCode
     @State private var hotkeyMods: UInt32 = AppSettings.shared.dictationHotkeyModifiers
+    @State private var meetingRecKeyCode: UInt32 = AppSettings.shared.meetingRecordHotkeyKeyCode
+    @State private var meetingRecMods: UInt32 = AppSettings.shared.meetingRecordHotkeyModifiers
     @State private var swapKeyCode: UInt32 = AppSettings.shared.dictationSwapHotkeyKeyCode
     @State private var swapMods: UInt32 = AppSettings.shared.dictationSwapHotkeyModifiers
     @State private var dictationAutoPaste: Bool = AppSettings.shared.dictationAutoPaste
@@ -84,6 +86,24 @@ struct SettingsView: View {
                 }
                 Section("Impromptu detection") {
                     Toggle("Prompt to record when a Zoom call / Meet tab is detected", isOn: $detectZoom)
+                }
+                Section("Meeting recording") {
+                    HStack {
+                        Text("Global start / stop recording")
+                        Spacer()
+                        HotkeyRecorder(keyCode: $meetingRecKeyCode, modifiers: $meetingRecMods)
+                        Menu("Presets") {
+                            ForEach(quickPresets, id: \.label) { preset in
+                                Button(preset.label) {
+                                    meetingRecKeyCode = preset.key
+                                    meetingRecMods = preset.mods
+                                }
+                            }
+                        }
+                        .frame(width: 90)
+                    }
+                    Text("A system-wide shortcut that starts an ad-hoc recording when idle and stops it when recording — works even when MeetingScribe isn't focused. Default: ⌥⌘R.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
                 Section("Dictation (Whispr Flow)") {
                     HStack {
@@ -564,6 +584,8 @@ struct SettingsView: View {
         s.detectZoomImpromptu = detectZoom
         s.dictationHotkeyKeyCode = hotkeyKeyCode
         s.dictationHotkeyModifiers = hotkeyMods
+        s.meetingRecordHotkeyKeyCode = meetingRecKeyCode
+        s.meetingRecordHotkeyModifiers = meetingRecMods
         s.dictationSwapHotkeyKeyCode = swapKeyCode
         s.dictationSwapHotkeyModifiers = swapMods
         s.dictationAutoPaste = dictationAutoPaste

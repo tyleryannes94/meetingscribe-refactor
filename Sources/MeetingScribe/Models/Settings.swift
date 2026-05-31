@@ -20,6 +20,8 @@ final class AppSettings {
         static let detectZoomImpromptu = "detectZoomImpromptu"
         static let dictationHotkeyKeyCode = "dictationHotkeyKeyCode"
         static let dictationHotkeyModifiers = "dictationHotkeyModifiers"
+        static let meetingRecordHotkeyKeyCode = "meetingRecordHotkeyKeyCode"
+        static let meetingRecordHotkeyModifiers = "meetingRecordHotkeyModifiers"
         static let dictationAutoPaste = "dictationAutoPaste"
         static let dictationUsePolished = "dictationUsePolished"
         static let dictationSwapHotkeyKeyCode = "dictationSwapHotkeyKeyCode"
@@ -281,6 +283,25 @@ final class AppSettings {
             return UInt32(v ?? 0)
         }
         set { defaults.set(Int(newValue), forKey: Keys.dictationHotkeyModifiers) }
+    }
+
+    /// Carbon virtual keycode for the GLOBAL meeting-record toggle (start/stop
+    /// a meeting recording system-wide). Default: R (15). (D4-1)
+    var meetingRecordHotkeyKeyCode: UInt32 {
+        get {
+            let v = defaults.integer(forKey: Keys.meetingRecordHotkeyKeyCode)
+            return v == 0 ? 15 : UInt32(v)
+        }
+        set { defaults.set(Int(newValue), forKey: Keys.meetingRecordHotkeyKeyCode) }
+    }
+
+    /// Carbon modifier mask for the meeting-record toggle. Default: ⌥⌘ (2304).
+    var meetingRecordHotkeyModifiers: UInt32 {
+        get {
+            let v = defaults.object(forKey: Keys.meetingRecordHotkeyModifiers) as? Int
+            return UInt32(v ?? 2304)
+        }
+        set { defaults.set(Int(newValue), forKey: Keys.meetingRecordHotkeyModifiers) }
     }
 
     /// If true, after transcribing a hotkey-triggered dictation, paste the

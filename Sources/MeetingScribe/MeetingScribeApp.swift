@@ -19,6 +19,7 @@ struct MeetingScribeApp: App {
     @State private var calendarTimer: Timer?
     @State private var hotkey = GlobalHotkey()
     @State private var swapHotkey = GlobalHotkey()
+    @State private var meetingRecordHotkey = GlobalHotkey()
     @State private var settingsObserver: AnyCancellable?
 
     var body: some Scene {
@@ -294,6 +295,22 @@ struct MeetingScribeApp: App {
         }
         swapHotkey.register(keyCode: s.dictationSwapHotkeyKeyCode,
                             modifiers: s.dictationSwapHotkeyModifiers)
+        // Global meeting-record toggle (D4-1): one chord starts an ad-hoc
+        // recording when idle and stops it when recording — works system-wide,
+        // even when MeetingScribe isn't the focused app.
+        meetingRecordHotkey.onTrigger = { [weak manager] in
+            guard let manager else { return }
+            Task { @MainActor in
+                switch manager.state {
+                case .recording, .stopping:
+                    await manager.stopRecording()
+                default:
+                    await manager.startRecording(for: nil)
+                }
+            }
+        }
+        meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
+                                     modifiers: s.meetingRecordHotkeyModifiers)
     }
 
     // MARK: - Login Item registration
@@ -377,6 +394,8 @@ struct MeetingScribeApp: App {
                                 modifiers: s.dictationHotkeyModifiers)
                 swapHotkey.register(keyCode: s.dictationSwapHotkeyKeyCode,
                                     modifiers: s.dictationSwapHotkeyModifiers)
+                meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
+                                             modifiers: s.meetingRecordHotkeyModifiers)
                 Task { @MainActor in
                     calendar.refreshUpcoming(force: true)
                     await notifications.syncScheduled(for: calendar.upcoming)
