@@ -42,6 +42,7 @@ struct SettingsView: View {
     @State private var showingNotionKeyEditor: Bool = false
     @State private var linearKeyDraft: String = AppSettings.shared.linearAPIKey ?? ""
     @State private var linearSaved: Bool = false
+    @State private var showHealthCheck = false
     @State private var linearTeams: [TaskSyncService.LinearTeamRef] = []
     @State private var linearTeamID: String = AppSettings.shared.linearDefaultTeamID ?? ""
     @State private var linearTeamsLoading: Bool = false
@@ -75,6 +76,13 @@ struct SettingsView: View {
                             .textSelection(.enabled)
                     }
                     Text("Use this to confirm the installed app matches the latest build (the build id is the git commit).")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Button {
+                        showHealthCheck = true
+                    } label: {
+                        Label("Run a health check", systemImage: "stethoscope")
+                    }
+                    Text("Checks the transcription model, Ollama, disk space, and macOS permissions.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Section("You") {
@@ -512,6 +520,9 @@ struct SettingsView: View {
         }
         .padding()
         .onAppear { mcp.refreshStatus() }
+        .sheet(isPresented: $showHealthCheck) {
+            HealthCheckSheet(isPresented: $showHealthCheck)
+        }
     }
 
     private struct HotkeyPreset {
