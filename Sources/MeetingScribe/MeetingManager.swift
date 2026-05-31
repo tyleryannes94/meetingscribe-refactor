@@ -837,6 +837,15 @@ final class MeetingManager: ObservableObject {
         }
     }
 
+    /// Absolute path to the meeting's canonical Obsidian markdown (`<slug>.md`),
+    /// or nil if it hasn't been written yet (e.g. not finalized). Used for
+    /// "Open in Obsidian". (C3-x)
+    func canonicalMarkdownURL(for meeting: Meeting) -> URL? {
+        let dir = store.directory(for: meeting, primaryTag: tagStore.primaryTag(for: meeting))
+        let url = dir.appendingPathComponent("\(meeting.slug).md")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     func audioURLs(for meeting: Meeting) -> [URL] {
         let dir = store.directory(for: meeting, primaryTag: tagStore.primaryTag(for: meeting))
         let fm = FileManager.default

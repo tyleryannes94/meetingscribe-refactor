@@ -43,6 +43,55 @@ actor CalendarStoreActor {
         .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
 
+    // MARK: - Write-back (P4-1)
+
+    /// Append (or replace) the meeting recap inside the calendar event's notes,
+    /// delimited by markers so re-running updates in place rather than stacking.
+    /// Returns whether the save succeeded. Full-access calendar permission is
+    /// already requested at onboarding.
+    func attachRecap(toEventID id: String, markdown: String, deepLink: String) -> Bool {
+        guard let event = store.event(withIdentifier: id) else { return false }
+        let begin = "<!-- MeetingScribe recap -->"
+        let end = "<!-- /MeetingScribe recap -->"
+        let block = "\(begin)\n\(markdown)\n\n\(deepLink)\n\(end)"
+        var notes = event.notes ?? ""
+        if let r1 = notes.range(of: begin), let r2 = notes.range(of: end), r1.lowerBound < r2.upperBound {
+            notes.replaceSubrange(r1.lowerBound..<r2.upperBound, with: block)
+        } else {
+            notes = notes.isEmpty ? block : notes + "\n\n" + block
+        }
+        event.notes = notes
+        do {
+            try store.save(event, span: .thisEvent)
+            return true
+        } catch {
+            log.error("Calendar recap write failed: \(error.localizedDescription, privacy: .public)")
+            ErrorReporter.shared.reportAsync(error, category: .calendar)
+            return false
+        }
+    }
+
+    /// Create a follow-up event on the user's default calendar. Returns the new
+    /// event identifier, or nil on failure.
+    @discardableResult
+    func scheduleFollowUp(title: String, start: Date, durationMinutes: Int, notes: String?) -> String? {
+        let event = EKEvent(eventStore: store)
+        event.title = title
+        event.startDate = start
+        event.endDate = start.addingTimeInterval(TimeInterval(durationMinutes * 60))
+        event.notes = notes
+        event.calendar = store.defaultCalendarForNewEvents
+        guard event.calendar != nil else { return nil }
+        do {
+            try store.save(event, span: .thisEvent)
+            return event.eventIdentifier
+        } catch {
+            log.error("Follow-up create failed: \(error.localizedDescription, privacy: .public)")
+            ErrorReporter.shared.reportAsync(error, category: .calendar)
+            return nil
+        }
+    }
+
     /// Fetch meetings in a window. `enabledIDs.isEmpty` includes everything.
     func meetings(from: Date,
                   to: Date,

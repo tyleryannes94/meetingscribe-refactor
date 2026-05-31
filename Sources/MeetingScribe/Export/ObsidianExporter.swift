@@ -48,6 +48,8 @@ enum ObsidianExporter {
         let dest = meetingFolderURL.appendingPathComponent("\(meeting.slug).md")
         do {
             try md.write(to: dest, atomically: true, encoding: .utf8)
+            // Drop the portability manifest at the vault root on first write. (C3-8)
+            VaultManifest.ensure(at: AppSettings.shared.storageDir)
             return dest
         } catch {
             return nil
