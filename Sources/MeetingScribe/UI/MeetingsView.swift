@@ -194,6 +194,16 @@ struct MeetingsView: View {
             Text("Meetings appear after you record a call, or when your calendar syncs.")
                 .font(NDS.small).foregroundStyle(NDS.textSecondary)
                 .multilineTextAlignment(.center)
+            // Actionable empty state — don't dead-end the user. (UX9-1)
+            if search.isEmpty {
+                Button {
+                    Task { await manager.startRecording(for: nil) }
+                } label: {
+                    Label("Record a meeting", systemImage: "record.circle")
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40).padding(.horizontal, 20)

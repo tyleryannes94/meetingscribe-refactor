@@ -175,7 +175,22 @@ struct TaskPageView: View {
             }
             if !item.isManual {
                 NotionPropertyRow(icon: "calendar.badge.checkmark", label: "From meeting") {
-                    Text(item.meetingTitle).font(NDS.body).foregroundStyle(NDS.textSecondary).lineLimit(1)
+                    if item.meetingID.isEmpty {
+                        Text(item.meetingTitle).font(NDS.body).foregroundStyle(NDS.textSecondary).lineLimit(1)
+                    } else {
+                        // Clickable → opens the source meeting (was dead text). (A3/UX4-1)
+                        Button {
+                            NotificationCenter.default.post(
+                                name: .meetingScribeOpenEntity, object: nil,
+                                userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: item.meetingID).absoluteString])
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(item.meetingTitle).font(NDS.body).foregroundStyle(NDS.brand).lineLimit(1)
+                                Image(systemName: "arrow.up.right").font(.caption2).foregroundStyle(NDS.brand)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
