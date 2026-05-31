@@ -7,9 +7,18 @@ import AppKit
 @available(macOS 14.0, *)
 struct TaskPageView: View {
     @ObservedObject var store: ActionItemStore
+    @EnvironmentObject var people: PeopleStore
+    @EnvironmentObject var router: WorkspaceRouter
     let itemID: String
     var breadcrumb: String = "Tasks"
     let onClose: () -> Void
+
+    /// Recent contacts surfaced first for the assignee→person link menu.
+    private var personPickerList: [Person] {
+        people.people
+            .sorted { ($0.lastInteractionAt ?? .distantPast) > ($1.lastInteractionAt ?? .distantPast) }
+            .prefix(50).map { $0 }
+    }
 
     @State private var titleDraft = ""
     @State private var assigneeDraft = ""
@@ -133,9 +142,50 @@ struct TaskPageView: View {
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
             NotionPropertyRow(icon: "person", label: "Assignee") {
-                TextField("Empty", text: $assigneeDraft)
-                    .textFieldStyle(.plain).font(NDS.body)
-                    .onSubmit { store.setOwner(itemID, owner: assigneeDraft.isEmpty ? nil : assigneeDraft) }
+                HStack(spacing: 6) {
+                    TextField("Empty", text: $assigneeDraft)
+                        .textFieldStyle(.plain).font(NDS.body)
+                        .onSubmit {
+                            // Free-text edit clears any stale hard link unless it
+                            // still matches the linked person's name.
+                            let name = assigneeDraft.isEmpty ? nil : assigneeDraft
+                            if let pid = item.ownerPersonID,
+                               people.person(by: pid)?.displayName == assigneeDraft {
+                                store.setOwnerPerson(itemID, personID: pid, ownerName: name)
+                            } else {
+                                store.setOwnerPerson(itemID, personID: nil, ownerName: name)
+                            }
+                        }
+                    // Link to a Person record (exact, navigable).
+                    Menu {
+                        if item.ownerPersonID != nil {
+                            Button("Unlink person") {
+                                store.setOwnerPerson(itemID, personID: nil,
+                                                     ownerName: assigneeDraft.isEmpty ? nil : assigneeDraft)
+                            }
+                            Divider()
+                        }
+                        ForEach(personPickerList) { p in
+                            Button(p.displayName) {
+                                assigneeDraft = p.displayName
+                                store.setOwnerPerson(itemID, personID: p.id, ownerName: p.displayName)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: item.ownerPersonID == nil
+                              ? "person.crop.circle.badge.plus"
+                              : "person.crop.circle.badge.checkmark")
+                            .foregroundStyle(item.ownerPersonID == nil ? NDS.textTertiary : NDS.brand)
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .help("Link this assignee to a person")
+                    if let pid = item.ownerPersonID, people.person(by: pid) != nil {
+                        Button { router.openPerson(pid) } label: {
+                            Image(systemName: "arrow.up.right.square")
+                        }
+                        .buttonStyle(.borderless).help("Open person")
+                    }
+                }
             }
             NotionPropertyRow(icon: "calendar.badge.clock", label: "Start") {
                 dateButton(item.startDate, show: $startShown) { store.setStartDate(itemID, startDate: $0) }

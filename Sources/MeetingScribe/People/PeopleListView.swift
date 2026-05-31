@@ -413,11 +413,10 @@ struct PeopleListView: View {
             PersonDetailView(person: person, onDeleted: { selection = nil })
                 .id(person.id)
         } else {
-            VStack(spacing: 8) {
-                Image(systemName: "person.crop.circle").font(.system(size: 40)).foregroundStyle(.secondary)
-                Text("Select a person").foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Relationship dashboard instead of dead space (reconnect / birthdays /
+            // most-active). Selecting a card row opens that person.
+            PeopleInsightsView(onOpen: { selection = $0 })
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

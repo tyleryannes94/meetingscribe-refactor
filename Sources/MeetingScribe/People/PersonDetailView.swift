@@ -182,6 +182,14 @@ struct PersonDetailView: View {
     @State private var confirmDelete = false
     @State private var newMemory = ""
     @State private var newTaskTitle = ""
+    @State private var newFavorite = ""
+    @State private var showNewTag = false
+    @State private var newTagName = ""
+    @State private var aiSuggestions: PersonAISuggestions?
+    @State private var aiRunning = false
+    @State private var aiError: String?
+    @State private var dismissedSuggestions: Set<String> = []
+    @State private var deepRunning = false
     /// Unrecorded calendar meetings with this person (last ~180 days), for the
     /// unified timeline (U2-1).
     @State private var calendarMeetings: [Meeting] = []
@@ -193,28 +201,6 @@ struct PersonDetailView: View {
     @State private var customPromptDraft = ""
     @State private var showCustomPrompt = false
     @State private var noteExpansion: [String: Bool] = [:]
-    @State private var rightTab: PersonRightTab = .notes
-
-    enum PersonRightTab: String, CaseIterable, Identifiable {
-        case notes, meetings, tasks, messages
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .notes:    return "Notes"
-            case .meetings: return "Meetings"
-            case .tasks:    return "Tasks"
-            case .messages: return "Messages"
-            }
-        }
-        var systemImage: String {
-            switch self {
-            case .notes:    return "note.text"
-            case .meetings: return "person.2.fill"
-            case .tasks:    return "checklist"
-            case .messages: return "message.fill"
-            }
-        }
-    }
 
     /// Display container for a finished analysis. Holds the preset (so we
     /// know what kind chip to show) and the rendered text the user can
@@ -236,80 +222,38 @@ struct PersonDetailView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            // ── LEFT COLUMN: Identity panel (fixed 280pt) ──────────────────
+        // One scrollable page of sections (no tabs) on the left so everything is
+        // visible at once, with the AI chat embedded as a persistent right column
+        // instead of a toggled rail.
+        HSplitView {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 22) {
                     identityPanel
+                    tagsEditSection
+                    if !current.photoRelativePaths.isEmpty { photosSection }
+                    contactRows
+                    if !current.bio.isEmpty || editingIdentity { notes }
+                    favoritesEditSection
+                    aiSuggestionsSection
+                    relationshipsSection
+                    encountersSection
+                    if !current.meetingMentions.isEmpty { mentionedInSection }
+                    meetingHistorySection
+                    tasksSection
+                    memoriesSection
+                    attachedNotesSection
+                    messagesSection
+                    provenanceFooter
                 }
-                // Top inset clears the translucent window toolbar (Tahoe) — the
-                // identity panel was sliding under it (avatar cut off). Matches
-                // the People list column's 60pt so the two panes line up. (req #1)
-                .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, NDS.splitPaneTopInset)
+                .padding(.horizontal, 28).padding(.bottom, 28).padding(.top, NDS.splitPaneTopInset)
+                .frame(maxWidth: 920, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 280)
-            .background(NDS.sidebarBg)
+            .frame(minWidth: 460, idealWidth: 640)
+            .background(NDS.bg)
 
-            Divider().overlay(NDS.divider)
-
-            // ── RIGHT COLUMN: Tabbed content (flex) ────────────────────────
-            VStack(spacing: 0) {
-                // Tab bar
-                HStack(spacing: 0) {
-                    ForEach(PersonRightTab.allCases) { tab in
-                        Button {
-                            rightTab = tab
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: tab.systemImage).font(.system(size: 11))
-                                Text(tab.label).font(.system(size: 13, weight: rightTab == tab ? .semibold : .regular))
-                            }
-                            .foregroundStyle(rightTab == tab ? NDS.brand : NDS.textSecondary)
-                            .padding(.vertical, 10).padding(.horizontal, 14)
-                            .overlay(alignment: .bottom) {
-                                if rightTab == tab {
-                                    Rectangle().fill(NDS.brand).frame(height: 2)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Spacer()
-                }
-                // Same toolbar inset as the identity panel + list column —
-                // the Notes/Meetings/Messages tab bar was hidden under the
-                // window title bar. Background fills the inset strip. (req #1)
-                .padding(.top, NDS.splitPaneTopInset)
-                .background(NDS.sidebarBg)
-                Divider().overlay(NDS.divider)
-
-                // Tab content
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        switch rightTab {
-                        case .notes:
-                            if !current.bio.isEmpty { notes }
-                            memoriesSection
-                            attachedNotesSection
-                        case .meetings:
-                            encountersSection
-                            if !current.meetingMentions.isEmpty { mentionedInSection }
-                            meetingHistorySection
-                        case .tasks:
-                            tasksSection
-                        case .messages:
-                            messagesSection
-                        }
-                        if rightTab == .notes { provenanceFooter }
-                    }
-                    .padding(24)
-                    // Was 720 — left a wide dead gutter on large displays (req #5).
-                    // Raised so the People detail uses more of the available width.
-                    .frame(maxWidth: 1280, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .background(NDS.bg)
-            }
+            personChatColumn
+                .frame(minWidth: 320, idealWidth: 380, maxWidth: 480)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { updateChatContext() }
@@ -498,37 +442,347 @@ struct PersonDetailView: View {
                 }
                 .padding(.top, 2)
             }
+        }
+    }
 
-            // Tags
-            if !tags.isEmpty {
+    // MARK: - Tags (inline add) + Favorites (inline add)
+
+    /// Tags with an always-present "Add tag" menu so tagging doesn't require the
+    /// full edit sheet. Lists existing people-tags and offers to create a new one.
+    private var tagsEditSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Tags").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                Spacer()
+                Menu {
+                    let unused = peopleTags.allTags.filter { !current.tagIDs.contains($0.id) }
+                    if !unused.isEmpty {
+                        ForEach(unused) { t in
+                            Button(t.name) { addTag(t.id) }
+                        }
+                        Divider()
+                    }
+                    Button("New tag…") { showNewTag = true }
+                } label: {
+                    Label("Add tag", systemImage: "plus")
+                }
+                .menuStyle(.borderlessButton).fixedSize().font(NDS.small)
+            }
+            if tags.isEmpty {
+                Text("No tags yet. Use Add tag to group this person (clients, family, an event…).")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+            } else {
                 FlowLayout(spacing: 5) {
-                    ForEach(tags) { t in TagChip(tag: t, removable: false, onRemove: nil) }
+                    ForEach(tags) { t in
+                        TagChip(tag: t, removable: true) { removeTag(t.id) }
+                    }
+                }
+            }
+        }
+        .alert("New tag", isPresented: $showNewTag) {
+            TextField("Tag name", text: $newTagName)
+            Button("Add") { commitNewTag() }
+            Button("Cancel", role: .cancel) { newTagName = "" }
+        }
+    }
+
+    private func addTag(_ tagID: String) {
+        var u = current
+        u.tagIDs.insert(tagID)
+        people.updatePerson(u)
+    }
+
+    private func removeTag(_ tagID: String) {
+        var u = current
+        u.tagIDs.remove(tagID)
+        people.updatePerson(u)
+    }
+
+    private func commitNewTag() {
+        let name = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newTagName = ""
+        guard !name.isEmpty else { return }
+        let tag = peopleTags.createTag(name: name)
+        addTag(tag.id)
+    }
+
+    /// Favorites with an inline add field so favorite things can be captured
+    /// without the edit sheet.
+    private var favoritesEditSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Favorite things").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+            if !current.favorites.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(current.favorites, id: \.self) { fav in
+                        HStack(spacing: 4) {
+                            Text(fav).font(NDS.small)
+                            Button { removeFavorite(fav) } label: {
+                                Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                            }
+                            .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                        }
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(NDS.fieldBg, in: Capsule())
+                        .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                Image(systemName: "heart").foregroundStyle(NDS.textTertiary)
+                TextField("Add a favorite — coffee order, hobby, team…", text: $newFavorite)
+                    .textFieldStyle(.plain)
+                    .onSubmit { addFavorite() }
+                if !newFavorite.isEmpty { Button("Add") { addFavorite() }.font(NDS.small) }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+        }
+    }
+
+    private func addFavorite() {
+        let v = newFavorite.trimmingCharacters(in: .whitespacesAndNewlines)
+        newFavorite = ""
+        guard !v.isEmpty else { return }
+        var u = current
+        if !u.favorites.contains(v) { u.favorites.append(v) }
+        people.updatePerson(u)
+    }
+
+    private func removeFavorite(_ fav: String) {
+        var u = current
+        u.favorites.removeAll { $0 == fav }
+        people.updatePerson(u)
+    }
+
+    // MARK: - AI suggestions (tags / relationships / encounters)
+
+    private var aiSuggestionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("AI suggestions", systemImage: "wand.and.stars")
+                    .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                Spacer()
+                if aiRunning {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button {
+                        Task { await generateAISuggestions() }
+                    } label: {
+                        Label(aiSuggestions == nil ? "Suggest" : "Refresh", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.borderless).font(NDS.small)
                 }
             }
 
-            Divider().overlay(NDS.divider)
-
-            // Photos (first one shown)
-            if !current.photoRelativePaths.isEmpty {
-                photosSection
-                Divider().overlay(NDS.divider)
+            if let err = aiError {
+                Text(err).font(NDS.small).foregroundStyle(.red)
             }
 
-            // Contact rows
-            contactRows
-
-            // Relationships
-            if !current.relationships.isEmpty {
-                Divider().overlay(NDS.divider)
-                relationshipsSection
-            }
-
-            // Favorites
-            if !current.favorites.isEmpty {
-                Divider().overlay(NDS.divider)
-                favoritesSection
+            if let s = visibleSuggestions {
+                if s.isEmpty {
+                    Text("No new suggestions — this profile already looks well-organized.")
+                        .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                } else {
+                    // Tags
+                    if !s.tags.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Tags").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            FlowLayout(spacing: 6) {
+                                ForEach(s.tags, id: \.self) { name in
+                                    suggestionChip(label: name, icon: "tag") { acceptTagSuggestion(name) }
+                                }
+                            }
+                        }
+                    }
+                    // Relationships
+                    if !s.relationships.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Relationships").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            ForEach(s.relationships, id: \.self) { rel in
+                                suggestionRow(
+                                    title: rel.name,
+                                    detail: rel.label,
+                                    actionLabel: matchedPerson(rel.name) == nil ? nil : "Link",
+                                    disabledNote: matchedPerson(rel.name) == nil ? "not in People" : nil
+                                ) { acceptRelationshipSuggestion(rel) }
+                            }
+                        }
+                    }
+                    // Encounters
+                    if !s.encounters.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Encounters").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            ForEach(s.encounters, id: \.self) { enc in
+                                suggestionRow(title: enc.title, detail: enc.note, actionLabel: "Log", disabledNote: nil) {
+                                    acceptEncounterSuggestion(enc)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if !aiRunning {
+                Text("Let AI propose tags, relationships, and encounters from this person's meetings and profile.")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
             }
         }
+        .padding(12)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+        .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
+    }
+
+    /// Suggestions minus anything the user already accepted or dismissed.
+    private var visibleSuggestions: PersonAISuggestions? {
+        guard var s = aiSuggestions else { return nil }
+        s.tags = s.tags.filter { name in
+            !dismissedSuggestions.contains("tag:\(name)")
+                && !current.tagIDs.contains(where: { peopleTags.tag(by: $0)?.name.caseInsensitiveCompare(name) == .orderedSame })
+        }
+        s.relationships = s.relationships.filter { !dismissedSuggestions.contains("rel:\($0.name)|\($0.label)") }
+        s.encounters = s.encounters.filter { !dismissedSuggestions.contains("enc:\($0.title)") }
+        return s
+    }
+
+    private func suggestionChip(label: String, icon: String, accept: @escaping () -> Void) -> some View {
+        Button(action: accept) {
+            HStack(spacing: 4) {
+                Image(systemName: "plus.circle.fill").font(.system(size: 11))
+                Text(label).font(NDS.small)
+            }
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(NDS.brand.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(NDS.brand.opacity(0.4), lineWidth: 1))
+            .foregroundStyle(NDS.brand)
+        }
+        .buttonStyle(.plain)
+        .help("Add “\(label)”")
+    }
+
+    @ViewBuilder
+    private func suggestionRow(title: String, detail: String, actionLabel: String?,
+                               disabledNote: String?, accept: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                if !detail.isEmpty {
+                    Text(detail).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+            if let actionLabel {
+                Button(actionLabel, action: accept).font(NDS.small)
+            } else if let disabledNote {
+                Text(disabledNote).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+        }
+        .padding(8)
+        .background(NDS.bg, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func matchedPerson(_ name: String) -> Person? {
+        let n = name.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !n.isEmpty, n != current.displayName.lowercased() else { return nil }
+        return people.people.first { $0.displayName.lowercased() == n }
+            ?? people.people.first { $0.id != current.id && $0.displayName.lowercased().contains(n) }
+    }
+
+    private func acceptTagSuggestion(_ name: String) {
+        let existing = peopleTags.allTags.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        let tag = existing ?? peopleTags.createTag(name: name)
+        addTag(tag.id)
+        dismissedSuggestions.insert("tag:\(name)")
+    }
+
+    private func acceptRelationshipSuggestion(_ rel: PersonAISuggestions.RelSuggestion) {
+        if let other = matchedPerson(rel.name) {
+            people.addRelationship(from: current.id, to: other.id, label: rel.label)
+        }
+        dismissedSuggestions.insert("rel:\(rel.name)|\(rel.label)")
+    }
+
+    private func acceptEncounterSuggestion(_ enc: PersonAISuggestions.EncSuggestion) {
+        _ = people.addEncounter(to: current.id, eventName: enc.title, notes: enc.note)
+        dismissedSuggestions.insert("enc:\(enc.title)")
+    }
+
+    /// Assemble the on-device context blob the model reasons over.
+    private func personContextForAI() -> String {
+        let p = current
+        var lines: [String] = []
+        lines.append("Name: \(p.displayName)")
+        if !p.role.isEmpty { lines.append("Role: \(p.role)") }
+        if !p.company.isEmpty { lines.append("Company: \(p.company)") }
+        if !p.bio.isEmpty { lines.append("Notes: \(p.bio)") }
+        let tagNames = tags.map { $0.name }
+        if !tagNames.isEmpty { lines.append("Existing tags: \(tagNames.joined(separator: ", "))") }
+        if !p.favorites.isEmpty { lines.append("Favorites: \(p.favorites.joined(separator: ", "))") }
+        let rels = p.relationships.compactMap { r -> String? in
+            guard let other = people.person(by: r.toPersonID) else { return nil }
+            return "\(r.label): \(other.displayName)"
+        }
+        if !rels.isEmpty { lines.append("Existing relationships: \(rels.joined(separator: "; "))") }
+        let encs = people.encounters(for: p.id).prefix(8).map { e in
+            "\(Self.dateFormatter.string(from: e.date)) — \(e.eventName)\(e.notes.isEmpty ? "" : ": \(e.notes)")"
+        }
+        if !encs.isEmpty { lines.append("Encounters:\n- " + encs.joined(separator: "\n- ")) }
+        // Recorded + calendar meetings this person was part of.
+        let recorded = manager.pastMeetings.filter(attendeeMatches(_:)).prefix(10)
+            .map { "\(Self.dateFormatter.string(from: $0.startDate)) — \($0.displayTitle)" }
+        let cal = calendarMeetings.prefix(10)
+            .map { "\(Self.dateFormatter.string(from: $0.startDate)) — \($0.displayTitle)" }
+        let meetings = (recorded + cal)
+        if !meetings.isEmpty { lines.append("Meetings together:\n- " + meetings.joined(separator: "\n- ")) }
+        // Other people who appear in those meetings — candidates for relationships.
+        let others = Set(manager.pastMeetings.filter(attendeeMatches(_:)).flatMap { $0.attendees })
+            .prefix(20)
+        if !others.isEmpty { lines.append("Other attendees seen with them: \(others.joined(separator: ", "))") }
+        return lines.joined(separator: "\n")
+    }
+
+    private func generateAISuggestions() async {
+        aiError = nil
+        aiRunning = true
+        defer { aiRunning = false }
+        let context = personContextForAI()
+        let result = await PersonSuggestionEngine.generate(
+            personName: current.displayName, context: context, using: OllamaService())
+        if let result {
+            aiSuggestions = result
+            if result.isEmpty { aiError = nil }
+        } else {
+            aiError = "Couldn't generate suggestions. Make sure Ollama is running."
+        }
+    }
+
+    // MARK: - Embedded chat (replaces the toggled sidebar rail)
+
+    private var personChatColumn: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles").foregroundStyle(NDS.brand)
+                Text("Ask AI about \(current.displayName.split(separator: " ").first.map(String.init) ?? current.displayName)")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                if !chatSession.messages.isEmpty {
+                    Button { chatSession.reset() } label: { Image(systemName: "arrow.counterclockwise") }
+                        .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                        .help("Clear conversation")
+                }
+            }
+            .padding(.horizontal, 14).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 10)
+            .background(NDS.sidebarBg)
+            Divider().overlay(NDS.divider)
+            ChatPanel(
+                session: chatSession,
+                density: .compact,
+                examplePrompts: [
+                    "Give me a briefing on \(current.displayName).",
+                    "What are my open tasks with them?",
+                    "Suggest tags and a relationship for this person.",
+                    "When did we last meet and what about?"
+                ]
+            )
+        }
+        .background(NDS.sidebarBg)
     }
 
     private func initials(for name: String) -> String {
@@ -668,20 +922,6 @@ struct PersonDetailView: View {
         }
     }
 
-    private var favoritesSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Favorite things").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-            FlowLayout(spacing: 6) {
-                ForEach(current.favorites, id: \.self) { fav in
-                    Text(fav).font(NDS.small)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background(NDS.fieldBg, in: Capsule())
-                        .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
-                }
-            }
-        }
-    }
-
     // MARK: - Photos
 
     private var photosSection: some View {
@@ -794,6 +1034,9 @@ struct PersonDetailView: View {
     }
 
     private func ownerMatchesPerson(_ item: ActionItem) -> Bool {
+        // Exact hard link wins; otherwise fall back to owner-string matching for
+        // legacy tasks that predate the Person link.
+        if let pid = item.ownerPersonID { return pid == current.id }
         guard let owner = item.owner?.lowercased().trimmingCharacters(in: .whitespaces),
               !owner.isEmpty else { return false }
         let tokens = ownerTokens(current)
@@ -817,7 +1060,7 @@ struct PersonDetailView: View {
         let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return }
         let item = actionItems.createTask(title: title)
-        actionItems.setOwner(item.id, owner: current.displayName)
+        actionItems.setOwnerPerson(item.id, personID: current.id, ownerName: current.displayName)
         newTaskTitle = ""
     }
 
@@ -1037,6 +1280,7 @@ struct PersonDetailView: View {
                     statRow("Recent", "\(s.last30) in 30d  ·  \(s.last90) in 90d")
                     if s.total >= 4 { analysisPresetMenu }
                     analysisResultView
+                    if s.total >= 1 { deepAnalysisControl }
                 }
                 .padding(10)
                 .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -1293,12 +1537,12 @@ struct PersonDetailView: View {
         chatSession.setContext(bits.filter { !$0.isEmpty }.joined(separator: " "))
     }
 
-    /// Reveal the chat rail and run a briefing prompt grounded on this person.
+    /// Run a briefing prompt in the embedded chat column, grounded on this person.
     private func askAIAboutPerson() {
         updateChatContext()
         let q = "Give me a briefing on \(current.displayName): recent meetings and "
             + "interactions, any open tasks, and what I should follow up on."
-        router.openChat?(q)
+        Task { await chatSession.sendUserMessage(q) }
     }
 
     /// Run one of the conversation analysis presets. For `.custom`,
@@ -1371,6 +1615,94 @@ struct PersonDetailView: View {
                 }
             }
         }
+    }
+
+    /// The one cached "deep analysis" report (kind "deep-all"), if it exists.
+    private var deepNote: AttachedNote? { current.attachedNotes.first { $0.kind == "deep-all" } }
+
+    /// A thorough one-time pass over the WHOLE message history: writes a full
+    /// report to Notes (cached, run-once) and mines tags/encounters from the
+    /// actual message content into the AI suggestions card.
+    @ViewBuilder
+    private var deepAnalysisControl: some View {
+        Divider().overlay(NDS.divider)
+        HStack(spacing: 10) {
+            Image(systemName: "doc.text.magnifyingglass").foregroundStyle(NDS.brand)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Deep analysis").font(NDS.small).foregroundStyle(NDS.textPrimary)
+                Text(deepNote == nil
+                     ? "One thorough pass over the entire history — cached, runs once."
+                     : "Saved to Notes · \(Self.dateFormatter.string(from: deepNote!.createdAt))")
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+            Spacer(minLength: 0)
+            if deepRunning {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(deepNote == nil ? "Run" : "Refresh") { runDeepMessageAnalysis() }
+                    .font(NDS.small)
+            }
+        }
+    }
+
+    private func runDeepMessageAnalysis() {
+        deepRunning = true
+        messageError = nil
+        let target = current
+        Task.detached(priority: .utility) {
+            guard let (_, recent) = try? MessagesAnalyzer.analyze(person: target, recentLimit: 100_000),
+                  !recent.isEmpty else {
+                await MainActor.run {
+                    self.deepRunning = false
+                    self.messageError = "No matched messages to analyze."
+                }
+                return
+            }
+            let transcript = String(recent
+                .map { "\($0.fromMe ? "Me" : target.displayName): \($0.text)" }
+                .joined(separator: "\n").prefix(48_000))
+            let ollama = OllamaService()
+            let reportPrompt = """
+            You are analyzing the COMPLETE text-message history between me and \
+            \(target.displayName). Write a thorough but concise Markdown report with \
+            these sections: ## Relationship overview, ## Communication style & cadence, \
+            ## Recurring topics, ## Notable moments & commitments, ## Suggested follow-ups. \
+            Base everything strictly on the messages — do not invent facts.
+
+            MESSAGES:
+            \(transcript)
+            """
+            let report = (try? await ollama.generate(prompt: reportPrompt,
+                                                     temperature: 0.2, numCtx: 16_384)) ?? ""
+            let cleaned = report.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Mine structured tags/encounters from the real message content.
+            let mined = await PersonSuggestionEngine.generate(
+                personName: target.displayName,
+                context: "These are real text messages between me and \(target.displayName):\n"
+                    + String(transcript.prefix(16_000)),
+                using: ollama)
+            await MainActor.run {
+                self.deepRunning = false
+                if !cleaned.isEmpty {
+                    self.people.deleteCachedAllTimeNote(personID: target.id, kind: "deep-all")
+                    self.people.addAttachedNote(
+                        to: target.id,
+                        title: "Deep message analysis — \(target.displayName)",
+                        body: cleaned, kind: "deep-all")
+                }
+                if let mined { self.mergeSuggestions(mined) }
+            }
+        }
+    }
+
+    private func mergeSuggestions(_ s: PersonAISuggestions) {
+        var base = aiSuggestions ?? PersonAISuggestions()
+        for t in s.tags where !base.tags.contains(t) { base.tags.append(t) }
+        let relKeys = Set(base.relationships.map { "\($0.name)|\($0.label)" })
+        base.relationships += s.relationships.filter { !relKeys.contains("\($0.name)|\($0.label)") }
+        let encKeys = Set(base.encounters.map { $0.title })
+        base.encounters += s.encounters.filter { !encKeys.contains($0.title) }
+        aiSuggestions = base
     }
 
     /// Whether an all-time analysis exists for this person + preset.
