@@ -105,8 +105,16 @@ struct WhisperRunner {
     func run(audio: URL, output: Output) async throws -> RunResult {
         try await preflight(audio: audio)
 
+        // Watchdog timeout so a hung whisper subprocess can never wedge the
+        // pipeline forever ("Re-transcribe stuck on Processing…"). The input is
+        // a 16 kHz mono Int16 WAV (32000 bytes/sec), so estimate its duration
+        // from file size and allow up to ~3x real-time + slack.
+        let fileSize = ((try? FileManager.default.attributesOfItem(atPath: audio.path))?[.size] as? Int64) ?? 0
+        let durationSec = max(0, Double(fileSize - 44) / 32000.0)
+        let timeout = max(300, durationSec * 3 + 180)
+
         let useGPUFirst = AppSettings.shared.whisperUseGPU
-        let firstResult = try runOnce(audio: audio, output: output, forceCPU: !useGPUFirst)
+        let firstResult = try runOnce(audio: audio, output: output, forceCPU: !useGPUFirst, timeout: timeout)
         if !firstResult.result.isEmpty { return firstResult.result }
 
         // First pass was empty. If we just ran on GPU, retry on CPU.
@@ -115,7 +123,7 @@ struct WhisperRunner {
             TranscriptionLog.note(tag: "WhisperRunner",
                                   message: "GPU pass empty — retrying on CPU (--no-gpu)",
                                   extra: ["audio": audio.path])
-            let retry = try runOnce(audio: audio, output: output, forceCPU: true)
+            let retry = try runOnce(audio: audio, output: output, forceCPU: true, timeout: timeout)
             if !retry.result.isEmpty { return retry.result }
             throw RunnerError.empty(retry.stderr)
         }
@@ -129,9 +137,9 @@ struct WhisperRunner {
         let stderr: String
     }
 
-    private func runOnce(audio: URL, output: Output, forceCPU: Bool) throws -> OnceResult {
+    private func runOnce(audio: URL, output: Output, forceCPU: Bool, timeout: TimeInterval) throws -> OnceResult {
         let prefix = workDir.appendingPathComponent("\(audio.deletingPathExtension().lastPathComponent)-\(forceCPU ? "cpu" : "gpu").whisper")
-        let stderr = try runWhisper(audio: audio, prefix: prefix, forceCPU: forceCPU)
+        let stderr = try runWhisper(audio: audio, prefix: prefix, forceCPU: forceCPU, timeout: timeout)
         let jsonURL = URL(fileURLWithPath: prefix.path + ".json")
         defer {
             // Best-effort cleanup so working dirs don't grow unbounded.
@@ -147,7 +155,7 @@ struct WhisperRunner {
         return OnceResult(result: parsed, stderr: stderr)
     }
 
-    private func runWhisper(audio: URL, prefix: URL, forceCPU: Bool) throws -> String {
+    private func runWhisper(audio: URL, prefix: URL, forceCPU: Bool, timeout: TimeInterval) throws -> String {
         let args = Self.argv(audio: audio, model: model, prefix: prefix, forceCPU: forceCPU)
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: binary)
@@ -160,22 +168,33 @@ struct WhisperRunner {
         let started = Date()
         try proc.run()
 
-        // Drain stderr concurrently so we don't block on a full pipe.
-        var stderrData = Data()
-        let stderrQueue = DispatchQueue(label: "whisper.stderr.drain")
-        stderrQueue.async {
-            let handle = errPipe.fileHandleForReading
-            while true {
-                let chunk = handle.availableData
-                if chunk.isEmpty { break }
-                stderrData.append(chunk)
+        // Drain BOTH pipes concurrently. Draining stdout only AFTER
+        // waitUntilExit() could deadlock if whisper fills the 64 KB stdout
+        // buffer (it never exits, we never read) — so read both off-thread.
+        let drainGroup = DispatchGroup()
+        let drainQ = DispatchQueue(label: "whisper.drain", attributes: .concurrent)
+        let stderrBox = DataBox(), stdoutBox = DataBox()
+        drainGroup.enter()
+        drainQ.async { stderrBox.data = errPipe.fileHandleForReading.readDataToEndOfFile(); drainGroup.leave() }
+        drainGroup.enter()
+        drainQ.async { stdoutBox.data = outPipe.fileHandleForReading.readDataToEndOfFile(); drainGroup.leave() }
+
+        // Watchdog: terminate a hung subprocess so the pipeline never blocks
+        // forever. On timeout the process exits non-zero and we throw, which
+        // surfaces as a transcription error rather than a stuck "Processing…".
+        let watchdog = DispatchWorkItem {
+            if proc.isRunning {
+                self.log.error("whisper exceeded \(Int(timeout))s timeout — terminating")
+                proc.terminate()
             }
         }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: watchdog)
+
         proc.waitUntilExit()
-        stderrQueue.sync {}
-        _ = outPipe.fileHandleForReading.readDataToEndOfFile()
+        watchdog.cancel()
+        drainGroup.wait()
         let elapsed = Date().timeIntervalSince(started)
-        let stderrStr = String(data: stderrData, encoding: .utf8) ?? ""
+        let stderrStr = String(data: stderrBox.data, encoding: .utf8) ?? ""
 
         TranscriptionLog.record(
             tag: "WhisperRunner",
@@ -191,6 +210,10 @@ struct WhisperRunner {
         }
         return stderrStr
     }
+
+    /// Box so the concurrent drain closures can write back captured Data
+    /// without a `var` capture warning.
+    private final class DataBox { var data = Data() }
 
     // MARK: - Argv (single source of truth)
 
