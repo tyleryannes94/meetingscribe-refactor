@@ -269,8 +269,12 @@ final class OllamaService {
         formatter.timeStyle = .short
         let when = formatter.string(from: meeting.startDate)
 
+        let feedback = SummaryFeedback.steeringNote(for: meeting.id).map {
+            "\n\nThe user was unhappy with the previous summary for this meeting. Their feedback: \"\($0)\". Address it directly in this version.\n"
+        } ?? ""
+
         return """
-        You are an assistant that writes concise, action-oriented meeting summaries.
+        You are an assistant that writes concise, action-oriented meeting summaries.\(feedback)
 
         Meeting: \(meeting.title)
         When: \(when)
