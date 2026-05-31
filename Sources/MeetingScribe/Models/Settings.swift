@@ -31,6 +31,8 @@ final class AppSettings {
         static let notionAPIKey = "notionAPIKey"
         static let notionActionItemsDatabaseID = "notionActionItemsDatabaseID"
         static let linearAPIKey = "linearAPIKey"
+        static let linearDefaultTeamID = "linearDefaultTeamID"
+        static let linearDefaultTeamName = "linearDefaultTeamName"
         static let lastTaskSync = "lastTaskSync"
         static let googleClientID = "googleClientID"
         static let googleClientSecret = "googleClientSecret"
@@ -406,6 +408,26 @@ final class AppSettings {
     var linearAPIKey: String? {
         get { KeychainStore.read(.linearAPIKey) }
         set { KeychainStore.write(.linearAPIKey, newValue) }
+    }
+
+    /// Default Linear team that "Push to Linear" creates issues under. Team
+    /// IDs are not secrets, so this lives in UserDefaults (not the Keychain).
+    /// Picked once in Settings → Task sync. `nil` until the user chooses.
+    var linearDefaultTeamID: String? {
+        get { optString(Keys.linearDefaultTeamID) }
+        set {
+            if let v = newValue, !v.isEmpty { defaults.set(v, forKey: Keys.linearDefaultTeamID) }
+            else { defaults.removeObject(forKey: Keys.linearDefaultTeamID) }
+        }
+    }
+
+    /// Human-readable name of the default Linear team, for display only.
+    var linearDefaultTeamName: String? {
+        get { optString(Keys.linearDefaultTeamName) }
+        set {
+            if let v = newValue, !v.isEmpty { defaults.set(v, forKey: Keys.linearDefaultTeamName) }
+            else { defaults.removeObject(forKey: Keys.linearDefaultTeamName) }
+        }
     }
 
     var lastTaskSync: Date? {

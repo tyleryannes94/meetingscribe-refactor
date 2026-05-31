@@ -40,6 +40,10 @@ struct SettingsView: View {
     @State private var showingNotionKeyEditor: Bool = false
     @State private var linearKeyDraft: String = AppSettings.shared.linearAPIKey ?? ""
     @State private var linearSaved: Bool = false
+    @State private var linearTeams: [TaskSyncService.LinearTeamRef] = []
+    @State private var linearTeamID: String = AppSettings.shared.linearDefaultTeamID ?? ""
+    @State private var linearTeamsLoading: Bool = false
+    @State private var linearTeamsError: String?
     @ObservedObject private var drive = GoogleDriveService.shared
     @State private var googleClientIDDraft: String = AppSettings.shared.googleClientID ?? ""
     @State private var googleSecretDraft: String = AppSettings.shared.googleClientSecret ?? ""
@@ -258,8 +262,42 @@ struct SettingsView: View {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { linearSaved = false }
                         }
                     }
-                    Text("Linear → Settings → Security & access → Personal API keys → New key. Read access is enough.")
+                    Text("Linear → Settings → Security & access → Personal API keys → New key. Read access is enough; write access is needed for Push to Linear.")
                         .font(.caption2).foregroundStyle(.tertiary)
+
+                    // Default team for "Push to Linear" — issues are created
+                    // under this team. Loaded on demand from the saved key.
+                    HStack {
+                        if linearTeams.isEmpty {
+                            Button(linearTeamsLoading ? "Loading…" : "Choose default team") {
+                                Task { await loadLinearTeams() }
+                            }
+                            .disabled(linearTeamsLoading
+                                      || (AppSettings.shared.linearAPIKey ?? "").isEmpty)
+                            if let name = AppSettings.shared.linearDefaultTeamName, !name.isEmpty {
+                                Text("Current: \(name)").font(.caption2).foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Picker("Default team", selection: $linearTeamID) {
+                                Text("None").tag("")
+                                ForEach(linearTeams) { t in
+                                    Text("\(t.name) (\(t.key))").tag(t.id)
+                                }
+                            }
+                            .onChange(of: linearTeamID) { _, new in
+                                let team = linearTeams.first { $0.id == new }
+                                AppSettings.shared.linearDefaultTeamID = new.isEmpty ? nil : new
+                                AppSettings.shared.linearDefaultTeamName = team?.name
+                            }
+                        }
+                    }
+                    if let err = linearTeamsError {
+                        Text(err).font(.caption2).foregroundStyle(.red)
+                    } else {
+                        Text("Push to Linear creates issues under this team.")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+
                     if let last = AppSettings.shared.lastTaskSync {
                         Text("Last sync: \(last.formatted(date: .abbreviated, time: .shortened)) — sync from the Action Items tab.")
                             .font(.caption2).foregroundStyle(.tertiary)
@@ -461,6 +499,27 @@ struct SettingsView: View {
             mcpStatus = "Installed. Updated: \(url.path). Restart Claude Desktop."
         } catch {
             mcpStatus = "Install failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Fetches the Linear teams for the saved API key so the user can pick a
+    /// default. Pre-selects the previously-chosen team if still present.
+    private func loadLinearTeams() async {
+        guard let key = AppSettings.shared.linearAPIKey, !key.isEmpty else {
+            linearTeamsError = "Save your Linear API key first."
+            return
+        }
+        linearTeamsLoading = true
+        linearTeamsError = nil
+        defer { linearTeamsLoading = false }
+        do {
+            let teams = try await TaskSyncService.fetchLinearTeams(apiKey: key)
+            linearTeams = teams
+            if teams.first(where: { $0.id == linearTeamID }) == nil {
+                linearTeamID = AppSettings.shared.linearDefaultTeamID ?? ""
+            }
+        } catch {
+            linearTeamsError = "Couldn't load teams: \(error.localizedDescription)"
         }
     }
 
