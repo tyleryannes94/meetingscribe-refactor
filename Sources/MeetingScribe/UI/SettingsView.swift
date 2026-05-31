@@ -51,11 +51,32 @@ struct SettingsView: View {
     @State private var googleSecretDraft: String = AppSettings.shared.googleClientSecret ?? ""
     @State private var googleFolderDraft: String = AppSettings.shared.googleDriveFolderName
 
+    /// Marketing version + build id (the build id is the git commit, stamped by
+    /// `make`). Lets the user confirm the installed app is the latest build.
+    private var appVersionString: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(short) (\(build))"
+    }
+
     var body: some View {
         VStack(alignment: .leading) {
             Text("Settings").font(.title2).bold()
 
             Form {
+                Section("About") {
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text(appVersionString)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    Text("Use this to confirm the installed app matches the latest build (the build id is the git commit).")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 Section("You") {
                     TextField("Your name", text: $userName)
                     TextField("Also called (comma-separated)", text: $userNameAliases)

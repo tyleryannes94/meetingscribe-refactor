@@ -193,11 +193,21 @@ extension UnifiedMeetingDetail {
                     ProgressView().controlSize(.small)
                     Text("Processing…").font(.system(size: 12)).foregroundStyle(NDS.textSecondary)
                 }
-            } else if manager.hasAudio(for: m) && (transcript.isEmpty) {
+            } else if manager.hasAudio(for: m) && transcript.isEmpty {
                 Button { manager.transcribeNow(meeting: m) } label: {
                     Label("Transcribe Now", systemImage: "text.bubble")
                 }
                 .buttonStyle(MSPrimaryButtonStyle())
+            } else if manager.hasAudio(for: m) {
+                // A transcript exists but the audio is still here — always offer
+                // a visible retry (re-runs transcription + summary on the
+                // recorded audio). Previously this was only reachable, mislabeled,
+                // from the overflow menu.
+                Button { manager.transcribeNow(meeting: m) } label: {
+                    Label("Re-transcribe", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+                .help("Re-run transcription and summary on this meeting's audio.")
             } else if m.conferenceURL != nil {
                 Button {
                     Task { await manager.switchToRecording(m) }
@@ -237,12 +247,14 @@ extension UnifiedMeetingDetail {
             if case .past(let m) = mode {
                 Divider()
 
-                // Transcription
+                // Transcription — re-run on the recorded audio. Label adapts so
+                // it's clearly a retry when a transcript already exists.
                 if !manager.isTranscribingMeeting(m) {
                     Button {
                         manager.transcribeNow(meeting: m)
                     } label: {
-                        Label("Transcribe Now", systemImage: "text.bubble")
+                        Label(transcript.isEmpty ? "Transcribe Now" : "Re-transcribe & summarize",
+                              systemImage: transcript.isEmpty ? "text.bubble" : "arrow.clockwise")
                     }
                     .disabled(!manager.hasAudio(for: m))
                 }
