@@ -188,7 +188,7 @@ struct OnboardingSheet: View {
         HStack(spacing: 6) {
             ForEach(0..<totalSteps, id: \.self) { i in
                 Circle()
-                    .fill(i == step ? Color.accentColor : Color.secondary.opacity(0.3))
+                    .fill(i == step ? NDS.brand : Color.secondary.opacity(0.3))
                     .frame(width: 6, height: 6)
             }
         }

@@ -418,7 +418,7 @@ struct ToolbarPillButton: View {
 
     private var background: AnyShapeStyle {
         switch prominence {
-        case .primary:   return AnyShapeStyle(Color.accentColor)
+        case .primary:   return AnyShapeStyle(NDS.brand)
         case .secondary: return AnyShapeStyle(Color(NSColor.controlBackgroundColor))
         }
     }
@@ -429,6 +429,6 @@ struct ToolbarPillButton: View {
         prominence == .primary ? .clear : Color(NSColor.separatorColor)
     }
     private var shadow: Color {
-        prominence == .primary ? Color.accentColor.opacity(0.2) : .clear
+        prominence == .primary ? NDS.brand.opacity(0.2) : .clear
     }
 }

@@ -354,7 +354,7 @@ private struct DonePill: View {
             }
             OverlayButton(label: "Open",
                           systemImage: "arrow.up.right",
-                          tint: .accentColor,
+                          tint: NDS.brand,
                           prominent: false,
                           action: controller.goToRecording)
             Button(action: controller.cancelOverlay) {

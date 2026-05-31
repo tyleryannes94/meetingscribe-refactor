@@ -47,7 +47,7 @@ struct NeedsAttentionWidget: View {
                     Button(action: onOpenFull) {
                         Text("+ \(items.count - 6) more — open all").font(.caption)
                     }
-                    .buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                    .buttonStyle(.plain).foregroundStyle(NDS.brand)
                 }
             }
             .padding(16)

@@ -96,7 +96,7 @@ func occurrenceRow(title: String, subtitle: String, selected: Bool,
             HStack(spacing: 8) {
                 Image(systemName: isCurrent ? "pencil.circle.fill" : "clock.arrow.circlepath")
                     .font(.system(size: 13))
-                    .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
+                    .foregroundStyle(isCurrent ? NDS.brand : .secondary)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.callout).lineLimit(1)
                     Text(subtitle).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
@@ -104,7 +104,7 @@ func occurrenceRow(title: String, subtitle: String, selected: Bool,
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8).padding(.vertical, 6)
-            .background(selected ? Color.accentColor.opacity(0.14) : .clear,
+            .background(selected ? NDS.brand.opacity(0.14) : .clear,
                         in: RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
         }

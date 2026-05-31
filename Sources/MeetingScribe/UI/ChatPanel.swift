@@ -64,7 +64,7 @@ struct ChatPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NDS.brand)
                 Text("Ask anything")
                     .font(density == .compact ? .callout.weight(.semibold)
                                               : .title3.weight(.semibold))
@@ -128,7 +128,7 @@ struct ChatPanel: View {
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: density == .compact ? 24 : 28))
-                    .foregroundStyle(canSubmit ? Color.accentColor
+                    .foregroundStyle(canSubmit ? NDS.brand
                                                 : Color.secondary.opacity(0.4))
             }
             .buttonStyle(.plain)

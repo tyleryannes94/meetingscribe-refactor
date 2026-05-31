@@ -366,7 +366,7 @@ struct MeetingNotesPage: View {
             } label: {
                 if let name = store.project(for: item)?.name {
                     Label(name, systemImage: "folder.fill").font(.caption2)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(NDS.brand)
                 } else {
                     Image(systemName: "folder.badge.plus").foregroundStyle(.secondary)
                 }

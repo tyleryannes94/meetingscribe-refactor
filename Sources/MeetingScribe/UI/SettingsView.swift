@@ -630,7 +630,7 @@ struct CalendarPickerSection: View {
                         Toggle(isOn: bindingFor(cal.id)) {
                             HStack(spacing: 8) {
                                 Circle()
-                                    .fill(Color(hex: cal.color) ?? .accentColor)
+                                    .fill(Color(hex: cal.color) ?? NDS.brand)
                                     .frame(width: 10, height: 10)
                                 Text(cal.title).font(.callout)
                                 if !cal.source.isEmpty {

@@ -277,7 +277,7 @@ struct MeetingCard: View {
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(isExpanded
-                                 ? AnyShapeStyle(Color.accentColor)
+                                 ? AnyShapeStyle(NDS.brand)
                                  : AnyShapeStyle(HierarchicalShapeStyle.tertiary))
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 .animation(.spring(response: 0.22, dampingFraction: 0.85), value: isExpanded)
@@ -345,7 +345,7 @@ struct StatusPulseDot: View {
 struct TagChipMini: View {
     let tag: MeetingTag
     var body: some View {
-        let color = Color(hex: tag.colorHex ?? "") ?? .accentColor
+        let color = Color(hex: tag.colorHex ?? "") ?? NDS.brand
         HStack(spacing: 3) {
             if let s = tag.symbol { Image(systemName: s).font(.system(size: 9)) }
             Text(tag.name).font(.caption2.weight(.medium))

@@ -126,7 +126,7 @@ extension ActionItemsView {
                     .background(priorityColor(item.priority).opacity(0.16), in: Capsule())
                     .foregroundStyle(priorityColor(item.priority))
                 if let name = store.project(for: item)?.name {
-                    Text(name).font(.caption2).foregroundStyle(Color.accentColor).lineLimit(1)
+                    Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1)
                 }
                 Spacer()
                 Menu {

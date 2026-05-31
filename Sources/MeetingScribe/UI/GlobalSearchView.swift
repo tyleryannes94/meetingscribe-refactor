@@ -82,9 +82,9 @@ struct GlobalSearchView: View {
                             Text(f.label).font(.callout)
                         }
                         .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(active ? Color.accentColor.opacity(0.22) : Color.clear,
+                        .background(active ? NDS.brand.opacity(0.22) : Color.clear,
                                     in: Capsule())
-                        .foregroundStyle(active ? Color.accentColor : .secondary)
+                        .foregroundStyle(active ? NDS.brand : .secondary)
                     }
                     .buttonStyle(.plain)
                     .help("Show only \(f.label.lowercased())")
@@ -162,7 +162,7 @@ struct GlobalSearchView: View {
                     .background(Color.secondary.opacity(0.1), in: Capsule())
             }
             .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(index == selection ? Color.accentColor.opacity(0.18) : Color.clear,
+            .background(index == selection ? NDS.brand.opacity(0.18) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }

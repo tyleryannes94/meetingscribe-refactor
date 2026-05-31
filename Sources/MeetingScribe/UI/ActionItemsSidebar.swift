@@ -36,7 +36,7 @@ struct ProjectRail: View {
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10).padding(.vertical, 7)
-                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 7))
+                .background(NDS.brand, in: RoundedRectangle(cornerRadius: 7))
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 8).padding(.bottom, 8)

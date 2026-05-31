@@ -111,7 +111,7 @@ struct ActionItemRow: View {
                         Label(projectName, systemImage: "folder.fill")
                             .labelStyle(.titleAndIcon)
                             .font(.caption2)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(NDS.brand)
                             .lineLimit(1)
                     }
                     if !item.isManual {
