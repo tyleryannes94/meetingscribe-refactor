@@ -67,12 +67,18 @@ enum NDS {
     }
 
     // MARK: Type
-    static let title = Font.system(size: 32, weight: .heavy)
-    static let pageTitle = Font.system(size: 26, weight: .bold)
-    static let sectionLabel = Font.system(size: 12, weight: .semibold)  // increased from 11
-    static let body = Font.system(size: 14)
-    static let small = Font.system(size: 12)
-    static let tiny = Font.system(size: 11)
+    //
+    // Tokens are mapped to semantic text styles so they scale with Dynamic Type
+    // / the system text-size setting (D5-2). Styles were chosen to keep the
+    // default-size appearance close to the previous fixed points (within ~2pt):
+    //   largeTitle≈34, title≈28, body≈17→callout 16, footnote≈13, caption≈12,
+    //   caption2≈11. `.weight()` preserves scaling.
+    static let title = Font.system(.largeTitle).weight(.heavy)        // was 32
+    static let pageTitle = Font.system(.title).weight(.bold)          // was 26
+    static let sectionLabel = Font.system(.caption).weight(.semibold) // was 12
+    static let body = Font.system(.callout)                           // was 14
+    static let small = Font.system(.footnote)                         // was 12
+    static let tiny = Font.system(.caption2)                          // was 11
 
     // MARK: Notion-style named colors for select/status chips.
     /// Notion's muted palette — chips use a low-alpha fill with a saturated text.
@@ -124,6 +130,31 @@ extension View {
             self
         }
     }
+
+    /// A fixed-size system font that STILL scales with Dynamic Type / the system
+    /// text-size setting (D5-2). Keeps the design's exact point size at the
+    /// default setting but grows/shrinks with the user's preference — use this
+    /// instead of a bare `.font(.system(size:))` so low-vision users aren't
+    /// locked out. `style` anchors the scaling curve.
+    func scaledFont(_ size: CGFloat,
+                    weight: Font.Weight = .regular,
+                    relativeTo style: Font.TextStyle = .body) -> some View {
+        modifier(ScaledSystemFont(size: size, weight: weight, relativeTo: style))
+    }
+}
+
+/// Backing modifier for `View.scaledFont` — `@ScaledMetric` does the scaling.
+@available(macOS 14.0, *)
+private struct ScaledSystemFont: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+    init(size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: style)
+        self.weight = weight
+    }
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight))
+    }
 }
 
 // MARK: - Reusable components
@@ -141,7 +172,7 @@ struct NotionChip: View {
     var body: some View {
         HStack(spacing: 4) {
             if let systemImage { Image(systemName: systemImage).font(.system(size: 9, weight: .bold)) }
-            Text(text).font(.system(size: 11.5, weight: .medium))
+            Text(text).scaledFont(11.5, weight: .medium, relativeTo: .caption)
         }
         .padding(.horizontal, 7).padding(.vertical, 2)
         .foregroundStyle(color)
@@ -479,7 +510,7 @@ struct AppearanceToggle: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon).font(.system(size: 10))
-                Text(label).font(.system(size: 11.5, weight: active ? .semibold : .medium))
+                Text(label).scaledFont(11.5, weight: active ? .semibold : .medium, relativeTo: .caption)
             }
             .foregroundStyle(active ? NDS.textPrimary : NDS.textSecondary)
             .padding(.horizontal, 8).padding(.vertical, 5)
