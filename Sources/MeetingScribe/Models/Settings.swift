@@ -57,6 +57,8 @@ final class AppSettings {
         static let whisperLanguage = "whisperLanguage"
         /// User-editable list of additional names/nicknames that mean "me".
         static let userNameAliases = "userNameAliases"
+        /// Explicit opt-in to allow a non-local Ollama endpoint (E4-3).
+        static let allowRemoteOllamaEndpoint = "allowRemoteOllamaEndpoint"
         /// Off-by-default kill-switch for the ScribeCore daemon recording path.
         /// The daemon path does not finalize a meeting (no merge/transcribe/
         /// summary) and records into an orphan folder → silent total data loss.
@@ -223,6 +225,15 @@ final class AppSettings {
     var useScribeCoreDaemon: Bool {
         get { defaults.object(forKey: Keys.useScribeCoreDaemon) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.useScribeCoreDaemon) }
+    }
+
+    /// Whether the user has explicitly approved sending meeting content to a
+    /// non-local Ollama endpoint. Default FALSE — a non-local `ollamaURL`
+    /// would otherwise silently ship transcripts off-device, violating the
+    /// local-first promise. See E4-3 / EgressPolicy.
+    var allowRemoteOllamaEndpoint: Bool {
+        get { defaults.object(forKey: Keys.allowRemoteOllamaEndpoint) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.allowRemoteOllamaEndpoint) }
     }
 
     var captureMic: Bool {

@@ -182,6 +182,8 @@ final class OllamaService {
         }
 
         let url = settings.ollamaURL.appendingPathComponent("api/generate")
+        // E4-3: refuse to POST content to a non-local endpoint unless approved.
+        try EgressPolicy.assertOllamaEgressAllowed(url)
         let body = GenerateRequest(
             model: settings.ollamaModel,
             prompt: prompt,
@@ -221,6 +223,8 @@ final class OllamaService {
         }
 
         let url = settings.ollamaURL.appendingPathComponent("api/generate")
+        // E4-3: the transcript must not leave the device via a non-local URL.
+        try EgressPolicy.assertOllamaEgressAllowed(url)
 
         let prompt = Self.buildPrompt(meeting: meeting, transcript: transcript)
         let body = GenerateRequest(

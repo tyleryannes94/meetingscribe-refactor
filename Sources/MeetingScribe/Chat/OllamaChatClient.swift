@@ -128,6 +128,9 @@ final class OllamaChatClient {
                 options: .init(temperature: 0.3, num_ctx: 4_096)
             )
             let url = AppSettings.shared.ollamaURL.appendingPathComponent("api/chat")
+            // E4-3: chat carries meeting content — block a non-local endpoint
+            // unless the user has explicitly approved remote egress.
+            try EgressPolicy.assertOllamaEgressAllowed(url)
             var req = URLRequest(url: url)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

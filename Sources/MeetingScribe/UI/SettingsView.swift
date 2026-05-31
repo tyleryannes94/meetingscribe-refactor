@@ -28,6 +28,7 @@ struct SettingsView: View {
     @State private var autoExtractPeople: Bool = AppSettings.shared.autoExtractPeople
     @State private var userName: String = AppSettings.shared.userName
     @State private var userNameAliases: String = AppSettings.shared.userNameAliases.joined(separator: ", ")
+    @State private var allowRemoteOllama: Bool = AppSettings.shared.allowRemoteOllamaEndpoint
     @State private var obsidianVaultPath: String = ExportSettings().vaultPath
     @State private var obsidianTemplate: String = ExportSettings().filenameTemplate
 
@@ -386,6 +387,9 @@ struct SettingsView: View {
                     Text("Recommended: \(AppSettings.recommendedOllamaModel) — strongest small open-weight model for tool calling. Install with `ollama pull \(AppSettings.recommendedOllamaModel)`. Avoid llama3.1:8b: it leaks tool-call JSON as plain text and over-fires safety refusals on benign prompts.")
                         .font(.caption2).foregroundStyle(.secondary)
                     OllamaStatusRow()
+                    Toggle("Allow a non-local Ollama endpoint", isOn: $allowRemoteOllama)
+                    Text("Off by default. MeetingScribe only sends transcripts to a local LLM (127.0.0.1). Turn this on only if you intentionally run Ollama on another machine — your meeting content will leave this device.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
 
                 Section("People (second brain)") {
@@ -491,6 +495,7 @@ struct SettingsView: View {
         s.whisperBinary = whisperBinary
         s.whisperModel = whisperModel
         if let u = URL(string: ollamaURL) { s.ollamaURL = u }
+        s.allowRemoteOllamaEndpoint = allowRemoteOllama
         s.ollamaModel = ollamaModel
         s.autoRecord = autoRecord
         s.captureMic = captureMic
