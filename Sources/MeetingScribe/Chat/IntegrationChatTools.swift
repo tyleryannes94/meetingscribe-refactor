@@ -136,12 +136,15 @@ final class IntegrationChatTools {
             return .failure(AnthropicClient.ClientError.toolExecutionFailed("export_meeting_to_drive", "Google Drive isn't connected. Connect it in Integrations."))
         }
         let f = DateFormatter(); f.dateFormat = "EEE, MMM d 'at' h:mm a"
+        // U4-3: an agent-driven export must not silently include the user's
+        // private notes — use the safe default (summary + transcript only).
         let doc = MeetingExporter.combinedMarkdown(
             title: m.displayTitle, dateString: f.string(from: m.startDate),
             attendees: m.attendees,
             summary: manager.summaryMarkdown(for: m),
             notes: manager.userNotes(for: m),
-            transcript: manager.transcriptMarkdown(for: m))
+            transcript: manager.transcriptMarkdown(for: m),
+            selection: .safeDefault)
         do {
             let url = try await GoogleDriveService.shared.exportMarkdown(filename: m.slug, content: doc)
             return .success(ChatToolHelpers.jsonString(["ok": true, "url": url, "meeting": m.displayTitle]))
