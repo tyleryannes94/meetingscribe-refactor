@@ -70,6 +70,12 @@ struct MainWindow: View {
     /// user (audit 8.3). Shown once and then never again per `hasCompletedOnboarding`.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @State private var showOnboarding: Bool = false
+    /// First-run AI-stack readiness (D3-1). Presented automatically when the
+    /// whisper model or Ollama isn't ready, so a non-technical user never hits a
+    /// raw shell command before their first recording.
+    @StateObject private var setup = SetupReadiness()
+    /// Offer the Setup Check at most once per launch so it never nags.
+    @State private var setupCheckOffered = false
     /// Sections built so far. Today is always pre-built; the persisted section
     /// is also included so the keep-alive ZStack renders it on first paint.
     @State private var visited: Set<TopLevelSection> = {
@@ -224,10 +230,12 @@ struct MainWindow: View {
     enum ActiveSheet: Identifiable {
         case search
         case addPerson
+        case setup
         var id: String {
             switch self {
             case .search: return "search"
             case .addPerson: return "addPerson"
+            case .setup: return "setup"
             }
         }
     }
@@ -303,6 +311,11 @@ struct MainWindow: View {
                 AddPersonSheet()
                     .environmentObject(PeopleStore.shared)
                     .environmentObject(PeopleTagStore.shared)
+            case .setup:
+                SetupCheckSheet(setup: setup, isPresented: Binding(
+                    get: { if case .setup = activeSheet { return true } else { return false } },
+                    set: { if !$0 { activeSheet = nil } }
+                ))
             }
         }
         // First-launch onboarding (audit 8.3). Pre-explains every macOS
@@ -333,6 +346,10 @@ struct MainWindow: View {
                 if !calendar.authorized {
                     Task { await calendar.requestAccess() }
                 }
+                // Onboarding already done — check the AI stack now and, if it
+                // isn't ready, surface the in-app Setup Check before the user
+                // hits a first recording. (D3-1)
+                await maybeShowSetupCheck()
             }
             // These three are all cheap when the cache is warm (which it
             // is by the time this fires — preloadIndex ran during
@@ -340,6 +357,13 @@ struct MainWindow: View {
             calendar.refreshUpcoming()
             manager.refreshPastMeetings()
             manager.refreshQuickNotes()
+        }
+        // New users: once onboarding closes, run the same readiness check so
+        // the Setup Check rides right behind the permission flow.
+        .onChange(of: showOnboarding) { _, showing in
+            if !showing {
+                Task { await maybeShowSetupCheck() }
+            }
         }
         // Background: keep all tabs' data fresh on an hourly cadence.
         // The previous `prewarmOtherTabs` pattern that pre-rendered every
@@ -404,6 +428,18 @@ struct MainWindow: View {
         DispatchQueue.main.async {
             router.open(e, manager: manager)
         }
+    }
+
+    /// Probe the local AI stack and, if it isn't ready, present the in-app
+    /// Setup Check — but at most once per launch and never stacked over another
+    /// sheet or the onboarding flow. (D3-1)
+    @MainActor
+    private func maybeShowSetupCheck() async {
+        guard !setupCheckOffered, !showOnboarding, activeSheet == nil else { return }
+        await setup.refresh()
+        guard !setup.isReady else { return }
+        setupCheckOffered = true
+        activeSheet = .setup
     }
 }
 

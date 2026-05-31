@@ -31,9 +31,9 @@ final class OllamaService {
         var errorDescription: String? {
             switch self {
             case .unreachable(let m):
-                return "Could not reach Ollama: \(m). Tried to auto-start it without success. Run `brew services start ollama` (or open a terminal and run `ollama serve`)."
+                return "Could not reach the local AI engine (Ollama): \(m). Open MeetingScribe's setup check to start it, or launch Ollama from Applications."
             case .notInstalled:
-                return "Ollama isn't installed. Install it with `brew install ollama`, then run `brew services start ollama`."
+                return "The local AI engine (Ollama) isn't installed yet. Open MeetingScribe's setup check to install it — no Terminal needed."
             case .http(let c, let m): return "Ollama HTTP \(c): \(m)"
             case .decode(let m): return "Could not decode Ollama response: \(m)"
             }

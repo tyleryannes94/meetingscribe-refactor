@@ -321,6 +321,25 @@ struct WhisperRunner {
             && url.deletingLastPathComponent().lastPathComponent == "models"
     }
 
+    /// True iff the configured whisper model file exists and is a sane size.
+    /// Used by the first-run Setup Check (D3-1) to show readiness.
+    static var isModelReady: Bool {
+        let path = AppSettings.shared.whisperModel
+        let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int64) ?? 0
+        return size >= 10_000_000
+    }
+
+    /// Public one-tap download for the Setup Check. Returns true if the default
+    /// base.en model is present afterwards. No-op when it already exists; only
+    /// downloads when the user is on the default base.en path (we never touch a
+    /// custom model location).
+    static func ensureDefaultModelDownloaded() async -> Bool {
+        if isModelReady { return true }
+        let path = AppSettings.shared.whisperModel
+        guard isDefaultBaseEnPath(path) else { return false }
+        return await tryAutoDownloadBaseEnModel(to: path)
+    }
+
     /// Download ggml-base.en.bin from the canonical whisper.cpp HF host
     /// (~140 MB) into `path`. Uses async URLSession so cooperative thread
     /// pool workers are never blocked. Writes via a temp file + atomic rename
