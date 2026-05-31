@@ -16,6 +16,7 @@ struct TodayView: View {
     @EnvironmentObject var calendar: CalendarService
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var tagStore: TagStore
+    @EnvironmentObject var decisions: DecisionStore
 
     /// Navigation is owned by `WorkspaceRouter` (D1-1): meeting cards route to
     /// the canonical Meetings-tab detail, and the widgets flip sections through
@@ -32,6 +33,7 @@ struct TodayView: View {
             manager.backfillPeopleIfNeeded()
             manager.backfillSearchIndexIfNeeded()
             manager.backfillEmbeddingsIfNeeded()
+            manager.backfillDecisionsIfNeeded()
         }
     }
 
@@ -61,6 +63,9 @@ struct TodayView: View {
                     router.section = .actions
                 }
 
+                // Decision ledger — recent decisions across all meetings. (P1-1)
+                decisionsSection
+
                 // "On this day" — resurface meetings from prior weeks/months/
                 // years on today's date. (C2-9/C2-6)
                 onThisDaySection
@@ -75,6 +80,45 @@ struct TodayView: View {
             // Full window width (req #5) — the feed is cards/lists, not prose,
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Decision ledger (P1-1)
+
+    @ViewBuilder
+    private var decisionsSection: some View {
+        let items = decisions.decisions
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal").foregroundStyle(NDS.brand)
+                    Text("Recent decisions").font(.system(size: 15, weight: .semibold))
+                }
+                ForEach(items.prefix(5)) { d in
+                    Button {
+                        if let m = manager.meeting(forEntityID: d.meetingID) { router.openMeeting(m) }
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "circle.fill").font(.system(size: 5))
+                                .foregroundStyle(NDS.brand).padding(.top, 6)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(d.text)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(NDS.textPrimary)
+                                    .multilineTextAlignment(.leading)
+                                Text("\(d.meetingTitle) · \(d.date.formatted(date: .abbreviated, time: .omitted))")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(NDS.textTertiary)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 

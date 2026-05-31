@@ -44,6 +44,7 @@ struct MeetingScribeApp: App {
                 .environmentObject(manager.actionItemBackfill)
                 .environmentObject(manager.personExtraction)
                 .environmentObject(manager.actionItems)
+                .environmentObject(manager.decisions)
                 .environmentObject(router)
                 .frame(minWidth: 720, minHeight: 560)
                 // Deep links: meetingscribe://<kind>/<id> from MCP, Shortcuts,
