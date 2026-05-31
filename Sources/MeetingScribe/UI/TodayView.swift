@@ -17,6 +17,7 @@ struct TodayView: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var decisions: DecisionStore
+    @EnvironmentObject var actionItems: ActionItemStore
 
     /// Navigation is owned by `WorkspaceRouter` (D1-1): meeting cards route to
     /// the canonical Meetings-tab detail, and the widgets flip sections through
@@ -63,6 +64,9 @@ struct TodayView: View {
                     router.section = .actions
                 }
 
+                // Owe / Owed commitments split by direction. (U3-2/P2-7)
+                commitmentsSection
+
                 // Decision ledger — recent decisions across all meetings. (P1-1)
                 decisionsSection
 
@@ -80,6 +84,62 @@ struct TodayView: View {
             // Full window width (req #5) — the feed is cards/lists, not prose,
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Commitments / Owe-Owed (U3-2/P2-7)
+
+    private func isMine(_ owner: String) -> Bool {
+        let o = owner.lowercased().trimmingCharacters(in: .whitespaces)
+        if o == "me" || o == "i" { return true }
+        let name = AppSettings.shared.userName.lowercased()
+        if !name.isEmpty && o.contains(name) { return true }
+        return AppSettings.shared.userNameAliases.contains { !$0.isEmpty && o.contains($0.lowercased()) }
+    }
+
+    @ViewBuilder
+    private var commitmentsSection: some View {
+        let open = actionItems.items.filter { $0.status != .completed && !($0.owner ?? "").isEmpty }
+        let iOwe = open.filter { isMine($0.owner ?? "") }
+        let owed = open.filter { !isMine($0.owner ?? "") }
+        if !iOwe.isEmpty || !owed.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.left.arrow.right").foregroundStyle(NDS.brand)
+                    Text("Commitments").font(.system(size: 15, weight: .semibold))
+                }
+                commitmentColumn("You owe", items: iOwe)
+                commitmentColumn("Owed to you", items: owed)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func commitmentColumn(_ title: String, items: [ActionItem]) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(title) (\(items.count))")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(items.prefix(3)) { item in
+                    Button {
+                        if let m = manager.meeting(forEntityID: item.meetingID) { router.openMeeting(m) }
+                        else { router.section = .actions }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(item.title).font(.system(size: 12))
+                                .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                            Spacer()
+                            if let owner = item.owner, !owner.isEmpty {
+                                Text(owner).font(.caption2).foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.vertical, 5).padding(.horizontal, 10)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 
