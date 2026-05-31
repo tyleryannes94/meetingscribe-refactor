@@ -41,7 +41,7 @@ struct PeopleListView: View {
         }
         .task { people.rebuildIndexIfNeeded() }   // builds the FTS5 index for search
         .sheet(isPresented: $showAdd) {
-            AddPersonSheet()
+            AddPersonSheet(seedTagID: tagFilter)
                 .environmentObject(people)
                 .environmentObject(peopleTags)
         }
