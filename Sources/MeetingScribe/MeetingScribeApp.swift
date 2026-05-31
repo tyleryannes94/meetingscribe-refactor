@@ -230,14 +230,14 @@ struct MeetingScribeApp: App {
         let t = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             Task { @MainActor in
                 calendar.refreshUpcoming()
-                await notifications.syncScheduled(for: calendar.upcoming)
+                let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
                 if AppSettings.shared.autoRecord { autoStartIfNeeded() }
             }
         }
         RunLoop.main.add(t, forMode: .common)
         calendarTimer = t
         Task { @MainActor in
-            await notifications.syncScheduled(for: calendar.upcoming)
+            let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
         }
     }
 
@@ -407,7 +407,7 @@ struct MeetingScribeApp: App {
                                              modifiers: s.meetingRecordHotkeyModifiers)
                 Task { @MainActor in
                     calendar.refreshUpcoming(force: true)
-                    await notifications.syncScheduled(for: calendar.upcoming)
+                    let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
                 }
             }
     }

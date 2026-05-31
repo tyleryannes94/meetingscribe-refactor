@@ -76,7 +76,7 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Schedules a one-shot notification ~10s before each upcoming meeting's
     /// start time. Clears prior scheduled notifications for meetings no longer
     /// in the list. Safe to call repeatedly.
-    func syncScheduled(for meetings: [Meeting]) async {
+    func syncScheduled(for meetings: [Meeting], briefs: [String: String] = [:]) async {
         guard AppSettings.shared.notifyAtMeetingStart else {
             await UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
             scheduledMeetingIDs.removeAll()
@@ -105,9 +105,16 @@ final class NotificationManager: NSObject, ObservableObject {
             let content = UNMutableNotificationContent()
             content.title = m.displayTitle
             content.subtitle = "Starting now"
-            content.body = (m.conferenceURL ?? "").isEmpty
+            let action = (m.conferenceURL ?? "").isEmpty
                 ? "Tap Record to start capturing this meeting."
                 : "Tap Join & Record to join and start capturing."
+            // Prepend a synthesized brief so the user is prepped, not just
+            // pinged. (P2-2)
+            if let brief = briefs[m.id], !brief.isEmpty {
+                content.body = "\(brief)\n\(action)"
+            } else {
+                content.body = action
+            }
             content.categoryIdentifier = Self.categoryMeeting
             if let payload = try? encoder.encode(m),
                let str = String(data: payload, encoding: .utf8) {
