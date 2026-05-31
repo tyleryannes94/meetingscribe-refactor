@@ -12,6 +12,7 @@ struct PeopleListView: View {
 
     @State private var query = ""
     @State private var tagFilter: String?
+    @State private var showTagManager = false
     @State private var selection: String?
     @State private var showAdd = false
     @State private var showGhosts = false
@@ -40,12 +41,15 @@ struct PeopleListView: View {
         }
         .task { people.rebuildIndexIfNeeded() }   // builds the FTS5 index for search
         .sheet(isPresented: $showAdd) {
-            AddPersonSheet()
+            AddPersonSheet(seedTagID: tagFilter)
                 .environmentObject(people)
                 .environmentObject(peopleTags)
         }
         .sheet(isPresented: $showDuplicates) {
             DuplicateReviewSheet().environmentObject(people)
+        }
+        .sheet(isPresented: $showTagManager) {
+            TagManagementSheet().environmentObject(people).environmentObject(peopleTags)
         }
         .alert("Merge duplicates", isPresented: Binding(
             get: { dedupResult != nil }, set: { if !$0 { dedupResult = nil } })) {
@@ -202,16 +206,24 @@ struct PeopleListView: View {
     private var tagChips: some View {
         let used = peopleTags.allTags.filter { people.usedTagIDs().contains($0.id) }
         if !used.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    FilterChip(label: "All", active: tagFilter == nil) { tagFilter = nil }
-                    ForEach(used) { t in
-                        FilterChip(label: t.name, active: tagFilter == t.id) {
-                            tagFilter = (tagFilter == t.id) ? nil : t.id
+            HStack(spacing: 6) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        FilterChip(label: "All", active: tagFilter == nil) { tagFilter = nil }
+                        ForEach(used) { t in
+                            FilterChip(label: t.name, active: tagFilter == t.id) {
+                                tagFilter = (tagFilter == t.id) ? nil : t.id
+                            }
                         }
                     }
+                    .padding(.leading)
                 }
-                .padding(.horizontal)
+                // Manage tags — rename/delete (store methods existed but had no
+                // UI, so a typo'd tag was permanent). (FT3-1)
+                Button { showTagManager = true } label: {
+                    Image(systemName: "slider.horizontal.3").font(.system(size: 12))
+                }
+                .buttonStyle(.borderless).help("Manage tags").padding(.trailing)
             }
             .padding(.bottom, 8)
         }
@@ -265,9 +277,19 @@ private struct PersonRow: View {
                 }
             }
             Spacer(minLength: 0)
+            // Last-interaction recency so "who have I gone cold on?" is visible
+            // without opening each person. (UX3-2)
+            if let last = person.lastInteractionAt {
+                Text(Self.relative.localizedString(for: last, relativeTo: Date()))
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
         }
         .padding(.vertical, 3)
     }
+
+    private static let relative: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated; return f
+    }()
 }
 
 @available(macOS 14.0, *)

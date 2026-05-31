@@ -11,6 +11,7 @@ struct AddPersonSheet: View {
     /// The person being edited, or nil for a brand-new person.
     let editing: Person?
 
+    @FocusState private var nameFocused: Bool
     @State private var displayName: String
     @State private var company: String
     @State private var role: String
@@ -23,7 +24,7 @@ struct AddPersonSheet: View {
     @State private var addresses: [String]
     @State private var favorites: String
 
-    init(editing: Person? = nil) {
+    init(editing: Person? = nil, seedTagID: String? = nil) {
         self.editing = editing
         _displayName = State(initialValue: editing?.displayName ?? "")
         _company = State(initialValue: editing?.company ?? "")
@@ -31,7 +32,8 @@ struct AddPersonSheet: View {
         _emails = State(initialValue: (editing?.emails.isEmpty == false) ? editing!.emails : [""])
         _phones = State(initialValue: (editing?.phones.isEmpty == false) ? editing!.phones : [""])
         _bio = State(initialValue: editing?.bio ?? "")
-        _tagIDs = State(initialValue: editing?.tagIDs ?? [])
+        // Prefill the active tag when adding while a tag filter is on. (UX3-3)
+        _tagIDs = State(initialValue: editing?.tagIDs ?? (seedTagID.map { [$0] } ?? []))
         _hasBirthday = State(initialValue: editing?.birthday != nil)
         _birthday = State(initialValue: editing?.birthday ?? Date())
         _addresses = State(initialValue: (editing?.addresses.isEmpty == false) ? editing!.addresses : [""])
@@ -59,7 +61,14 @@ struct AddPersonSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    field("Name", text: $displayName, prompt: "Jane Smith")
+                    // Inlined (not the `field` helper) so `.focused` lands on the
+                    // TextField itself — UX10-4 auto-focus on a new person.
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Name").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                        TextField("Jane Smith", text: $displayName)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($nameFocused)
+                    }
                     HStack(spacing: 12) {
                         field("Company", text: $company, prompt: "Acme")
                         field("Role", text: $role, prompt: "Engineer")
@@ -100,6 +109,7 @@ struct AddPersonSheet: View {
             }
         }
         .frame(width: 460, height: 540)
+        .onAppear { if editing == nil { nameFocused = true } }
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String) -> some View {

@@ -470,6 +470,21 @@ struct PersonDetailView: View {
                     .buttonStyle(MSSecondaryButtonStyle())
                     .accessibilityLabel("Delete person")
                 }
+                // Always-visible add affordances so logging an encounter or
+                // adding the FIRST relationship doesn't require navigating away
+                // or waiting for a section to appear. (UX3-4/A8)
+                HStack(spacing: 6) {
+                    Button { showAddEncounter = true } label: {
+                        Label("Encounter", systemImage: "calendar.badge.plus")
+                    }
+                    .buttonStyle(.borderless).font(NDS.small)
+                    Button { showAddRelationship = true } label: {
+                        Label("Relationship", systemImage: "person.2.badge.plus")
+                    }
+                    .buttonStyle(.borderless).font(NDS.small)
+                    Spacer()
+                }
+                .padding(.top, 2)
             }
 
             // Tags
