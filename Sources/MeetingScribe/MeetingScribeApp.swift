@@ -254,8 +254,16 @@ struct MeetingScribeApp: App {
 
     /// Post a "Meeting ready" banner when transcription + summary finishes.
     private func wirePipelineNotification() {
-        manager.pipelineController.onComplete = { [weak notifications] meeting in
-            notifications?.notifyTranscriptionComplete(meeting: meeting)
+        manager.pipelineController.onComplete = { [weak notifications, weak manager] meeting in
+            // Pull a clean prose snippet from the summary for the notification
+            // body (skip markdown headings/blank lines). (U3-5)
+            let summary = manager?.summaryMarkdown(for: meeting) ?? ""
+            let snippet = summary
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix(">") }
+                ?? ""
+            notifications?.notifyTranscriptionComplete(meeting: meeting, summarySnippet: snippet)
         }
     }
 

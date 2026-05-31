@@ -28,6 +28,7 @@ final class NotificationManager: NSObject, ObservableObject {
     private var scheduledMeetingIDs: Set<String> = []
     private let meetingPayloadKey = "meetingJSON"
     private let sourcePayloadKey = "source"
+    private let deepLinkKey = "deepLink"
 
     override init() {
         super.init()
@@ -130,11 +131,17 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Posts an immediate notification when transcription + summary finishes
     /// for a meeting. This is the most valuable notification — it closes the
     /// loop for the user ("your meeting is ready to review").
-    func notifyTranscriptionComplete(meeting: Meeting) {
+    func notifyTranscriptionComplete(meeting: Meeting, summarySnippet: String = "") {
         let content = UNMutableNotificationContent()
         content.title = "Meeting ready: \(meeting.displayTitle)"
-        content.body = "Transcript and summary are ready to review."
+        let snippet = summarySnippet.trimmingCharacters(in: .whitespacesAndNewlines)
+        content.body = snippet.isEmpty
+            ? "Transcript and summary are ready to review."
+            : String(snippet.prefix(160))
         content.sound = .default
+        // Deep link so tapping opens the meeting (routed via the registered
+        // scheme, D1-2) instead of just activating the app. (U3-5)
+        content.userInfo[deepLinkKey] = "meetingscribe://meeting/\(meeting.id)"
         let req = UNNotificationRequest(
             identifier: "transcription-\(meeting.id)",
             content: content,
@@ -199,9 +206,14 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             let source = (userInfo[sourcePayloadKey] as? String) ?? "Impromptu"
             onRecordImpromptu?(source)
         case UNNotificationDefaultActionIdentifier:
-            // Tap on the notification body — open the app window.
+            // Tap on the notification body — open the app window, and follow a
+            // deep link to the meeting if one was attached. (U3-5)
             NSApp.activate(ignoringOtherApps: true)
-            if let m = meeting { onRecordMeeting?(m) }
+            if let link = userInfo[deepLinkKey] as? String, let url = URL(string: link) {
+                NSWorkspace.shared.open(url)
+            } else if let m = meeting {
+                onRecordMeeting?(m)
+            }
         default:
             break
         }
