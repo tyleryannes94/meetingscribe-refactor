@@ -247,17 +247,16 @@ extension UnifiedMeetingDetail {
             if case .past(let m) = mode {
                 Divider()
 
-                // Transcription — re-run on the recorded audio. Label adapts so
-                // it's clearly a retry when a transcript already exists.
-                if !manager.isTranscribingMeeting(m) {
-                    Button {
-                        manager.transcribeNow(meeting: m)
-                    } label: {
-                        Label(transcript.isEmpty ? "Transcribe Now" : "Re-transcribe & summarize",
-                              systemImage: transcript.isEmpty ? "text.bubble" : "arrow.clockwise")
-                    }
-                    .disabled(!manager.hasAudio(for: m))
+                // Transcription — re-run on the recorded audio. Always available
+                // when audio exists (even mid-"Processing", so a stuck or bad
+                // job can be retried). Label adapts to a clear retry.
+                Button {
+                    manager.transcribeNow(meeting: m)
+                } label: {
+                    Label(transcript.isEmpty ? "Transcribe Now" : "Re-transcribe & summarize",
+                          systemImage: transcript.isEmpty ? "text.bubble" : "arrow.clockwise")
                 }
+                .disabled(!manager.hasAudio(for: m))
 
                 // Join actions (if URL exists)
                 if m.conferenceURL != nil {
@@ -333,15 +332,21 @@ extension UnifiedMeetingDetail {
             }
 
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: NDS.buttonIconSide, height: NDS.buttonSecondaryH)
-                .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(NDS.hairline, lineWidth: 1))
+            // Labeled so it reads as a real "options / settings" affordance
+            // instead of a bare ⋯ icon people miss. (Edit, Re-transcribe,
+            // Recover, Export, Reveal all live in here.)
+            HStack(spacing: 5) {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 12, weight: .medium))
+                Text("Options").font(.system(size: 12, weight: .medium))
+            }
+            .padding(.horizontal, 11)
+            .frame(height: NDS.buttonSecondaryH)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(NDS.hairline, lineWidth: 1))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("More actions")
+        .help("Meeting options — edit, re-transcribe, recover, export")
     }
 
     // MARK: - Upcoming action row
