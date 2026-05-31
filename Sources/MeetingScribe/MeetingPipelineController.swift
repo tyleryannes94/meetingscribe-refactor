@@ -194,14 +194,16 @@ final class MeetingPipelineController: ObservableObject {
 
         lastCompletedDir = store.directory(for: workingMeeting, primaryTag: primary)
 
-        // 5. Write in-folder markdown snapshot.
+        // 5. Write in-folder markdown snapshot. Pass real tag names so the
+        // canonical file is Obsidian-native and never ships a date-partition
+        // folder name as a tag. (C3-1)
         let finalDir = store.directory(for: workingMeeting, primaryTag: primary)
-        ObsidianExporter.writeMarkdownFile(for: workingMeeting, to: finalDir)
+        let tagNameList = tagStore.tagIDs(for: workingMeeting)
+            .compactMap { tagStore.tag(by: $0)?.name }
+        ObsidianExporter.writeMarkdownFile(for: workingMeeting, to: finalDir, tags: tagNameList)
 
         // 6. Index into vault FTS so GlobalSearch finds this meeting.
-        let tagNames = tagStore.tagIDs(for: workingMeeting)
-            .compactMap { tagStore.tag(by: $0)?.name }
-            .joined(separator: " ")
+        let tagNames = tagNameList.joined(separator: " ")
         PeopleStore.shared.indexMeeting(workingMeeting,
                                         summary: summary,
                                         tags: tagNames.isEmpty ? nil : tagNames)
@@ -300,11 +302,11 @@ final class MeetingPipelineController: ObservableObject {
                     try? store.writeSummary(summary, for: meeting, primaryTag: primary)
                     let extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
                     actionItems.reconcileExtracted(extracted, for: meeting.id)
-                    ObsidianExporter.writeMarkdownFile(for: meeting, to: dir)
-                    // Index into vault FTS.
-                    let tagNames = tagStore.tagIDs(for: meeting)
+                    let tagNameList = tagStore.tagIDs(for: meeting)
                         .compactMap { tagStore.tag(by: $0)?.name }
-                        .joined(separator: " ")
+                    ObsidianExporter.writeMarkdownFile(for: meeting, to: dir, tags: tagNameList)
+                    // Index into vault FTS.
+                    let tagNames = tagNameList.joined(separator: " ")
                     PeopleStore.shared.indexMeeting(meeting,
                                                     summary: summary,
                                                     tags: tagNames.isEmpty ? nil : tagNames)
@@ -316,7 +318,11 @@ final class MeetingPipelineController: ObservableObject {
             }
         } else {
             // Even without a summary regeneration, refresh the markdown snapshot.
-            await MainActor.run { ObsidianExporter.writeMarkdownFile(for: meeting, to: dir) }
+            await MainActor.run {
+                let tagNameList = tagStore.tagIDs(for: meeting)
+                    .compactMap { tagStore.tag(by: $0)?.name }
+                ObsidianExporter.writeMarkdownFile(for: meeting, to: dir, tags: tagNameList)
+            }
         }
 
         // Signal completion to registered observers.
