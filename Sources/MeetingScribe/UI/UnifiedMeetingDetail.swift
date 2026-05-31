@@ -74,6 +74,11 @@ struct UnifiedMeetingDetail: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Clear the translucent window toolbar (Tahoe) in the Meetings-tab
+            // split view — without this the title + action buttons (Transcribe,
+            // Options) slid under the toolbar and were cut off. Matches the
+            // People tab's identity-panel inset.
+            Color.clear.frame(height: NDS.splitPaneTopInset)
             header
             Divider()
             audioBar
