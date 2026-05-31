@@ -18,6 +18,7 @@ struct TodayView: View {
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var decisions: DecisionStore
     @EnvironmentObject var actionItems: ActionItemStore
+    @State private var showStandup = false
 
     /// Navigation is owned by `WorkspaceRouter` (D1-1): meeting cards route to
     /// the canonical Meetings-tab detail, and the widgets flip sections through
@@ -263,6 +264,15 @@ struct TodayView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button { showStandup = true } label: {
+                Label("Standup", systemImage: "list.bullet.rectangle")
+            }
+            .help("Generate a daily standup: yesterday, today, open commitments")
+        }
+        .sheet(isPresented: $showStandup) {
+            StandupDigestSheet(
+                markdown: StandupDigest.markdown(manager: manager, calendar: calendar),
+                isPresented: $showStandup)
         }
     }
 
