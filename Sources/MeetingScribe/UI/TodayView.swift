@@ -61,6 +61,10 @@ struct TodayView: View {
                     router.section = .actions
                 }
 
+                // "On this day" — resurface meetings from prior weeks/months/
+                // years on today's date. (C2-9/C2-6)
+                onThisDaySection
+
                 // People suggestions below meetings — they're context, not actions
                 SuggestedPeopleView()
 
@@ -71,6 +75,74 @@ struct TodayView: View {
             // Full window width (req #5) — the feed is cards/lists, not prose,
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - On this day (C2-9/C2-6)
+
+    /// Past meetings that fall on today's calendar date in a prior year (true
+    /// anniversaries), or on a round "ago" milestone (~1 week / 1 month /
+    /// 1 quarter / 1 year ago, ±1 day). Newest first.
+    private var onThisDay: [Meeting] {
+        let cal = Calendar.current
+        let now = Date()
+        let today = cal.dateComponents([.month, .day], from: now)
+        let startToday = cal.startOfDay(for: now)
+        return manager.pastMeetings.filter { m in
+            guard !cal.isDateInToday(m.startDate) else { return false }
+            let c = cal.dateComponents([.month, .day], from: m.startDate)
+            if c.month == today.month && c.day == today.day { return true }
+            let days = cal.dateComponents([.day], from: cal.startOfDay(for: m.startDate),
+                                          to: startToday).day ?? 0
+            return [7, 30, 90, 365].contains { abs(days - $0) <= 1 }
+        }
+        .sorted { $0.startDate > $1.startDate }
+    }
+
+    @ViewBuilder
+    private var onThisDaySection: some View {
+        let items = onThisDay
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath").foregroundStyle(NDS.brand)
+                    Text("On this day").font(.system(size: 15, weight: .semibold))
+                }
+                ForEach(items.prefix(4)) { m in
+                    Button { router.openMeeting(m) } label: {
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(m.displayTitle)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(NDS.textPrimary)
+                                Text(agoString(m.startDate))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(NDS.textTertiary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(NDS.textTertiary)
+                        }
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// Human "N days/weeks/months/years ago" label.
+    private func agoString(_ date: Date) -> String {
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: date),
+                                                   to: Calendar.current.startOfDay(for: Date())).day ?? 0
+        switch days {
+        case 365...:  return "\(days / 365) year\(days / 365 == 1 ? "" : "s") ago"
+        case 28...:   return "\(days / 30) month\(days / 30 == 1 ? "" : "s") ago"
+        case 7...:    return "\(days / 7) week\(days / 7 == 1 ? "" : "s") ago"
+        default:      return "\(days) days ago"
         }
     }
 

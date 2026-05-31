@@ -145,6 +145,11 @@ final class PeopleStore: ObservableObject {
     /// Meeting IDs that already have an embedding (for backfill diffing).
     func embeddedMeetingIDs() -> Set<String> { db.embeddedEntityIDs(kind: "meeting") }
 
+    /// Auto-discovered related meetings (semantic similarity) for backlinks. (C2-3)
+    func relatedMeetingIDs(toID id: String, limit: Int = 5) -> [String] {
+        db.relatedMeetings(toID: id, limit: limit).map(\.id)
+    }
+
     /// Compute + store an embedding for indexed content. No-op when the
     /// embedding model / Ollama isn't available (search just stays lexical).
     func embedAndStore(entityID: String, entityKind: String, text: String) async {

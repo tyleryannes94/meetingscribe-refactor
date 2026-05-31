@@ -12,6 +12,7 @@ final class ChatSession: ObservableObject {
     /// keys, no outbound traffic.
     private let ollama = OllamaChatClient()
     private(set) var tools: ChatTools?
+    private var manager: MeetingManager?
 
     @Published private(set) var messages: [AnthropicClient.Message] = []
     @Published private(set) var isRunning: Bool = false
@@ -30,6 +31,7 @@ final class ChatSession: ObservableObject {
     init() {}
 
     func attach(manager: MeetingManager) {
+        self.manager = manager
         self.tools = ChatTools(manager: manager)
     }
 
@@ -158,10 +160,15 @@ final class ChatSession: ObservableObject {
         isRunning = true
         lastError = nil
         defer { isRunning = false }
+        // Retrieve-then-ground (C2-2): pull the most relevant vault passages for
+        // the latest question via hybrid search and inject them — with their
+        // meetingscribe:// links — into the system prompt so the model answers
+        // grounded in real meetings and cites them. Tools remain available.
+        let grounded = await groundedSystemPrompt()
         do {
             messages = try await dispatch(
                 messages: messages,
-                system: systemPrompt,
+                system: grounded,
                 tools: toolsRef.tools,
                 progress: { [weak self] msg in self?.messages.append(msg) },
                 runTool: { name, input in
@@ -191,5 +198,57 @@ final class ChatSession: ObservableObject {
     func reset() {
         messages = []
         lastError = nil
+    }
+
+    // MARK: - Retrieve-then-ground (C2-2)
+
+    /// Plain text of the most recent user message.
+    private func lastUserText() -> String {
+        guard let msg = messages.last(where: { $0.role == .user }) else { return "" }
+        return msg.content.compactMap { c -> String? in
+            if case .text(let t) = c { return t } else { return nil }
+        }.joined(separator: " ")
+    }
+
+    /// systemPrompt augmented with retrieved, citable vault context for the
+    /// current question. Returns the bare systemPrompt when there's nothing to
+    /// retrieve (e.g. greetings, or an empty/unbuilt index).
+    private func groundedSystemPrompt() async -> String {
+        let query = lastUserText().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 4, let manager else { return systemPrompt }
+
+        let results = await PeopleStore.shared.searchVaultHybrid(query, limit: 6)
+        let meetings = results.filter { $0.entityKind == "meeting" }.prefix(5)
+        guard !meetings.isEmpty else { return systemPrompt }
+
+        let df = DateFormatter(); df.dateStyle = .medium
+        var blocks: [String] = []
+        for r in meetings {
+            guard let m = manager.meeting(forEntityID: r.entityID) else { continue }
+            let summary = manager.summaryMarkdown(for: m)
+            let snippet = summary.isEmpty ? "(no summary)" : String(summary.prefix(1200))
+            blocks.append("""
+            ### \(m.displayTitle) — \(df.string(from: m.startDate))
+            Link: meetingscribe://meeting/\(m.id)
+            \(snippet)
+            """)
+        }
+        guard !blocks.isEmpty else { return systemPrompt }
+
+        return systemPrompt + """
+
+
+        ─────────────────────────────────────────────
+        RETRIEVED VAULT CONTEXT (for THIS question)
+        ─────────────────────────────────────────────
+        The passages below were retrieved from the user's own meetings by hybrid
+        search. When the answer is in them, ground your reply in them and CITE
+        each meeting you use as a markdown link to its Link above, e.g.
+        [Weekly sync](meetingscribe://meeting/<id>). If they don't cover the
+        question, say so plainly and offer to search differently or use a tool —
+        do NOT invent meetings or details.
+
+        \(blocks.joined(separator: "\n\n"))
+        """
     }
 }
