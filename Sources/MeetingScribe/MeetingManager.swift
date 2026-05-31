@@ -724,6 +724,36 @@ final class MeetingManager: ObservableObject {
         }
     }
 
+    private var didBackfillEmbeddings = false
+
+    /// One-shot per-session pass that computes semantic embeddings for any past
+    /// meetings that don't have one yet (e.g. all of them, the first time the
+    /// embedding model is available). Runs in the background, throttled, and
+    /// no-ops per meeting when the model is unreachable. (C2-1b)
+    func backfillEmbeddingsIfNeeded() {
+        guard !didBackfillEmbeddings else { return }
+        didBackfillEmbeddings = true
+        let meetings = pastMeetings
+        guard !meetings.isEmpty else { return }
+        Task { @MainActor in
+            let have = PeopleStore.shared.embeddedMeetingIDs()
+            let todo = meetings.filter { !have.contains($0.id) }
+            guard !todo.isEmpty else { return }
+            // Ensure the embedding model is present (idempotent; pulls ~274 MB
+            // once). If Ollama is down this throws and we just skip — embeds
+            // no-op and search stays lexical.
+            try? await OllamaChatClient.pullModel(AppSettings.shared.ollamaEmbeddingModel)
+            for m in todo {
+                let primary = self.tagStore.primaryTag(for: m)
+                let summary = self.store.readSummary(for: m, primaryTag: primary)
+                await PeopleStore.shared.embedAndStore(
+                    entityID: m.id, entityKind: "meeting",
+                    text: m.displayTitle + "\n" + summary)
+                await Task.yield()
+            }
+        }
+    }
+
     func userNotes(for meeting: Meeting) -> String {
         let cached = bodyCache.cached(meeting.id)
         if !cached.isEmpty { return cached.notes }

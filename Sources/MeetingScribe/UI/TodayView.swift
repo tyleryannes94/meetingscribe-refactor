@@ -31,6 +31,7 @@ struct TodayView: View {
             manager.backfillActionItemsIfNeeded()
             manager.backfillPeopleIfNeeded()
             manager.backfillSearchIndexIfNeeded()
+            manager.backfillEmbeddingsIfNeeded()
         }
     }
 

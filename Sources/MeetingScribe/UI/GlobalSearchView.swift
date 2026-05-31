@@ -200,9 +200,17 @@ struct GlobalSearchView: View {
             // tags) plus the chatQuery "Ask Chat" passthrough. (C2-1: global
             // search used to fall back to an in-memory contains() scan.)
             let ftsKinds: Set<WorkspaceEntityKind> = [.meeting, .voiceNote, .person]
-            let fts = PeopleStore.shared.searchVault(q).compactMap(ftsEntity)
             let other = manager.search(q).filter { !ftsKinds.contains($0.kind) }
-            results = filteredResults(fts + other)
+            // Instant lexical results first…
+            results = filteredResults(PeopleStore.shared.searchVault(q).compactMap(ftsEntity) + other)
+            // …then refine with hybrid semantic ranking once the query embedding
+            // returns (no-op if the embedding model isn't available). Guarded
+            // against a stale query so fast typing isn't clobbered. (C2-1b)
+            Task { @MainActor in
+                let hybrid = await PeopleStore.shared.searchVaultHybrid(q)
+                guard q == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+                results = filteredResults(hybrid.compactMap(ftsEntity) + other)
+            }
         }
         selection = 0
     }
