@@ -533,6 +533,18 @@ final class PeopleStore: ObservableObject {
         return encounter
     }
 
+    /// Move a person's `lastInteractionAt` forward to `date` (never backward),
+    /// so the stay-in-touch signal reflects recorded meetings and confirmed
+    /// links — not just manual encounters. (P2-1)
+    func bumpLastInteraction(personID: String, date: Date) {
+        guard let idx = people.firstIndex(where: { $0.id == personID }) else { return }
+        if (people[idx].lastInteractionAt ?? .distantPast) < date {
+            people[idx].lastInteractionAt = date
+            writePerson(people[idx])
+            people.sort(by: Self.recencyThenName)
+        }
+    }
+
     func deleteEncounter(_ encounter: Encounter) {
         encounters.removeAll { $0.id == encounter.id }
         try? FileManager.default.removeItem(at: fileURL(for: encounter))
@@ -1064,6 +1076,8 @@ final class PeopleStore: ObservableObject {
                     addMeetingMention(meeting.id, toPersonID: match.id)
                     autoLinked += 1
                 }
+                // Recorded-meeting attendance is a real interaction. (P2-1)
+                bumpLastInteraction(personID: match.id, date: meeting.startDate)
                 continue
             }
 
@@ -1110,6 +1124,7 @@ final class PeopleStore: ObservableObject {
                                   bio: suggestion.summary)
         }
         addMeetingMention(suggestion.meetingID, toPersonID: person.id)
+        bumpLastInteraction(personID: person.id, date: suggestion.meetingDate)
         removeSuggestion(suggestion)
         return self.person(by: person.id)
     }
