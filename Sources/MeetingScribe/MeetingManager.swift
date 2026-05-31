@@ -211,6 +211,7 @@ final class MeetingManager: ObservableObject {
                 // while `activeMeeting` was set. (ScribeCore path already used `m`.)
                 state = .recording(meeting: m, startedAt: Date())
             }
+            MetricsStore.shared.record(.meetingRecorded)   // local-only metric (P5-1)
             // When ScribeCore is handling recording, state is updated via the
             // DarwinNotifier.recordingStarted signal observed in init().
             lastError = nil

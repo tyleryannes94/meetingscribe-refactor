@@ -164,6 +164,7 @@ final class ChatSession: ObservableObject {
         // the latest question via hybrid search and inject them — with their
         // meetingscribe:// links — into the system prompt so the model answers
         // grounded in real meetings and cites them. Tools remain available.
+        MetricsStore.shared.record(.chatQuery)   // local-only metric (P5-1)
         let grounded = await groundedSystemPrompt()
         do {
             messages = try await dispatch(

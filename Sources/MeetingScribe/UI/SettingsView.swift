@@ -31,6 +31,7 @@ struct SettingsView: View {
     @State private var userName: String = AppSettings.shared.userName
     @State private var userNameAliases: String = AppSettings.shared.userNameAliases.joined(separator: ", ")
     @State private var allowRemoteOllama: Bool = AppSettings.shared.allowRemoteOllamaEndpoint
+    @State private var collectMetrics: Bool = AppSettings.shared.collectMetrics
     @State private var obsidianVaultPath: String = ExportSettings().vaultPath
     @State private var obsidianTemplate: String = ExportSettings().filenameTemplate
 
@@ -467,6 +468,18 @@ struct SettingsView: View {
                     Text("App-wide errors (recording, transcription, summary, polish, Notion) are logged at \(AppLog.fileURL.path). Send this file if you hit a bug.")
                         .font(.caption2).foregroundStyle(.secondary)
                     DiagnosticsExportRow()
+                }
+                Section("Usage metrics") {
+                    Toggle("Collect local usage metrics", isOn: $collectMetrics)
+                        .onChange(of: collectMetrics) { _, v in AppSettings.shared.collectMetrics = v }
+                    Text("Off by default. Counts stay on this Mac (UserDefaults) and are NEVER uploaded — there's no network code for them. Lets you see how much you use MeetingScribe.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    if collectMetrics {
+                        ForEach(MetricsStore.shared.snapshot(), id: \.0) { event, count in
+                            HStack { Text(event.label); Spacer(); Text("\(count)").foregroundStyle(.secondary).monospacedDigit() }
+                                .font(.caption)
+                        }
+                    }
                 }
                 Section("Ollama") {
                     TextField("Server URL", text: $ollamaURL)
