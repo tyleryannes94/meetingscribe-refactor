@@ -357,6 +357,10 @@ struct MainWindow: View {
             calendar.refreshUpcoming()
             manager.refreshPastMeetings()
             manager.refreshQuickNotes()
+            // First-run only: seed a bundled sample meeting so Today is never
+            // empty and first value (a real summary) arrives in zero clicks.
+            // No-ops when the vault already has meetings. (D3-3)
+            SampleMeetingSeeder.seedIfNeeded(manager: manager)
         }
         // New users: once onboarding closes, run the same readiness check so
         // the Setup Check rides right behind the permission flow.
