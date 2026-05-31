@@ -287,6 +287,13 @@ extension UnifiedMeetingDetail {
 
                 // File operations
                 Button {
+                    let link = WorkspaceLink.url(kind: .meeting, id: m.id).absoluteString
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(link, forType: .string)
+                } label: {
+                    Label("Copy link to meeting", systemImage: "link")
+                }
+                Button {
                     manager.revealInFinder(m)
                 } label: {
                     Label("Reveal in Finder", systemImage: "folder")

@@ -695,10 +695,29 @@ struct PersonDetailView: View {
         }
     }
 
+    @ViewBuilder
     private func contactRow(icon: String, text: String) -> some View {
+        // Email/phone rows are now actionable — mailto: / tel: — instead of dead
+        // text the user had to copy and switch apps to use. (A2/UX3-1)
+        let url: URL? = {
+            switch icon {
+            case "envelope": return URL(string: "mailto:\(text)")
+            case "phone":    return URL(string: "tel:\(text.filter { $0.isNumber || $0 == "+" })")
+            default:         return nil
+            }
+        }()
         HStack(spacing: 8) {
             Image(systemName: icon).font(.system(size: 12)).foregroundStyle(NDS.textTertiary).frame(width: 16)
-            Text(text).font(NDS.body).textSelection(.enabled)
+            if let url {
+                Button { NSWorkspace.shared.open(url) } label: {
+                    Text(text).font(NDS.body).foregroundStyle(NDS.brand)
+                }
+                .buttonStyle(.plain)
+                .help(icon == "envelope" ? "Email \(text)" : "Call \(text)")
+            } else {
+                Text(text).font(NDS.body).textSelection(.enabled)
+            }
+            Spacer(minLength: 0)
         }
     }
 
