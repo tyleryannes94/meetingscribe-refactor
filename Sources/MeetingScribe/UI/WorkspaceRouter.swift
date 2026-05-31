@@ -45,6 +45,14 @@ final class WorkspaceRouter: ObservableObject {
         section = .meetings
     }
 
+    /// Open a person in the People tab. Person routing is notification-based
+    /// (PeopleListView observes it), so this needs no manager.
+    func openPerson(_ id: String) {
+        section = .people
+        NotificationCenter.default.post(name: .meetingScribeOpenPerson,
+                                        object: nil, userInfo: ["id": id])
+    }
+
     /// Single entry point for opening any workspace entity (search palette,
     /// deep links, person/meeting backlinks). Meetings open in the Meetings
     /// tab detail; other kinds flip to their section. Replaces the old
@@ -70,15 +78,11 @@ final class WorkspaceRouter: ObservableObject {
         case .project, .actionItem:
             section = .actions
         case .person:
-            section = .people
-            NotificationCenter.default.post(name: .meetingScribeOpenPerson,
-                                            object: nil, userInfo: ["id": id])
+            openPerson(id)
         case .attachedNote:
             // rawID is "<personId>::<noteId>" — route to the person.
             let personId = id.split(separator: "::").first.map(String.init) ?? id
-            section = .people
-            NotificationCenter.default.post(name: .meetingScribeOpenPerson,
-                                            object: nil, userInfo: ["id": personId])
+            openPerson(personId)
         case .chatQuery:
             openChat?(id)
         case .tag:

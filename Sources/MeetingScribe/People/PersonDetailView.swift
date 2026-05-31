@@ -157,6 +157,7 @@ struct PersonDetailView: View {
     @EnvironmentObject var peopleTags: PeopleTagStore
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var chatSession: ChatSession
+    @EnvironmentObject var router: WorkspaceRouter
 
     let person: Person
     /// Called after the person is deleted so the list can clear its selection.
@@ -526,22 +527,33 @@ struct PersonDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     NotionEyebrow(text: "In your recordings", count: matches.count)
                     ForEach(matches.prefix(20)) { m in
-                        HStack(spacing: 10) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(m.displayTitle)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(NDS.textPrimary)
-                                Text(m.startDate, style: .date)
-                                    .font(.system(size: 11))
+                        // Clickable backlink — routes to the meeting in the
+                        // canonical Meetings-tab detail. Was a dead HStack. (D1-5)
+                        Button {
+                            router.openMeeting(m)
+                        } label: {
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(m.displayTitle)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(NDS.textPrimary)
+                                    Text(m.startDate, style: .date)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(NDS.textTertiary)
+                                }
+                                Spacer()
+                                if m.health?.status == .ok {
+                                    Circle().fill(Color.green.opacity(0.6)).frame(width: 6, height: 6)
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
                                     .foregroundStyle(NDS.textTertiary)
                             }
-                            Spacer()
-                            if m.health?.status == .ok {
-                                Circle().fill(Color.green.opacity(0.6)).frame(width: 6, height: 6)
-                            }
+                            .padding(.vertical, 6).padding(.horizontal, 10)
+                            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                            .contentShape(Rectangle())
                         }
-                        .padding(.vertical, 6).padding(.horizontal, 10)
-                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                        .buttonStyle(.plain)
                     }
                 }
             }
