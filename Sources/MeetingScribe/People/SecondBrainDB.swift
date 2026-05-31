@@ -35,6 +35,11 @@ final class SecondBrainDB {
 
     private var db: OpaquePointer?
 
+    /// True when the database failed `quick_check` on open and was deleted +
+    /// recreated empty. The owner (PeopleStore) repopulates it from the
+    /// canonical JSON via `rebuild()`. (E3-4)
+    private(set) var needsRebuild = false
+
     static var dbURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport.appendingPathComponent("MeetingScribe", isDirectory: true)
@@ -46,13 +51,57 @@ final class SecondBrainDB {
     deinit { if db != nil { sqlite3_close(db) } }
 
     private func open() {
+        guard openConnection() else { return }
+        // E3-4: validate the derived index on open. A truncated/corrupt db
+        // (power loss during a WAL checkpoint, disk-full) would otherwise
+        // silently return empty results and the People graph — which the whole
+        // product is built on — would go dark with no signal. The db is
+        // derived from canonical JSON, so on failure we delete it, recreate an
+        // empty schema, and flag the owner to rebuild.
+        if !quickCheck() {
+            log.error("secondbrain.db failed quick_check — deleting and rebuilding from canonical JSON")
+            if db != nil { sqlite3_close(db); db = nil }
+            Self.removeDatabaseFiles()
+            guard openConnection() else { return }
+            needsRebuild = true
+        }
+        ensureSchema()
+    }
+
+    /// Clears the rebuild flag once the owner has repopulated the index.
+    func clearNeedsRebuild() { needsRebuild = false }
+
+    private func openConnection() -> Bool {
         guard sqlite3_open(Self.dbURL.path, &db) == SQLITE_OK else {
             log.error("Failed to open secondbrain.db")
             db = nil
-            return
+            return false
         }
         exec("PRAGMA journal_mode=WAL;")
-        ensureSchema()
+        return true
+    }
+
+    /// `PRAGMA quick_check` — true iff SQLite reports the file is "ok". A
+    /// failure to even prepare the statement is treated as corrupt.
+    private func quickCheck() -> Bool {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA quick_check;", -1, &stmt, nil) == SQLITE_OK else {
+            return false
+        }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW, let c = sqlite3_column_text(stmt, 0) else {
+            return false
+        }
+        return String(cString: c) == "ok"
+    }
+
+    /// Removes the main db file plus its WAL/SHM sidecars so a fresh,
+    /// non-corrupt database is created on the next open.
+    private static func removeDatabaseFiles() {
+        let fm = FileManager.default
+        for suffix in ["", "-wal", "-shm"] {
+            try? fm.removeItem(at: URL(fileURLWithPath: dbURL.path + suffix))
+        }
     }
 
     private func ensureSchema() {
@@ -163,15 +212,25 @@ final class SecondBrainDB {
     /// Full rebuild from the canonical in-memory snapshot. `tagName` resolves a
     /// people-tag id to its display name so tags are searchable by name.
     func rebuild(people: [Person], encounters: [Encounter], tagName: (String) -> String?) {
-        exec("BEGIN;")
-        exec("DELETE FROM people;")
-        exec("DELETE FROM encounters_idx;")
-        exec("DELETE FROM search_index;")
-        exec("DELETE FROM vault_content WHERE entity_kind='person';")
+        // E3-4: roll back on any failed step so a mid-rebuild error (disk-full,
+        // corruption) can't leave a committed, half-populated index.
+        guard execChecked("BEGIN;") else { return }
+        let cleared = execChecked("DELETE FROM people;")
+            && execChecked("DELETE FROM encounters_idx;")
+            && execChecked("DELETE FROM search_index;")
+            && execChecked("DELETE FROM vault_content WHERE entity_kind='person';")
+        guard cleared else {
+            exec("ROLLBACK;")
+            log.error("rebuild failed during clear — rolled back")
+            return
+        }
         let counts = Dictionary(encounters.map { ($0.personID, 1) }, uniquingKeysWith: +)
         for p in people { insertPerson(p, encounterCount: counts[p.id] ?? 0, tagName: tagName) }
         for e in encounters { insertEncounter(e) }
-        exec("COMMIT;")
+        if !execChecked("COMMIT;") {
+            exec("ROLLBACK;")
+            log.error("rebuild COMMIT failed — rolled back")
+        }
     }
 
     func upsertPerson(_ p: Person, encounterCount: Int, tagName: (String) -> String?) {
@@ -338,11 +397,22 @@ final class SecondBrainDB {
     }
 
     private func exec(_ sql: String) {
+        _ = execChecked(sql)
+    }
+
+    /// Like `exec` but returns whether the statement succeeded, so a
+    /// transaction can roll back on the first failure.
+    @discardableResult
+    private func execChecked(_ sql: String) -> Bool {
         var err: UnsafeMutablePointer<CChar>?
-        if sqlite3_exec(db, sql, nil, nil, &err) != SQLITE_OK, let err {
-            log.error("exec failed: \(String(cString: err), privacy: .public)")
-            sqlite3_free(err)
+        if sqlite3_exec(db, sql, nil, nil, &err) != SQLITE_OK {
+            if let err {
+                log.error("exec failed: \(String(cString: err), privacy: .public)")
+                sqlite3_free(err)
+            }
+            return false
         }
+        return true
     }
 
     private func tableExists(_ name: String) -> Bool {
