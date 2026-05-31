@@ -106,12 +106,11 @@ enum PersonExtractor {
             log.error("Person extraction produced unparseable JSON")
             return []
         }
-        // Drop empties and obvious self-references.
+        // Drop empties and obvious self-references (profile-driven, U1-2).
+        let selfAliases = AppSettings.shared.myNameAliases
         return people.filter { p in
             let n = p.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             return !n.isEmpty && !selfAliases.contains(n)
         }
     }
-
-    private static let selfAliases: Set<String> = ["me", "i", "myself", "tyler", "tyler yannes"]
 }

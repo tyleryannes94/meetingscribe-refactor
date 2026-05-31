@@ -292,10 +292,22 @@ struct MeetingScribeApp: App {
     /// Must use `loginItem(identifier:)` — `mainApp` registers the calling process
     /// itself (the UI), not the embedded ScribeCore helper.
     /// Safe to call repeatedly — SMAppService is idempotent when already registered.
+    ///
+    /// GATED OFF by default (E3-1): the daemon recording path does not finalize
+    /// a meeting and loses it silently. When the kill-switch is off we also
+    /// proactively *unregister* the login item so existing installs that already
+    /// registered it stop booting the daemon on next login.
     private func registerScribeCoreLoginItem() {
         if #available(macOS 13.0, *) {
+            let item = SMAppService.loginItem(identifier: "com.tyleryannes.ScribeCore")
+            guard AppSettings.shared.useScribeCoreDaemon else {
+                // Best-effort: tear down a previously-registered daemon login item.
+                do { try item.unregister() }
+                catch { print("Failed to unregister ScribeCore login item: \(error)") }
+                return
+            }
             do {
-                try SMAppService.loginItem(identifier: "com.tyleryannes.ScribeCore").register()
+                try item.register()
             } catch {
                 print("Failed to register ScribeCore login item: \(error)")
             }

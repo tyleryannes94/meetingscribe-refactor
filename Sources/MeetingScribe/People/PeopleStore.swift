@@ -211,6 +211,13 @@ final class PeopleStore: ObservableObject {
                 let r = self.deduplicate()
                 if r.removed > 0 { self.log.info("One-time dedup removed \(r.removed, privacy: .public) duplicate(s)") }
             }
+            // E3-4: if the derived index was corrupt and got recreated empty on
+            // open, repopulate it now from the canonical JSON we just loaded.
+            if self.db.needsRebuild {
+                self.rebuildIndex()
+                self.didBuildIndex = true
+                self.db.clearNeedsRebuild()
+            }
         }
         if Thread.isMainThread { publish() } else { DispatchQueue.main.async(execute: publish) }
     }

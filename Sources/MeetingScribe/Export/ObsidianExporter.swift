@@ -16,10 +16,17 @@ enum ObsidianExporter {
     /// Builds the canonical meeting markdown and writes it to `{meetingFolder}/{slug}.md`.
     /// Reads transcript, summary, notes, and action items from the files already present
     /// in `meetingFolderURL`. Safe to call repeatedly — atomically overwrites.
+    ///
+    /// C3-1: this now routes through the rich `markdown(for:)` builder so the
+    /// on-disk file is the Obsidian-native one — `attendees:` frontmatter, real
+    /// `[[wikilinks]]`, inline `#tags`, and a `## People` section. `tags` must
+    /// be the meeting's real tag names (from TagStore); the previous behavior
+    /// scraped them from the folder name, which shipped the date-partition
+    /// segment (e.g. `2026-05`) as a bogus tag.
     @discardableResult
-    static func writeMarkdownFile(for meeting: Meeting, to meetingFolderURL: URL) -> URL? {
-        let fm = FileManager.default
-
+    static func writeMarkdownFile(for meeting: Meeting,
+                                  to meetingFolderURL: URL,
+                                  tags: [String]? = nil) -> URL? {
         func readFile(_ name: String) -> String {
             let url = meetingFolderURL.appendingPathComponent(name)
             return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
@@ -28,55 +35,15 @@ enum ObsidianExporter {
         let summary    = readFile("summary.md")
         let transcript = readFile("transcript.md")
         let userNotes  = readFile("notes.md")
+        let resolvedTags = tags ?? folderTagFallback(meetingFolderURL)
+        let actionItems = readActionItems(in: meetingFolderURL)
 
-        // Duration in whole minutes
-        let durationMinutes = Int(meeting.endDate.timeIntervalSince(meeting.startDate) / 60)
-
-        // Tags — derive from the folder name (one level up from meeting slug)
-        let tagFolderName = meetingFolderURL.deletingLastPathComponent().lastPathComponent
-        let tagList = tagFolderName == "Untagged" ? "" : tagFolderName
-
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
-        let dateStr = iso.string(from: meeting.startDate)
-
-        // Build YAML frontmatter + body using the requested template
-        var md = ""
-        md += "---\n"
-        md += "id: \(meeting.id)\n"
-        md += "title: \(meeting.displayTitle)\n"
-        md += "date: \(dateStr)\n"
-        md += "duration: \(durationMinutes)m\n"
-        md += "tags: \(tagList)\n"
-        md += "---\n\n"
-
-        md += "## Summary\n\n"
-        let summaryTrimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        md += summaryTrimmed.isEmpty ? "Pending transcription…" : summaryTrimmed
-        md += "\n\n"
-
-        md += "## Action Items\n\n"
-        // Parse action items from the summary/transcript or fall back to "None yet."
-        let actionItemsURL = meetingFolderURL.appendingPathComponent("action-items.json")
-        var actionItemsText = "None yet."
-        if fm.fileExists(atPath: actionItemsURL.path),
-           let data = try? Data(contentsOf: actionItemsURL),
-           let items = try? JSONDecoder().decode([[String: String]].self, from: data),
-           !items.isEmpty {
-            actionItemsText = items
-                .compactMap { $0["title"] ?? $0["text"] ?? $0["body"] }
-                .map { "- [ ] \($0)" }
-                .joined(separator: "\n")
-        }
-        md += actionItemsText + "\n\n"
-
-        md += "## Transcript\n\n"
-        md += transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        md += "\n\n"
-
-        md += "## Notes\n\n"
-        md += userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        md += "\n"
+        let md = markdown(for: meeting,
+                          summary: summary,
+                          notes: userNotes,
+                          transcript: transcript,
+                          tags: resolvedTags,
+                          actionItems: actionItems)
 
         let dest = meetingFolderURL.appendingPathComponent("\(meeting.slug).md")
         do {
@@ -85,6 +52,27 @@ enum ObsidianExporter {
         } catch {
             return nil
         }
+    }
+
+    /// Action-item titles read from the meeting folder's `action-items.json`.
+    private static func readActionItems(in meetingFolderURL: URL) -> [String] {
+        let url = meetingFolderURL.appendingPathComponent("action-items.json")
+        guard let data = try? Data(contentsOf: url),
+              let items = try? JSONDecoder().decode([[String: String]].self, from: data) else {
+            return []
+        }
+        return items.compactMap { $0["title"] ?? $0["text"] ?? $0["body"] }
+    }
+
+    /// Fallback when the caller didn't supply tags: use the parent folder name,
+    /// but never a date-partition segment like `2026-05` or the `Untagged`
+    /// bucket (those are layout artifacts, not real tags). (C3-1)
+    private static func folderTagFallback(_ meetingFolderURL: URL) -> [String] {
+        let name = meetingFolderURL.deletingLastPathComponent().lastPathComponent
+        if name == "Untagged" || name.isEmpty { return [] }
+        // YYYY or YYYY-MM date partition → not a tag.
+        if name.range(of: #"^\d{4}(-\d{2})?$"#, options: .regularExpression) != nil { return [] }
+        return [name]
     }
 
     // MARK: - Obsidian-vault export (external)
@@ -96,7 +84,8 @@ enum ObsidianExporter {
                          summary: String,
                          notes: String,
                          transcript: String,
-                         tags: [String]) -> String {
+                         tags: [String],
+                         actionItems: [String] = []) -> String {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withFullDate]
         let dateStr = iso.string(from: meeting.startDate)
@@ -133,6 +122,10 @@ enum ObsidianExporter {
         // --- Body sections ---
         if !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             out += "## Summary\n\n\(summary)\n\n"
+        }
+        if !actionItems.isEmpty {
+            out += "## Action Items\n\n"
+            out += actionItems.map { "- [ ] \($0)" }.joined(separator: "\n") + "\n\n"
         }
         if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             out += "## Notes\n\n\(notes)\n\n"

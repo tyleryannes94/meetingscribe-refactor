@@ -298,10 +298,14 @@ extension UnifiedMeetingDetail {
                 // Export submenu
                 Menu("Export…") {
                     Button {
-                        MeetingExporter.exportMarkdown(exportDocument(for: m), suggestedName: m.slug)
+                        if let doc = confirmedExportDocument(for: m) {
+                            MeetingExporter.exportMarkdown(doc, suggestedName: m.slug)
+                        }
                     } label: { Label("Markdown (.md)", systemImage: "doc.plaintext") }
                     Button {
-                        MeetingExporter.exportPDF(exportDocument(for: m), suggestedName: m.slug)
+                        if let doc = confirmedExportDocument(for: m) {
+                            MeetingExporter.exportPDF(doc, suggestedName: m.slug)
+                        }
                     } label: { Label("PDF (.pdf)", systemImage: "doc.richtext") }
                     Divider()
                     Button { exportToDrive(m) } label: {
@@ -448,7 +452,7 @@ extension UnifiedMeetingDetail {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             return
         }
-        let doc = exportDocument(for: m)
+        guard let doc = confirmedExportDocument(for: m) else { return }
         Task { try? await drive.exportMarkdown(filename: m.slug, content: doc) }
     }
 
@@ -463,14 +467,34 @@ extension UnifiedMeetingDetail {
         ObsidianExporter.export(md, filename: m.slug)
     }
 
-    func exportDocument(for m: Meeting) -> String {
+    func exportDocument(for m: Meeting,
+                        selection: MeetingExporter.ShareSelection = .init()) -> String {
         MeetingExporter.combinedMarkdown(
             title: m.displayTitle,
             dateString: timeRange(),
             attendees: m.attendees,
             summary: manager.summaryMarkdown(for: m),
             notes: noteDraft.isEmpty ? manager.userNotes(for: m) : noteDraft,
-            transcript: manager.transcriptMarkdown(for: m))
+            transcript: manager.transcriptMarkdown(for: m),
+            selection: selection)
+    }
+
+    /// Shows the "what's included" confirm (private notes off by default), then
+    /// builds the export document for the chosen sections. Returns nil if the
+    /// user cancels. (U4-3)
+    func confirmedExportDocument(for m: Meeting) -> String? {
+        let summary = manager.summaryMarkdown(for: m)
+        let notes = noteDraft.isEmpty ? manager.userNotes(for: m) : noteDraft
+        let transcript = manager.transcriptMarkdown(for: m)
+        func hasText(_ s: String) -> Bool {
+            !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard let selection = MeetingExporter.confirmShareSelection(
+            hasSummary: hasText(summary),
+            hasNotes: hasText(notes),
+            hasTranscript: hasText(transcript)
+        ) else { return nil }
+        return exportDocument(for: m, selection: selection)
     }
 
     @ViewBuilder

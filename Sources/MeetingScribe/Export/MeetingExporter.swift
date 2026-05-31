@@ -9,14 +9,32 @@ import UniformTypeIdentifiers
 @available(macOS 14.0, *)
 enum MeetingExporter {
 
+    /// What a share/export is allowed to include. Private notes default OFF so
+    /// they can't leak to a recipient unless explicitly chosen. (U4-3)
+    struct ShareSelection {
+        var includeSummary = true
+        var includeNotes = false
+        var includeTranscript = true
+
+        /// Safe default for non-interactive (agent-driven) exports: never the
+        /// user's private notes.
+        static let safeDefault = ShareSelection(includeSummary: true,
+                                                includeNotes: false,
+                                                includeTranscript: true)
+    }
+
     /// Builds a single combined markdown document from a meeting's parts.
-    /// Empty sections are skipped.
+    /// Empty sections are skipped. The `include*` flags gate which sections
+    /// are emitted so a share can omit private notes / the full transcript.
     static func combinedMarkdown(title: String,
                                  dateString: String,
                                  attendees: [String],
                                  summary: String,
                                  notes: String,
-                                 transcript: String) -> String {
+                                 transcript: String,
+                                 includeSummary: Bool = true,
+                                 includeNotes: Bool = true,
+                                 includeTranscript: Bool = true) -> String {
         var out = "# \(title)\n\n_\(dateString)_\n"
         if !attendees.isEmpty {
             out += "\n**Attendees:** \(attendees.joined(separator: ", "))\n"
@@ -31,10 +49,63 @@ enum MeetingExporter {
             }
             out += "\n---\n\n## \(heading)\n\n\(b)\n"
         }
-        section("Summary", summary)
-        section("My Notes", notes)
-        section("Transcript", transcript)
+        if includeSummary { section("Summary", summary) }
+        if includeNotes { section("My Notes", notes) }
+        if includeTranscript { section("Transcript", transcript) }
         return out
+    }
+
+    /// Convenience overload taking a `ShareSelection`.
+    static func combinedMarkdown(title: String,
+                                 dateString: String,
+                                 attendees: [String],
+                                 summary: String,
+                                 notes: String,
+                                 transcript: String,
+                                 selection: ShareSelection) -> String {
+        combinedMarkdown(title: title, dateString: dateString, attendees: attendees,
+                         summary: summary, notes: notes, transcript: transcript,
+                         includeSummary: selection.includeSummary,
+                         includeNotes: selection.includeNotes,
+                         includeTranscript: selection.includeTranscript)
+    }
+
+    /// Presents a "what's included" confirmation before any share/export so the
+    /// user can't accidentally send private notes or the full transcript to a
+    /// recipient. Private notes default OFF. Returns nil if cancelled. (U4-3)
+    @MainActor
+    static func confirmShareSelection(hasSummary: Bool,
+                                      hasNotes: Bool,
+                                      hasTranscript: Bool) -> ShareSelection? {
+        let alert = NSAlert()
+        alert.messageText = "What should this export include?"
+        alert.informativeText = "Choose what leaves MeetingScribe. Your private notes are excluded by default."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Export")
+        alert.addButton(withTitle: "Cancel")
+
+        func checkbox(_ title: String, on: Bool, enabled: Bool) -> NSButton {
+            let b = NSButton(checkboxWithTitle: title, target: nil, action: nil)
+            b.state = on ? .on : .off
+            b.isEnabled = enabled
+            return b
+        }
+        let summaryBox = checkbox("Summary", on: hasSummary, enabled: hasSummary)
+        let notesBox = checkbox("My private notes", on: false, enabled: hasNotes)
+        let transcriptBox = checkbox("Full transcript", on: hasTranscript, enabled: hasTranscript)
+
+        let stack = NSStackView(views: [summaryBox, notesBox, transcriptBox])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = true
+        stack.frame = NSRect(x: 0, y: 0, width: 260, height: 78)
+        alert.accessoryView = stack
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return ShareSelection(includeSummary: summaryBox.state == .on,
+                              includeNotes: notesBox.state == .on,
+                              includeTranscript: transcriptBox.state == .on)
     }
 
     /// Prompts for a destination and writes the markdown. Returns the URL on
