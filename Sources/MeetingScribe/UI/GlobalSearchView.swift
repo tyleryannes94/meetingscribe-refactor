@@ -118,30 +118,63 @@ struct GlobalSearchView: View {
 
     @ViewBuilder
     private var content: some View {
-        if results.isEmpty {
-            VStack(spacing: 8) {
-                Image(systemName: query.isEmpty ? "sparkle.magnifyingglass" : "questionmark.folder")
-                    .font(.system(size: 30)).foregroundStyle(.secondary)
-                Text(query.isEmpty ? "Type to search your workspace" : "No matches for “\(query)”")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(Array(results.enumerated()), id: \.element.id) { idx, e in
-                            row(e, index: idx)
-                                .id(idx)
-                        }
-                    }
-                    .padding(8)
+        let commands = commandMatches
+        return Group {
+            if results.isEmpty && commands.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: query.isEmpty ? "sparkle.magnifyingglass" : "questionmark.folder")
+                        .font(.system(size: 30)).foregroundStyle(.secondary)
+                    Text(query.isEmpty ? "Type to search, or run a command (e.g. \"record\", \"new task\")"
+                                       : "No matches for “\(query)”")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                .onChange(of: selection) { _, new in
-                    withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(new, anchor: .center) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            if !commands.isEmpty {
+                                sectionLabel("Commands")
+                                ForEach(commands) { c in commandRow(c) }
+                                if !results.isEmpty { sectionLabel("Results") }
+                            }
+                            ForEach(Array(results.enumerated()), id: \.element.id) { idx, e in
+                                row(e, index: idx).id(idx)
+                            }
+                        }
+                        .padding(8)
+                    }
+                    .onChange(of: selection) { _, new in
+                        withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(new, anchor: .center) }
+                    }
                 }
             }
         }
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .semibold)).tracking(0.6)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 2)
+    }
+
+    private func commandRow(_ c: PaletteCommand) -> some View {
+        Button { runCommand(c) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: c.icon).frame(width: 20).foregroundStyle(NDS.brand)
+                Text(c.title).font(.body)
+                Spacer()
+                Text("Command").font(.caption2).foregroundStyle(.tertiary)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(NDS.brand.opacity(0.12), in: Capsule())
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func row(_ e: WorkspaceEntity, index: Int) -> some View {
@@ -305,8 +338,12 @@ struct GlobalSearchView: View {
     }
 
     private func openSelected() {
-        guard results.indices.contains(selection) else { return }
-        open(results[selection])
+        if results.indices.contains(selection) {
+            open(results[selection])
+        } else if let cmd = commandMatches.first {
+            // No result rows but a command matches — Enter runs it. (D4-2)
+            runCommand(cmd)
+        }
     }
 
     private func open(_ e: WorkspaceEntity) {
@@ -314,5 +351,61 @@ struct GlobalSearchView: View {
         // hops to the next runloop tick before presenting, so the transition
         // doesn't fight itself.
         onOpen(e)
+    }
+
+    // MARK: - Command palette (D4-2)
+
+    struct PaletteCommand: Identifiable {
+        let id = UUID()
+        let title: String
+        let icon: String
+        let keywords: [String]
+        let run: () -> Void
+    }
+
+    private func nav(_ s: TopLevelSection) {
+        NotificationCenter.default.post(name: .meetingScribeNavigate, object: s)
+    }
+
+    private var allCommands: [PaletteCommand] {
+        [
+            PaletteCommand(title: "Start recording", icon: "record.circle", keywords: ["record", "start", "meeting"]) {
+                Task { await manager.startRecording(for: nil) }
+            },
+            PaletteCommand(title: "Stop recording", icon: "stop.circle", keywords: ["stop", "record"]) {
+                Task { await manager.stopRecording() }
+            },
+            PaletteCommand(title: "New voice note", icon: "mic.circle", keywords: ["voice", "note", "dictate"]) {
+                Task { await manager.startQuickNote() }
+            },
+            PaletteCommand(title: "New task", icon: "checklist", keywords: ["task", "todo", "new"]) {
+                _ = manager.actionItems.createTask(title: "New task")
+                nav(.actions)
+            },
+            PaletteCommand(title: "Add person", icon: "person.crop.circle.badge.plus", keywords: ["person", "contact", "add"]) {
+                NotificationCenter.default.post(name: .meetingScribeAddPerson, object: nil)
+            },
+            PaletteCommand(title: "Go to Today", icon: "sun.max", keywords: ["today", "home"]) { nav(.today) },
+            PaletteCommand(title: "Go to Meetings", icon: "person.2.fill", keywords: ["meetings"]) { nav(.meetings) },
+            PaletteCommand(title: "Go to People", icon: "person.2", keywords: ["people", "contacts"]) { nav(.people) },
+            PaletteCommand(title: "Go to Tasks", icon: "checklist", keywords: ["tasks", "todos"]) { nav(.actions) },
+            PaletteCommand(title: "Go to Voice Notes", icon: "waveform", keywords: ["voice", "notes"]) { nav(.notes) },
+            PaletteCommand(title: "Refresh", icon: "arrow.clockwise", keywords: ["refresh", "reload"]) {
+                manager.refreshPastMeetings(force: true); manager.refreshQuickNotes()
+            },
+        ]
+    }
+
+    var commandMatches: [PaletteCommand] {
+        let q = query.lowercased().trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2 else { return [] }
+        return allCommands.filter { c in
+            c.title.lowercased().contains(q) || c.keywords.contains { $0.contains(q) }
+        }
+    }
+
+    func runCommand(_ c: PaletteCommand) {
+        isPresented = false
+        c.run()
     }
 }
