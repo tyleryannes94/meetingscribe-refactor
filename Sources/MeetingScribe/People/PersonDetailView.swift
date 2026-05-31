@@ -185,6 +185,10 @@ struct PersonDetailView: View {
     @State private var newFavorite = ""
     @State private var showNewTag = false
     @State private var newTagName = ""
+    @State private var aiSuggestions: PersonAISuggestions?
+    @State private var aiRunning = false
+    @State private var aiError: String?
+    @State private var dismissedSuggestions: Set<String> = []
     /// Unrecorded calendar meetings with this person (last ~180 days), for the
     /// unified timeline (U2-1).
     @State private var calendarMeetings: [Meeting] = []
@@ -229,6 +233,7 @@ struct PersonDetailView: View {
                     contactRows
                     if !current.bio.isEmpty || editingIdentity { notes }
                     favoritesEditSection
+                    aiSuggestionsSection
                     relationshipsSection
                     encountersSection
                     if !current.meetingMentions.isEmpty { mentionedInSection }
@@ -546,6 +551,205 @@ struct PersonDetailView: View {
         var u = current
         u.favorites.removeAll { $0 == fav }
         people.updatePerson(u)
+    }
+
+    // MARK: - AI suggestions (tags / relationships / encounters)
+
+    private var aiSuggestionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("AI suggestions", systemImage: "wand.and.stars")
+                    .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                Spacer()
+                if aiRunning {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button {
+                        Task { await generateAISuggestions() }
+                    } label: {
+                        Label(aiSuggestions == nil ? "Suggest" : "Refresh", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.borderless).font(NDS.small)
+                }
+            }
+
+            if let err = aiError {
+                Text(err).font(NDS.small).foregroundStyle(.red)
+            }
+
+            if let s = visibleSuggestions {
+                if s.isEmpty {
+                    Text("No new suggestions — this profile already looks well-organized.")
+                        .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                } else {
+                    // Tags
+                    if !s.tags.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Tags").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            FlowLayout(spacing: 6) {
+                                ForEach(s.tags, id: \.self) { name in
+                                    suggestionChip(label: name, icon: "tag") { acceptTagSuggestion(name) }
+                                }
+                            }
+                        }
+                    }
+                    // Relationships
+                    if !s.relationships.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Relationships").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            ForEach(s.relationships, id: \.self) { rel in
+                                suggestionRow(
+                                    title: rel.name,
+                                    detail: rel.label,
+                                    actionLabel: matchedPerson(rel.name) == nil ? nil : "Link",
+                                    disabledNote: matchedPerson(rel.name) == nil ? "not in People" : nil
+                                ) { acceptRelationshipSuggestion(rel) }
+                            }
+                        }
+                    }
+                    // Encounters
+                    if !s.encounters.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Encounters").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            ForEach(s.encounters, id: \.self) { enc in
+                                suggestionRow(title: enc.title, detail: enc.note, actionLabel: "Log", disabledNote: nil) {
+                                    acceptEncounterSuggestion(enc)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if !aiRunning {
+                Text("Let AI propose tags, relationships, and encounters from this person's meetings and profile.")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+            }
+        }
+        .padding(12)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+        .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
+    }
+
+    /// Suggestions minus anything the user already accepted or dismissed.
+    private var visibleSuggestions: PersonAISuggestions? {
+        guard var s = aiSuggestions else { return nil }
+        s.tags = s.tags.filter { name in
+            !dismissedSuggestions.contains("tag:\(name)")
+                && !current.tagIDs.contains(where: { peopleTags.tag(by: $0)?.name.caseInsensitiveCompare(name) == .orderedSame })
+        }
+        s.relationships = s.relationships.filter { !dismissedSuggestions.contains("rel:\($0.name)|\($0.label)") }
+        s.encounters = s.encounters.filter { !dismissedSuggestions.contains("enc:\($0.title)") }
+        return s
+    }
+
+    private func suggestionChip(label: String, icon: String, accept: @escaping () -> Void) -> some View {
+        Button(action: accept) {
+            HStack(spacing: 4) {
+                Image(systemName: "plus.circle.fill").font(.system(size: 11))
+                Text(label).font(NDS.small)
+            }
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(NDS.brand.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(NDS.brand.opacity(0.4), lineWidth: 1))
+            .foregroundStyle(NDS.brand)
+        }
+        .buttonStyle(.plain)
+        .help("Add “\(label)”")
+    }
+
+    @ViewBuilder
+    private func suggestionRow(title: String, detail: String, actionLabel: String?,
+                               disabledNote: String?, accept: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                if !detail.isEmpty {
+                    Text(detail).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+            if let actionLabel {
+                Button(actionLabel, action: accept).font(NDS.small)
+            } else if let disabledNote {
+                Text(disabledNote).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+        }
+        .padding(8)
+        .background(NDS.bg, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func matchedPerson(_ name: String) -> Person? {
+        let n = name.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !n.isEmpty, n != current.displayName.lowercased() else { return nil }
+        return people.people.first { $0.displayName.lowercased() == n }
+            ?? people.people.first { $0.id != current.id && $0.displayName.lowercased().contains(n) }
+    }
+
+    private func acceptTagSuggestion(_ name: String) {
+        let existing = peopleTags.allTags.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        let tag = existing ?? peopleTags.createTag(name: name)
+        addTag(tag.id)
+        dismissedSuggestions.insert("tag:\(name)")
+    }
+
+    private func acceptRelationshipSuggestion(_ rel: PersonAISuggestions.RelSuggestion) {
+        if let other = matchedPerson(rel.name) {
+            people.addRelationship(from: current.id, to: other.id, label: rel.label)
+        }
+        dismissedSuggestions.insert("rel:\(rel.name)|\(rel.label)")
+    }
+
+    private func acceptEncounterSuggestion(_ enc: PersonAISuggestions.EncSuggestion) {
+        _ = people.addEncounter(to: current.id, eventName: enc.title, notes: enc.note)
+        dismissedSuggestions.insert("enc:\(enc.title)")
+    }
+
+    /// Assemble the on-device context blob the model reasons over.
+    private func personContextForAI() -> String {
+        let p = current
+        var lines: [String] = []
+        lines.append("Name: \(p.displayName)")
+        if !p.role.isEmpty { lines.append("Role: \(p.role)") }
+        if !p.company.isEmpty { lines.append("Company: \(p.company)") }
+        if !p.bio.isEmpty { lines.append("Notes: \(p.bio)") }
+        let tagNames = tags.map { $0.name }
+        if !tagNames.isEmpty { lines.append("Existing tags: \(tagNames.joined(separator: ", "))") }
+        if !p.favorites.isEmpty { lines.append("Favorites: \(p.favorites.joined(separator: ", "))") }
+        let rels = p.relationships.compactMap { r -> String? in
+            guard let other = people.person(by: r.toPersonID) else { return nil }
+            return "\(r.label): \(other.displayName)"
+        }
+        if !rels.isEmpty { lines.append("Existing relationships: \(rels.joined(separator: "; "))") }
+        let encs = people.encounters(for: p.id).prefix(8).map { e in
+            "\(Self.dateFormatter.string(from: e.date)) — \(e.eventName)\(e.notes.isEmpty ? "" : ": \(e.notes)")"
+        }
+        if !encs.isEmpty { lines.append("Encounters:\n- " + encs.joined(separator: "\n- ")) }
+        // Recorded + calendar meetings this person was part of.
+        let recorded = manager.pastMeetings.filter(attendeeMatches(_:)).prefix(10)
+            .map { "\(Self.dateFormatter.string(from: $0.startDate)) — \($0.displayTitle)" }
+        let cal = calendarMeetings.prefix(10)
+            .map { "\(Self.dateFormatter.string(from: $0.startDate)) — \($0.displayTitle)" }
+        let meetings = (recorded + cal)
+        if !meetings.isEmpty { lines.append("Meetings together:\n- " + meetings.joined(separator: "\n- ")) }
+        // Other people who appear in those meetings — candidates for relationships.
+        let others = Set(manager.pastMeetings.filter(attendeeMatches(_:)).flatMap { $0.attendees })
+            .prefix(20)
+        if !others.isEmpty { lines.append("Other attendees seen with them: \(others.joined(separator: ", "))") }
+        return lines.joined(separator: "\n")
+    }
+
+    private func generateAISuggestions() async {
+        aiError = nil
+        aiRunning = true
+        defer { aiRunning = false }
+        let context = personContextForAI()
+        let result = await PersonSuggestionEngine.generate(
+            personName: current.displayName, context: context, using: OllamaService())
+        if let result {
+            aiSuggestions = result
+            if result.isEmpty { aiError = nil }
+        } else {
+            aiError = "Couldn't generate suggestions. Make sure Ollama is running."
+        }
     }
 
     // MARK: - Embedded chat (replaces the toggled sidebar rail)
