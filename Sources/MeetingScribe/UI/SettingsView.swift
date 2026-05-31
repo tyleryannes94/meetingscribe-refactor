@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var captureSystem: Bool = AppSettings.shared.captureSystem
     @State private var filterToConference: Bool = AppSettings.shared.filterToConferenceLinks
     @State private var notifyAtStart: Bool = AppSettings.shared.notifyAtMeetingStart
+    @State private var dailyBrief: Bool = AppSettings.shared.dailyBriefEnabled
     @State private var detectZoom: Bool = AppSettings.shared.detectZoomImpromptu
     @State private var hotkeyKeyCode: UInt32 = AppSettings.shared.dictationHotkeyKeyCode
     @State private var hotkeyMods: UInt32 = AppSettings.shared.dictationHotkeyModifiers
@@ -110,6 +111,11 @@ struct SettingsView: View {
                 Section("Calendar") {
                     Toggle("Only show meetings with a conference link", isOn: $filterToConference)
                     Toggle("Notify me at meeting start time", isOn: $notifyAtStart)
+                    Toggle("Daily morning brief (8am)", isOn: $dailyBrief)
+                        .onChange(of: dailyBrief) { _, v in
+                            AppSettings.shared.dailyBriefEnabled = v
+                            NotificationCenter.default.post(name: .meetingScribeSettingsChanged, object: nil)
+                        }
                     Text("MeetingScribe reads all calendars connected to macOS Calendar.app. To add Google work + personal calendars: System Settings → Internet Accounts → Google → sign in. Below, choose which of those calendars MeetingScribe should pull events from.")
                         .font(.caption).foregroundStyle(.secondary)
                     CalendarPickerSection()

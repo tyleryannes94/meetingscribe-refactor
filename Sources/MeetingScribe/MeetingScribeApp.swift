@@ -191,6 +191,7 @@ struct MeetingScribeApp: App {
 
         // BACKGROUND: notifications + Ollama. Neither blocks the UI.
         Task { await notifications.requestAuthorization() }
+        notifications.scheduleDailyBrief()   // morning brief, opt-in (P2-5)
         Task.detached(priority: .utility) { [manager] in
             await manager.ensureOllamaRunning()
         }
@@ -405,6 +406,7 @@ struct MeetingScribeApp: App {
                                     modifiers: s.dictationSwapHotkeyModifiers)
                 meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
                                              modifiers: s.meetingRecordHotkeyModifiers)
+                notifications.scheduleDailyBrief()
                 Task { @MainActor in
                     calendar.refreshUpcoming(force: true)
                     let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)

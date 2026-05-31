@@ -14,6 +14,7 @@ final class AppSettings {
         static let ollamaModel = "ollamaModel"
         static let ollamaEmbeddingModel = "ollamaEmbeddingModel"
         static let collectMetrics = "collectMetrics"
+        static let dailyBriefEnabled = "dailyBriefEnabled"
         static let autoRecord = "autoRecord"
         static let captureMic = "captureMic"
         static let captureSystem = "captureSystem"
@@ -205,6 +206,12 @@ final class AppSettings {
     var collectMetrics: Bool {
         get { defaults.bool(forKey: Keys.collectMetrics) }
         set { defaults.set(newValue, forKey: Keys.collectMetrics) }
+    }
+
+    /// Opt-in daily 8am "morning brief" notification (P2-5). Default OFF.
+    var dailyBriefEnabled: Bool {
+        get { defaults.bool(forKey: Keys.dailyBriefEnabled) }
+        set { defaults.set(newValue, forKey: Keys.dailyBriefEnabled) }
     }
 
     /// One-time migration: if the stored model is still the old default

@@ -156,6 +156,20 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(req)
     }
 
+    /// Schedules (or cancels) a repeating 8am "morning brief" nudge. (P2-5)
+    func scheduleDailyBrief() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["daily-brief"])
+        guard AppSettings.shared.dailyBriefEnabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Good morning"
+        content.body = "Your daily brief: yesterday's recap, today's meetings, and open commitments. Open MeetingScribe → Standup."
+        content.sound = .default
+        var when = DateComponents(); when.hour = 8; when.minute = 0
+        let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: true)
+        center.add(UNNotificationRequest(identifier: "daily-brief", content: content, trigger: trigger))
+    }
+
     /// Posts an immediate notification when an impromptu meeting is detected.
     func notifyImpromptuDetected(source: String) {
         let content = UNMutableNotificationContent()
