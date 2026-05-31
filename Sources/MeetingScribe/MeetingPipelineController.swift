@@ -221,6 +221,9 @@ final class MeetingPipelineController: ObservableObject {
         let embedID = workingMeeting.id
         Task { await PeopleStore.shared.embedAndStore(entityID: embedID, entityKind: "meeting", text: embedText) }
 
+        // Append to the day's note — a linkable temporal spine. (C2-4/C3-3)
+        DailyNoteWriter.appendMeeting(workingMeeting, storageDir: AppSettings.shared.storageDir)
+
         liveResetIfStillIdle()
 
         // Notify interested parties (e.g. NotificationManager) that the
