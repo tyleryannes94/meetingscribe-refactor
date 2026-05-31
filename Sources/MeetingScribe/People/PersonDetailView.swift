@@ -159,6 +159,7 @@ struct PersonDetailView: View {
     @EnvironmentObject var chatSession: ChatSession
     @EnvironmentObject var router: WorkspaceRouter
     @EnvironmentObject var calendar: CalendarService
+    @EnvironmentObject var actionItems: ActionItemStore
 
     let person: Person
     /// Called after the person is deleted so the list can clear its selection.
@@ -180,6 +181,7 @@ struct PersonDetailView: View {
     @State private var showAddRelationship = false
     @State private var confirmDelete = false
     @State private var newMemory = ""
+    @State private var newTaskTitle = ""
     /// Unrecorded calendar meetings with this person (last ~180 days), for the
     /// unified timeline (U2-1).
     @State private var calendarMeetings: [Meeting] = []
@@ -194,12 +196,13 @@ struct PersonDetailView: View {
     @State private var rightTab: PersonRightTab = .notes
 
     enum PersonRightTab: String, CaseIterable, Identifiable {
-        case notes, meetings, messages
+        case notes, meetings, tasks, messages
         var id: String { rawValue }
         var label: String {
             switch self {
             case .notes:    return "Notes"
             case .meetings: return "Meetings"
+            case .tasks:    return "Tasks"
             case .messages: return "Messages"
             }
         }
@@ -207,6 +210,7 @@ struct PersonDetailView: View {
             switch self {
             case .notes:    return "note.text"
             case .meetings: return "person.2.fill"
+            case .tasks:    return "checklist"
             case .messages: return "message.fill"
             }
         }
@@ -291,6 +295,8 @@ struct PersonDetailView: View {
                             encountersSection
                             if !current.meetingMentions.isEmpty { mentionedInSection }
                             meetingHistorySection
+                        case .tasks:
+                            tasksSection
                         case .messages:
                             messagesSection
                         }
@@ -480,6 +486,12 @@ struct PersonDetailView: View {
                     .buttonStyle(.borderless).font(NDS.small)
                     Button { showAddRelationship = true } label: {
                         Label("Relationship", systemImage: "person.2.badge.plus")
+                    }
+                    .buttonStyle(.borderless).font(NDS.small)
+                    // Open the chat rail grounded on this person — the page context
+                    // is already set via updateChatContext(). (cross-tab)
+                    Button { askAIAboutPerson() } label: {
+                        Label("Ask AI", systemImage: "sparkles")
                     }
                     .buttonStyle(.borderless).font(NDS.small)
                     Spacer()
@@ -761,6 +773,131 @@ struct PersonDetailView: View {
                 ForEach(mine) { e in EncounterRow(encounter: e) { people.deleteEncounter(e) } }
             }
         }
+    }
+
+    // MARK: - Tasks (cross-tab: ActionItems owned by this person)
+
+    /// Lowercased tokens that an ActionItem.owner string can match this person by:
+    /// full name, first name, and any email.
+    private func ownerTokens(_ p: Person) -> Set<String> {
+        var t = Set<String>()
+        let name = p.displayName.lowercased().trimmingCharacters(in: .whitespaces)
+        if !name.isEmpty {
+            t.insert(name)
+            if let first = name.split(separator: " ").first { t.insert(String(first)) }
+        }
+        for e in p.emails {
+            let el = e.lowercased().trimmingCharacters(in: .whitespaces)
+            if !el.isEmpty { t.insert(el) }
+        }
+        return t
+    }
+
+    private func ownerMatchesPerson(_ item: ActionItem) -> Bool {
+        guard let owner = item.owner?.lowercased().trimmingCharacters(in: .whitespaces),
+              !owner.isEmpty else { return false }
+        let tokens = ownerTokens(current)
+        // Exact token match, or the owner string contains the full name.
+        if tokens.contains(owner) { return true }
+        let full = current.displayName.lowercased().trimmingCharacters(in: .whitespaces)
+        return full.split(separator: " ").count > 1 && owner.contains(full)
+    }
+
+    private var personTasks: [ActionItem] {
+        actionItems.items
+            .filter { ownerMatchesPerson($0) }
+            .sorted { lhs, rhs in
+                let lDone = lhs.status == .completed, rDone = rhs.status == .completed
+                if lDone != rDone { return !lDone }   // open first
+                return (lhs.dueDate ?? .distantFuture) < (rhs.dueDate ?? .distantFuture)
+            }
+    }
+
+    private func addTaskForPerson() {
+        let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        let item = actionItems.createTask(title: title)
+        actionItems.setOwner(item.id, owner: current.displayName)
+        newTaskTitle = ""
+    }
+
+    private var tasksSection: some View {
+        let mine = personTasks
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Tasks").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                if !mine.isEmpty {
+                    Text("\(mine.filter { $0.status != .completed }.count) open")
+                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                }
+                Spacer()
+            }
+            // Quick add — assigns this person as owner so it shows up here and in
+            // the Actions tab.
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle").foregroundStyle(NDS.textTertiary)
+                TextField("Add a task for \(current.displayName.split(separator: " ").first.map(String.init) ?? current.displayName)…",
+                          text: $newTaskTitle)
+                    .textFieldStyle(.plain)
+                    .onSubmit { addTaskForPerson() }
+                if !newTaskTitle.isEmpty {
+                    Button("Add") { addTaskForPerson() }.font(NDS.small)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+
+            if mine.isEmpty {
+                Text("No tasks assigned to \(current.displayName) yet. Assign them as a task owner here or in the Actions tab.")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+            } else {
+                ForEach(mine) { item in taskRow(item) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func taskRow(_ item: ActionItem) -> some View {
+        let done = item.status == .completed
+        HStack(spacing: 10) {
+            Button {
+                actionItems.setStatus(item.id, status: done ? .open : .completed)
+            } label: {
+                Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15))
+                    .foregroundStyle(done ? NDS.brand : NDS.textTertiary)
+            }
+            .buttonStyle(.borderless)
+
+            Button {
+                router.route(kind: .actionItem, id: item.id, manager: manager)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(.system(size: 13.5, weight: .medium))
+                        .strikethrough(done, color: NDS.textTertiary)
+                        .foregroundStyle(done ? NDS.textTertiary : NDS.textPrimary)
+                        .lineLimit(2)
+                    HStack(spacing: 8) {
+                        if let due = item.dueDate {
+                            Label(Self.dateFormatter.string(from: due), systemImage: "calendar")
+                                .font(NDS.tiny)
+                                .foregroundStyle(due < Date() && !done ? .red : NDS.textTertiary)
+                        }
+                        if !item.meetingTitle.isEmpty {
+                            Label(item.meetingTitle, systemImage: "mic")
+                                .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(NDS.textTertiary)
+        }
+        .padding(10)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
     }
 
     private var relationshipsSection: some View {
@@ -1154,6 +1291,14 @@ struct PersonDetailView: View {
             "When the user asks anything ambiguous, default to this person — use the id above as the `id` argument to get_person / get_person_messages / list_person_meetings / attach_note_to_person."
         ]
         chatSession.setContext(bits.filter { !$0.isEmpty }.joined(separator: " "))
+    }
+
+    /// Reveal the chat rail and run a briefing prompt grounded on this person.
+    private func askAIAboutPerson() {
+        updateChatContext()
+        let q = "Give me a briefing on \(current.displayName): recent meetings and "
+            + "interactions, any open tasks, and what I should follow up on."
+        router.openChat?(q)
     }
 
     /// Run one of the conversation analysis presets. For `.custom`,

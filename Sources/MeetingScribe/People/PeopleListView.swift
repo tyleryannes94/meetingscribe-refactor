@@ -11,7 +11,8 @@ struct PeopleListView: View {
     @StateObject private var importer = PeopleImportController()
 
     @State private var query = ""
-    @State private var tagFilter: String?
+    /// AND-filter: a person must carry EVERY selected tag to show. Empty = all.
+    @State private var tagFilters: Set<String> = []
     @State private var showTagManager = false
     @State private var selection: String?
     @State private var showAdd = false
@@ -21,8 +22,39 @@ struct PeopleListView: View {
     /// Phase 7 — toggles the force-directed mindmap in place of the list/detail.
     @State private var graphMode = false
 
+    // Multi-select + bulk actions (FT3-2/FT3-3).
+    @State private var selectMode = false
+    @State private var multiSelection: Set<String> = []
+    @State private var bulkConfirmDelete = false
+    @State private var bulkConfirmMerge = false
+
+    @AppStorage("people.sortOrder") private var sortRaw = PeopleSort.recent.rawValue
+    private var sortOrder: PeopleSort { PeopleSort(rawValue: sortRaw) ?? .recent }
+
     private var filtered: [Person] {
-        people.filteredPeople(query: query, tagID: tagFilter, includeGhosts: showGhosts)
+        // The store filters by a single tag; apply the remaining AND-tags and the
+        // chosen sort here. Search relevance order is preserved while querying.
+        let base = people.filteredPeople(query: query, tagID: tagFilters.first, includeGhosts: showGhosts)
+        let tagged = tagFilters.count <= 1 ? base : base.filter { tagFilters.isSubset(of: $0.tagIDs) }
+        guard query.isEmpty else { return tagged }
+        return sorted(tagged)
+    }
+
+    private func sorted(_ list: [Person]) -> [Person] {
+        switch sortOrder {
+        case .recent:
+            return list.sorted { ($0.lastInteractionAt ?? .distantPast) > ($1.lastInteractionAt ?? .distantPast) }
+        case .name:
+            return list.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        case .meetings:
+            return list.sorted { meetingCount($0) > meetingCount($1) }
+        case .newest:
+            return list.sorted { $0.createdAt > $1.createdAt }
+        }
+    }
+
+    private func meetingCount(_ p: Person) -> Int {
+        people.encounterCount(for: p.id) + p.meetingMentions.count
     }
 
     var body: some View {
@@ -41,7 +73,7 @@ struct PeopleListView: View {
         }
         .task { people.rebuildIndexIfNeeded() }   // builds the FTS5 index for search
         .sheet(isPresented: $showAdd) {
-            AddPersonSheet(seedTagID: tagFilter)
+            AddPersonSheet(seedTagID: tagFilters.first)
                 .environmentObject(people)
                 .environmentObject(peopleTags)
         }
@@ -68,7 +100,7 @@ struct PeopleListView: View {
                 $0.name.lowercased() == name.lowercased()
                     || $0.name.lowercased().contains(name.lowercased())
             }) {
-                tagFilter = match.id
+                tagFilters = [match.id]
             } else {
                 query = name
             }
@@ -108,6 +140,31 @@ struct PeopleListView: View {
             .disabled(importer.isWorking)
             .help("Import people from Contacts, Gmail, calendar, or a file")
             Spacer(minLength: 0)
+            // Sort the list (persisted). Disabled while searching, where results
+            // are ordered by relevance.
+            Menu {
+                Picker("Sort", selection: $sortRaw) {
+                    ForEach(PeopleSort.allCases) { s in
+                        Label(s.label, systemImage: s.icon).tag(s.rawValue)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .disabled(!query.isEmpty)
+            .help("Sort people")
+            // Multi-select for bulk tag / merge / delete (FT3-2/FT3-3).
+            if !people.people.isEmpty {
+                Button {
+                    selectMode.toggle()
+                    if !selectMode { multiSelection = [] }
+                } label: {
+                    Text(selectMode ? "Done" : "Select")
+                }
+                .help("Select multiple people for bulk actions")
+            }
         }
         .padding(.horizontal).padding(.bottom, 8)
     }
@@ -166,6 +223,15 @@ struct PeopleListView: View {
 
             if people.people.isEmpty {
                 emptyState
+            } else if selectMode {
+                List(selection: $multiSelection) {
+                    ForEach(filtered) { person in
+                        PersonRow(person: person)
+                            .tag(person.id)
+                    }
+                }
+                .listStyle(.inset)
+                bulkBar
             } else {
                 List(selection: $selection) {
                     ForEach(filtered) { person in
@@ -179,11 +245,107 @@ struct PeopleListView: View {
         }
     }
 
+    // MARK: - Bulk actions
+
+    /// Bottom bar shown in select mode: tag, merge, or delete the checked people.
+    @ViewBuilder
+    private var bulkBar: some View {
+        let usable = peopleTags.allTags
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 10) {
+                Text("\(multiSelection.count) selected")
+                    .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                Spacer(minLength: 0)
+                Menu {
+                    if usable.isEmpty {
+                        Text("No tags yet")
+                    } else {
+                        ForEach(usable) { t in
+                            Button(t.name) { applyTagToSelection(t.id) }
+                        }
+                    }
+                } label: {
+                    Label("Tag", systemImage: "tag")
+                }
+                .menuStyle(.borderlessButton).fixedSize()
+                .disabled(multiSelection.isEmpty || usable.isEmpty)
+
+                Button {
+                    bulkConfirmMerge = true
+                } label: {
+                    Label("Merge", systemImage: "arrow.triangle.merge")
+                }
+                .disabled(multiSelection.count < 2)
+                .help("Merge the selected people into one record")
+
+                Button(role: .destructive) {
+                    bulkConfirmDelete = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(multiSelection.isEmpty)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+        }
+        .confirmationDialog(
+            "Merge \(multiSelection.count) people into one?",
+            isPresented: $bulkConfirmMerge, titleVisibility: .visible) {
+            Button("Merge into \(mergeKeeper()?.displayName ?? "the strongest record")") { mergeSelection() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Encounters, tags, notes, and relationships are combined onto the most complete record. This can't be undone.")
+        }
+        .confirmationDialog(
+            "Delete \(multiSelection.count) \(multiSelection.count == 1 ? "person" : "people")?",
+            isPresented: $bulkConfirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { deleteSelection() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Their records and encounters are permanently removed.")
+        }
+    }
+
+    private func applyTagToSelection(_ tagID: String) {
+        for id in multiSelection {
+            guard var p = people.person(by: id), !p.tagIDs.contains(tagID) else { continue }
+            p.tagIDs.insert(tagID)
+            people.updatePerson(p)
+        }
+    }
+
+    /// The record bulk-merge collapses into: the highest-signal of the selection.
+    private func mergeKeeper() -> Person? {
+        multiSelection.compactMap { people.person(by: $0) }.max {
+            $0.relevanceScore(encounterCount: people.encounterCount(for: $0.id))
+                < $1.relevanceScore(encounterCount: people.encounterCount(for: $1.id))
+        }
+    }
+
+    private func mergeSelection() {
+        guard let keeper = mergeKeeper() else { return }
+        for id in multiSelection where id != keeper.id {
+            people.mergePeople(keep: keeper.id, remove: id)
+        }
+        multiSelection = []
+        selectMode = false
+        selection = keeper.id
+    }
+
+    private func deleteSelection() {
+        for id in multiSelection {
+            if let p = people.person(by: id) { people.deletePerson(p) }
+        }
+        if let sel = selection, multiSelection.contains(sel) { selection = nil }
+        multiSelection = []
+        selectMode = false
+    }
+
     /// "N low-signal contacts hidden" toggle (§12.4) — only when the unfiltered
     /// list is actually hiding ghosts.
     @ViewBuilder
     private var ghostFooter: some View {
-        if query.isEmpty, tagFilter == nil, people.ghostCount > 0 {
+        if query.isEmpty, tagFilters.isEmpty, people.ghostCount > 0 {
             Button {
                 withAnimation { showGhosts.toggle() }
             } label: {
@@ -209,10 +371,13 @@ struct PeopleListView: View {
             HStack(spacing: 6) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        FilterChip(label: "All", active: tagFilter == nil) { tagFilter = nil }
+                        FilterChip(label: "All", active: tagFilters.isEmpty) { tagFilters = [] }
                         ForEach(used) { t in
-                            FilterChip(label: t.name, active: tagFilter == t.id) {
-                                tagFilter = (tagFilter == t.id) ? nil : t.id
+                            // AND semantics — selecting two tags shows only people
+                            // carrying both. (UX3-5)
+                            FilterChip(label: t.name, active: tagFilters.contains(t.id)) {
+                                if tagFilters.contains(t.id) { tagFilters.remove(t.id) }
+                                else { tagFilters.insert(t.id) }
                             }
                         }
                     }
@@ -253,6 +418,28 @@ struct PeopleListView: View {
                 Text("Select a person").foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+/// List ordering options (persisted via @AppStorage). Applied when not searching.
+enum PeopleSort: String, CaseIterable, Identifiable {
+    case recent, name, meetings, newest
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .recent:   return "Recent activity"
+        case .name:     return "Name (A–Z)"
+        case .meetings: return "Most meetings"
+        case .newest:   return "Recently added"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .recent:   return "clock"
+        case .name:     return "textformat.abc"
+        case .meetings: return "calendar"
+        case .newest:   return "sparkles"
         }
     }
 }
