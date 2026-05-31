@@ -45,6 +45,14 @@ struct MeetingScribeApp: App {
                 .environmentObject(manager.actionItems)
                 .environmentObject(router)
                 .frame(minWidth: 720, minHeight: 560)
+                // Deep links: meetingscribe://<kind>/<id> from MCP, Shortcuts,
+                // Spotlight, or another app. The scheme is registered in
+                // Resources/Info.plist (CFBundleURLTypes). Routes through the
+                // one canonical router. (D1-2)
+                .onOpenURL { url in
+                    guard let parsed = WorkspaceLink.parse(url) else { return }
+                    router.route(kind: parsed.kind, id: parsed.id, manager: manager)
+                }
                 .task {
                     startServices()
                 }
