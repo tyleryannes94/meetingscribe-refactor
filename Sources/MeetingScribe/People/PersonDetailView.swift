@@ -189,6 +189,7 @@ struct PersonDetailView: View {
     @State private var aiRunning = false
     @State private var aiError: String?
     @State private var dismissedSuggestions: Set<String> = []
+    @State private var deepRunning = false
     /// Unrecorded calendar meetings with this person (last ~180 days), for the
     /// unified timeline (U2-1).
     @State private var calendarMeetings: [Meeting] = []
@@ -1276,6 +1277,7 @@ struct PersonDetailView: View {
                     statRow("Recent", "\(s.last30) in 30d  ·  \(s.last90) in 90d")
                     if s.total >= 4 { analysisPresetMenu }
                     analysisResultView
+                    if s.total >= 1 { deepAnalysisControl }
                 }
                 .padding(10)
                 .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -1610,6 +1612,94 @@ struct PersonDetailView: View {
                 }
             }
         }
+    }
+
+    /// The one cached "deep analysis" report (kind "deep-all"), if it exists.
+    private var deepNote: AttachedNote? { current.attachedNotes.first { $0.kind == "deep-all" } }
+
+    /// A thorough one-time pass over the WHOLE message history: writes a full
+    /// report to Notes (cached, run-once) and mines tags/encounters from the
+    /// actual message content into the AI suggestions card.
+    @ViewBuilder
+    private var deepAnalysisControl: some View {
+        Divider().overlay(NDS.divider)
+        HStack(spacing: 10) {
+            Image(systemName: "doc.text.magnifyingglass").foregroundStyle(NDS.brand)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Deep analysis").font(NDS.small).foregroundStyle(NDS.textPrimary)
+                Text(deepNote == nil
+                     ? "One thorough pass over the entire history — cached, runs once."
+                     : "Saved to Notes · \(Self.dateFormatter.string(from: deepNote!.createdAt))")
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+            Spacer(minLength: 0)
+            if deepRunning {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(deepNote == nil ? "Run" : "Refresh") { runDeepMessageAnalysis() }
+                    .font(NDS.small)
+            }
+        }
+    }
+
+    private func runDeepMessageAnalysis() {
+        deepRunning = true
+        messageError = nil
+        let target = current
+        Task.detached(priority: .utility) {
+            guard let (_, recent) = try? MessagesAnalyzer.analyze(person: target, recentLimit: 100_000),
+                  !recent.isEmpty else {
+                await MainActor.run {
+                    self.deepRunning = false
+                    self.messageError = "No matched messages to analyze."
+                }
+                return
+            }
+            let transcript = String(recent
+                .map { "\($0.fromMe ? "Me" : target.displayName): \($0.text)" }
+                .joined(separator: "\n").prefix(48_000))
+            let ollama = OllamaService()
+            let reportPrompt = """
+            You are analyzing the COMPLETE text-message history between me and \
+            \(target.displayName). Write a thorough but concise Markdown report with \
+            these sections: ## Relationship overview, ## Communication style & cadence, \
+            ## Recurring topics, ## Notable moments & commitments, ## Suggested follow-ups. \
+            Base everything strictly on the messages — do not invent facts.
+
+            MESSAGES:
+            \(transcript)
+            """
+            let report = (try? await ollama.generate(prompt: reportPrompt,
+                                                     temperature: 0.2, numCtx: 16_384)) ?? ""
+            let cleaned = report.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Mine structured tags/encounters from the real message content.
+            let mined = await PersonSuggestionEngine.generate(
+                personName: target.displayName,
+                context: "These are real text messages between me and \(target.displayName):\n"
+                    + String(transcript.prefix(16_000)),
+                using: ollama)
+            await MainActor.run {
+                self.deepRunning = false
+                if !cleaned.isEmpty {
+                    self.people.deleteCachedAllTimeNote(personID: target.id, kind: "deep-all")
+                    self.people.addAttachedNote(
+                        to: target.id,
+                        title: "Deep message analysis — \(target.displayName)",
+                        body: cleaned, kind: "deep-all")
+                }
+                if let mined { self.mergeSuggestions(mined) }
+            }
+        }
+    }
+
+    private func mergeSuggestions(_ s: PersonAISuggestions) {
+        var base = aiSuggestions ?? PersonAISuggestions()
+        for t in s.tags where !base.tags.contains(t) { base.tags.append(t) }
+        let relKeys = Set(base.relationships.map { "\($0.name)|\($0.label)" })
+        base.relationships += s.relationships.filter { !relKeys.contains("\($0.name)|\($0.label)") }
+        let encKeys = Set(base.encounters.map { $0.title })
+        base.encounters += s.encounters.filter { !encKeys.contains($0.title) }
+        aiSuggestions = base
     }
 
     /// Whether an all-time analysis exists for this person + preset.
