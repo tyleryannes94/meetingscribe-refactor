@@ -55,6 +55,8 @@ final class AppSettings {
         /// BCP-47 language code passed to whisper-cli via --language.
         /// "auto" = let whisper detect; "en", "es", "fr", etc. for forced lang.
         static let whisperLanguage = "whisperLanguage"
+        /// User-editable list of additional names/nicknames that mean "me".
+        static let userNameAliases = "userNameAliases"
         /// Off-by-default kill-switch for the ScribeCore daemon recording path.
         /// The daemon path does not finalize a meeting (no merge/transcribe/
         /// summary) and records into an orphan folder → silent total data loss.
@@ -119,6 +121,42 @@ final class AppSettings {
             return v.isEmpty ? "Tyler" : v
         }
         set { defaults.set(newValue, forKey: Keys.userName) }
+    }
+
+    /// Additional names/nicknames that should be treated as referring to the
+    /// user (e.g. "Ty", a first name, "the eng lead"). User-editable in
+    /// Settings. Combined with `userName` by `myNameAliases`. (U1-2)
+    var userNameAliases: [String] {
+        get { defaults.stringArray(forKey: Keys.userNameAliases) ?? [] }
+        set { defaults.set(newValue, forKey: Keys.userNameAliases) }
+    }
+
+    /// All lowercased tokens that mean "the user": generic first-person words,
+    /// the configured `userName` (full form + first token), and any
+    /// user-defined `userNameAliases`. The single source of truth for the
+    /// "only my action items" ownership filter and for dropping self-references
+    /// during people/attendee extraction. Replaces the hardcoded "tyler" sets
+    /// that silently broke those features for anyone not named Tyler. (U1-2)
+    var myNameAliases: Set<String> {
+        var set: Set<String> = ["me", "i", "myself", "my"]
+        let name = userName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !name.isEmpty {
+            set.insert(name)
+            if let first = name.split(separator: " ").first { set.insert(String(first)) }
+        }
+        for alias in userNameAliases {
+            let t = alias.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !t.isEmpty { set.insert(t) }
+        }
+        return set
+    }
+
+    /// `myNameAliases` minus the generic first-person pronouns — i.e. only the
+    /// tokens that look like an actual name. Used where matching "me"/"my"/"i"
+    /// as a substring would be too eager (e.g. scanning free-text for the
+    /// user's name). (U1-2)
+    var myNameTokens: Set<String> {
+        myNameAliases.subtracting(["me", "i", "myself", "my"])
     }
 
     var whisperBinary: String {

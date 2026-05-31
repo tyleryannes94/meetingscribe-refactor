@@ -5,7 +5,8 @@ import Foundation
 /// and look like "Jane Smith", "jane@acme.com", or "Jane Smith <jane@acme.com>".
 enum CalendarAttendeeImporter {
     /// Names/emails that are the user — skip so we don't import ourselves.
-    private static let selfTokens: Set<String> = ["me", "tyler", "tyler yannes"]
+    /// Profile-driven (U1-2): derived from AppSettings.userName + aliases.
+    private static var selfTokens: Set<String> { AppSettings.shared.myNameAliases }
 
     static func candidates(from meetings: [Meeting]) -> [PersonImport] {
         var byKey: [String: PersonImport] = [:]

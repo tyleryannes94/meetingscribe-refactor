@@ -21,13 +21,6 @@ import Foundation
 /// away user edits.
 enum ActionItemExtractor {
 
-    /// Owner labels that mean "the user" (Tyler). Items owned by anyone else
-    /// are NOT added to the user's task list — only their own commitments and
-    /// items explicitly delegated to them by name become tasks.
-    private static let myOwnerAliases: Set<String> = [
-        "me", "i", "myself", "my", "tyler", "tyler yannes"
-    ]
-
     static func extract(from summary: String, meeting: Meeting) -> [ActionItem] {
         guard let actionSection = isolateActionItemsSection(in: summary) else { return [] }
         let lines = actionSection.components(separatedBy: .newlines)
@@ -67,10 +60,13 @@ enum ActionItemExtractor {
     /// "Tyler, can you…"). Items owned by other named participants, or with no
     /// owner and no mention of the user, are treated as not-mine.
     private static func isMine(owner: String?, text: String) -> Bool {
+        // Profile-driven (U1-2): the set of tokens that mean "the user" comes
+        // from AppSettings.userName + aliases, not a hardcoded "tyler".
+        let aliases = AppSettings.shared.myNameAliases
         if let o = owner?.lowercased().trimmingCharacters(in: .whitespaces), !o.isEmpty {
-            // Owner like "Me", "Tyler", "Me (Tyler)", "Tyler Yannes".
-            if myOwnerAliases.contains(o) { return true }
-            for alias in myOwnerAliases where o.hasPrefix(alias + " ") || o.contains("(\(alias))") {
+            // Owner like "Me", the user's name, "Me (Name)", "First Last".
+            if aliases.contains(o) { return true }
+            for alias in aliases where o.hasPrefix(alias + " ") || o.contains("(\(alias))") {
                 return true
             }
             // Owner is someone else → not mine.
@@ -78,8 +74,14 @@ enum ActionItemExtractor {
         }
         // No owner parsed — only mine if the action explicitly names me.
         let lower = text.lowercased()
-        return lower.hasPrefix("tyler ") || lower.hasPrefix("tyler,")
-            || lower.contains(" tyler ") || lower.hasPrefix("i ")
+        if lower.hasPrefix("i ") { return true }
+        // Match the user's actual name tokens (not the generic pronouns, which
+        // would match far too eagerly mid-sentence).
+        for name in AppSettings.shared.myNameTokens {
+            if lower.hasPrefix(name + " ") || lower.hasPrefix(name + ",")
+                || lower.contains(" \(name) ") { return true }
+        }
+        return false
     }
 
     /// Returns the text between `## Action Items` and the next `## ` heading
