@@ -182,6 +182,9 @@ struct PersonDetailView: View {
     @State private var confirmDelete = false
     @State private var newMemory = ""
     @State private var newTaskTitle = ""
+    @State private var newFavorite = ""
+    @State private var showNewTag = false
+    @State private var newTagName = ""
     /// Unrecorded calendar meetings with this person (last ~180 days), for the
     /// unified timeline (U2-1).
     @State private var calendarMeetings: [Meeting] = []
@@ -193,28 +196,6 @@ struct PersonDetailView: View {
     @State private var customPromptDraft = ""
     @State private var showCustomPrompt = false
     @State private var noteExpansion: [String: Bool] = [:]
-    @State private var rightTab: PersonRightTab = .notes
-
-    enum PersonRightTab: String, CaseIterable, Identifiable {
-        case notes, meetings, tasks, messages
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .notes:    return "Notes"
-            case .meetings: return "Meetings"
-            case .tasks:    return "Tasks"
-            case .messages: return "Messages"
-            }
-        }
-        var systemImage: String {
-            switch self {
-            case .notes:    return "note.text"
-            case .meetings: return "person.2.fill"
-            case .tasks:    return "checklist"
-            case .messages: return "message.fill"
-            }
-        }
-    }
 
     /// Display container for a finished analysis. Holds the preset (so we
     /// know what kind chip to show) and the rendered text the user can
@@ -236,80 +217,37 @@ struct PersonDetailView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            // ── LEFT COLUMN: Identity panel (fixed 280pt) ──────────────────
+        // One scrollable page of sections (no tabs) on the left so everything is
+        // visible at once, with the AI chat embedded as a persistent right column
+        // instead of a toggled rail.
+        HSplitView {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 22) {
                     identityPanel
+                    tagsEditSection
+                    if !current.photoRelativePaths.isEmpty { photosSection }
+                    contactRows
+                    if !current.bio.isEmpty || editingIdentity { notes }
+                    favoritesEditSection
+                    relationshipsSection
+                    encountersSection
+                    if !current.meetingMentions.isEmpty { mentionedInSection }
+                    meetingHistorySection
+                    tasksSection
+                    memoriesSection
+                    attachedNotesSection
+                    messagesSection
+                    provenanceFooter
                 }
-                // Top inset clears the translucent window toolbar (Tahoe) — the
-                // identity panel was sliding under it (avatar cut off). Matches
-                // the People list column's 60pt so the two panes line up. (req #1)
-                .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, NDS.splitPaneTopInset)
+                .padding(.horizontal, 28).padding(.bottom, 28).padding(.top, NDS.splitPaneTopInset)
+                .frame(maxWidth: 920, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 280)
-            .background(NDS.sidebarBg)
+            .frame(minWidth: 460, idealWidth: 640)
+            .background(NDS.bg)
 
-            Divider().overlay(NDS.divider)
-
-            // ── RIGHT COLUMN: Tabbed content (flex) ────────────────────────
-            VStack(spacing: 0) {
-                // Tab bar
-                HStack(spacing: 0) {
-                    ForEach(PersonRightTab.allCases) { tab in
-                        Button {
-                            rightTab = tab
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: tab.systemImage).font(.system(size: 11))
-                                Text(tab.label).font(.system(size: 13, weight: rightTab == tab ? .semibold : .regular))
-                            }
-                            .foregroundStyle(rightTab == tab ? NDS.brand : NDS.textSecondary)
-                            .padding(.vertical, 10).padding(.horizontal, 14)
-                            .overlay(alignment: .bottom) {
-                                if rightTab == tab {
-                                    Rectangle().fill(NDS.brand).frame(height: 2)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Spacer()
-                }
-                // Same toolbar inset as the identity panel + list column —
-                // the Notes/Meetings/Messages tab bar was hidden under the
-                // window title bar. Background fills the inset strip. (req #1)
-                .padding(.top, NDS.splitPaneTopInset)
-                .background(NDS.sidebarBg)
-                Divider().overlay(NDS.divider)
-
-                // Tab content
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        switch rightTab {
-                        case .notes:
-                            if !current.bio.isEmpty { notes }
-                            memoriesSection
-                            attachedNotesSection
-                        case .meetings:
-                            encountersSection
-                            if !current.meetingMentions.isEmpty { mentionedInSection }
-                            meetingHistorySection
-                        case .tasks:
-                            tasksSection
-                        case .messages:
-                            messagesSection
-                        }
-                        if rightTab == .notes { provenanceFooter }
-                    }
-                    .padding(24)
-                    // Was 720 — left a wide dead gutter on large displays (req #5).
-                    // Raised so the People detail uses more of the available width.
-                    .frame(maxWidth: 1280, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .background(NDS.bg)
-            }
+            personChatColumn
+                .frame(minWidth: 320, idealWidth: 380, maxWidth: 480)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { updateChatContext() }
@@ -498,37 +436,148 @@ struct PersonDetailView: View {
                 }
                 .padding(.top, 2)
             }
+        }
+    }
 
-            // Tags
-            if !tags.isEmpty {
+    // MARK: - Tags (inline add) + Favorites (inline add)
+
+    /// Tags with an always-present "Add tag" menu so tagging doesn't require the
+    /// full edit sheet. Lists existing people-tags and offers to create a new one.
+    private var tagsEditSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Tags").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                Spacer()
+                Menu {
+                    let unused = peopleTags.allTags.filter { !current.tagIDs.contains($0.id) }
+                    if !unused.isEmpty {
+                        ForEach(unused) { t in
+                            Button(t.name) { addTag(t.id) }
+                        }
+                        Divider()
+                    }
+                    Button("New tag…") { showNewTag = true }
+                } label: {
+                    Label("Add tag", systemImage: "plus")
+                }
+                .menuStyle(.borderlessButton).fixedSize().font(NDS.small)
+            }
+            if tags.isEmpty {
+                Text("No tags yet. Use Add tag to group this person (clients, family, an event…).")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+            } else {
                 FlowLayout(spacing: 5) {
-                    ForEach(tags) { t in TagChip(tag: t, removable: false, onRemove: nil) }
+                    ForEach(tags) { t in
+                        TagChip(tag: t, removable: true) { removeTag(t.id) }
+                    }
                 }
             }
-
-            Divider().overlay(NDS.divider)
-
-            // Photos (first one shown)
-            if !current.photoRelativePaths.isEmpty {
-                photosSection
-                Divider().overlay(NDS.divider)
-            }
-
-            // Contact rows
-            contactRows
-
-            // Relationships
-            if !current.relationships.isEmpty {
-                Divider().overlay(NDS.divider)
-                relationshipsSection
-            }
-
-            // Favorites
-            if !current.favorites.isEmpty {
-                Divider().overlay(NDS.divider)
-                favoritesSection
-            }
         }
+        .alert("New tag", isPresented: $showNewTag) {
+            TextField("Tag name", text: $newTagName)
+            Button("Add") { commitNewTag() }
+            Button("Cancel", role: .cancel) { newTagName = "" }
+        }
+    }
+
+    private func addTag(_ tagID: String) {
+        var u = current
+        u.tagIDs.insert(tagID)
+        people.updatePerson(u)
+    }
+
+    private func removeTag(_ tagID: String) {
+        var u = current
+        u.tagIDs.remove(tagID)
+        people.updatePerson(u)
+    }
+
+    private func commitNewTag() {
+        let name = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newTagName = ""
+        guard !name.isEmpty else { return }
+        let tag = peopleTags.createTag(name: name)
+        addTag(tag.id)
+    }
+
+    /// Favorites with an inline add field so favorite things can be captured
+    /// without the edit sheet.
+    private var favoritesEditSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Favorite things").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+            if !current.favorites.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(current.favorites, id: \.self) { fav in
+                        HStack(spacing: 4) {
+                            Text(fav).font(NDS.small)
+                            Button { removeFavorite(fav) } label: {
+                                Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                            }
+                            .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                        }
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(NDS.fieldBg, in: Capsule())
+                        .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                Image(systemName: "heart").foregroundStyle(NDS.textTertiary)
+                TextField("Add a favorite — coffee order, hobby, team…", text: $newFavorite)
+                    .textFieldStyle(.plain)
+                    .onSubmit { addFavorite() }
+                if !newFavorite.isEmpty { Button("Add") { addFavorite() }.font(NDS.small) }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+        }
+    }
+
+    private func addFavorite() {
+        let v = newFavorite.trimmingCharacters(in: .whitespacesAndNewlines)
+        newFavorite = ""
+        guard !v.isEmpty else { return }
+        var u = current
+        if !u.favorites.contains(v) { u.favorites.append(v) }
+        people.updatePerson(u)
+    }
+
+    private func removeFavorite(_ fav: String) {
+        var u = current
+        u.favorites.removeAll { $0 == fav }
+        people.updatePerson(u)
+    }
+
+    // MARK: - Embedded chat (replaces the toggled sidebar rail)
+
+    private var personChatColumn: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles").foregroundStyle(NDS.brand)
+                Text("Ask AI about \(current.displayName.split(separator: " ").first.map(String.init) ?? current.displayName)")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                if !chatSession.messages.isEmpty {
+                    Button { chatSession.reset() } label: { Image(systemName: "arrow.counterclockwise") }
+                        .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                        .help("Clear conversation")
+                }
+            }
+            .padding(.horizontal, 14).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 10)
+            .background(NDS.sidebarBg)
+            Divider().overlay(NDS.divider)
+            ChatPanel(
+                session: chatSession,
+                density: .compact,
+                examplePrompts: [
+                    "Give me a briefing on \(current.displayName).",
+                    "What are my open tasks with them?",
+                    "Suggest tags and a relationship for this person.",
+                    "When did we last meet and what about?"
+                ]
+            )
+        }
+        .background(NDS.sidebarBg)
     }
 
     private func initials(for name: String) -> String {
@@ -663,20 +712,6 @@ struct PersonDetailView: View {
                 ForEach(addresses, id: \.self) { contactRow(icon: "mappin.and.ellipse", text: $0) }
                 if let bday = current.birthday {
                     contactRow(icon: "gift", text: Self.birthdayFormatter.string(from: bday))
-                }
-            }
-        }
-    }
-
-    private var favoritesSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Favorite things").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-            FlowLayout(spacing: 6) {
-                ForEach(current.favorites, id: \.self) { fav in
-                    Text(fav).font(NDS.small)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background(NDS.fieldBg, in: Capsule())
-                        .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
                 }
             }
         }
@@ -1293,12 +1328,12 @@ struct PersonDetailView: View {
         chatSession.setContext(bits.filter { !$0.isEmpty }.joined(separator: " "))
     }
 
-    /// Reveal the chat rail and run a briefing prompt grounded on this person.
+    /// Run a briefing prompt in the embedded chat column, grounded on this person.
     private func askAIAboutPerson() {
         updateChatContext()
         let q = "Give me a briefing on \(current.displayName): recent meetings and "
             + "interactions, any open tasks, and what I should follow up on."
-        router.openChat?(q)
+        Task { await chatSession.sendUserMessage(q) }
     }
 
     /// Run one of the conversation analysis presets. For `.custom`,
