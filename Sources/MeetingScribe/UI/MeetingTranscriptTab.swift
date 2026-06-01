@@ -29,9 +29,13 @@ var transcriptBody: some View {
                 .environmentObject(manager)
         case .past:
             if transcript.isEmpty {
-                placeholder(systemImage: "waveform",
-                            title: "No transcript",
-                            message: "This meeting didn't capture audio, or transcription failed.")
+                if bodyLoaded {
+                    placeholder(systemImage: "waveform",
+                                title: "No transcript",
+                                message: "This meeting didn't capture audio, or transcription failed.")
+                } else {
+                    MSSkeleton(lines: 8).padding(24)   // loading, not empty (PP-1)
+                }
             } else {
                 // Use the navigable sync view when transcript has structured
                 // speaker/timestamp data. Falls back gracefully if format is plain prose.
