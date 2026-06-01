@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import ImageIO
 
 /// Downsampled, decoded thumbnail cache for people photos. Replaces repeated
@@ -16,14 +17,28 @@ enum ThumbnailCache {
         return c
     }()
 
+    private static func key(_ url: URL, _ maxPixel: CGFloat) -> NSString {
+        "\(url.path)|\(Int(maxPixel))" as NSString
+    }
+
+    /// Memory hit only — no decode. For an instant first paint before the async
+    /// decode lands.
+    static func cached(url: URL, maxPixel: CGFloat) -> NSImage? {
+        cache.object(forKey: key(url, maxPixel))
+    }
+
     static func thumbnail(at url: URL, maxPixel: CGFloat) -> NSImage? {
-        let key = "\(url.path)|\(Int(maxPixel))" as NSString
-        if let hit = cache.object(forKey: key) { return hit }
+        let k = key(url, maxPixel)
+        if let hit = cache.object(forKey: k) { return hit }
         guard let img = downsample(url: url, maxPixel: maxPixel) else { return nil }
         // Cost ≈ decoded RGBA bytes so totalCostLimit evicts by real memory.
         let px = maxPixel * scale
-        cache.setObject(img, forKey: key, cost: Int(px * px * 4))
+        cache.setObject(img, forKey: k, cost: Int(px * px * 4))
         return img
+    }
+
+    static func downsampleOffMain(url: URL, maxPixel: CGFloat) -> NSImage? {
+        downsample(url: url, maxPixel: maxPixel)
     }
 
     private static func downsample(url: URL, maxPixel: CGFloat) -> NSImage? {
@@ -38,5 +53,39 @@ enum ThumbnailCache {
         ]
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
         return NSImage(cgImage: cg, size: NSSize(width: maxPixel, height: maxPixel))
+    }
+}
+
+/// Renders a downsampled, cached thumbnail with the decode done OFF the main
+/// thread (the synchronous decode-in-body was a confirmed scroll stall — V5
+/// DI-2). Shows a memory hit instantly; otherwise a placeholder fades to the
+/// image once decoded.
+@available(macOS 14.0, *)
+struct CachedThumbnail: View {
+    let url: URL
+    let side: CGFloat
+    var cornerRadius: CGFloat = 8
+    @State private var image: NSImage?
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(nsImage: image).resizable().scaledToFill()
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(NDS.fieldBg)
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .task(id: url) { await load() }
+    }
+
+    private func load() async {
+        if let hit = ThumbnailCache.cached(url: url, maxPixel: side) { image = hit; return }
+        let side = self.side, url = self.url
+        let decoded = await Task.detached(priority: .utility) {
+            ThumbnailCache.thumbnail(at: url, maxPixel: side)
+        }.value
+        if !Task.isCancelled { image = decoded }
     }
 }
