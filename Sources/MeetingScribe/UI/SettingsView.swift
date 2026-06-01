@@ -13,6 +13,8 @@ struct SettingsView: View {
     @State private var autoRecord: Bool = AppSettings.shared.autoRecord
     @State private var captureMic: Bool = AppSettings.shared.captureMic
     @State private var captureSystem: Bool = AppSettings.shared.captureSystem
+    @State private var liveTranscriptionEnabled: Bool = AppSettings.shared.liveTranscriptionEnabled
+    @State private var deferLiveOnBattery: Bool = AppSettings.shared.deferLiveTranscriptionOnBattery
     @State private var filterToConference: Bool = AppSettings.shared.filterToConferenceLinks
     @State private var notifyAtStart: Bool = AppSettings.shared.notifyAtMeetingStart
     @State private var dailyBrief: Bool = AppSettings.shared.dailyBriefEnabled
@@ -106,6 +108,11 @@ struct SettingsView: View {
                     Text("Auto-start ONLY fires if MeetingScribe detects you've actually joined the call (Zoom app open with a meeting window, or a browser tab on meet.google.com). Time blocks and meetings you skip won't trigger a surprise recording.")
                         .font(.caption).foregroundStyle(.secondary)
                     Text("Live transcript runs every 5 minutes during a recording.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Toggle("Transcribe live during the meeting", isOn: $liveTranscriptionEnabled)
+                    Toggle("Defer to batch on battery / low-power", isOn: $deferLiveOnBattery)
+                        .disabled(!liveTranscriptionEnabled)
+                    Text("Deferring skips the per-chunk Whisper cold-loads while unplugged; the full transcript is produced in one pass when you stop. Currently: \(ResourceGovernor.shared.statusDescription).")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Calendar") {
@@ -492,6 +499,13 @@ struct SettingsView: View {
                     TextField("Model", text: $ollamaModel)
                     Text("Recommended: \(AppSettings.recommendedOllamaModel) — strongest small open-weight model for tool calling. Install with `ollama pull \(AppSettings.recommendedOllamaModel)`. Avoid llama3.1:8b: it leaks tool-call JSON as plain text and over-fires safety refusals on benign prompts.")
                         .font(.caption2).foregroundStyle(.secondary)
+                    HStack {
+                        Text("This Mac: \(HardwareProfile.summary)")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Use recommended") { ollamaModel = HardwareProfile.recommendedSummaryModel }
+                            .font(.caption)
+                    }
                     OllamaStatusRow()
                     Toggle("Allow a non-local Ollama endpoint", isOn: $allowRemoteOllama)
                     Text("Off by default. MeetingScribe only sends transcripts to a local LLM (127.0.0.1). Turn this on only if you intentionally run Ollama on another machine — your meeting content will leave this device.")
@@ -630,6 +644,8 @@ struct SettingsView: View {
         s.autoRecord = autoRecord
         s.captureMic = captureMic
         s.captureSystem = captureSystem
+        s.liveTranscriptionEnabled = liveTranscriptionEnabled
+        s.deferLiveTranscriptionOnBattery = deferLiveOnBattery
         s.filterToConferenceLinks = filterToConference
         s.notifyAtMeetingStart = notifyAtStart
         s.detectZoomImpromptu = detectZoom
