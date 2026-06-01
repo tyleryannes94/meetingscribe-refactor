@@ -417,6 +417,7 @@ struct MeetingScribeApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        CrashReporter.install()   // capture silent crashes into the diag bundle (PS-3)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }

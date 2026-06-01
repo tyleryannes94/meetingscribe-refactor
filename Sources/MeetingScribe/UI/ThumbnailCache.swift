@@ -12,6 +12,7 @@ enum ThumbnailCache {
     private static let cache: NSCache<NSString, NSImage> = {
         let c = NSCache<NSString, NSImage>()
         c.countLimit = 256
+        c.totalCostLimit = 48 * 1024 * 1024   // byte-bound to prevent OOM (V5 PS-5)
         return c
     }()
 
@@ -19,7 +20,9 @@ enum ThumbnailCache {
         let key = "\(url.path)|\(Int(maxPixel))" as NSString
         if let hit = cache.object(forKey: key) { return hit }
         guard let img = downsample(url: url, maxPixel: maxPixel) else { return nil }
-        cache.setObject(img, forKey: key)
+        // Cost ≈ decoded RGBA bytes so totalCostLimit evicts by real memory.
+        let px = maxPixel * scale
+        cache.setObject(img, forKey: key, cost: Int(px * px * 4))
         return img
     }
 
