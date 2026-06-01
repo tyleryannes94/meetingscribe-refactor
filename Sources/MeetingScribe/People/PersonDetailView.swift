@@ -950,7 +950,8 @@ struct PersonDetailView: View {
     @ViewBuilder
     private func photoThumb(_ rel: String) -> some View {
         let url = people.photoURL(for: current, relativePath: rel)
-        if let img = NSImage(contentsOf: url) {
+        // Downsampled + cached instead of a full-res decode per re-render. (E2-5)
+        if let img = ThumbnailCache.thumbnail(at: url, maxPixel: 72) {
             Image(nsImage: img)
                 .resizable().scaledToFill()
                 .frame(width: 72, height: 72)

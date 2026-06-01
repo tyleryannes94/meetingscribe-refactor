@@ -18,6 +18,8 @@ final class AppSettings {
         static let autoRecord = "autoRecord"
         static let captureMic = "captureMic"
         static let captureSystem = "captureSystem"
+        static let liveTranscriptionEnabled = "liveTranscriptionEnabled"
+        static let deferLiveTranscriptionOnBattery = "deferLiveTranscriptionOnBattery"
         static let filterToConferenceLinks = "filterToConferenceLinks"
         static let notifyAtMeetingStart = "notifyAtMeetingStart"
         static let detectZoomImpromptu = "detectZoomImpromptu"
@@ -271,6 +273,20 @@ final class AppSettings {
     var captureSystem: Bool {
         get { defaults.object(forKey: Keys.captureSystem) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.captureSystem) }
+    }
+
+    /// Run transcription live during the meeting (vs a single batch pass on
+    /// stop). Off → always defer to batch. (E2-2/E2-3)
+    var liveTranscriptionEnabled: Bool {
+        get { defaults.object(forKey: Keys.liveTranscriptionEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.liveTranscriptionEnabled) }
+    }
+
+    /// When on battery / low-power, defer transcription to batch-on-stop to avoid
+    /// the per-chunk Whisper cold-loads that dominate avoidable energy use.
+    var deferLiveTranscriptionOnBattery: Bool {
+        get { defaults.object(forKey: Keys.deferLiveTranscriptionOnBattery) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.deferLiveTranscriptionOnBattery) }
     }
 
     /// Hide calendar events that don't have a Zoom/Meet/Teams URL — most of

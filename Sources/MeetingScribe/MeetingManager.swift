@@ -194,12 +194,19 @@ final class MeetingManager: ObservableObject {
             usingScribeCore = scribeCoreSucceeded
 
             if !scribeCoreSucceeded {
-                // Fallback: direct AudioRecorder path
-                audio.onMicChunk = { [weak self] url, _, s, e in
-                    self?.liveTranscriber.submitChunk(url: url, speaker: "Me", startSec: s, endSec: e)
-                }
-                audio.onSystemChunk = { [weak self] url, _, s, e in
-                    self?.liveTranscriber.submitChunk(url: url, speaker: "Them", startSec: s, endSec: e)
+                // Fallback: direct AudioRecorder path.
+                // Power/thermal governor (E2-2/E2-3): when on battery/low-power or
+                // thermally critical, skip live transcription — finalize does a
+                // single batch pass on stop instead, avoiding per-chunk cold-loads.
+                if ResourceGovernor.shared.shouldRunLiveTranscription {
+                    audio.onMicChunk = { [weak self] url, _, s, e in
+                        self?.liveTranscriber.submitChunk(url: url, speaker: "Me", startSec: s, endSec: e)
+                    }
+                    audio.onSystemChunk = { [weak self] url, _, s, e in
+                        self?.liveTranscriber.submitChunk(url: url, speaker: "Them", startSec: s, endSec: e)
+                    }
+                } else {
+                    AppLog.info("transcription", "Live transcription deferred to batch — \(ResourceGovernor.shared.statusDescription)")
                 }
 
                 let dir = store.directory(for: m, primaryTag: primary)
@@ -835,6 +842,15 @@ final class MeetingManager: ObservableObject {
         if FileManager.default.fileExists(atPath: dir.path) {
             NSWorkspace.shared.activateFileViewerSelecting([dir])
         }
+    }
+
+    /// Absolute path to the meeting's canonical Obsidian markdown (`<slug>.md`),
+    /// or nil if it hasn't been written yet (e.g. not finalized). Used for
+    /// "Open in Obsidian". (C3-x)
+    func canonicalMarkdownURL(for meeting: Meeting) -> URL? {
+        let dir = store.directory(for: meeting, primaryTag: tagStore.primaryTag(for: meeting))
+        let url = dir.appendingPathComponent("\(meeting.slug).md")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     func audioURLs(for meeting: Meeting) -> [URL] {

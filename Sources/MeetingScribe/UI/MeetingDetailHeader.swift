@@ -335,6 +335,28 @@ extension UnifiedMeetingDetail {
                     Button { exportToObsidian(m) } label: {
                         Label("Obsidian vault", systemImage: "doc.text.below.ecg")
                     }
+                    Button { openInObsidian(m) } label: {
+                        Label("Open in Obsidian", systemImage: "arrow.up.forward.app")
+                    }
+                }
+
+                // Calendar write-back (P4-1)
+                Menu("Calendar…") {
+                    if isCalendarLinked(m) {
+                        Button { addRecapToCalendar(m) } label: {
+                            Label("Add recap to event", systemImage: "calendar.badge.plus")
+                        }
+                        Divider()
+                    }
+                    Button { scheduleFollowUp(m, days: 1) } label: {
+                        Label("Schedule follow-up tomorrow", systemImage: "calendar.badge.clock")
+                    }
+                    Button { scheduleFollowUp(m, days: 3) } label: {
+                        Label("Schedule follow-up in 3 days", systemImage: "calendar.badge.clock")
+                    }
+                    Button { scheduleFollowUp(m, days: 7) } label: {
+                        Label("Schedule follow-up next week", systemImage: "calendar.badge.clock")
+                    }
                 }
             }
 
@@ -489,6 +511,76 @@ extension UnifiedMeetingDetail {
             transcript: manager.transcriptMarkdown(for: m),
             tags: tagNames)
         ObsidianExporter.export(md, filename: m.slug)
+    }
+
+    // MARK: - Calendar write-back (P4-1)
+
+    /// Only calendar-sourced meetings have a real EKEvent to write back to.
+    func isCalendarLinked(_ m: Meeting) -> Bool {
+        !m.isImpromptu && !m.isImported && (m.calendarName?.isEmpty == false)
+    }
+
+    /// Write the meeting recap (summary + deep link) into the calendar event's
+    /// notes, in place. Full calendar access is requested at onboarding.
+    func addRecapToCalendar(_ m: Meeting) {
+        let summary = manager.summaryMarkdown(for: m)
+        let recap = summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Recorded with MeetingScribe — recap pending."
+            : summary
+        let link = WorkspaceLink.url(kind: .meeting, id: m.id).absoluteString
+        Task {
+            let ok = await CalendarStoreActor.shared.attachRecap(
+                toEventID: m.id, markdown: recap, deepLink: link)
+            await MainActor.run {
+                infoAlert(ok
+                    ? "Recap added to the calendar event."
+                    : "Couldn't update the event — it may have been deleted or you don't have write access to that calendar.")
+            }
+        }
+    }
+
+    /// Create a follow-up event `days` after the meeting, same time of day.
+    func scheduleFollowUp(_ m: Meeting, days: Int) {
+        guard let start = Calendar.current.date(byAdding: .day, value: days, to: m.startDate) else { return }
+        let link = WorkspaceLink.url(kind: .meeting, id: m.id).absoluteString
+        Task {
+            let id = await CalendarStoreActor.shared.scheduleFollowUp(
+                title: "Follow-up: \(m.displayTitle)",
+                start: start, durationMinutes: 30,
+                notes: "Follow-up to the meeting on \(timeRange()).\n\(link)")
+            await MainActor.run {
+                let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short
+                infoAlert(id != nil
+                    ? "Follow-up scheduled for \(f.string(from: start))."
+                    : "Couldn't create the event. Check calendar access in Settings.")
+            }
+        }
+    }
+
+    private func infoAlert(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    // MARK: - Open in Obsidian (C3-x)
+
+    /// Deep-link the meeting's canonical markdown open in Obsidian. Best-effort:
+    /// requires Obsidian installed with this vault added.
+    func openInObsidian(_ m: Meeting) {
+        guard let url = manager.canonicalMarkdownURL(for: m) else {
+            infoAlert("No exported markdown yet — finalize the meeting first.")
+            return
+        }
+        var comps = URLComponents()
+        comps.scheme = "obsidian"
+        comps.host = "open"
+        comps.queryItems = [URLQueryItem(name: "path", value: url.path)]
+        if let obsURL = comps.url {
+            NSWorkspace.shared.open(obsURL)
+        }
     }
 
     func exportDocument(for m: Meeting,
