@@ -20,9 +20,18 @@ final class TagStore: ObservableObject {
         var seriesTags: [String: [String]]
     }
 
-    @Published private(set) var allTags: [MeetingTag] = MeetingTag.presets
+    @Published private(set) var allTags: [MeetingTag] = MeetingTag.presets {
+        didSet { rebuildTagIndex() }
+    }
     private var meetingTags: [String: [String]] = [:]
     private var seriesTags: [String: [String]] = [:]
+
+    // O(1) tag lookup (V5 PR-2). `tag(by:)` was an O(tags) scan run per card per
+    // render across every meeting list. Kept in sync via didSet + seeded in init.
+    private var tagIndex: [String: MeetingTag] = [:]
+    private func rebuildTagIndex() {
+        tagIndex = Dictionary(allTags.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
 
     /// Called when a tag is renamed — arguments are (oldFolderName, newFolderName).
     /// Wire this in MeetingManager to rename the corresponding vault folder on disk.
@@ -31,6 +40,7 @@ final class TagStore: ObservableObject {
     private var fileURL: URL { AppSettings.shared.storageDir.appendingPathComponent("tags.json") }
 
     init() {
+        rebuildTagIndex()   // seed for the preset default (didSet doesn't fire on it)
         // Read OFF the main thread (the file open can stall on slow/scanned
         // disks and would block app launch); decode + merge back on the main actor.
         let url = fileURL
@@ -124,7 +134,7 @@ final class TagStore: ObservableObject {
     }
 
     func tag(by id: String) -> MeetingTag? {
-        allTags.first { $0.id == id }
+        tagIndex[id]
     }
 
     // MARK: - Assignments

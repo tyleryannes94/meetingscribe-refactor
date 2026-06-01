@@ -33,8 +33,27 @@ final class PeopleStore: ObservableObject {
     static let autoLinkThreshold = 0.85   // ≥ → silently link to existing person
     static let possibleMatchThreshold = 0.6 // ≥ (and < auto) → "is this X?" suggestion
 
-    @Published private(set) var people: [Person] = []
-    @Published private(set) var encounters: [Encounter] = []
+    @Published private(set) var people: [Person] = [] {
+        didSet { rebuildPersonIndex() }
+    }
+    @Published private(set) var encounters: [Encounter] = [] {
+        didSet { rebuildEncounterCounts() }
+    }
+
+    // O(1) lookups (V5 PR-3 / TP-1). person(by:) and encounterCount were O(n) /
+    // O(n²) — called inside the People list's sort comparator on the main actor
+    // (per keystroke), and per-render across the app. Kept in sync via didSet.
+    private var personIndex: [String: Person] = [:]
+    private var encounterCountIndex: [String: Int] = [:]
+
+    private func rebuildPersonIndex() {
+        personIndex = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+    private func rebuildEncounterCounts() {
+        var counts: [String: Int] = [:]
+        for e in encounters { counts[e.personID, default: 0] += 1 }
+        encounterCountIndex = counts
+    }
     /// Pending auto-extraction suggestions awaiting confirm/dismiss (Phase B).
     @Published private(set) var suggestions: [PersonSuggestion] = []
 
@@ -79,7 +98,7 @@ final class PeopleStore: ObservableObject {
     // MARK: - Index (SQLite/FTS5)
 
     private func tagNameResolver(_ id: String) -> String? { PeopleTagStore.shared.tag(by: id)?.name }
-    func encounterCount(for personID: String) -> Int { encounters.reduce(0) { $1.personID == personID ? $0 + 1 : $0 } }
+    func encounterCount(for personID: String) -> Int { encounterCountIndex[personID] ?? 0 }
 
     /// Rebuild the whole index from canonical in-memory data. Idempotent.
     func rebuildIndex() {
@@ -471,7 +490,7 @@ final class PeopleStore: ObservableObject {
     }
 
     func person(by id: String) -> Person? {
-        people.first { $0.id == id }
+        personIndex[id]
     }
 
     private func writePerson(_ person: Person) {
