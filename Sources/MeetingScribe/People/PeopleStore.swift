@@ -531,6 +531,22 @@ final class PeopleStore: ObservableObject {
         personIndex[id]
     }
 
+    /// Re-insert a previously-deleted person (same id) and their encounters, for
+    /// Undo. Photos and reciprocal relationships removed at delete aren't
+    /// restored, but identity/contact/notes/tags/encounters are. (V5 DI-3)
+    func restore(person: Person, encounters restored: [Encounter]) {
+        if !people.contains(where: { $0.id == person.id }) {
+            people.append(person)
+            people.sort(by: Self.recencyThenName)
+            writePerson(person)
+        }
+        for e in restored where !encounters.contains(where: { $0.id == e.id }) {
+            encounters.append(e)
+            writeEncounter(e)
+        }
+        encounters.sort { $0.date > $1.date }
+    }
+
     private func writePerson(_ person: Person) {
         do {
             let dir = directory(for: person)

@@ -291,12 +291,17 @@ struct PersonDetailView: View {
         .confirmationDialog("Delete \(current.displayName)?",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
+                let snapshot = current
+                let encs = people.encounters(for: current.id)
                 people.deletePerson(current)
                 onDeleted()
+                ToastCenter.shared.show("Deleted \(snapshot.displayName)", undoTitle: "Undo") {
+                    people.restore(person: snapshot, encounters: encs)
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes the person and all their encounters. This can't be undone.")
+            Text("Removes the person and their encounters. You can undo right after.")
         }
     }
 
