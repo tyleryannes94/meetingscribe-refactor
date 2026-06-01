@@ -252,11 +252,32 @@ struct PeopleListView: View {
                     ForEach(filtered) { person in
                         PersonRow(person: person)
                             .tag(person.id)
+                            .contextMenu { personRowMenu(person) }   // right-click (SC-7)
                     }
                 }
                 .listStyle(.inset)
                 ghostFooter
             }
+        }
+    }
+
+    /// Right-click actions on a person row.
+    @ViewBuilder
+    private func personRowMenu(_ person: Person) -> some View {
+        Button { selection = person.id } label: { Label("Open", systemImage: "arrow.forward") }
+        let unused = peopleTags.allTags.filter { !person.tagIDs.contains($0.id) }
+        if !unused.isEmpty {
+            Menu {
+                ForEach(unused) { t in
+                    Button(t.name) {
+                        var u = person; u.tagIDs.insert(t.id); people.updatePerson(u)
+                    }
+                }
+            } label: { Label("Add tag", systemImage: "tag") }
+        }
+        Divider()
+        Button(role: .destructive) { people.deletePerson(person) } label: {
+            Label("Delete", systemImage: "trash")
         }
     }
 
