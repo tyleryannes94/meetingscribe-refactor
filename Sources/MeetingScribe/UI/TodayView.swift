@@ -29,14 +29,22 @@ struct TodayView: View {
         feed
             .background(NDS.bg)
             .onAppear {
-            calendar.refreshUpcoming()
-            manager.refreshPastMeetings()
-            manager.backfillActionItemsIfNeeded()
-            manager.backfillPeopleIfNeeded()
-            manager.backfillSearchIndexIfNeeded()
-            manager.backfillEmbeddingsIfNeeded()
-            manager.backfillDecisionsIfNeeded()
-        }
+                calendar.refreshUpcoming()
+                manager.refreshPastMeetings()
+            }
+            .task {
+                // Defer the one-shot backfills (action items, people, search index,
+                // embeddings, decisions) off the first-paint frame so Today renders
+                // immediately. They're single-shot-per-session + off-main internally,
+                // so a short delay is harmless. (V5 TT-2)
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard !Task.isCancelled else { return }
+                manager.backfillActionItemsIfNeeded()
+                manager.backfillPeopleIfNeeded()
+                manager.backfillSearchIndexIfNeeded()
+                manager.backfillEmbeddingsIfNeeded()
+                manager.backfillDecisionsIfNeeded()
+            }
     }
 
     // MARK: - Feed (left column)
