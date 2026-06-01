@@ -22,7 +22,18 @@ struct PeopleInsightsView: View {
                     card(title: "Reconnect", icon: "person.crop.circle.badge.exclamationmark",
                          subtitle: "Haven't talked in a while") {
                         ForEach(cold, id: \.0.id) { person, last in
-                            row(person, trailing: Self.relative.localizedString(for: last, relativeTo: Date()))
+                            HStack(spacing: 6) {
+                                row(person, trailing: Self.relative.localizedString(for: last, relativeTo: Date()))
+                                // Inline reconnect: logs an interaction now so they
+                                // drop off the gone-cold list. (TP-8)
+                                Button {
+                                    people.bumpLastInteraction(personID: person.id, date: Date())
+                                } label: {
+                                    Image(systemName: "checkmark.circle")
+                                }
+                                .buttonStyle(.borderless).foregroundStyle(NDS.brand)
+                                .help("Mark reached out")
+                            }
                         }
                     }
                 }
