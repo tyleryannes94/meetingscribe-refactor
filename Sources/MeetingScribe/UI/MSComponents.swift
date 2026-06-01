@@ -57,6 +57,35 @@ extension MSSectionHeader where Trailing == EmptyView {
     }
 }
 
+/// One search field for the whole app (V5 SC-2). Replaces the divergent inline
+/// magnifying-glass + TextField + clear-button stacks. Esc clears; pass
+/// `autoFocus` to grab focus on appear.
+@available(macOS 14.0, *)
+struct MSSearchField: View {
+    let placeholder: String
+    @Binding var text: String
+    var autoFocus: Bool = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(NDS.textTertiary)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onExitCommand { text = "" }
+            if !text.isEmpty {
+                Button { text = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                    .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+        .onAppear { if autoFocus { focused = true } }
+    }
+}
+
 /// A redacted placeholder block for cold-cache loading states — show page
 /// structure instead of a blank/false-empty flash on first paint. Reduce-motion
 /// aware (no shimmer when the user asked for less motion). (V5 DI-1 / PP-2)
