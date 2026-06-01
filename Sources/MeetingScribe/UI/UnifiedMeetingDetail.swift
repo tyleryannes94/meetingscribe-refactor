@@ -23,7 +23,9 @@ struct UnifiedMeetingDetail: View {
 
     @StateObject var meetingChat = ChatSession()
 
-    @State var tab: DetailTab = .summary
+    @State var tab: DetailTab = .notes
+    /// Summary disclosure state within the combined Notes canvas (CN-1).
+    @State var summaryExpanded = true
     /// Whether we've applied the smart tab default for this meeting yet.
     /// Prevents tab from jumping when the user has already made a selection.
     @State private var hasAppliedTabDefault = false
@@ -92,9 +94,8 @@ struct UnifiedMeetingDetail: View {
             tabPicker
             Group {
                 switch tab {
-                case .summary:    summaryBody
+                case .notes:      combinedNotesBody
                 case .transcript: transcriptBody
-                case .notes:      notesEditor
                 case .chat:       chatBody
                 }
             }
@@ -262,11 +263,12 @@ struct UnifiedMeetingDetail: View {
         hasAppliedTabDefault = true
         switch mode {
         case .past:
-            // Defer until the body loads so we know if a summary exists.
+            // The Notes canvas already shows the summary up top, so it's the
+            // right default; expand the summary when one exists.
+            tab = .notes
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                let hasSummary = !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                if hasSummary { tab = .summary }
+                summaryExpanded = !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
         case .live:
             tab = .notes  // Notes while recording so you can type alongside the transcript.
