@@ -160,6 +160,7 @@ struct PersonDetailView: View {
     @EnvironmentObject var router: WorkspaceRouter
     @EnvironmentObject var calendar: CalendarService
     @EnvironmentObject var actionItems: ActionItemStore
+    @EnvironmentObject var decisions: DecisionStore
 
     let person: Person
     /// Called after the person is deleted so the list can clear its selection.
@@ -248,6 +249,7 @@ struct PersonDetailView: View {
                             encountersSection.id("nav-encounters")
                             if !current.meetingMentions.isEmpty { mentionedInSection }
                             meetingHistorySection.id("nav-meetings")
+                            decisionsSection
                             tasksSection.id("nav-tasks")
                             memoriesSection.id("nav-notes")
                             attachedNotesSection
@@ -872,6 +874,45 @@ struct PersonDetailView: View {
     /// Unified person timeline: recorded meetings (clickable) UNIONED with
     /// unrecorded calendar meetings, deduped, each badged. Previously this only
     /// showed recordings, so a manager's unrecorded 1:1s read empty. (U2-1, D1-5)
+    /// Decisions from meetings this person is linked to — a cross-tab surface so
+    /// commitments don't stay buried in one meeting's markdown. (V5, derived from
+    /// meetingMentions — no model change.)
+    @ViewBuilder
+    private var decisionsSection: some View {
+        let mine = decisions.decisions
+            .filter { current.meetingMentions.contains($0.meetingID) }
+            .sorted { $0.date > $1.date }
+            .prefix(8)
+        if !mine.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Decisions").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                ForEach(Array(mine)) { d in
+                    Button {
+                        NotificationCenter.default.post(
+                            name: .meetingScribeOpenEntity, object: nil,
+                            userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: d.meetingID).absoluteString])
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.seal").font(.system(size: 13))
+                                .foregroundStyle(NDS.brand.opacity(0.7))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(d.text).font(.system(size: 13.5)).foregroundStyle(NDS.textPrimary)
+                                    .lineLimit(2)
+                                Text("\(d.meetingTitle) · \(Self.dateFormatter.string(from: d.date))")
+                                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(10)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
     private var meetingHistorySection: some View {
         let recorded = manager.pastMeetings.filter(attendeeMatches)
         // Drop calendar meetings that line up with a recording (same ~minute).

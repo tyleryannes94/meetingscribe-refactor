@@ -57,6 +57,29 @@ struct MeetingCard: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contextMenu { rowMenu }   // right-click actions (V5 SC-7)
+    }
+
+    /// Right-click row actions. Past meetings get the full set; live/upcoming
+    /// just open.
+    @ViewBuilder
+    private var rowMenu: some View {
+        Button { onOpen() } label: { Label("Open", systemImage: "arrow.forward") }
+        if variant == .past {
+            Button {
+                let link = WorkspaceLink.url(kind: .meeting, id: meeting.id).absoluteString
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(link, forType: .string)
+            } label: { Label("Copy link", systemImage: "link") }
+            Button { manager.revealInFinder(meeting) } label: {
+                Label("Reveal in Finder", systemImage: "folder")
+            }
+            if manager.hasAudio(for: meeting) {
+                Button { manager.transcribeNow(meeting: meeting) } label: {
+                    Label("Re-transcribe", systemImage: "arrow.clockwise")
+                }
+            }
+        }
     }
 
     // MARK: - Time column
