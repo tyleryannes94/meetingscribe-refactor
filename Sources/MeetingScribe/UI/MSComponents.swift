@@ -57,6 +57,33 @@ extension MSSectionHeader where Trailing == EmptyView {
     }
 }
 
+/// A redacted placeholder block for cold-cache loading states — show page
+/// structure instead of a blank/false-empty flash on first paint. Reduce-motion
+/// aware (no shimmer when the user asked for less motion). (V5 DI-1 / PP-2)
+@available(macOS 14.0, *)
+struct MSSkeleton: View {
+    var lines: Int = 3
+    var lineHeight: CGFloat = 12
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shimmer = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(0..<max(1, lines), id: \.self) { i in
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(NDS.fieldBg)
+                    .frame(height: lineHeight)
+                    .frame(maxWidth: i == lines - 1 ? 180 : .infinity, alignment: .leading)
+            }
+        }
+        .opacity(reduceMotion ? 1 : (shimmer ? 0.55 : 1))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                   value: shimmer)
+        .onAppear { if !reduceMotion { shimmer = true } }
+        .accessibilityHidden(true)
+    }
+}
+
 /// A centered icon + title (+ optional message) for blank panes. Replaces the
 /// several bespoke "nothing here yet" stacks across the tabs.
 @available(macOS 14.0, *)

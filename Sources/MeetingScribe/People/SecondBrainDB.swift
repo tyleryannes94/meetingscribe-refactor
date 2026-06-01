@@ -78,6 +78,15 @@ final class SecondBrainDB {
             return false
         }
         exec("PRAGMA journal_mode=WAL;")
+        // Production pragma profile (V5 CB-3): broad speedup for search/recall/
+        // graph + removes a lock-contention crash vector. synchronous=NORMAL is
+        // safe under WAL; mmap/cache cut read syscalls; busy_timeout avoids
+        // SQLITE_BUSY throws under concurrent access.
+        exec("PRAGMA synchronous=NORMAL;")
+        exec("PRAGMA busy_timeout=5000;")
+        exec("PRAGMA mmap_size=268435456;")   // 256 MB
+        exec("PRAGMA cache_size=-16000;")      // ~16 MB page cache
+        exec("PRAGMA temp_store=MEMORY;")
         return true
     }
 
