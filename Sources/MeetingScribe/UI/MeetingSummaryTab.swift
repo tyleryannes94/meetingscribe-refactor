@@ -3,6 +3,106 @@ import AppKit
 
 @available(macOS 14.0, *)
 extension UnifiedMeetingDetail {
+    // MARK: - Enhanced Notes canvas (CN-1)
+
+    /// One canvas: the AI summary (collapsible, up top) + your editable notes
+    /// below, so you read the recap and write notes without switching tabs.
+    @ViewBuilder
+    var combinedNotesBody: some View {
+        switch mode {
+        case .past:
+            VStack(spacing: 0) {
+                outcomesStrip        // action items + decisions, always visible (TM-5)
+                summaryDisclosure
+                Divider().overlay(NDS.divider)
+                notesEditor
+            }
+        default:
+            // Live/upcoming: no finished summary yet — just the notes editor.
+            notesEditor
+        }
+    }
+
+    /// Outcomes (action items + decisions) lifted OUT of the summary-gated branch
+    /// so they're visible even before/without a summary. (TM-5)
+    @ViewBuilder
+    private var outcomesStrip: some View {
+        if let m = meeting {
+            let items = manager.actionItems.items(for: m.id)
+            let decs = manager.decisions.decisions.filter { $0.meetingID == m.id }
+            if !items.isEmpty || !decs.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Outcomes").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                    ForEach(items.prefix(5)) { item in
+                        HStack(spacing: 8) {
+                            Button {
+                                manager.actionItems.setStatus(
+                                    item.id, status: item.status == .completed ? .open : .completed)
+                            } label: {
+                                Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(item.status == .completed ? NDS.brand : NDS.textTertiary)
+                            }
+                            .buttonStyle(.borderless)
+                            Text(item.title).font(NDS.small).lineLimit(1)
+                                .strikethrough(item.status == .completed, color: NDS.textTertiary)
+                            if let owner = item.owner, !owner.isEmpty {
+                                Text(owner).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    ForEach(decs.prefix(3)) { d in
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.seal").font(.system(size: 12))
+                                .foregroundStyle(NDS.brand.opacity(0.7))
+                            Text(d.text).font(NDS.small).foregroundStyle(NDS.textSecondary).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(NDS.sidebarBg)
+                Divider().overlay(NDS.divider)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var summaryDisclosure: some View {
+        if !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { summaryExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: summaryExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10, weight: .semibold)).foregroundStyle(NDS.textTertiary)
+                        Label("Summary", systemImage: "sparkles")
+                            .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 6)
+                if summaryExpanded {
+                    followUpButton.padding(.horizontal).padding(.bottom, 8)
+                    ScrollView {
+                        MarkdownEditor(text: .constant(summary), isEditable: false)
+                            .padding(.horizontal, 8)
+                    }
+                    .frame(maxHeight: 320)
+                }
+            }
+            .background(NDS.sidebarBg)
+        } else if !bodyLoaded {
+            MSSkeleton(lines: 4).padding(14)
+        }
+        // Loaded + empty summary → render nothing; the notes editor takes the
+        // full height.
+    }
+
     @ViewBuilder
     var summaryBody: some View {
         switch mode {

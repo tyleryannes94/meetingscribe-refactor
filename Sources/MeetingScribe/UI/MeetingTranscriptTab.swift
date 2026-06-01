@@ -156,26 +156,24 @@ struct LiveTranscriptScroll: View {
     }
 }
 
-/// Tab order is intentional: Summary first (post-meeting review),
-/// then Transcript, then My Notes, then Ask AI.
-/// For live/upcoming meetings the default is Transcript or My Notes
-/// (see UnifiedMeetingDetail.applySmartTabDefault).
+/// Enhanced Notes canvas (V5 CN-1): the Summary and My Notes tabs are merged
+/// into one "Notes" canvas (summary up top, your editable notes below) so you
+/// read the recap and write notes without tab-switching. Transcript stays its
+/// own tab (long + navigable), Ask AI stays interactive.
 enum DetailTab: String, CaseIterable, Identifiable {
-    case summary, transcript, notes, chat
+    case notes, transcript, chat
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .summary:    return "Summary"
+        case .notes:      return "Notes"
         case .transcript: return "Transcript"
-        case .notes:      return "My Notes"
         case .chat:       return "Ask AI"
         }
     }
     var systemImage: String {
         switch self {
-        case .summary:    return "sparkles"
-        case .transcript: return "text.alignleft"
         case .notes:      return "note.text"
+        case .transcript: return "text.alignleft"
         case .chat:       return "bubble.left.and.sparkles"
         }
     }
