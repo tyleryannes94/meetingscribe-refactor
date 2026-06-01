@@ -226,28 +226,39 @@ struct PersonDetailView: View {
         // visible at once, with the AI chat embedded as a persistent right column
         // instead of a toggled rail.
         HSplitView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    identityPanel
-                    tagsEditSection
-                    if !current.photoRelativePaths.isEmpty { photosSection }
-                    contactRows
-                    if !current.bio.isEmpty || editingIdentity { notes }
-                    favoritesEditSection
-                    aiSuggestionsSection
-                    relationshipsSection
-                    encountersSection
-                    if !current.meetingMentions.isEmpty { mentionedInSection }
-                    meetingHistorySection
-                    tasksSection
-                    memoriesSection
-                    attachedNotesSection
-                    messagesSection
-                    provenanceFooter
+            // Pinned section jump-rail above the scroll so the long single-page
+            // profile stays navigable. (U3 — wayfinding)
+            ScrollViewReader { proxy in
+                VStack(spacing: 0) {
+                    sectionNav(proxy)
+                        .padding(.top, NDS.splitPaneTopInset)
+                        .padding(.horizontal, 28).padding(.bottom, 8)
+                        .background(NDS.bg)
+                    Divider().overlay(NDS.divider)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 22) {
+                            identityPanel.id("top")
+                            tagsEditSection.id("nav-tags")
+                            if !current.photoRelativePaths.isEmpty { photosSection }
+                            contactRows.id("nav-contact")
+                            if !current.bio.isEmpty || editingIdentity { notes }
+                            favoritesEditSection
+                            aiSuggestionsSection.id("nav-ai")
+                            relationshipsSection.id("nav-relationships")
+                            encountersSection.id("nav-encounters")
+                            if !current.meetingMentions.isEmpty { mentionedInSection }
+                            meetingHistorySection.id("nav-meetings")
+                            tasksSection.id("nav-tasks")
+                            memoriesSection.id("nav-notes")
+                            attachedNotesSection
+                            messagesSection.id("nav-messages")
+                            provenanceFooter
+                        }
+                        .padding(.horizontal, 28).padding(.bottom, 28).padding(.top, 16)
+                        .frame(maxWidth: 920, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
-                .padding(.horizontal, 28).padding(.bottom, 28).padding(.top, NDS.splitPaneTopInset)
-                .frame(maxWidth: 920, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(minWidth: 460, idealWidth: 640)
             .background(NDS.bg)
@@ -285,6 +296,51 @@ struct PersonDetailView: View {
         } message: {
             Text("This removes the person and all their encounters. This can't be undone.")
         }
+    }
+
+    // MARK: - Section jump-rail (U3)
+
+    /// Chips for the present sections; tapping scrolls the profile to that anchor.
+    @ViewBuilder
+    private func sectionNav(_ proxy: ScrollViewProxy) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(sectionNavItems, id: \.id) { item in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(item.id, anchor: .top)
+                        }
+                    } label: {
+                        Text(item.label)
+                            .font(NDS.tiny)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(NDS.fieldBg, in: Capsule())
+                            .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
+                            .foregroundStyle(NDS.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var sectionNavItems: [(id: String, label: String)] {
+        var items: [(id: String, label: String)] = [(id: "nav-tags", label: "Tags")]
+        let hasContact = !current.emails.filter { !$0.isEmpty }.isEmpty
+            || !current.phones.filter { !$0.isEmpty }.isEmpty
+            || !current.addresses.filter { !$0.isEmpty }.isEmpty
+            || current.birthday != nil
+        if hasContact { items.append((id: "nav-contact", label: "Contact")) }
+        items.append(contentsOf: [
+            (id: "nav-ai", label: "Suggestions"),
+            (id: "nav-relationships", label: "Relationships"),
+            (id: "nav-encounters", label: "Encounters"),
+            (id: "nav-meetings", label: "Meetings"),
+            (id: "nav-tasks", label: "Tasks"),
+            (id: "nav-notes", label: "Notes"),
+            (id: "nav-messages", label: "Messages"),
+        ])
+        return items
     }
 
     // MARK: - Inline identity editing
@@ -625,9 +681,7 @@ struct PersonDetailView: View {
                     .font(NDS.small).foregroundStyle(NDS.textTertiary)
             }
         }
-        .padding(12)
-        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
-        .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
+        .msCard(padding: 12)
     }
 
     /// Suggestions minus anything the user already accepted or dismissed.

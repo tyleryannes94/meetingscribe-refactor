@@ -44,12 +44,10 @@ struct PeopleInsightsView: View {
                 }
 
                 if (goneCold?.isEmpty ?? true) && (upcomingBirthdays?.isEmpty ?? true) && (mostActive?.isEmpty ?? true) {
-                    VStack(spacing: 8) {
-                        Image(systemName: "person.crop.circle").font(.system(size: 40)).foregroundStyle(.secondary)
-                        Text("Select a person, or add interactions to see insights here.")
-                            .foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity).padding(.top, 40)
+                    MSEmptyState(systemImage: "person.crop.circle",
+                                 title: "No insights yet",
+                                 message: "Select a person, or add interactions to see who to reconnect with here.")
+                        .padding(.top, 40)
                 }
             }
             .padding(.horizontal, 28).padding(.bottom, 28).padding(.top, NDS.splitPaneTopInset)
@@ -123,9 +121,7 @@ struct PeopleInsightsView: View {
             }
             VStack(spacing: 2) { content() }
         }
-        .padding(14)
-        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
-        .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
+        .msCard()
     }
 
     private func row(_ person: Person, trailing: String) -> some View {
