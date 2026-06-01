@@ -1004,17 +1004,12 @@ struct PersonDetailView: View {
     @ViewBuilder
     private func photoThumb(_ rel: String) -> some View {
         let url = people.photoURL(for: current, relativePath: rel)
-        // Downsampled + cached instead of a full-res decode per re-render. (E2-5)
-        if let img = ThumbnailCache.thumbnail(at: url, maxPixel: 72) {
-            Image(nsImage: img)
-                .resizable().scaledToFill()
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(NDS.hairline, lineWidth: 1))
-                .contextMenu {
-                    Button("Remove photo", role: .destructive) { people.removePhoto(rel, from: current.id) }
-                }
-        }
+        // Off-main decode + cache (E2-5 / V5 DI-2) — no synchronous decode on scroll.
+        CachedThumbnail(url: url, side: 72)
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(NDS.hairline, lineWidth: 1))
+            .contextMenu {
+                Button("Remove photo", role: .destructive) { people.removePhoto(rel, from: current.id) }
+            }
     }
 
     @ViewBuilder

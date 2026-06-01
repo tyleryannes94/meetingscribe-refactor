@@ -33,7 +33,17 @@ final class SecondBrainDB {
     private let log = Logger(subsystem: "com.tyleryannes.MeetingScribe", category: "SecondBrainDB")
     static let schemaVersion = 2
 
-    private var db: OpaquePointer?
+    private var handle: OpaquePointer?
+    private var didOpen = false
+    /// Lazily opens on first real use so the `sqlite3_open` + `quick_check` stays
+    /// OFF the synchronous launch path — `PeopleStore.shared` (which owns this) is
+    /// built during the app's `body`, so opening in `init` stalled launch. Still
+    /// `@MainActor`, so there's no data race; the open just happens when the
+    /// People tab first queries/rebuilds rather than at app start. (V5 PC-2)
+    private var db: OpaquePointer? {
+        if !didOpen { didOpen = true; open() }
+        return handle
+    }
 
     /// True when the database failed `quick_check` on open and was deleted +
     /// recreated empty. The owner (PeopleStore) repopulates it from the
@@ -47,8 +57,8 @@ final class SecondBrainDB {
         return dir.appendingPathComponent("secondbrain.db")
     }
 
-    init() { open() }
-    deinit { if db != nil { sqlite3_close(db) } }
+    init() {}   // open is lazy (PC-2)
+    deinit { if handle != nil { sqlite3_close(handle) } }
 
     private func open() {
         guard openConnection() else { return }
@@ -60,7 +70,7 @@ final class SecondBrainDB {
         // empty schema, and flag the owner to rebuild.
         if !quickCheck() {
             log.error("secondbrain.db failed quick_check — deleting and rebuilding from canonical JSON")
-            if db != nil { sqlite3_close(db); db = nil }
+            if handle != nil { sqlite3_close(handle); handle = nil }
             Self.removeDatabaseFiles()
             guard openConnection() else { return }
             needsRebuild = true
@@ -72,9 +82,9 @@ final class SecondBrainDB {
     func clearNeedsRebuild() { needsRebuild = false }
 
     private func openConnection() -> Bool {
-        guard sqlite3_open(Self.dbURL.path, &db) == SQLITE_OK else {
+        guard sqlite3_open(Self.dbURL.path, &handle) == SQLITE_OK else {
             log.error("Failed to open secondbrain.db")
-            db = nil
+            handle = nil
             return false
         }
         exec("PRAGMA journal_mode=WAL;")
