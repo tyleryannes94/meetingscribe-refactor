@@ -185,15 +185,9 @@ struct MeetingsView: View {
     // MARK: - Empty states
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "person.2")
-                .font(.system(size: 32))
-                .foregroundStyle(NDS.textTertiary)
-            Text(search.isEmpty ? "No meetings yet" : "No matches")
-                .font(.headline)
-            Text("Meetings appear after you record a call, or when your calendar syncs.")
-                .font(NDS.small).foregroundStyle(NDS.textSecondary)
-                .multilineTextAlignment(.center)
+        MSEmptyState(systemImage: "person.2",
+                     title: search.isEmpty ? "No meetings yet" : "No matches",
+                     message: "Meetings appear after you record a call, or when your calendar syncs.") {
             // Actionable empty state — don't dead-end the user. (UX9-1)
             if search.isEmpty {
                 Button {
@@ -202,11 +196,8 @@ struct MeetingsView: View {
                     Label("Record a meeting", systemImage: "record.circle")
                 }
                 .buttonStyle(.borderedProminent)
-                .padding(.top, 4)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40).padding(.horizontal, 20)
     }
 
     private var meetingEmptyDetail: some View {

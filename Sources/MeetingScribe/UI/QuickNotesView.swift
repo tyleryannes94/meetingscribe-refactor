@@ -39,18 +39,13 @@ struct QuickNotesView: View {
             .padding()
             Divider()
             if manager.quickNotes.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "waveform.badge.plus").font(.system(size: 36)).foregroundStyle(.secondary)
-                    Text("No notes yet").font(.headline)
-                    Text("Record a note, or import an audio file — it'll be transcribed locally.")
-                        .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    Button {
-                        importNote()
-                    } label: { Label("Import audio file", systemImage: "square.and.arrow.down") }
-                    .padding(.top, 4)
+                MSEmptyState(systemImage: "waveform.badge.plus",
+                             title: "No notes yet",
+                             message: "Record a note, or import an audio file — it'll be transcribed locally.") {
+                    Button { importNote() } label: {
+                        Label("Import audio file", systemImage: "square.and.arrow.down")
+                    }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding()
             } else {
                 List(selection: $selection) {
                     ForEach(manager.quickNotes) { note in
