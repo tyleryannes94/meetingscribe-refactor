@@ -35,6 +35,15 @@ extension UnifiedMeetingDetail {
                                 .padding(.horizontal, 8).padding(.vertical, 3)
                                 .background(NDS.fieldBg, in: Capsule())
                         }
+                        // One-click add every attendee not yet in People. (TM-9)
+                        if unaddedAttendeeCount(m) > 0 {
+                            Button { addAllAttendeesToPeople(m) } label: {
+                                Label("Add \(unaddedAttendeeCount(m)) to People",
+                                      systemImage: "person.crop.circle.badge.plus")
+                                    .font(.system(size: 11))
+                            }
+                            .buttonStyle(.borderless)
+                        }
                     }
                     .padding(.horizontal, 20)
                 }
@@ -511,6 +520,38 @@ extension UnifiedMeetingDetail {
             transcript: manager.transcriptMarkdown(for: m),
             tags: tagNames)
         ObsidianExporter.export(md, filename: m.slug)
+    }
+
+    // MARK: - Add all attendees to People (TM-9)
+
+    /// (fullName, email) for an attendee string "Name <email>".
+    private func parseAttendee(_ a: String) -> (name: String, email: String) {
+        let name = a.components(separatedBy: "<").first?
+            .trimmingCharacters(in: .whitespaces) ?? a
+        var email = ""
+        if let lt = a.firstIndex(of: "<"), let gt = a.firstIndex(of: ">"), lt < gt {
+            email = String(a[a.index(after: lt)..<gt]).trimmingCharacters(in: .whitespaces)
+        }
+        return (name.isEmpty ? a : name, email)
+    }
+
+    private func attendeeExists(_ a: String) -> Bool {
+        let p = parseAttendee(a)
+        return PeopleStore.shared.people.contains { person in
+            person.displayName.caseInsensitiveCompare(p.name) == .orderedSame
+            || (!p.email.isEmpty && person.emails.contains { $0.caseInsensitiveCompare(p.email) == .orderedSame })
+        }
+    }
+
+    func unaddedAttendeeCount(_ m: Meeting) -> Int {
+        m.attendees.filter { !attendeeExists($0) }.count
+    }
+
+    func addAllAttendeesToPeople(_ m: Meeting) {
+        for a in m.attendees where !attendeeExists(a) {
+            let p = parseAttendee(a)
+            _ = PeopleStore.shared.createPerson(displayName: p.name, email: p.email)
+        }
     }
 
     // MARK: - Calendar write-back (P4-1)
