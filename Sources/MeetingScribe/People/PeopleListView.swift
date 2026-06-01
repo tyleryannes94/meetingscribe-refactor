@@ -31,6 +31,11 @@ struct PeopleListView: View {
     @State private var bulkConfirmDelete = false
     @State private var bulkConfirmMerge = false
 
+    /// Frame-0 launch snapshot (PC-1) — loaded synchronously so the list is
+    /// populated instantly on cold open while PeopleStore hydrates off-main.
+    @State private var snapshotRows: [PeopleStore.ListSnapshot.Row] =
+        PeopleStore.loadListSnapshot()?.rows ?? []
+
     @AppStorage("people.sortOrder") private var sortRaw = PeopleSort.recent.rawValue
     private var sortOrder: PeopleSort { PeopleSort(rawValue: sortRaw) ?? .recent }
 
@@ -222,7 +227,17 @@ struct PeopleListView: View {
             Divider()
 
             if people.people.isEmpty {
-                emptyState
+                if snapshotRows.isEmpty {
+                    emptyState
+                } else {
+                    // Launch snapshot: instantly-populated rows while the store
+                    // hydrates; replaced by the live list the moment it loads. (PC-1)
+                    List {
+                        ForEach(snapshotRows) { row in SnapshotPersonRow(row: row) }
+                    }
+                    .listStyle(.inset)
+                    .allowsHitTesting(false)
+                }
             } else if selectMode {
                 List(selection: $multiSelection) {
                     ForEach(filtered) { person in
@@ -435,6 +450,34 @@ enum PeopleSort: String, CaseIterable, Identifiable {
         case .meetings: return "calendar"
         case .newest:   return "sparkles"
         }
+    }
+}
+
+/// Frame-0 snapshot row (PC-1) — same shape as PersonRow but driven by the tiny
+/// persisted digest, so the list looks identical before the store hydrates.
+@available(macOS 14.0, *)
+private struct SnapshotPersonRow: View {
+    let row: PeopleStore.ListSnapshot.Row
+    private static let relative: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated; return f
+    }()
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "person.circle.fill")
+                .font(.system(size: 26)).foregroundStyle(NDS.brand.opacity(0.7))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.name).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                if !row.subtitle.isEmpty {
+                    Text(row.subtitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            if let e = row.lastEpoch {
+                Text(Self.relative.localizedString(for: Date(timeIntervalSince1970: e), relativeTo: Date()))
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+        }
+        .padding(.vertical, 3)
     }
 }
 
