@@ -26,9 +26,23 @@ final class ChatSession: ObservableObject {
         if context != pageContext { pageContext = context }
     }
 
+    // Persist the conversation across relaunches (V5 TS-1) — it was in-memory
+    // only, so every restart wiped the chat.
+    private static let cacheName = "chat-session"
+    private static let cacheVersion = 1
+
     /// Default init for @StateObject. Must call `attach(manager:)`
     /// before any user message lands or tools will be unavailable.
-    init() {}
+    init() {
+        if let saved = VaultCache.load([AnthropicClient.Message].self,
+                                       name: Self.cacheName, version: Self.cacheVersion) {
+            messages = saved
+        }
+    }
+
+    private func persist() {
+        VaultCache.save(messages, name: Self.cacheName, version: Self.cacheVersion)
+    }
 
     func attach(manager: MeetingManager) {
         self.manager = manager
@@ -193,6 +207,7 @@ final class ChatSession: ObservableObject {
         var cut = messages.count - maxMessages
         while cut < messages.count && messages[cut].role != .user { cut += 1 }
         if cut > 0 && cut < messages.count { messages.removeFirst(cut) }
+        persist()
     }
 
     /// All Chats go through the local Ollama instance.
@@ -212,6 +227,7 @@ final class ChatSession: ObservableObject {
     func reset() {
         messages = []
         lastError = nil
+        persist()
     }
 
     // MARK: - Retrieve-then-ground (C2-2)

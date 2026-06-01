@@ -86,6 +86,9 @@ struct TodayView: View {
                 // years on today's date. (C2-9/C2-6)
                 onThisDaySection
 
+                // Recent voice notes — the one surface Today never referenced. (TT-6)
+                recentNotesSection
+
                 // People suggestions below meetings — they're context, not actions
                 SuggestedPeopleView()
 
@@ -308,6 +311,46 @@ struct TodayView: View {
         case 28...:   return "\(days / 30) month\(days / 30 == 1 ? "" : "s") ago"
         case 7...:    return "\(days / 7) week\(days / 7 == 1 ? "" : "s") ago"
         default:      return "\(days) days ago"
+        }
+    }
+
+    // MARK: - Recent notes (TT-6)
+
+    private var recentNotes: [QuickNote] {
+        manager.quickNotes.sorted { $0.createdAt > $1.createdAt }.prefix(3).map { $0 }
+    }
+
+    @ViewBuilder
+    private var recentNotesSection: some View {
+        let notes = recentNotes
+        if !notes.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Recent notes", systemImage: "waveform")
+                        .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                    Spacer()
+                    Button("All") { router.select(.notes) }
+                        .font(NDS.small).buttonStyle(.borderless)
+                }
+                ForEach(notes) { n in
+                    Button { router.select(.notes) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "waveform").foregroundStyle(NDS.brand.opacity(0.7))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(n.title).font(.system(size: 13.5, weight: .medium)).lineLimit(1)
+                                if !n.snippet.isEmpty {
+                                    Text(n.snippet).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(10)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 
