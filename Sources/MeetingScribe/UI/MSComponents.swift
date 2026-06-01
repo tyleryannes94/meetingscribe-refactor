@@ -116,15 +116,18 @@ struct MSSkeleton: View {
 /// A centered icon + title (+ optional message) for blank panes. Replaces the
 /// several bespoke "nothing here yet" stacks across the tabs.
 @available(macOS 14.0, *)
-struct MSEmptyState: View {
+struct MSEmptyState<Actions: View>: View {
     let systemImage: String
     let title: String
     var message: String?
+    @ViewBuilder var actions: () -> Actions
 
-    init(systemImage: String, title: String, message: String? = nil) {
+    init(systemImage: String, title: String, message: String? = nil,
+         @ViewBuilder actions: @escaping () -> Actions) {
         self.systemImage = systemImage
         self.title = title
         self.message = message
+        self.actions = actions
     }
 
     var body: some View {
@@ -137,8 +140,16 @@ struct MSEmptyState: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
+            actions().padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+    }
+}
+
+@available(macOS 14.0, *)
+extension MSEmptyState where Actions == EmptyView {
+    init(systemImage: String, title: String, message: String? = nil) {
+        self.init(systemImage: systemImage, title: title, message: message) { EmptyView() }
     }
 }
