@@ -89,11 +89,49 @@ final class PeopleStore: ObservableObject {
                 let snapshot = Cache(people: p, encounters: e, suggestions: s,
                                      dismissedSignatures: Array(self.dismissedSignatures),
                                      extractedMeetingIDs: Array(self.extractedMeetingIDs))
-                DispatchQueue.global(qos: .utility).async { self.writeCache(snapshot) }
+                // Launch Snapshot (PC-1): a tiny per-row digest the People list
+                // renders synchronously on the next cold open while the full
+                // store hydrates off-main.
+                let listSnap = Self.buildListSnapshot(p)
+                DispatchQueue.global(qos: .utility).async {
+                    self.writeCache(snapshot)
+                    VaultCache.save(listSnap, name: Self.listSnapshotName, version: Self.listSnapshotVersion)
+                }
             }
     }
 
     private var cacheCancellable: AnyCancellable?
+
+    // MARK: - Launch snapshot (PC-1)
+
+    static let listSnapshotName = "people-list"
+    static let listSnapshotVersion = 1
+
+    struct ListSnapshot: Codable {
+        struct Row: Codable, Identifiable, Hashable {
+            var id: String
+            var name: String
+            var subtitle: String
+            var lastEpoch: Double?
+        }
+        var rows: [Row]
+    }
+
+    private static func buildListSnapshot(_ people: [Person]) -> ListSnapshot {
+        let rows = people.sorted(by: recencyThenName).prefix(200).map { p in
+            ListSnapshot.Row(
+                id: p.id,
+                name: p.displayName,
+                subtitle: [p.role, p.company].filter { !$0.isEmpty }.joined(separator: " · "),
+                lastEpoch: p.lastInteractionAt?.timeIntervalSince1970)
+        }
+        return ListSnapshot(rows: Array(rows))
+    }
+
+    /// Read the persisted People-list snapshot (frame-0 render before hydrate).
+    static func loadListSnapshot() -> ListSnapshot? {
+        VaultCache.load(ListSnapshot.self, name: listSnapshotName, version: listSnapshotVersion)
+    }
 
     // MARK: - Index (SQLite/FTS5)
 
