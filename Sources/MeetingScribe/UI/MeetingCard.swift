@@ -252,7 +252,7 @@ struct MeetingCard: View {
             .foregroundStyle(NDS.selectColor("orange"))
             .padding(.horizontal, 8).padding(.vertical, 2)
             .background(NDS.selectColor("orange").opacity(0.12), in: Capsule())
-        } else if hasFile("transcript.md") {
+        } else if transcriptReady {
             HStack(spacing: 5) {
                 Circle().fill(NDS.selectColor("green")).frame(width: 6, height: 6)
                 Text("Ready")
@@ -313,12 +313,19 @@ struct MeetingCard: View {
     private func durationMinutes() -> Int {
         max(0, Int(meeting.endDate.timeIntervalSince(meeting.startDate) / 60))
     }
-    private func hasFile(_ name: String) -> Bool {
-        let primary = tagStore.primaryTag(for: meeting)
-        let dir = manager.store.directory(for: meeting, primaryTag: primary)
-        guard let s = try? String(contentsOf: dir.appendingPathComponent(name),
-                                  encoding: .utf8) else { return false }
-        return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// Transcript-ready status WITHOUT reading the file. Previously `pastStatus`
+    /// called `String(contentsOf: transcript.md)` on every body eval — for every
+    /// row, every scroll — the #1 list jank/hang vector (V5 PR-1). The health DTO
+    /// already records whether the transcript is non-empty; only fall back to a
+    /// cheap existence *stat* for older meetings that predate health.
+    private var transcriptReady: Bool {
+        switch meeting.health?.status {
+        case .ok, .partial, .fallbackUsed: return true
+        case .noTranscript: return false
+        case .none:
+            let dir = manager.store.directory(for: meeting, primaryTag: tagStore.primaryTag(for: meeting))
+            return FileManager.default.fileExists(atPath: dir.appendingPathComponent("transcript.md").path)
+        }
     }
 }
 
