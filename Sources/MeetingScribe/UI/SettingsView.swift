@@ -101,6 +101,7 @@ struct SettingsView: View {
                         Button("Choose…") { pickFolder() }
                     }
                 }
+                PhoneAccessSection()
                 Section("Capture") {
                     Toggle("Record microphone", isOn: $captureMic)
                     Toggle("Record system audio", isOn: $captureSystem)
@@ -898,5 +899,116 @@ struct OllamaStatusRow: View {
         statusText = ok
             ? "Started ollama serve. Logs: /tmp/meetingscribe-ollama.log"
             : "Auto-start failed. Try `brew services start ollama` in Terminal."
+    }
+}
+
+// MARK: - Phone access (embedded web server)
+
+/// Settings card for the embedded web server that lets an iPhone browser
+/// read/edit the vault over the LAN or Tailscale. Talks to the shared
+/// `WebServerController` singleton, so toggling here drives the same server
+/// the app starts at launch.
+@available(macOS 14.0, *)
+struct PhoneAccessSection: View {
+    @ObservedObject private var web = WebServerController.shared
+    @State private var enabled = AppSettings.shared.webServerEnabled
+    @State private var port = String(AppSettings.shared.webServerPort)
+    @State private var endpoints: [WebServerController.Endpoint] = []
+    @State private var qr: NSImage?
+    @State private var copied = false
+
+    var body: some View {
+        Section("Phone access (web)") {
+            Toggle("Serve my vault to phone browsers", isOn: $enabled)
+                .onChange(of: enabled) { _, on in
+                    web.setEnabled(on)
+                    refresh()
+                }
+
+            Text("Browse and edit your meetings, people, projects, and tasks from your phone — all served straight off this Mac. Nothing is uploaded to a cloud database. Works on the same Wi-Fi; pair with Tailscale (free) to reach it from anywhere. See docs/PHONE_ACCESS.md.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            HStack {
+                Text("Port")
+                TextField("8765", text: $port)
+                    .frame(width: 80)
+                    .multilineTextAlignment(.trailing)
+                Button("Apply") {
+                    if let p = Int(port), (1024...65535).contains(p) {
+                        web.setPort(p)
+                        refresh()
+                    }
+                }
+            }
+
+            if web.isRunning {
+                Label("Running", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green).font(.callout)
+            } else if let err = web.lastError {
+                Label(err, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).font(.caption)
+            }
+
+            if web.isRunning {
+                if let qr {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 6) {
+                            Image(nsImage: qr)
+                                .resizable().interpolation(.none)
+                                .frame(width: 168, height: 168)
+                                .background(Color.white)
+                                .cornerRadius(8)
+                            Text("Scan with your phone camera")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                }
+
+                ForEach(endpoints) { endpoint in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(endpoint.label).font(.caption).foregroundStyle(.secondary)
+                            Text(endpoint.url).font(.system(.caption, design: .monospaced))
+                                .lineLimit(1).truncationMode(.middle)
+                        }
+                        Spacer()
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(endpoint.url, forType: .string)
+                            copied = true
+                        } label: { Image(systemName: "doc.on.doc") }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                if copied {
+                    Text("Link copied").font(.caption2).foregroundStyle(.green)
+                }
+
+                Button(role: .destructive) {
+                    web.regenerateToken()
+                    refresh()
+                } label: {
+                    Label("Regenerate access token", systemImage: "arrow.triangle.2.circlepath")
+                }
+                Text("Regenerating signs every paired phone out. Re-scan the new QR code to reconnect.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { refresh() }
+    }
+
+    private func refresh() {
+        enabled = AppSettings.shared.webServerEnabled
+        port = String(AppSettings.shared.webServerPort)
+        endpoints = web.isRunning ? web.endpoints() : []
+        // QR encodes the first endpoint (Tailscale preferred, else LAN).
+        if web.isRunning, let first = endpoints.first {
+            qr = web.qrImage(for: first.url)
+        } else {
+            qr = nil
+        }
+        copied = false
     }
 }

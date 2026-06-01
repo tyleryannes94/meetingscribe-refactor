@@ -172,6 +172,13 @@ struct MeetingScribeApp: App {
         chatSession.attach(manager: manager)
         observeSettingsChanges()
 
+        // Phone access: wire the embedded web server to the live stores and
+        // start it if the user has enabled it. Reads/writes flow through the
+        // same @MainActor stores the desktop UI uses, so edits from a phone
+        // get persistence, index updates, and dedup for free. (Off by default.)
+        WebServerController.shared.configure(manager: manager)
+        WebServerController.shared.startIfEnabled()
+
         // Wire the iCloud inbox watcher — processes files dropped by iPhone
         // Shortcuts into vault/_inbox/. Without this, Shortcut-to-MeetingScribe
         // flows (quick notes, voice notes, action items) are silently ignored.

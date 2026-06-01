@@ -73,6 +73,15 @@ final class AppSettings {
         /// summary) and records into an orphan folder → silent total data loss.
         /// Gated OFF until that path is finished. See E3-1.
         static let useScribeCoreDaemon = "useScribeCoreDaemon"
+        /// Embedded web server (phone access) — off by default.
+        static let webServerEnabled = "webServerEnabled"
+        /// Port the embedded web server listens on. Default 8765.
+        static let webServerPort = "webServerPort"
+        /// Shared access token the phone presents to read/write the vault. A
+        /// LAN/Tailscale-scoped secret, generated on first launch of the
+        /// feature. Stored here (not the Keychain) for simplicity — it grants
+        /// no more than a logged-in desktop session already has.
+        static let webServerToken = "webServerToken"
     }
 
     /// The recommended local model. Qwen 2.5 7B is the strongest small
@@ -263,6 +272,31 @@ final class AppSettings {
     var allowRemoteOllamaEndpoint: Bool {
         get { defaults.object(forKey: Keys.allowRemoteOllamaEndpoint) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.allowRemoteOllamaEndpoint) }
+    }
+
+    // MARK: - Phone access (embedded web server)
+
+    /// Whether the embedded web server (browse/edit from a phone browser) is
+    /// running. Off by default — opt in from Settings → Phone access.
+    var webServerEnabled: Bool {
+        get { defaults.object(forKey: Keys.webServerEnabled) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.webServerEnabled) }
+    }
+
+    /// TCP port the web server binds. Default 8765.
+    var webServerPort: Int {
+        get {
+            let v = defaults.integer(forKey: Keys.webServerPort)
+            return v == 0 ? 8765 : v
+        }
+        set { defaults.set(newValue, forKey: Keys.webServerPort) }
+    }
+
+    /// Shared bearer/cookie token the phone presents on every request. Empty
+    /// until first configured; `WebServerController` generates one on launch.
+    var webServerToken: String {
+        get { defaults.string(forKey: Keys.webServerToken) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.webServerToken) }
     }
 
     var captureMic: Bool {

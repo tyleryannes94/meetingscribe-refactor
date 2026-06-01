@@ -26,5 +26,11 @@
          outside the bundle. -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
+    <!-- Embedded web server (Phone access): the app opens a listening TCP
+         socket so an iPhone browser on the LAN / over Tailscale can read and
+         edit the vault. Without network.server, NWListener can't bind. The
+         server is off by default and gated behind a Settings toggle + token. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
 </dict>
 </plist>
