@@ -86,6 +86,13 @@ final class HTTPServer: @unchecked Sendable {
     private var listener: NWListener?
     private var handler: Handler?
 
+    /// Strong references to in-flight connections, keyed by identity. Without
+    /// this the `HTTPConnection` would deallocate the instant `accept` returns
+    /// (its NW callbacks hold only `weak self`), so it would accept the socket
+    /// and then never reply. Guarded by `connectionsLock`.
+    private var connections: [ObjectIdentifier: HTTPConnection] = [:]
+    private let connectionsLock = NSLock()
+
     var isRunning: Bool { listener != nil }
 
     /// Starts listening on `port`. Throws if the port can't be bound (e.g. in
@@ -123,11 +130,26 @@ final class HTTPServer: @unchecked Sendable {
     func stop() {
         listener?.cancel()
         listener = nil
+        connectionsLock.lock()
+        let live = connections.values
+        connections.removeAll()
+        connectionsLock.unlock()
+        for conn in live { conn.cancel() }
     }
 
     private func accept(_ connection: NWConnection) {
         guard let handler else { connection.cancel(); return }
         let conn = HTTPConnection(connection: connection, queue: queue, handler: handler)
+        let key = ObjectIdentifier(conn)
+        connectionsLock.lock()
+        connections[key] = conn          // retain until it finishes
+        connectionsLock.unlock()
+        conn.onClose = { [weak self] in
+            guard let self else { return }
+            self.connectionsLock.lock()
+            self.connections[key] = nil
+            self.connectionsLock.unlock()
+        }
         conn.start()
     }
 }
@@ -142,6 +164,12 @@ private final class HTTPConnection: @unchecked Sendable {
     /// Cap total request size (headers + body) to avoid unbounded growth.
     private let maxRequestBytes = 16 * 1024 * 1024
 
+    /// Invoked exactly once when the connection finishes, so the server can drop
+    /// its strong reference. Guarded by `closedFlag`.
+    var onClose: (() -> Void)?
+    private var closed = false
+    private let closedLock = NSLock()
+
     init(connection: NWConnection, queue: DispatchQueue, handler: @escaping HTTPServer.Handler) {
         self.connection = connection
         self.queue = queue
@@ -152,7 +180,7 @@ private final class HTTPConnection: @unchecked Sendable {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
-                self?.connection.cancel()
+                self?.cancel()
             default:
                 break
             }
@@ -161,10 +189,20 @@ private final class HTTPConnection: @unchecked Sendable {
         pump()
     }
 
+    /// Tears the connection down and notifies the server once.
+    func cancel() {
+        closedLock.lock()
+        let alreadyClosed = closed
+        closed = true
+        closedLock.unlock()
+        connection.cancel()
+        if !alreadyClosed { onClose?() }
+    }
+
     private func pump() {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
             guard let self else { return }
-            if error != nil { self.connection.cancel(); return }
+            if error != nil { self.cancel(); return }
             if let data, !data.isEmpty { self.buffer.append(data) }
 
             if let request = self.parseIfComplete() {
@@ -172,7 +210,7 @@ private final class HTTPConnection: @unchecked Sendable {
             } else if self.buffer.count > self.maxRequestBytes {
                 self.respondAndClose(.error(413, "Request too large"))
             } else if isComplete {
-                self.connection.cancel()
+                self.cancel()
             } else {
                 self.pump()
             }
@@ -253,7 +291,7 @@ private final class HTTPConnection: @unchecked Sendable {
         var out = Data(head.utf8)
         out.append(response.body)
         connection.send(content: out, completion: .contentProcessed { [weak self] _ in
-            self?.connection.cancel()
+            self?.cancel()
         })
     }
 
