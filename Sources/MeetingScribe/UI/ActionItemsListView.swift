@@ -101,21 +101,94 @@ extension ActionItemsView {
     }
 
     var listBody: some View {
-        ScrollView {
-            LazyVStack(spacing: 8) {
-                switch groupBy {
-                case .none:
-                    ForEach(projectFiltered) { row(for: $0) }
-                default:
-                    ForEach(groupedKeys, id: \.self) { key in
-                        if let rows = grouped[key] {
-                            section(title: key, items: rows)
+        VStack(spacing: 0) {
+            taskSelectToolbar
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    switch groupBy {
+                    case .none:
+                        ForEach(projectFiltered) { selectableRow($0) }
+                    default:
+                        ForEach(groupedKeys, id: \.self) { key in
+                            if let rows = grouped[key] {
+                                section(title: key, items: rows)
+                            }
                         }
                     }
                 }
+                .padding(16)
             }
-            .padding(16)
         }
+    }
+
+    /// Wraps a row with a selection checkbox in multi-select mode. (TK-3)
+    @ViewBuilder
+    func selectableRow(_ item: ActionItem) -> some View {
+        if taskSelectMode {
+            HStack(spacing: 8) {
+                Button { toggleTaskSelection(item.id) } label: {
+                    Image(systemName: taskSelection.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(taskSelection.contains(item.id) ? NDS.brand : NDS.textTertiary)
+                }
+                .buttonStyle(.borderless)
+                row(for: item)
+            }
+        } else {
+            row(for: item)
+        }
+    }
+
+    /// Select toggle + bulk action bar (TK-3/TK-4): set status/priority/delete.
+    @ViewBuilder
+    var taskSelectToolbar: some View {
+        HStack(spacing: 10) {
+            Button(taskSelectMode ? "Done" : "Select") {
+                taskSelectMode.toggle()
+                if !taskSelectMode { taskSelection = [] }
+            }
+            .font(NDS.small)
+            if taskSelectMode && !taskSelection.isEmpty {
+                Text("\(taskSelection.count) selected")
+                    .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                Spacer()
+                Menu {
+                    ForEach(ActionItem.Status.allCases) { s in
+                        Button(s.label) { bulkSetStatus(s) }
+                    }
+                } label: { Label("Status", systemImage: "circle.lefthalf.filled") }
+                .menuStyle(.borderlessButton).fixedSize()
+                Menu {
+                    ForEach(ActionItem.Priority.allCases) { p in
+                        Button(p.label) { bulkSetPriority(p) }
+                    }
+                } label: { Label("Priority", systemImage: "flag") }
+                .menuStyle(.borderlessButton).fixedSize()
+                Button(role: .destructive) { bulkDeleteTasks() } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            } else {
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Divider().overlay(NDS.divider) }
+    }
+
+    func toggleTaskSelection(_ id: String) {
+        if taskSelection.contains(id) { taskSelection.remove(id) } else { taskSelection.insert(id) }
+    }
+    func bulkSetStatus(_ s: ActionItem.Status) {
+        for id in taskSelection { store.setStatus(id, status: s) }
+    }
+    func bulkSetPriority(_ p: ActionItem.Priority) {
+        for id in taskSelection { store.setPriority(id, priority: p) }
+    }
+    func bulkDeleteTasks() {
+        let ids = taskSelection
+        for id in ids { store.delete(id) }
+        taskSelection = []
+        taskSelectMode = false
     }
 
     // MARK: - Filtered data
@@ -241,7 +314,7 @@ extension ActionItemsView {
                 Spacer()
             }
             .padding(.top, 8)
-            ForEach(items) { row(for: $0) }
+            ForEach(items) { selectableRow($0) }
         }
     }
 

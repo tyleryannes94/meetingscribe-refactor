@@ -36,6 +36,13 @@ struct ActionItemsView: View {
     @State var tableSort: TableSort = .priority
     @State var tableSortAscending = false
 
+    // Multi-select + bulk actions (TK-3/TK-4).
+    @State var taskSelectMode = false
+    @State var taskSelection: Set<String> = []
+    // Resizable, persisted Tasks sidebar width (TK-8 — was a fixed 230).
+    @AppStorage("tasks.railWidth") var railWidth: Double = 230
+    @State var railDragStart: Double?
+
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board
         var id: String { rawValue }
@@ -107,8 +114,22 @@ struct ActionItemsView: View {
                         selectedProjectID: $selectedProjectID,
                         selectedMeetingID: $selectedMeetingID,
                         selectedInitiativeID: $selectedInitiativeID)
-                .frame(width: 230)
+                .frame(width: CGFloat(railWidth))
+            // Draggable divider — resizes + persists the sidebar width. (TK-8)
             Divider().overlay(NDS.divider)
+                .background(Color.clear.frame(width: 6).contentShape(Rectangle()))
+                .gesture(
+                    DragGesture()
+                        .onChanged { v in
+                            let start = railDragStart ?? railWidth
+                            if railDragStart == nil { railDragStart = railWidth }
+                            railWidth = min(360, max(180, start + Double(v.translation.width)))
+                        }
+                        .onEnded { _ in railDragStart = nil }
+                )
+                .onHover { inside in
+                    if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                }
             Group {
                 if let tid = selectedTaskID, store.items.contains(where: { $0.id == tid }) {
                     TaskPageView(store: store, itemID: tid,
