@@ -276,8 +276,19 @@ struct PeopleListView: View {
             } label: { Label("Add tag", systemImage: "tag") }
         }
         Divider()
-        Button(role: .destructive) { people.deletePerson(person) } label: {
+        Button(role: .destructive) { deleteWithUndo(person) } label: {
             Label("Delete", systemImage: "trash")
+        }
+    }
+
+    /// Delete a person but offer an Undo toast that restores them. (V5 DI-3)
+    private func deleteWithUndo(_ person: Person) {
+        let snapshot = person
+        let encounters = people.encounters(for: person.id)
+        if selection == person.id { selection = nil }
+        people.deletePerson(person)
+        ToastCenter.shared.show("Deleted \(person.displayName)", undoTitle: "Undo") {
+            people.restore(person: snapshot, encounters: encounters)
         }
     }
 
@@ -369,12 +380,20 @@ struct PeopleListView: View {
     }
 
     private func deleteSelection() {
-        for id in multiSelection {
-            if let p = people.person(by: id) { people.deletePerson(p) }
+        // Snapshot for Undo before the files are removed.
+        let snapshots: [(Person, [Encounter])] = multiSelection.compactMap { id in
+            guard let p = people.person(by: id) else { return nil }
+            return (p, people.encounters(for: id))
         }
+        for (p, _) in snapshots { people.deletePerson(p) }
         if let sel = selection, multiSelection.contains(sel) { selection = nil }
+        let count = snapshots.count
         multiSelection = []
         selectMode = false
+        guard count > 0 else { return }
+        ToastCenter.shared.show("Deleted \(count) \(count == 1 ? "person" : "people")", undoTitle: "Undo") {
+            for (p, encs) in snapshots { people.restore(person: p, encounters: encs) }
+        }
     }
 
     /// "N low-signal contacts hidden" toggle (§12.4) — only when the unfiltered
