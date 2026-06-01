@@ -37,6 +37,10 @@ struct UnifiedMeetingDetail: View {
     @State var saveTimer: Timer?
     @State var transcript: String = ""
     @State var summary: String = ""
+    /// Tri-state loading flag (V5 PP-1): false while a cold body load is in
+    /// flight so empty content reads as "loading" (skeleton), not the
+    /// error-looking "No transcript / No summary".
+    @State var bodyLoaded: Bool = false
     @State var titleDraft: String = ""
     @State var descriptionDraft: String = ""
     @State var editingHeader: Bool = false
@@ -169,13 +173,16 @@ struct UnifiedMeetingDetail: View {
 
         guard let m = meeting else {
             transcript = ""; summary = ""; noteDraft = ""; lastSavedDraft = ""
-            audioURLs = []; backlinks = []; return
+            audioURLs = []; backlinks = []; bodyLoaded = true; return
         }
 
         // 1. Synchronous cache snapshot — instant first paint.
         let cached = manager.bodyCache.cached(m.id)
         transcript = cached.transcript
         summary = cached.summary
+        // A warm cache hit is "loaded"; a cold miss stays "loading" until the
+        // async refresh commits, so we show a skeleton instead of a false empty.
+        bodyLoaded = !(cached.transcript.isEmpty && cached.summary.isEmpty)
         noteDraft = cached.notes
         lastSavedDraft = cached.notes
         titleDraft = m.userTitle ?? m.title
@@ -199,6 +206,7 @@ struct UnifiedMeetingDetail: View {
             guard !Task.isCancelled, meeting?.id == viewedID else { return }
             transcript = fresh.transcript
             summary = fresh.summary
+            bodyLoaded = true   // refresh landed — empty now means truly empty (PP-1)
             if noteDraft == lastSavedDraft {
                 // Don't clobber in-progress edits.
                 noteDraft = fresh.notes

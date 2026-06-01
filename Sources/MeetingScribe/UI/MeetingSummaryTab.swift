@@ -27,7 +27,8 @@ extension UnifiedMeetingDetail {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if summary.isEmpty {
-                    emptySummaryView
+                    if bodyLoaded { emptySummaryView }
+                    else { MSSkeleton(lines: 6).padding(24) }   // loading, not empty (PP-1)
                 } else {
                     // Read-only markdown renderer — true heading sizes,
                     // indented lists, monospaced code. MarkdownEditor on
