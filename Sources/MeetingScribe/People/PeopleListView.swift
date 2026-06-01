@@ -11,6 +11,9 @@ struct PeopleListView: View {
     @StateObject private var importer = PeopleImportController()
 
     @State private var query = ""
+    /// Debounced mirror of `query` — the filter/FTS pipeline runs off this so it
+    /// doesn't re-run on every keystroke. (V5 PR-4)
+    @State private var debouncedQuery = ""
     /// AND-filter: a person must carry EVERY selected tag to show. Empty = all.
     @State private var tagFilters: Set<String> = []
     @State private var showTagManager = false
@@ -34,9 +37,9 @@ struct PeopleListView: View {
     private var filtered: [Person] {
         // The store filters by a single tag; apply the remaining AND-tags and the
         // chosen sort here. Search relevance order is preserved while querying.
-        let base = people.filteredPeople(query: query, tagID: tagFilters.first, includeGhosts: showGhosts)
+        let base = people.filteredPeople(query: debouncedQuery, tagID: tagFilters.first, includeGhosts: showGhosts)
         let tagged = tagFilters.count <= 1 ? base : base.filter { tagFilters.isSubset(of: $0.tagIDs) }
-        guard query.isEmpty else { return tagged }
+        guard debouncedQuery.isEmpty else { return tagged }
         return sorted(tagged)
     }
 
@@ -72,6 +75,14 @@ struct PeopleListView: View {
             }
         }
         .task { people.rebuildIndexIfNeeded() }   // builds the FTS5 index for search
+        .onChange(of: query) { _, new in
+            // Clearing is instant; typing settles for 180ms before the pipeline runs.
+            if new.isEmpty { debouncedQuery = ""; return }
+            Task {
+                try? await Task.sleep(nanoseconds: 180_000_000)
+                if query == new { debouncedQuery = new }
+            }
+        }
         .sheet(isPresented: $showAdd) {
             AddPersonSheet(seedTagID: tagFilters.first)
                 .environmentObject(people)
@@ -334,7 +345,7 @@ struct PeopleListView: View {
     /// list is actually hiding ghosts.
     @ViewBuilder
     private var ghostFooter: some View {
-        if query.isEmpty, tagFilters.isEmpty, people.ghostCount > 0 {
+        if debouncedQuery.isEmpty, tagFilters.isEmpty, people.ghostCount > 0 {
             Button {
                 withAnimation { showGhosts.toggle() }
             } label: {

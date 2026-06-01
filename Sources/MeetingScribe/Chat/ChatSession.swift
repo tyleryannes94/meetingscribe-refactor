@@ -180,6 +180,19 @@ final class ChatSession: ObservableObject {
             lastError = error.localizedDescription
             log.error("Chat failed: \(error.localizedDescription, privacy: .public)")
         }
+        trimHistory()
+    }
+
+    /// Bound the in-memory conversation so a long-running chat can't grow without
+    /// limit and get OOM-killed. (V5 PS-2) Trims oldest turns but only at a
+    /// `.user` boundary, so tool_use/tool_result pairs and the user/assistant
+    /// alternation stay valid.
+    private let maxMessages = 60
+    private func trimHistory() {
+        guard messages.count > maxMessages else { return }
+        var cut = messages.count - maxMessages
+        while cut < messages.count && messages[cut].role != .user { cut += 1 }
+        if cut > 0 && cut < messages.count { messages.removeFirst(cut) }
     }
 
     /// All Chats go through the local Ollama instance.
