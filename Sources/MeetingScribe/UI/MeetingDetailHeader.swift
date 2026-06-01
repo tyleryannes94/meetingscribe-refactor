@@ -645,6 +645,9 @@ extension UnifiedMeetingDetail {
 private struct AttendeeChip: View {
     let attendee: String
     @EnvironmentObject var router: WorkspaceRouter
+    // Observe the store so the "already in People" dot updates live after you
+    // create/tag a person — it read PeopleStore.shared statically before. (SP-3)
+    @EnvironmentObject var people: PeopleStore
 
     private var initials: String {
         // Extract display name (before <email>)
@@ -679,7 +682,7 @@ private struct AttendeeChip: View {
     }
 
     private var existingPerson: Person? {
-        PeopleStore.shared.people.first {
+        people.people.first {
             $0.displayName.caseInsensitiveCompare(fullName) == .orderedSame
             || (!email.isEmpty && $0.emails.contains { $0.caseInsensitiveCompare(email) == .orderedSame })
         }
@@ -732,7 +735,7 @@ private struct AttendeeChip: View {
         if let p = existingPerson {
             router.openPerson(p.id)
         } else {
-            let p = PeopleStore.shared.createPerson(displayName: fullName, email: email)
+            let p = people.createPerson(displayName: fullName, email: email)
             router.openPerson(p.id)
         }
     }

@@ -203,19 +203,8 @@ struct PeopleListView: View {
                     .padding(.horizontal).padding(.bottom, 6)
             }
 
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").foregroundStyle(NDS.textTertiary)
-                TextField("Search name, company, role…", text: $query)
-                    .textFieldStyle(.plain)
-                if !query.isEmpty {
-                    Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
-                        .accessibilityLabel("Clear search")
-                }
-            }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
-            .padding(.horizontal).padding(.bottom, 8)
+            MSSearchField(placeholder: "Search name, company, role…", text: $query)
+                .padding(.horizontal).padding(.bottom, 8)
 
             tagChips
 
@@ -395,14 +384,9 @@ struct PeopleListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "person.2").font(.system(size: 36)).foregroundStyle(.secondary)
-            Text("No people yet").font(.headline)
-            Text("Use Add Person or Import above to get started — from Contacts, Gmail, your calendar, or a file.")
-                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        MSEmptyState(systemImage: "person.2",
+                     title: "No people yet",
+                     message: "Use Add Person or Import above to get started — from Contacts, Gmail, your calendar, or a file.")
     }
 
     // MARK: - Detail
