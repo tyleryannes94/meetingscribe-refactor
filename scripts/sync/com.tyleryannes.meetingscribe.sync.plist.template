@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  MeetingScribe one-way sync LaunchAgent (WORK MacBook).
+
+  install-sync.sh fills in the @PLACEHOLDERS@ and installs the result at
+  ~/Library/LaunchAgents/com.tyleryannes.meetingscribe.sync.plist.
+
+  Runs every 2 hours while awake (coalesced to the next wake if the laptop was
+  asleep at the boundary) plus once at login (RunAtLoad). An optional daily
+  StartCalendarInterval floor is included but commented out.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tyleryannes.meetingscribe.sync</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@SCRIPT_PATH@</string>
+    </array>
+
+    <!-- Run every 2 hours (best-effort; coalesced if asleep). 3600 = hourly. -->
+    <key>StartInterval</key>
+    <integer>@INTERVAL_SECONDS@</integer>
+
+    <!-- Fire once shortly after load (e.g. login) so a freshly-booted laptop syncs. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Optional HARD daily floor at 09:00, in addition to the interval. Uncomment
+         to guarantee at least one run/day even if the interval keeps getting
+         skipped by sleep.
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>9</integer>
+        <key>Minute</key><integer>0</integer>
+    </dict>
+    -->
+
+    <!-- Don't pile up runs if a sync is slow; the script also self-locks. -->
+    <key>ThrottleInterval</key>
+    <integer>300</integer>
+
+    <key>StandardOutPath</key>
+    <string>@LOG_DIR@/sync.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>@LOG_DIR@/sync.err.log</string>
+
+    <!-- Ensure Homebrew + system tool paths are present for the agent. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+</dict>
+</plist>
