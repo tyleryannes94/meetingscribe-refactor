@@ -401,6 +401,19 @@ final class PeopleStore: ObservableObject {
                 result.append(p)
             }
         }
+        // E2-10 — one-time forward classification: for people still `.unset`,
+        // infer a relationship type from their existing freeform relationship
+        // labels ("spouse" → partner, "mom" → family, …). In-memory only; the
+        // inferred type persists the next time the person is saved. Existing
+        // users get instant classification without re-entering anything.
+        for i in result.indices where result[i].relationshipType == .unset {
+            for rel in result[i].relationships {
+                if let inferred = RelationshipType.inferred(fromLabel: rel.label) {
+                    result[i].relationshipType = inferred
+                    break
+                }
+            }
+        }
         return result
     }
 

@@ -111,6 +111,30 @@ final class RelationshipTypeTests: XCTestCase {
         }
     }
 
+    // MARK: Label inference (E2-10 forward migration)
+
+    func testLabelInferenceMapsCommonLabels() {
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "spouse"), .romanticPartner)
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "Wife"), .romanticPartner)
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "my husband"), .romanticPartner)
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "Mom"), .familyMember)
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "brother"), .familyMember)
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "manager"), .colleague)
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "coworker"), .colleague)
+    }
+
+    /// "best friend" must classify as closeFriend, not get short-circuited by
+    /// the bare "friend" rule.
+    func testLabelInferencePrefersCloseFriendOverFriend() {
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "best friend"), .closeFriend)
+        XCTAssertEqual(RelationshipType.inferred(fromLabel: "friend"), .friend)
+    }
+
+    func testLabelInferenceReturnsNilForUnknownLabel() {
+        XCTAssertNil(RelationshipType.inferred(fromLabel: "acquaintance from the gym"))
+        XCTAssertNil(RelationshipType.inferred(fromLabel: ""))
+    }
+
     /// Every case has a non-empty display name, emoji, and color token so the
     /// UI never renders a blank chip.
     func testEveryCaseHasPresentationMetadata() {

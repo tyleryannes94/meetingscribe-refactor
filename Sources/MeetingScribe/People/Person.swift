@@ -119,6 +119,34 @@ enum RelationshipType: String, Codable, CaseIterable, Hashable {
         case .unset:            return "RelationshipUnset"     // neutral
         }
     }
+
+    /// E2-10 — best-effort classification from a freeform relationship label
+    /// (e.g. "spouse", "mom", "manager"). Used as a one-time forward migration
+    /// so existing users get an inferred type without re-entering data. Returns
+    /// nil when no keyword matches. Symmetric romantic/family labels classify
+    /// correctly regardless of edge direction; ambiguous labels stay nil.
+    static func inferred(fromLabel rawLabel: String) -> RelationshipType? {
+        let l = rawLabel.lowercased()
+        func has(_ words: [String]) -> Bool { words.contains { l.contains($0) } }
+        // Order matters: "best friend" must hit closeFriend before "friend".
+        if has(["spouse", "partner", "wife", "husband", "girlfriend",
+                "boyfriend", "fiance", "fiancé", "fiancée", "significant other"]) {
+            return .romanticPartner
+        }
+        if has(["mom", "mother", "dad", "father", "parent", "sister", "brother",
+                "sibling", "son", "daughter", "kid", "child", "grandma", "grandpa",
+                "grandmother", "grandfather", "aunt", "uncle", "cousin", "nephew",
+                "niece", "family"]) {
+            return .familyMember
+        }
+        if has(["best friend", "bestie", "close friend"]) { return .closeFriend }
+        if has(["manager", "boss", "coworker", "co-worker", "colleague",
+                "report", "teammate", "client", "vendor", "coleague"]) {
+            return .colleague
+        }
+        if has(["friend"]) { return .friend }
+        return nil
+    }
 }
 
 // MARK: - Relationship (person-to-person edge)

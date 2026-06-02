@@ -23,6 +23,7 @@ struct AddPersonSheet: View {
     @State private var birthday: Date
     @State private var addresses: [String]
     @State private var favorites: String
+    @State private var relationshipType: RelationshipType
 
     init(editing: Person? = nil, seedTagID: String? = nil) {
         self.editing = editing
@@ -38,6 +39,7 @@ struct AddPersonSheet: View {
         _birthday = State(initialValue: editing?.birthday ?? Date())
         _addresses = State(initialValue: (editing?.addresses.isEmpty == false) ? editing!.addresses : [""])
         _favorites = State(initialValue: (editing?.favorites ?? []).joined(separator: ", "))
+        _relationshipType = State(initialValue: editing?.relationshipType ?? .unset)
     }
 
     private var trimmedName: String {
@@ -68,6 +70,20 @@ struct AddPersonSheet: View {
                         TextField("Jane Smith", text: $displayName)
                             .textFieldStyle(.roundedBorder)
                             .focused($nameFocused)
+                    }
+                    // Relationship type (D2-2) — placed high so it's set at
+                    // creation. Drives check-in cadence, notification copy, and
+                    // which coaching content unlocks.
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Relationship").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                        Picker("Relationship", selection: $relationshipType) {
+                            ForEach(RelationshipType.allCases, id: \.self) { type in
+                                Text("\(type.emoji)  \(type.displayName)").tag(type)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     HStack(spacing: 12) {
                         field("Company", text: $company, prompt: "Acme")
@@ -141,6 +157,7 @@ struct AddPersonSheet: View {
         person.bio = bio
         person.tagIDs = tagIDs
         person.birthday = hasBirthday ? birthday : nil
+        person.relationshipType = relationshipType
         person.importSources.insert("manual")
         people.updatePerson(person)
         dismiss()
