@@ -1760,6 +1760,20 @@ struct PersonDetailView: View {
             let transcript = recent.map { "\($0.fromMe ? "Me" : target.displayName): \($0.text)" }
                 .joined(separator: "\n")
                 .prefix(transcriptBudget)
+            // C2-4 — distress pre-flight guard. For intimate relationships,
+            // never hand crisis/harm content to the model for clinical-style
+            // analysis; surface supportive resources instead and stop here.
+            if target.relationshipType.supportsDepthContent,
+               let category = DistressFilter.scan(String(transcript)) {
+                await MainActor.run {
+                    self.analysisRunning = nil
+                    self.analysisOutput = AnalysisOutput(
+                        preset: preset,
+                        body: DistressFilter.supportiveMessage(for: category),
+                        promptUsed: "")
+                }
+                return
+            }
             let prompt = preset.template(personName: target.displayName,
                                          customPrompt: customDraft,
                                          relationshipType: target.relationshipType)
