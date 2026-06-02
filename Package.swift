@@ -17,6 +17,10 @@ let package = Package(
         .executable(name: "ScribeCore", targets: ["ScribeCore"]),
         .executable(name: "MeetingScribeMCP", targets: ["MeetingScribeMCP"]),
         .executable(name: "NotionMCP", targets: ["NotionMCP"]),
+        // Hub-side cross-device ingestion: folds a work device's quarantined
+        // backup (<vault>/_remote/<device>/) into the live second brain. Runnable
+        // standalone (e.g. via launchd on the hub) — Foundation + VaultKit only.
+        .executable(name: "MeetingScribeSync", targets: ["MeetingScribeSync"]),
         // Consolidated vault library: the single source of truth for shared
         // models, JSON helpers, path helpers, and Darwin IPC. Foundation +
         // Combine only — no AppKit/SwiftUI/UIKit — so it can be used from any
@@ -72,6 +76,12 @@ let package = Package(
             name: "NotionMCP",
             dependencies: ["VaultKit"],
             path: "Sources/NotionMCP",
+            swiftSettings: commonSwiftSettings
+        ),
+        .executableTarget(
+            name: "MeetingScribeSync",
+            dependencies: ["VaultKit"],
+            path: "Sources/MeetingScribeSync",
             swiftSettings: commonSwiftSettings
         ),
         .testTarget(
