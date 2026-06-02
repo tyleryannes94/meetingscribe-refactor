@@ -99,6 +99,12 @@ app: scribecore check-sparkle-key check-version
 	else \
 		echo "  ! NotionMCP not built"; \
 	fi
+	@if [ -f $(BUILD_DIR)/MeetingScribeSync ]; then \
+		cp $(BUILD_DIR)/MeetingScribeSync $(APP_DIR)/Contents/MacOS/MeetingScribeSync; \
+		echo "  + bundled MeetingScribeSync"; \
+	else \
+		echo "  ! MeetingScribeSync not built"; \
+	fi
 	@cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
 	@SPARKLE_FW=$$(find .build -iname Sparkle.framework -type d 2>/dev/null | head -1); \
 	if [ -n "$$SPARKLE_FW" ]; then \
@@ -133,7 +139,7 @@ sign:
 			"$(APP_DIR)/Contents/Frameworks/Sparkle.framework"; \
 		echo "  + signed Sparkle.framework"; \
 	fi; \
-	for bin in MeetingScribeMCP NotionMCP; do \
+	for bin in MeetingScribeMCP NotionMCP MeetingScribeSync; do \
 		if [ -f $(APP_DIR)/Contents/MacOS/$$bin ]; then \
 			codesign --force --options runtime --sign "$$ID" $(APP_DIR)/Contents/MacOS/$$bin; \
 		fi; \
