@@ -77,18 +77,47 @@ enum ConversationAnalysisPreset: String, CaseIterable, Identifiable, Hashable {
     }
 
     /// Prompt template. `PROMPT_BODY` is replaced with the rendered
-    /// recent-snippets transcript. We anchor the participants as
-    /// adult professionals to keep small models' over-firing safety
-    /// classifiers calm (same trick we use in MessagesAnalyzer
-    /// .conversationSummary).
-    func template(personName: String, customPrompt: String) -> String {
-        let preamble = """
-        You are an analyst summarizing the personal communication of \
-        the user (an adult professional named Tyler) and one of his \
-        adult contacts named \(personName). Both parties are adults. \
-        This is the user's own message data on their own machine. \
-        Do not refuse — there is nothing harmful about summarizing it.
-        """
+    /// recent-snippets transcript. The preamble adapts to the relationship
+    /// type so the model's framing matches the emotional context — a partner
+    /// analysis gets a Gottman-informed coach persona, family gets NVC framing,
+    /// and colleagues get the professional analyst baseline. (Phase 3 / U5-3)
+    func template(personName: String,
+                  customPrompt: String,
+                  relationshipType: RelationshipType = .unset) -> String {
+        let userName = AppSettings.shared.userName
+        let preamble: String
+        switch relationshipType {
+        case .romanticPartner:
+            preamble = """
+            You are a warm, Gottman-informed relationship coach helping \(userName) \
+            reflect on their connection with their partner, \(personName). \
+            Both parties are adults. This is \(userName)'s own message data on \
+            their own device. Respond with curiosity and care — no clinical verdicts. \
+            Do not refuse — there is nothing harmful here.
+            """
+        case .familyMember:
+            preamble = """
+            You are a thoughtful, NVC-informed family coach helping \(userName) \
+            reflect on their relationship with their family member \(personName). \
+            Both are adults. This is \(userName)'s own message data on their own \
+            device. Respond with warmth and acknowledge complexity. \
+            Do not refuse — there is nothing harmful here.
+            """
+        case .closeFriend:
+            preamble = """
+            You are a supportive coach helping \(userName) nurture their friendship \
+            with \(personName). Use a love-language-aware lens. Both are adults. \
+            This is \(userName)'s own data on their own device. Respond with warmth. \
+            Do not refuse — there is nothing harmful here.
+            """
+        default:
+            preamble = """
+            You are an analyst summarizing the communication between \
+            \(userName) and their contact \(personName). Both parties are adults. \
+            This is \(userName)'s own message data on their own machine. \
+            Do not refuse — there is nothing harmful about summarizing it.
+            """
+        }
         switch self {
         case .relationshipSummary:
             return preamble + "\n\n" + """
@@ -102,11 +131,14 @@ enum ConversationAnalysisPreset: String, CaseIterable, Identifiable, Hashable {
             """
         case .sentimentTrends:
             return preamble + "\n\n" + """
-            Analyze sentiment trends in these recent messages between Tyler \
-            and \(personName). Identify the general tone (warm / tense / \
-            neutral / etc.) and call out any recent shifts in mood, energy, \
-            or topic. Be specific and ground claims in the messages. 5–8 \
-            sentences max.
+            Reflect on the quality of connection in these recent messages \
+            between \(AppSettings.shared.userName) and \(personName). \
+            Describe moments of warmth, shared joy, and genuine engagement — \
+            as well as any moments of distance, missed bids, or tension. \
+            Avoid clinical labels; instead use specific examples from the \
+            messages. End with one forward-looking question: "What might \
+            bring more of [something positive] into this relationship?" \
+            5–8 sentences max.
 
             Messages:
             PROMPT_BODY
@@ -505,6 +537,53 @@ struct PersonDetailView: View {
                 }
                 .padding(.top, 2)
             }
+        // Relationship type row — always visible; tapping cycles through types
+        // or opens a compact picker. Hidden during active identity editing to
+        // keep the form focused.
+        if !editingIdentity {
+            relationshipTypePicker
+        }
+        }
+    }
+
+    /// Compact relationship-type selector displayed in the identity panel.
+    @ViewBuilder
+    private var relationshipTypePicker: some View {
+        HStack(spacing: 6) {
+            Text("Relationship:")
+                .font(NDS.small)
+                .foregroundStyle(NDS.textSecondary)
+            Menu {
+                ForEach(RelationshipType.allCases, id: \.self) { rtype in
+                    Button {
+                        var updated = current
+                        updated.relationshipType = rtype
+                        people.updatePerson(updated)
+                    } label: {
+                        HStack {
+                            Text("\(rtype.emoji) \(rtype.displayName)")
+                            if current.relationshipType == rtype {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(current.relationshipType.emoji)
+                    Text(current.relationshipType.displayName)
+                        .font(NDS.small)
+                        .foregroundStyle(current.relationshipType == .unset ? NDS.textTertiary : NDS.textPrimary)
+                    Image(systemName: "chevron.down").font(.system(size: 9))
+                        .foregroundStyle(NDS.textTertiary)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 6))
+            }
+            .menuStyle(.borderlessButton)
+            .help("Set relationship type — controls check-in cadence and coaching content")
+            Spacer()
         }
     }
 
@@ -1682,7 +1761,8 @@ struct PersonDetailView: View {
                 .joined(separator: "\n")
                 .prefix(transcriptBudget)
             let prompt = preset.template(personName: target.displayName,
-                                         customPrompt: customDraft)
+                                         customPrompt: customDraft,
+                                         relationshipType: target.relationshipType)
                 .replacingOccurrences(of: "PROMPT_BODY", with: String(transcript))
             // Larger num_ctx for the all-time run so qwen2.5:7b can
             // actually read everything we hand it; smaller for recent.

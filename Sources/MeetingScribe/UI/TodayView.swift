@@ -92,6 +92,9 @@ struct TodayView: View {
                 // People suggestions below meetings — they're context, not actions
                 SuggestedPeopleView()
 
+                // "Stay connected" — overdue relationship check-ins with quick-log (Phase 2)
+                StayConnectedSection { p in openPerson(p) }
+
                 // "Stay in touch" — people you're drifting from (by last interaction).
                 ReconnectView { p in openPerson(p) }
             }

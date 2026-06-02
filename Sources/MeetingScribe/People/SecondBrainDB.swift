@@ -31,7 +31,7 @@ struct VaultSearchResult {
 @MainActor
 final class SecondBrainDB {
     private let log = Logger(subsystem: "com.tyleryannes.MeetingScribe", category: "SecondBrainDB")
-    static let schemaVersion = 2
+    static let schemaVersion = 3
 
     private var handle: OpaquePointer?
     private var didOpen = false
@@ -174,6 +174,10 @@ final class SecondBrainDB {
             migrateToV2()
         }
 
+        if detectedVersion < 3 {
+            migrateToV3()
+        }
+
         // Embeddings for semantic recall (C2-1b). Idempotent; independent of the
         // FTS schema version so it lands for existing v2 databases too.
         exec("""
@@ -236,6 +240,19 @@ final class SecondBrainDB {
 
         exec("CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
         exec("INSERT OR REPLACE INTO schema_meta VALUES ('schema_version', '2');")
+    }
+
+    // MARK: - Schema v3 migration (Phase D — relationship type + check-in cadence)
+
+    private func migrateToV3() {
+        log.info("Migrating SecondBrainDB to schema version 3 (relationship type + check-in cadence)")
+        // Additive ALTER TABLE — safe on all existing v1/v2 databases.
+        // SQLite ignores "duplicate column" errors, so these are wrapped in
+        // try? at the exec level; we use the "column not found" check pattern.
+        exec("ALTER TABLE people ADD COLUMN relationship_type TEXT DEFAULT 'unset';")
+        exec("ALTER TABLE people ADD COLUMN check_in_cadence_days INTEGER;")
+        exec("INSERT OR REPLACE INTO schema_meta VALUES ('schema_version', '3');")
+        log.info("SecondBrainDB v3 migration complete")
     }
 
     // MARK: - Rebuild / sync

@@ -46,6 +46,83 @@ struct AttachedNote: Identifiable, Codable, Hashable {
     }
 }
 
+// MARK: - Relationship Type
+
+/// The category of relationship this person represents.
+/// Each type carries default check-in cadence and enables type-specific
+/// content (coaching prompts, frameworks, UI differentiation).
+/// Stored as a String rawValue so new cases survive tolerant decoding on
+/// earlier builds — unknown raw values decode to `.unset` via `decodeIfPresent`.
+enum RelationshipType: String, Codable, CaseIterable, Hashable {
+    case romanticPartner  = "romantic_partner"
+    case familyMember     = "family_member"
+    case closeFriend      = "close_friend"
+    case friend           = "friend"
+    case colleague        = "colleague"
+    case acquaintance     = "acquaintance"
+    case unset            = "unset"
+
+    var displayName: String {
+        switch self {
+        case .romanticPartner:  return "Partner"
+        case .familyMember:     return "Family"
+        case .closeFriend:      return "Close Friend"
+        case .friend:           return "Friend"
+        case .colleague:        return "Colleague"
+        case .acquaintance:     return "Acquaintance"
+        case .unset:            return "Unset"
+        }
+    }
+
+    /// Suggested days between check-ins for this relationship type.
+    var defaultCheckInDays: Int {
+        switch self {
+        case .romanticPartner:  return 1
+        case .familyMember:     return 7
+        case .closeFriend:      return 14
+        case .friend:           return 21
+        case .colleague:        return 30
+        case .acquaintance:     return 60
+        case .unset:            return 14
+        }
+    }
+
+    /// Types that unlock depth content (coaching frameworks, reflection prompts).
+    var supportsDepthContent: Bool {
+        switch self {
+        case .romanticPartner, .familyMember, .closeFriend: return true
+        default: return false
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .romanticPartner:  return "💑"
+        case .familyMember:     return "👨‍👩‍👧"
+        case .closeFriend:      return "🤝"
+        case .friend:           return "😊"
+        case .colleague:        return "💼"
+        case .acquaintance:     return "👋"
+        case .unset:            return "👤"
+        }
+    }
+
+    /// Accent color token name for this type (referenced in NDS / SwiftUI).
+    var colorName: String {
+        switch self {
+        case .romanticPartner:  return "RelationshipPartner"   // rose
+        case .familyMember:     return "RelationshipFamily"    // amber
+        case .closeFriend:      return "RelationshipCloseFriend" // teal
+        case .friend:           return "RelationshipFriend"    // sky
+        case .colleague:        return "RelationshipColleague" // slate
+        case .acquaintance:     return "RelationshipAcquaintance" // gray
+        case .unset:            return "RelationshipUnset"     // neutral
+        }
+    }
+}
+
+// MARK: - Relationship (person-to-person edge)
+
 /// A directed relationship to another person (§4.4). Bidirectional by default —
 /// when set on A→B, `PeopleStore` mirrors a reciprocal entry on B.
 struct Relationship: Identifiable, Codable, Hashable {
@@ -122,6 +199,20 @@ struct Person: Identifiable, Codable, Hashable {
     /// `AttachedNote` for the shape.
     var attachedNotes: [AttachedNote]
 
+    // MARK: - Phase D — relationship type + check-in cadence
+
+    /// The kind of relationship (partner, family, close friend, …).
+    /// Defaults to `.unset`; set in AddPersonSheet or PersonDetailView.
+    var relationshipType: RelationshipType
+    /// User-overridden check-in cadence in days. When nil, the type's
+    /// `defaultCheckInDays` is used.
+    var checkInCadenceDays: Int?
+
+    /// Effective days between check-ins: user override if set, else type default.
+    var effectiveCheckInDays: Int {
+        checkInCadenceDays ?? relationshipType.defaultCheckInDays
+    }
+
     init(id: String = UUID().uuidString,
          displayName: String,
          company: String = "",
@@ -142,7 +233,9 @@ struct Person: Identifiable, Codable, Hashable {
          contactIdentifier: String? = nil,
          importSources: Set<String> = [],
          relationships: [Relationship] = [],
-         attachedNotes: [AttachedNote] = []) {
+         attachedNotes: [AttachedNote] = [],
+         relationshipType: RelationshipType = .unset,
+         checkInCadenceDays: Int? = nil) {
         self.id = id
         self.displayName = displayName
         self.company = company
@@ -164,6 +257,8 @@ struct Person: Identifiable, Codable, Hashable {
         self.importSources = importSources
         self.relationships = relationships
         self.attachedNotes = attachedNotes
+        self.relationshipType = relationshipType
+        self.checkInCadenceDays = checkInCadenceDays
     }
 
     /// Convenience accessors for the Phase A single-field sheet.
@@ -189,7 +284,8 @@ extension Person {
         case id, displayName, company, role, emails, phones, bio, tagIDs,
              createdAt, updatedAt, lastInteractionAt, meetingMentions,
              birthday, addresses, favorites, memories, photoRelativePaths,
-             contactIdentifier, importSources, relationships, attachedNotes
+             contactIdentifier, importSources, relationships, attachedNotes,
+             relationshipType, checkInCadenceDays
     }
 
     /// Tolerant decoder. Like `Meeting`, every field added after the first
@@ -219,6 +315,9 @@ extension Person {
         importSources = (try? c.decode(Set<String>.self, forKey: .importSources)) ?? []
         relationships = (try? c.decode([Relationship].self, forKey: .relationships)) ?? []
         attachedNotes = (try? c.decode([AttachedNote].self, forKey: .attachedNotes)) ?? []
+        // Phase D — tolerant: unknown raw values (future types on older builds) → .unset
+        relationshipType = (try? c.decodeIfPresent(RelationshipType.self, forKey: .relationshipType)) ?? .unset
+        checkInCadenceDays = (try? c.decodeIfPresent(Int.self, forKey: .checkInCadenceDays)) ?? nil
     }
 
     /// A coarse relevance score (§12.4) used to surface high-signal people and

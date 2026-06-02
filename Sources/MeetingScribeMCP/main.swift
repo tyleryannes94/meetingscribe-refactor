@@ -877,6 +877,79 @@ let toolList: [JSONValue] = [
                 "text": .object(["type": "string", "description": "Note text (markdown ok)."])
             ])
         ])
+    ]),
+    // Phase 4 — People relationship tools
+    .object([
+        "name": "list_encounters",
+        "description": "Get the encounter/check-in history for a specific person — when you last met, call type, mood, and any notes. Use this to understand the relationship's health over time.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["id"]),
+            "properties": .object([
+                "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."]),
+                "limit": .object(["type": "integer", "default": 20])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "log_encounter",
+        "description": "Log a check-in or encounter with a person. Use when the user says they just met, called, or messaged someone. Automatically updates the person's last-interaction date.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["id", "kind"]),
+            "properties": .object([
+                "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."]),
+                "kind": .object(["type": "string", "description": "Type: Call, Coffee / Meal, Video Call, Message, Met Up, or Milestone."]),
+                "notes": .object(["type": "string", "description": "Optional freeform notes about the encounter."]),
+                "date": .object(["type": "string", "description": "ISO8601 date (defaults to now)."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "get_check_in_status",
+        "description": "Get the check-in health for a person: last encounter date, days since last contact, target cadence, and whether they are overdue.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["id"]),
+            "properties": .object([
+                "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "list_overdue_check_ins",
+        "description": "List all people with typed relationships (partner, family, friend) who are overdue for a check-in, sorted by most overdue first.",
+        "inputSchema": .object([
+            "type": "object",
+            "properties": .object([
+                "limit": .object(["type": "integer", "default": 10])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "get_coaching_context",
+        "description": "Get a comprehensive relationship coaching context for a person: relationship type, encounter frequency, birthday countdown, recommended framework, and health score. Use this to proactively coach the user on their relationship.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["id"]),
+            "properties": .object([
+                "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "attach_note_to_person",
+        "description": "Save a piece of text — typically an analysis output (relationship summary, coaching insight, sentiment analysis) — onto a person's record so the user can find it later. The note appears in the Notes section of the Person detail view.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["id", "title", "body"]),
+            "properties": .object([
+                "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."]),
+                "title": .object(["type": "string", "description": "Short title for the note."]),
+                "body": .object(["type": "string", "description": "The note content (markdown ok)."]),
+                "kind": .object(["type": "string", "description": "Category: summary, sentiment, coaching, custom. Default: custom."])
+            ])
+        ])
     ])
 ]
 
@@ -1416,6 +1489,294 @@ func tool_createMeetingNote(args: [String: Any]) -> JSONValue {
     }
 }
 
+// MARK: - Phase 4 People tools
+
+func encountersDir() -> URL { storageDir.appendingPathComponent("encounters", isDirectory: true) }
+
+/// Load all encounter JSON files for a given person ID. Falls back to
+/// an empty array if the directory doesn't exist (new vault).
+func loadEncounters(forPersonID personID: String) -> [[String: Any]] {
+    let dir = encountersDir()
+    guard let files = try? FileManager.default.contentsOfDirectory(at: dir,
+                                                                    includingPropertiesForKeys: nil,
+                                                                    options: [.skipsHiddenFiles]) else {
+        return []
+    }
+    var result: [[String: Any]] = []
+    for f in files where f.pathExtension == "json" {
+        guard let data = try? Data(contentsOf: f),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+        // Encounter may be wrapped in SchemaEnvelope {version, data: {...}}
+        let enc: [String: Any]
+        if let inner = obj["data"] as? [String: Any] { enc = inner }
+        else { enc = obj }
+        guard let pid = enc["personID"] as? String, pid == personID else { continue }
+        result.append(enc)
+    }
+    result.sort {
+        let d0 = ($0["date"] as? String) ?? ""
+        let d1 = ($1["date"] as? String) ?? ""
+        return d0 > d1
+    }
+    return result
+}
+
+func tool_listEncounters(args: [String: Any]) -> JSONValue {
+    guard let id = args["id"] as? String, let p = resolvePerson(id) else {
+        let raw = (args["id"] as? String) ?? "(missing)"
+        return .object(["error": .string("no person matched `\(raw)`. Call list_people first.")])
+    }
+    let limit = (args["limit"] as? Int) ?? 20
+    let encs = loadEncounters(forPersonID: p.id).prefix(limit)
+    let rows: [JSONValue] = encs.map { enc in
+        .object([
+            "id":        .string((enc["id"] as? String) ?? ""),
+            "date":      .string((enc["date"] as? String) ?? ""),
+            "kind":      .string((enc["eventName"] as? String) ?? ""),
+            "notes":     .string((enc["notes"] as? String) ?? ""),
+            "location":  .string((enc["location"] as? String) ?? "")
+        ])
+    }
+    return .object([
+        "personID":   .string(p.id),
+        "personName": .string(p.displayName),
+        "count":      .int(rows.count),
+        "encounters": .array(rows)
+    ])
+}
+
+func tool_logEncounter(args: [String: Any]) -> JSONValue {
+    guard let id = args["id"] as? String, let p = resolvePerson(id) else {
+        let raw = (args["id"] as? String) ?? "(missing)"
+        return .object(["error": .string("no person matched `\(raw)`. Call list_people first.")])
+    }
+    let kind  = (args["kind"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Check-in"
+    let notes = (args["notes"] as? String) ?? ""
+    let date: Date
+    if let dateStr = args["date"] as? String, let parsed = isoDate(dateStr) {
+        date = parsed
+    } else {
+        date = Date()
+    }
+    let encID = UUID().uuidString
+    let enc: [String: Any] = [
+        "id": encID,
+        "personID": p.id,
+        "eventName": kind,
+        "date": iso(date),
+        "notes": notes,
+        "createdAt": iso(Date())
+    ]
+    let envelope: [String: Any] = ["version": 1, "data": enc]
+    let encURL = encountersDir().appendingPathComponent("\(encID).json")
+    try? FileManager.default.createDirectory(at: encountersDir(), withIntermediateDirectories: true)
+    if let data = try? JSONSerialization.data(withJSONObject: envelope, options: [.prettyPrinted, .sortedKeys]) {
+        try? data.write(to: encURL, options: .atomic)
+    }
+    // The running app will detect the new encounter file via its vault watcher
+    // and update lastInteractionAt / the search index on next access.
+    return .object([
+        "ok":           .bool(true),
+        "encounterId":  .string(encID),
+        "personID":     .string(p.id),
+        "personName":   .string(p.displayName),
+        "kind":         .string(kind),
+        "date":         .string(iso(date))
+    ])
+}
+
+/// Default check-in cadence in days for a given relationship type raw value.
+func defaultCadence(for relationshipTypeRaw: String?) -> Int {
+    switch relationshipTypeRaw {
+    case "romantic_partner": return 1
+    case "family_member":    return 7
+    case "close_friend":     return 14
+    case "friend":           return 21
+    case "colleague":        return 30
+    case "acquaintance":     return 60
+    default:                 return 14
+    }
+}
+
+func tool_getCheckInStatus(args: [String: Any]) -> JSONValue {
+    guard let id = args["id"] as? String, let p = resolvePerson(id) else {
+        let raw = (args["id"] as? String) ?? "(missing)"
+        return .object(["error": .string("no person matched `\(raw)`. Call list_people first.")])
+    }
+    let encs = loadEncounters(forPersonID: p.id)
+    let lastEncDate: Date? = encs.compactMap { enc -> Date? in
+        guard let s = enc["date"] as? String else { return nil }
+        return isoDate(s)
+    }.max()
+    let lastDate = lastEncDate ?? p.lastInteractionAt ?? p.createdAt
+    let cadence = p.checkInCadenceDays ?? defaultCadence(for: p.relationshipType)
+    let daysSince = Int(Date().timeIntervalSince(lastDate) / 86400)
+    let isOverdue = daysSince > cadence
+    let overdueDays = max(0, daysSince - cadence)
+    return .object([
+        "personID":          .string(p.id),
+        "personName":        .string(p.displayName),
+        "relationshipType":  .string(p.relationshipType ?? "unset"),
+        "cadenceDays":       .int(cadence),
+        "lastEncounterDate": .string(iso(lastDate)),
+        "daysSinceLast":     .int(daysSince),
+        "isOverdue":         .bool(isOverdue),
+        "overdueDays":       .int(overdueDays),
+        "encounterCount":    .int(encs.count)
+    ])
+}
+
+func tool_listOverdueCheckIns(args: [String: Any]) -> JSONValue {
+    let limit = (args["limit"] as? Int) ?? 10
+    let people = loadAllPeople()
+    var rows: [(PersonDTO, Int)] = []
+    for p in people {
+        guard let rt = p.relationshipType, rt != "unset", !rt.isEmpty else { continue }
+        let encs = loadEncounters(forPersonID: p.id)
+        let lastDate: Date = encs.compactMap { enc -> Date? in
+            guard let s = enc["date"] as? String else { return nil }
+            return isoDate(s)
+        }.sorted(by: >).first ?? p.lastInteractionAt ?? p.createdAt
+        let cadence = p.checkInCadenceDays ?? defaultCadence(for: rt)
+        let daysSince = Int(Date().timeIntervalSince(lastDate) / 86400)
+        let overdue = daysSince - cadence
+        if overdue > 0 { rows.append((p, overdue)) }
+    }
+    rows.sort { $0.1 > $1.1 }
+    let result: [JSONValue] = rows.prefix(limit).map { (p, overdue) in
+        .object([
+            "personID":         .string(p.id),
+            "personName":       .string(p.displayName),
+            "relationshipType": .string(p.relationshipType ?? "unset"),
+            "overdueDays":      .int(overdue)
+        ])
+    }
+    return .object(["overdueCount": .int(rows.count), "people": .array(result)])
+}
+
+func tool_getCoachingContext(args: [String: Any]) -> JSONValue {
+    guard let id = args["id"] as? String, let p = resolvePerson(id) else {
+        let raw = (args["id"] as? String) ?? "(missing)"
+        return .object(["error": .string("no person matched `\(raw)`. Call list_people first.")])
+    }
+    let encs = loadEncounters(forPersonID: p.id)
+    let encCount = encs.count
+    let dates: [Date] = encs.compactMap { enc -> Date? in
+        guard let s = enc["date"] as? String else { return nil }
+        return isoDate(s)
+    }.sorted(by: >)
+    let medianGapDays: Int
+    if dates.count >= 2 {
+        var gaps = (0..<(dates.count - 1)).map { i in
+            Int(dates[i].timeIntervalSince(dates[i+1]) / 86400)
+        }
+        gaps.sort()
+        medianGapDays = gaps[gaps.count / 2]
+    } else {
+        medianGapDays = 0
+    }
+    let lastDate = dates.first ?? p.lastInteractionAt ?? p.createdAt
+    let daysSinceLast = Int(Date().timeIntervalSince(lastDate) / 86400)
+    let cadence = p.checkInCadenceDays ?? defaultCadence(for: p.relationshipType)
+    let isOverdue = daysSinceLast > cadence
+    var birthdayDaysUntil: Int? = nil
+    if let bday = p.birthday {
+        let cal = Calendar.current
+        var bdComp = cal.dateComponents([.month, .day], from: bday)
+        let now = Date()
+        bdComp.year = cal.component(.year, from: now)
+        if let thisYear = cal.date(from: bdComp) {
+            let diff = Int(thisYear.timeIntervalSince(now) / 86400)
+            birthdayDaysUntil = diff >= 0 ? diff : Int((thisYear.addingTimeInterval(365 * 86400)).timeIntervalSince(now) / 86400)
+        }
+    }
+    let framework: String
+    switch p.relationshipType {
+    case "romantic_partner": framework = "Gottman Method — focus on bids for connection, love languages, and repair"
+    case "family_member":    framework = "NVC (Non-Violent Communication) — needs, feelings, and empathic listening"
+    case "close_friend":     framework = "Love Languages + intentional time — quality time and acts of appreciation"
+    default:                 framework = "Active listening and consistent follow-through"
+    }
+    var result: [String: JSONValue] = [
+        "personID":             .string(p.id),
+        "personName":           .string(p.displayName),
+        "relationshipType":     .string(p.relationshipType ?? "unset"),
+        "cadenceDays":          .int(cadence),
+        "daysSinceLast":        .int(daysSinceLast),
+        "isOverdue":            .bool(isOverdue),
+        "encounterCount":       .int(encCount),
+        "medianGapDays":        .int(medianGapDays),
+        "recommendedFramework": .string(framework)
+    ]
+    if let bdDays = birthdayDaysUntil {
+        result["birthdayDaysUntil"] = .int(bdDays)
+    }
+    return .object(result)
+}
+
+func tool_attachNoteToPerson(args: [String: Any]) -> JSONValue {
+    guard let id = args["id"] as? String, let p = resolvePerson(id) else {
+        let raw = (args["id"] as? String) ?? "(missing)"
+        return .object(["error": .string("no person matched `\(raw)`. Call list_people first.")])
+    }
+    guard let body = (args["body"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !body.isEmpty else {
+        return .object(["error": .string("body is required and cannot be empty")])
+    }
+    let title = (args["title"] as? String) ?? "Note"
+    let kind  = (args["kind"] as? String) ?? "custom"
+    let noteID = UUID().uuidString
+    let note: [String: Any] = [
+        "id": noteID,
+        "title": title,
+        "body": body,
+        "kind": kind,
+        "createdAt": iso(Date())
+    ]
+    // Patch the person.json — append to attachedNotes array using raw JSON.
+    let personDir = storageDir.appendingPathComponent("people", isDirectory: true)
+    // Find the person's directory by scanning for matching person.json files.
+    if let contents = try? FileManager.default.contentsOfDirectory(
+        at: personDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
+        for dir in contents where dir.hasDirectoryPath {
+            let jsonURL = dir.appendingPathComponent("person.json")
+            guard var raw = try? JSONSerialization.jsonObject(with: Data(contentsOf: jsonURL)) as? [String: Any] else { continue }
+            let stored: [String: Any]
+            if let inner = raw["data"] as? [String: Any] { stored = inner }
+            else { stored = raw }
+            guard (stored["id"] as? String) == p.id else { continue }
+            // Patch via raw JSON to avoid round-tripping through Codable (which
+            // would strip unknown future fields).
+            var patchTarget = (raw["data"] as? [String: Any]) ?? raw
+            var notes = (patchTarget["attachedNotes"] as? [[String: Any]]) ?? []
+            notes.insert(note, at: 0)
+            patchTarget["attachedNotes"] = notes
+            if raw["data"] != nil { raw["data"] = patchTarget } else { raw = patchTarget }
+            if let data = try? JSONSerialization.data(withJSONObject: raw, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: jsonURL, options: .atomic)
+            }
+            break
+        }
+    }
+    return .object([
+        "ok":         .bool(true),
+        "noteId":     .string(noteID),
+        "personID":   .string(p.id),
+        "personName": .string(p.displayName),
+        "title":      .string(title),
+        "kind":       .string(kind)
+    ])
+}
+
+/// ISO8601 date parser for raw strings in the MCP (no Codable context available).
+func isoDate(_ string: String) -> Date? {
+    let df = ISO8601DateFormatter()
+    df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = df.date(from: string) { return d }
+    df.formatOptions = [.withInternetDateTime]
+    return df.date(from: string)
+}
+
 func runTool(name: String, args: [String: Any]) -> JSONValue {
     switch name {
     case "list_meetings":         return tool_listMeetings(args: args)
@@ -1435,6 +1796,13 @@ func runTool(name: String, args: [String: Any]) -> JSONValue {
     case "add_person":            return tool_addPerson(args: args)
     case "add_memory":            return tool_addMemory(args: args)
     case "create_meeting_note":   return tool_createMeetingNote(args: args)
+    // Phase 4 — People relationship tools
+    case "list_encounters":       return tool_listEncounters(args: args)
+    case "log_encounter":         return tool_logEncounter(args: args)
+    case "get_check_in_status":   return tool_getCheckInStatus(args: args)
+    case "list_overdue_check_ins": return tool_listOverdueCheckIns(args: args)
+    case "get_coaching_context":  return tool_getCoachingContext(args: args)
+    case "attach_note_to_person": return tool_attachNoteToPerson(args: args)
     default: return .object(["error": .string("unknown tool: \(name)")])
     }
 }

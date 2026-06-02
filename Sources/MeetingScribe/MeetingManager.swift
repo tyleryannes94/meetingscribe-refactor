@@ -141,11 +141,50 @@ final class MeetingManager: ObservableObject {
                 await self.liveTranscriber.flush()
                 let live = self.liveTranscriber.renderMarkdown()
                 try? self.store.writeTranscript(live, for: meeting, primaryTag: primary)
+                // Claim the pipeline slot synchronously before publishing state changes
+                // so a concurrent "Transcribe Now" cannot race the daemon-stop finalize.
+                // Previously this path skipped beginPipeline + finalize entirely, so
+                // meetings stopped via ScribeCore got no summary, no action items, and
+                // no FTS index. (E4-1)
+                self.pipelineController.beginPipeline(meeting.id)
                 self.state = .idle
                 self.activeMeeting = nil
                 self.lastStoppedMeetingID = meeting.id
                 self.recordingMonitor.resetToIdle()
                 self.refreshPastMeetings(force: true)
+                let liveDropped = self.liveTranscriber.droppedChunkCount
+                let liveCoverage = self.liveTranscriber.lastTranscribedSecond
+                // ScribeCore owns the audio hardware, but the vault directory is
+                // identical to the direct-recording path. Build a synthetic Result
+                // pointing at the on-disk directory so the pipeline can read the
+                // audio manifest and run a batch repair pass if needed. (E4-1)
+                let dir = self.store.directory(for: meeting, primaryTag: primary)
+                let synthResult = AudioRecorder.Result(
+                    directory: dir,
+                    segmentIndex: AudioManifestStore.segmentCount(meetingDir: dir),
+                    micURL: nil,
+                    systemURL: nil,
+                    health: MeetingHealthDTO(status: .ok, warnings: [],
+                                             recordedSeconds: 0,
+                                             micBytes: 0, systemBytes: 0))
+                Task.detached(priority: .userInitiated) { [weak self] in
+                    guard let self else { return }
+                    await self.pipelineController.finalize(
+                        meeting: meeting,
+                        audioResult: synthResult,
+                        liveTranscript: live,
+                        liveDroppedChunks: liveDropped,
+                        liveCoverageSeconds: liveCoverage,
+                        recordedDuration: 0
+                    ) { [weak self] in
+                        Task { @MainActor in
+                            if self?.activeMeeting == nil { self?.liveTranscriber.reset() }
+                            self?.bodyCache.invalidate(meeting.id)
+                            self?.refreshPastMeetings(force: true)
+                        }
+                    }
+                    await MainActor.run { self.personExtraction.extract(for: meeting) }
+                }
             }
         }
         // When ScribeCore daemon finishes booting it posts coreReady. This

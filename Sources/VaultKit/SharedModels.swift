@@ -202,12 +202,18 @@ public struct PersonDTO: Codable, Sendable {
     public let birthday: Date?
     public let meetingMentions: [String]
     public let importSources: [String]
+    /// Phase D — relationship type raw value (mirrors Person.RelationshipType.rawValue).
+    /// Nil when the person predates Phase D or has no type set.
+    public let relationshipType: String?
+    /// User-overridden check-in cadence in days. Nil = use type default.
+    public let checkInCadenceDays: Int?
 
     private enum CodingKeys: String, CodingKey {
         case id, displayName, company, role, emails, phones, addresses,
              bio, favorites, memories, relationships, tagIDs,
              createdAt, updatedAt, lastInteractionAt, birthday,
-             meetingMentions, importSources
+             meetingMentions, importSources,
+             relationshipType, checkInCadenceDays
     }
 
     /// Tolerant decode: every field past `id` and `displayName` has a
@@ -253,6 +259,9 @@ public struct PersonDTO: Codable, Sendable {
         } else {
             importSources = []
         }
+        // Phase D — tolerant: nil when absent (older builds / no type set).
+        relationshipType = (try? c.decodeIfPresent(String.self, forKey: .relationshipType)) ?? nil
+        checkInCadenceDays = (try? c.decodeIfPresent(Int.self, forKey: .checkInCadenceDays)) ?? nil
     }
 
     public init(id: String, displayName: String, company: String = "",
@@ -263,7 +272,9 @@ public struct PersonDTO: Codable, Sendable {
                 tagIDs: [String] = [], createdAt: Date = Date(),
                 updatedAt: Date = Date(), lastInteractionAt: Date? = nil,
                 birthday: Date? = nil, meetingMentions: [String] = [],
-                importSources: [String] = []) {
+                importSources: [String] = [],
+                relationshipType: String? = nil,
+                checkInCadenceDays: Int? = nil) {
         self.id = id; self.displayName = displayName
         self.company = company; self.role = role
         self.emails = emails; self.phones = phones
@@ -273,6 +284,8 @@ public struct PersonDTO: Codable, Sendable {
         self.createdAt = createdAt; self.updatedAt = updatedAt
         self.lastInteractionAt = lastInteractionAt; self.birthday = birthday
         self.meetingMentions = meetingMentions; self.importSources = importSources
+        self.relationshipType = relationshipType
+        self.checkInCadenceDays = checkInCadenceDays
     }
 }
 

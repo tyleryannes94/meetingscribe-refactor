@@ -1,0 +1,40 @@
+{
+  "name": "MeetingScribe",
+  "description": "Local-first meeting intelligence with relationship coaching. Exposes 23 tools to Claude: read and write meetings, transcripts, summaries, action items, people/contacts, encounter history, relationship health, and coaching context. All data stays on your Mac — no cloud, no API keys.",
+  "homepage": "https://github.com/tyleryannes94/meetingscribe-refactor",
+  "tags": [
+    "meetings",
+    "transcription",
+    "productivity",
+    "people",
+    "relationships",
+    "local-first",
+    "second-brain",
+    "contacts",
+    "macos"
+  ],
+  "install": {
+    "type": "stdio",
+    "command": "/Applications/MeetingScribe.app/Contents/MacOS/MeetingScribeMCP",
+    "env": {
+      "MEETINGSCRIBE_STORAGE": "~/Documents/MeetingNotes"
+    }
+  },
+  "tools": [
+    "list_meetings", "get_meeting", "get_transcript", "get_notes", "get_summary",
+    "list_voice_notes", "get_voice_note",
+    "list_action_items", "create_action_item", "update_action_item",
+    "list_people", "get_person", "get_person_messages", "list_person_meetings",
+    "add_person", "add_memory", "create_meeting_note", "attach_note_to_person",
+    "list_encounters", "log_encounter", "get_check_in_status",
+    "list_overdue_check_ins", "get_coaching_context"
+  ],
+  "toolCount": 23,
+  "platforms": ["macos"],
+  "requires": {
+    "app": "MeetingScribe (free download)",
+    "minMacOS": "14.0"
+  },
+  "license": "MIT",
+  "author": "Tyler Yannes"
+}

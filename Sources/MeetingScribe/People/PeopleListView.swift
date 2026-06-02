@@ -39,13 +39,29 @@ struct PeopleListView: View {
     @AppStorage("people.sortOrder") private var sortRaw = PeopleSort.recent.rawValue
     private var sortOrder: PeopleSort { PeopleSort(rawValue: sortRaw) ?? .recent }
 
+    /// Active relationship-type filter; nil = show all types.
+    @State private var relationshipTypeFilter: RelationshipType? = nil
+
     private var filtered: [Person] {
         // The store filters by a single tag; apply the remaining AND-tags and the
         // chosen sort here. Search relevance order is preserved while querying.
         let base = people.filteredPeople(query: debouncedQuery, tagID: tagFilters.first, includeGhosts: showGhosts)
         let tagged = tagFilters.count <= 1 ? base : base.filter { tagFilters.isSubset(of: $0.tagIDs) }
-        guard debouncedQuery.isEmpty else { return tagged }
-        return sorted(tagged)
+        // Apply relationship-type filter when set.
+        let typeFiltered: [Person]
+        if let rtype = relationshipTypeFilter {
+            typeFiltered = tagged.filter { $0.relationshipType == rtype }
+        } else {
+            typeFiltered = tagged
+        }
+        guard debouncedQuery.isEmpty else { return typeFiltered }
+        return sorted(typeFiltered)
+    }
+
+    /// Which relationship types actually appear in the current people list (for chip visibility).
+    private var presentTypes: [RelationshipType] {
+        let used = Set(people.people.map(\.relationshipType)).subtracting([.unset])
+        return RelationshipType.allCases.filter { used.contains($0) }
     }
 
     private func sorted(_ list: [Person]) -> [Person] {
@@ -223,6 +239,11 @@ struct PeopleListView: View {
                 .padding(.horizontal).padding(.bottom, 8)
 
             tagChips
+
+            // Relationship-type filter chips (only shown when multiple types are in use).
+            if presentTypes.count > 1 {
+                relationshipTypeChips
+            }
 
             Divider()
 
@@ -449,6 +470,28 @@ struct PeopleListView: View {
         }
     }
 
+    /// Horizontal chip bar for filtering by relationship type.
+    @ViewBuilder
+    private var relationshipTypeChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                FilterChip(label: "All", active: relationshipTypeFilter == nil) {
+                    relationshipTypeFilter = nil
+                }
+                ForEach(presentTypes, id: \.self) { rtype in
+                    FilterChip(
+                        label: "\(rtype.emoji) \(rtype.displayName)",
+                        active: relationshipTypeFilter == rtype
+                    ) {
+                        relationshipTypeFilter = (relationshipTypeFilter == rtype) ? nil : rtype
+                    }
+                }
+            }
+            .padding(.leading)
+        }
+        .padding(.bottom, 6)
+    }
+
     private var emptyState: some View {
         MSEmptyState(systemImage: "person.2",
                      title: "No people yet",
@@ -535,7 +578,15 @@ private struct PersonRow: View {
                 .font(.system(size: 26))
                 .foregroundStyle(NDS.brand.opacity(0.7))
             VStack(alignment: .leading, spacing: 2) {
-                Text(person.displayName).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(person.displayName).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                    // Relationship type badge — only shown when type is set.
+                    if person.relationshipType != .unset {
+                        Text(person.relationshipType.emoji)
+                            .font(.system(size: 11))
+                            .help(person.relationshipType.displayName)
+                    }
+                }
                 if !subtitle.isEmpty {
                     Text(subtitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
                 }
