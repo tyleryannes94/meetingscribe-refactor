@@ -130,10 +130,54 @@ Four independent guarantees:
    `_people-cache.json`, logs, the Whisper model blobs, and `secondbrain.db` are all
    skipped. Your meeting audio **is** included.)
 
-Right now the work data simply *sits* in `_remote/` as a complete, browsable backup.
-A future app feature (the "ingestion engine" in the master plan) can optionally fold
-it into your main Meetings/People/Tasks lists, deduplicated — but that's opt-in and
-not required for the backup to protect you.
+Out of the box the work data simply *sits* in `_remote/` as a complete, browsable
+backup. To fold it into your real Meetings / People / Tasks lists — deduplicated —
+run the **ingestion engine** below. That step is opt-in; the backup protects you
+either way.
+
+---
+
+## Phase 2 — fold the backup into your second brain (`MeetingScribeSync`)
+
+`rsync` *delivers* work files into `_remote/`. The bundled `MeetingScribeSync` tool
+*promotes* them into your live vault: new meetings appear in your Meetings list,
+work contacts are matched/merged into your existing People (deduped by email/phone/
+name), and work tasks/tags are unioned in. It runs **on the hub**.
+
+**Guarantees (by construction):**
+
+- **Additive only — never clobbers.** It has no delete path and never overwrites an
+  existing meeting/person/task. It only *adds* new records and *unions* new sub-data
+  (emails, memories, mentions…) into existing ones. Your own data is untouchable.
+- **Namespaced meetings.** Imported meetings land in `_imported-<device>/<slug>/`,
+  a sibling of your own meetings, tagged `isImported`. The app discovers them on its
+  next index rebuild.
+- **People dedup.** A work contact that matches one of yours (same email, phone, or
+  name) is merged into your existing person — unknown fields (photos, notes) are
+  preserved, empty fields filled, collections unioned, and `importSources` stamped
+  with the device.
+- **Idempotent.** A content-hash ledger (`_remote/.import-ledger.json`) means
+  re-running is a cheap no-op; only genuinely new/changed items are applied.
+
+**Try it (dry run first — writes nothing):**
+```bash
+bash scripts/sync/hub-ingest.sh            # report what WOULD be imported
+bash scripts/sync/hub-ingest.sh --apply    # actually perform the merge
+bash scripts/sync/hub-ingest.sh --self-test  # verify the merge logic
+```
+The binary is bundled in the app at
+`/Applications/MeetingScribe.app/Contents/MacOS/MeetingScribeSync` after `make app`;
+the wrapper finds it automatically (or builds from the repo with `swift run`).
+
+**Schedule it on the hub** (after you're happy with a dry run): render
+`scripts/sync/com.tyleryannes.meetingscribe.ingest.plist.template` (replace
+`@SCRIPT_PATH@` with the absolute path to `hub-ingest.sh`, `@INTERVAL_SECONDS@` e.g.
+`10800` for every 3 h, `@LOG_DIR@`), drop it in `~/Library/LaunchAgents/`, and load:
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tyleryannes.meetingscribe.ingest.plist
+```
+Run it a bit less often than the rsync push so it ingests complete arrivals. Logs go
+to `~/Library/Logs/MeetingScribe/ingest*.log`.
 
 ---
 
@@ -182,10 +226,14 @@ not required for the backup to protect you.
 
 ```
 scripts/sync/
-├── install-sync.sh        # run this on the work MacBook (interactive setup)
-├── uninstall-sync.sh      # remove it (--purge also drops key + config)
-├── meetingscribe-sync.sh  # the rsync push script (installed to ~/.local/bin)
-└── com.tyleryannes.meetingscribe.sync.plist.template   # launchd schedule template
+├── install-sync.sh        # WORK Mac: interactive rsync-push setup
+├── uninstall-sync.sh      # WORK Mac: remove it (--purge also drops key + config)
+├── meetingscribe-sync.sh  # WORK Mac: the rsync push script (installed to ~/.local/bin)
+├── com.tyleryannes.meetingscribe.sync.plist.template     # WORK Mac: push schedule
+├── hub-ingest.sh          # HUB: run the ingestion engine (dry-run by default)
+└── com.tyleryannes.meetingscribe.ingest.plist.template   # HUB: ingest schedule
+
+Sources/MeetingScribeSync/  # the ingestion engine (Phase 2), built with the app
 ```
 Config lives at `~/.config/meetingscribe-sync/config.env`; logs at
-`~/Library/Logs/MeetingScribe/sync*.log`.
+`~/Library/Logs/MeetingScribe/{sync,ingest}*.log`.
