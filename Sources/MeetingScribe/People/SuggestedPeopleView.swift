@@ -85,6 +85,10 @@ struct ReconnectView: View {
     @EnvironmentObject var people: PeopleStore
     var onOpen: (Person) -> Void
 
+    /// "Not yet" hides a suggestion for the rest of the session without
+    /// logging a fake interaction (C3-7).
+    @State private var snoozed: Set<String> = []
+
     /// Fallback cadence when there isn't enough history to infer one.
     private static let defaultCadenceDays: Double = 30
 
@@ -105,7 +109,8 @@ struct ReconnectView: View {
         let now = Date()
         return people.people
             .compactMap { p -> (Person, Date)? in
-                guard let last = p.lastInteractionAt,
+                guard !snoozed.contains(p.id),
+                      let last = p.lastInteractionAt,
                       now.timeIntervalSince(last) > cadenceSeconds(for: p) else { return nil }
                 return (p, last)
             }
@@ -124,25 +129,40 @@ struct ReconnectView: View {
                     Spacer()
                 }
                 ForEach(items, id: \.person.id) { item in
-                    Button { onOpen(item.person) } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "person.circle")
-                                .font(.system(size: 22)).foregroundStyle(NDS.textTertiary)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.person.displayName)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(NDS.textPrimary)
-                                Text(Self.lastText(item.last))
-                                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                    HStack(spacing: 10) {
+                        Button { onOpen(item.person) } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "person.circle")
+                                    .font(.system(size: 22)).foregroundStyle(NDS.textTertiary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.person.displayName)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(NDS.textPrimary)
+                                    Text(Self.lastText(item.last))
+                                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                                }
                             }
-                            Spacer(minLength: 4)
-                            Image(systemName: "chevron.right")
-                                .font(.caption).foregroundStyle(NDS.textTertiary)
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
-                        .padding(.vertical, 4)
+                        .buttonStyle(.plain)
+                        Spacer(minLength: 4)
+                        // C3-7 — turn the passive card into an active habit
+                        // trigger. "Yes" logs the interaction (drops them off
+                        // the list); "Not yet" snoozes for this session.
+                        HStack(spacing: 4) {
+                            Text("Did you connect?")
+                                .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            Button("Yes") {
+                                people.bumpLastInteraction(personID: item.person.id, date: Date())
+                            }
+                            .buttonStyle(.borderless).font(NDS.tiny).foregroundStyle(NDS.brand)
+                            Button("Not yet") {
+                                snoozed.insert(item.person.id)
+                            }
+                            .buttonStyle(.borderless).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(.vertical, 4)
                 }
             }
             .padding(14)

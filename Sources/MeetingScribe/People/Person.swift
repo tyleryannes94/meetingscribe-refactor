@@ -87,6 +87,22 @@ enum RelationshipType: String, Codable, CaseIterable, Hashable {
         }
     }
 
+    /// D1-6 — days of silence after which this person surfaces on the
+    /// "Reconnect" card. Deliberately looser than `defaultCheckInDays` (you'd
+    /// ideally text a partner daily, but they're only "drifting" after a week)
+    /// so the reconnect surface stays meaningful rather than always-on.
+    var reconnectThresholdDays: Int {
+        switch self {
+        case .romanticPartner:  return 7
+        case .familyMember:     return 14
+        case .closeFriend:      return 21
+        case .friend:           return 30
+        case .colleague:        return 45
+        case .acquaintance:     return 90
+        case .unset:            return 45
+        }
+    }
+
     /// Types that unlock depth content (coaching frameworks, reflection prompts).
     var supportsDepthContent: Bool {
         switch self {

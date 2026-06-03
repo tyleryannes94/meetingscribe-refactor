@@ -9,7 +9,6 @@ struct PeopleInsightsView: View {
     /// Select a person in the list.
     var onOpen: (String) -> Void
 
-    private static let goneColdDays = 45
     private static let birthdayWindowDays = 30
 
     var body: some View {
@@ -73,10 +72,18 @@ struct PeopleInsightsView: View {
     /// People you've interacted with before but not in a while (excludes
     /// never-contacted imports, which have no lastInteractionAt).
     private var goneCold: [(Person, Date)]? {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -Self.goneColdDays, to: Date()) ?? Date()
+        // D1-6 — per-type drift threshold instead of one flat cutoff. A partner
+        // surfaces after a week of silence; a colleague after six. A user
+        // override on check-in cadence tightens it further when it's shorter.
+        let now = Date()
+        let cal = Calendar.current
         return people.people
             .compactMap { p -> (Person, Date)? in
-                guard let last = p.lastInteractionAt, last < cutoff else { return nil }
+                guard let last = p.lastInteractionAt else { return nil }
+                let threshold = min(p.relationshipType.reconnectThresholdDays,
+                                    p.checkInCadenceDays ?? Int.max)
+                guard let cutoff = cal.date(byAdding: .day, value: -threshold, to: now),
+                      last < cutoff else { return nil }
                 return (p, last)
             }
             .sorted { $0.1 < $1.1 }
