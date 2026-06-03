@@ -1178,6 +1178,7 @@ struct PersonDetailView: View {
             HStack {
                 Text("Encounters").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                 Spacer()
+                checkInGoalMenu
                 Button { showAddEncounter = true } label: { Label("Add", systemImage: "plus") }
                     .buttonStyle(.borderless).font(NDS.small)
             }
@@ -1185,9 +1186,41 @@ struct PersonDetailView: View {
                 Text("No encounters yet. Add where you met or last saw them.")
                     .font(NDS.small).foregroundStyle(NDS.textTertiary)
             } else {
+                // D4-6 — 13-week consistency heat map + streak.
+                EncounterHeatMap(dates: mine.map(\.date), goalDays: current.checkInGoalDays)
                 ForEach(mine) { e in EncounterRow(encounter: e) { people.deleteEncounter(e) } }
             }
         }
+    }
+
+    /// P2-8 — per-person aspirational check-in goal. Distinct from the inferred
+    /// cadence; shown as an annotation on the heat map.
+    @ViewBuilder
+    private var checkInGoalMenu: some View {
+        let options: [Int?] = [nil, 3, 7, 14, 30, 60]
+        Menu {
+            ForEach(options.indices, id: \.self) { idx in
+                let opt = options[idx]
+                Button {
+                    var updated = current
+                    updated.checkInGoalDays = opt
+                    people.updatePerson(updated)
+                } label: {
+                    HStack {
+                        Text(opt.map { "Every \($0) days" } ?? "No goal")
+                        if current.checkInGoalDays == opt {
+                            Spacer(); Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label(current.checkInGoalDays.map { "Goal: \($0)d" } ?? "Set goal",
+                  systemImage: "target")
+        }
+        .menuStyle(.borderlessButton)
+        .font(NDS.small)
+        .help("Set an aspirational check-in goal for this person")
     }
 
     // MARK: - Tasks (cross-tab: ActionItems owned by this person)

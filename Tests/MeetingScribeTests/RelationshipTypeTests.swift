@@ -90,6 +90,30 @@ final class RelationshipTypeTests: XCTestCase {
         XCTAssertGreaterThan(partner, 0, "cadence must be a positive number of days")
     }
 
+    /// P2-8 — the aspirational goal field round-trips through the tolerant
+    /// Person decoder, and is absent (nil) for older records.
+    func testCheckInGoalDaysRoundTrips() throws {
+        var p = Person(displayName: "Sam", relationshipType: .closeFriend)
+        p.checkInGoalDays = 14
+        let data = try JSONEncoder().encode(p)
+        let back = try JSONDecoder().decode(Person.self, from: data)
+        XCTAssertEqual(back.checkInGoalDays, 14)
+
+        let legacy = #"{ "id": "x", "displayName": "Legacy" }"#.data(using: .utf8)!
+        XCTAssertNil(try JSONDecoder().decode(Person.self, from: legacy).checkInGoalDays)
+    }
+
+    /// D1-6 — reconnect thresholds are looser than the daily-ish check-in
+    /// cadence and tighten with closeness.
+    func testReconnectThresholdsAreLooserThanCadenceAndOrdered() {
+        XCTAssertGreaterThanOrEqual(RelationshipType.romanticPartner.reconnectThresholdDays,
+                                    RelationshipType.romanticPartner.defaultCheckInDays)
+        XCTAssertLessThan(RelationshipType.romanticPartner.reconnectThresholdDays,
+                          RelationshipType.familyMember.reconnectThresholdDays)
+        XCTAssertLessThan(RelationshipType.friend.reconnectThresholdDays,
+                          RelationshipType.colleague.reconnectThresholdDays)
+    }
+
     /// `effectiveCheckInDays` uses the user override when present, else the
     /// type default.
     func testEffectiveCheckInDaysHonoursOverride() {

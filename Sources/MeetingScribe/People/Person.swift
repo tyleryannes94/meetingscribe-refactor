@@ -251,6 +251,10 @@ struct Person: Identifiable, Codable, Hashable {
     /// User-overridden check-in cadence in days. When nil, the type's
     /// `defaultCheckInDays` is used.
     var checkInCadenceDays: Int?
+    /// P2-8 — an aspirational per-person goal ("I want to connect every N
+    /// days"), distinct from the inferred/override cadence. Shown as a target
+    /// line on the encounter heat map. Nil = no explicit goal set.
+    var checkInGoalDays: Int?
 
     /// Effective days between check-ins: user override if set, else type default.
     var effectiveCheckInDays: Int {
@@ -279,7 +283,8 @@ struct Person: Identifiable, Codable, Hashable {
          relationships: [Relationship] = [],
          attachedNotes: [AttachedNote] = [],
          relationshipType: RelationshipType = .unset,
-         checkInCadenceDays: Int? = nil) {
+         checkInCadenceDays: Int? = nil,
+         checkInGoalDays: Int? = nil) {
         self.id = id
         self.displayName = displayName
         self.company = company
@@ -303,6 +308,7 @@ struct Person: Identifiable, Codable, Hashable {
         self.attachedNotes = attachedNotes
         self.relationshipType = relationshipType
         self.checkInCadenceDays = checkInCadenceDays
+        self.checkInGoalDays = checkInGoalDays
     }
 
     /// Convenience accessors for the Phase A single-field sheet.
@@ -329,7 +335,7 @@ extension Person {
              createdAt, updatedAt, lastInteractionAt, meetingMentions,
              birthday, addresses, favorites, memories, photoRelativePaths,
              contactIdentifier, importSources, relationships, attachedNotes,
-             relationshipType, checkInCadenceDays
+             relationshipType, checkInCadenceDays, checkInGoalDays
     }
 
     /// Tolerant decoder. Like `Meeting`, every field added after the first
@@ -362,6 +368,7 @@ extension Person {
         // Phase D — tolerant: unknown raw values (future types on older builds) → .unset
         relationshipType = (try? c.decodeIfPresent(RelationshipType.self, forKey: .relationshipType)) ?? .unset
         checkInCadenceDays = (try? c.decodeIfPresent(Int.self, forKey: .checkInCadenceDays)) ?? nil
+        checkInGoalDays = (try? c.decodeIfPresent(Int.self, forKey: .checkInGoalDays)) ?? nil
     }
 
     /// A coarse relevance score (§12.4) used to surface high-signal people and
