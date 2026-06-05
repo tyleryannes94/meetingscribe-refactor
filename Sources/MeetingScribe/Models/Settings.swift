@@ -31,6 +31,8 @@ final class AppSettings {
         static let dictationUsePolished = "dictationUsePolished"
         static let dictationSwapHotkeyKeyCode = "dictationSwapHotkeyKeyCode"
         static let dictationSwapHotkeyModifiers = "dictationSwapHotkeyModifiers"
+        static let dictationPromptHotkeyKeyCode = "dictationPromptHotkeyKeyCode"
+        static let dictationPromptHotkeyModifiers = "dictationPromptHotkeyModifiers"
         static let enabledCalendarIDs = "enabledCalendarIDs"
         /// Storage key — kept as "coworkFolders" so existing users don't
         /// lose their saved folder list. Surfaced in code as `chatFolders`.
@@ -408,6 +410,23 @@ final class AppSettings {
     var dictationSwapHotkeyModifiers: UInt32 {
         get { UInt32(defaults.object(forKey: Keys.dictationSwapHotkeyModifiers) as? Int ?? 0) }
         set { defaults.set(Int(newValue), forKey: Keys.dictationSwapHotkeyModifiers) }
+    }
+
+    /// Carbon virtual keycode for the "rewrite dictation as an AI prompt"
+    /// hotkey. Default: F7 (98). Replaces the last-inserted dictation with a
+    /// TCREI-structured prompt version. Optional — only fires on demand.
+    var dictationPromptHotkeyKeyCode: UInt32 {
+        get {
+            let v = defaults.integer(forKey: Keys.dictationPromptHotkeyKeyCode)
+            return v == 0 ? 98 : UInt32(v)
+        }
+        set { defaults.set(Int(newValue), forKey: Keys.dictationPromptHotkeyKeyCode) }
+    }
+
+    /// Carbon modifier mask for the prompt-rewrite hotkey. 0 = no modifiers.
+    var dictationPromptHotkeyModifiers: UInt32 {
+        get { UInt32(defaults.object(forKey: Keys.dictationPromptHotkeyModifiers) as? Int ?? 0) }
+        set { defaults.set(Int(newValue), forKey: Keys.dictationPromptHotkeyModifiers) }
     }
 
     /// EventKit calendar identifiers the user has opted in to. Empty set =

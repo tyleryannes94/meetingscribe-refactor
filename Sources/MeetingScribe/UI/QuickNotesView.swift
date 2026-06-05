@@ -210,12 +210,16 @@ struct QuickNoteDetail: View {
 
     @State private var rawDraft: String = ""
     @State private var polishedDraft: String = ""
+    @State private var promptDraft: String = ""
     @State private var lastSavedRaw: String = ""
     @State private var lastSavedPolished: String = ""
+    @State private var lastSavedPrompt: String = ""
     @State private var rawSaveTimer: Timer?
     @State private var polishedSaveTimer: Timer?
+    @State private var promptSaveTimer: Timer?
     @State private var rawCopied = false
     @State private var polishedCopied = false
+    @State private var promptCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -232,6 +236,7 @@ struct QuickNoteDetail: View {
         .onAppear { reload() }
         .onChange(of: manager.quickNotesTranscribing) { _, _ in reloadIfNoUserEdits() }
         .onChange(of: manager.quickNotesPolishing) { _, _ in reloadIfNoUserEdits() }
+        .onChange(of: manager.quickNotesStructuringPrompt) { _, _ in reloadIfNoUserEdits() }
         .onDisappear { flushSaves() }
         .id(note.id)
     }
@@ -372,6 +377,22 @@ struct QuickNoteDetail: View {
                 rerunDisabled: manager.isTranscribingQuickNote(note),
                 onChange: { scheduleRawSave() }
             )
+            pane(
+                title: "AI Prompt",
+                subtitle: "TCREI-structured prompt (optional)",
+                icon: "wand.and.stars",
+                accent: .green,
+                text: $promptDraft,
+                isInFlight: manager.isStructuringQuickNotePrompt(note),
+                inFlightText: "Structuring prompt…",
+                emptyPlaceholder: emptyPromptPlaceholder,
+                copied: $promptCopied,
+                onCopy: { copy(promptDraft, into: $promptCopied) },
+                onRerun: { manager.regenerateQuickNotePrompt(note) },
+                rerunLabel: promptDraft.isEmpty ? "Generate" : "Regenerate",
+                rerunDisabled: rawDraft.isEmpty || manager.isStructuringQuickNotePrompt(note),
+                onChange: { schedulePromptSave() }
+            )
         }
     }
 
@@ -384,6 +405,12 @@ struct QuickNoteDetail: View {
     private var emptyRawPlaceholder: String {
         if manager.isTranscribingQuickNote(note) { return "Whisper is running…" }
         return "No transcript yet. Click Re-transcribe to run whisper against the recorded audio."
+    }
+
+    private var emptyPromptPlaceholder: String {
+        if manager.isTranscribingQuickNote(note) { return "Waiting for transcript…" }
+        if rawDraft.isEmpty { return "No transcript yet." }
+        return "Optional. Click Generate to rewrite the transcript into a structured AI prompt (Task, Context, References, Evaluate, Iterate). Or use the prompt hotkey right after dictating."
     }
 
     @ViewBuilder
@@ -480,10 +507,13 @@ struct QuickNoteDetail: View {
     private func reload() {
         let raw = manager.readQuickNoteTranscript(note)
         let polished = manager.readQuickNotePolished(note)
+        let prompt = manager.readQuickNotePrompt(note)
         rawDraft = raw
         polishedDraft = polished
+        promptDraft = prompt
         lastSavedRaw = raw
         lastSavedPolished = polished
+        lastSavedPrompt = prompt
     }
 
     /// Re-read disk-side state when a background job (transcribe / polish)
@@ -501,6 +531,13 @@ struct QuickNoteDetail: View {
             if fresh != polishedDraft {
                 polishedDraft = fresh
                 lastSavedPolished = fresh
+            }
+        }
+        if promptDraft == lastSavedPrompt {
+            let fresh = manager.readQuickNotePrompt(note)
+            if fresh != promptDraft {
+                promptDraft = fresh
+                lastSavedPrompt = fresh
             }
         }
     }
@@ -529,9 +566,22 @@ struct QuickNoteDetail: View {
         manager.saveQuickNotePolished(polishedDraft, for: note)
         lastSavedPolished = polishedDraft
     }
+    private func schedulePromptSave() {
+        promptSaveTimer?.invalidate()
+        promptSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { _ in
+            Task { @MainActor in flushPromptSave() }
+        }
+    }
+    private func flushPromptSave() {
+        promptSaveTimer?.invalidate(); promptSaveTimer = nil
+        guard promptDraft != lastSavedPrompt else { return }
+        manager.saveQuickNotePrompt(promptDraft, for: note)
+        lastSavedPrompt = promptDraft
+    }
     private func flushSaves() {
         flushRawSave()
         flushPolishedSave()
+        flushPromptSave()
     }
 
     private func copy(_ text: String, into flag: Binding<Bool>) {

@@ -19,6 +19,7 @@ struct MeetingScribeApp: App {
     @State private var calendarTimer: Timer?
     @State private var hotkey = GlobalHotkey()
     @State private var swapHotkey = GlobalHotkey()
+    @State private var promptHotkey = GlobalHotkey()
     @State private var meetingRecordHotkey = GlobalHotkey()
     @State private var settingsObserver: AnyCancellable?
 
@@ -312,6 +313,13 @@ struct MeetingScribeApp: App {
         }
         swapHotkey.register(keyCode: s.dictationSwapHotkeyKeyCode,
                             modifiers: s.dictationSwapHotkeyModifiers)
+        // Optional: rewrite the just-dictated text into a TCREI-structured AI
+        // prompt, in place. Separate from the raw↔polished swap.
+        promptHotkey.onTrigger = { [weak manager] in
+            manager?.dictation.rewriteAsPrompt()
+        }
+        promptHotkey.register(keyCode: s.dictationPromptHotkeyKeyCode,
+                              modifiers: s.dictationPromptHotkeyModifiers)
         // Global meeting-record toggle (D4-1): one chord starts an ad-hoc
         // recording when idle and stops it when recording — works system-wide,
         // even when MeetingScribe isn't the focused app.
@@ -411,6 +419,8 @@ struct MeetingScribeApp: App {
                                 modifiers: s.dictationHotkeyModifiers)
                 swapHotkey.register(keyCode: s.dictationSwapHotkeyKeyCode,
                                     modifiers: s.dictationSwapHotkeyModifiers)
+                promptHotkey.register(keyCode: s.dictationPromptHotkeyKeyCode,
+                                      modifiers: s.dictationPromptHotkeyModifiers)
                 meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
                                              modifiers: s.meetingRecordHotkeyModifiers)
                 notifications.scheduleDailyBrief()
