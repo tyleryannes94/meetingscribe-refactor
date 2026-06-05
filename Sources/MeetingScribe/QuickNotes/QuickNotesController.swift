@@ -27,6 +27,8 @@ final class QuickNotesController: ObservableObject {
     @Published private(set) var transcribing: Set<String> = []
     /// IDs of quick notes currently being polished.
     @Published private(set) var polishing: Set<String> = []
+    /// IDs of quick notes currently being rewritten into a TCREI AI prompt.
+    @Published private(set) var structuringPrompt: Set<String> = []
     /// Per-note error string for the detail view to surface failures inline.
     @Published private(set) var errors: [String: String] = [:]
 
@@ -34,6 +36,7 @@ final class QuickNotesController: ObservableObject {
     private let recorder = MicOnlyRecorder()
     private let transcriber = QuickTranscribe()
     private let polisher = TranscriptPolisher()
+    private let promptRewriter = PromptRewriter()
     private var pendingNote: QuickNote?
 
     /// Hook called after a new dictation note finishes transcribing. Lets
@@ -146,6 +149,36 @@ final class QuickNotesController: ObservableObject {
         Task { await polishInBackground(note, raw: raw) }
     }
 
+    /// Generate (or regenerate) the TCREI-structured AI prompt for a note from
+    /// its raw transcript. Optional and on-demand — unlike polish it does NOT
+    /// run automatically after transcription.
+    func generatePrompt(_ note: QuickNote) {
+        let raw = store.readTranscript(for: note)
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            setError(note.id, "No raw transcript to rewrite. Run Transcribe first.")
+            return
+        }
+        setError(note.id, nil)
+        Task { await rewritePromptInBackground(note, raw: raw) }
+    }
+
+    private func rewritePromptInBackground(_ note: QuickNote, raw: String) async {
+        structuringPrompt.insert(note.id)
+        defer {
+            structuringPrompt.remove(note.id)
+            refresh()
+        }
+        do {
+            let prompt = try await promptRewriter.rewrite(raw)
+            try? store.writePrompt(prompt, for: note)
+        } catch {
+            log.error("prompt rewrite failed: \(error.localizedDescription, privacy: .public)")
+            ErrorReporter.shared.report(error, category: .integration,
+                                        context: ["service": "ollama", "phase": "prompt", "note": note.id])
+            setError(note.id, "AI-prompt rewrite failed: \(error.localizedDescription). The raw transcript is still saved.")
+        }
+    }
+
     private func transcribe(_ note: QuickNote, audioURL: URL) async {
         setError(note.id, nil)
         transcribing.insert(note.id)
@@ -216,6 +249,7 @@ final class QuickNotesController: ObservableObject {
 
     func readTranscript(_ note: QuickNote) -> String { store.readTranscript(for: note) }
     func readPolished(_ note: QuickNote) -> String { store.readPolished(for: note) }
+    func readPrompt(_ note: QuickNote) -> String { store.readPrompt(for: note) }
 
     func saveTranscript(_ text: String, for note: QuickNote) {
         try? store.writeTranscript(text, for: note)
@@ -234,6 +268,10 @@ final class QuickNotesController: ObservableObject {
         try? store.writePolished(text, for: note)
     }
 
+    func savePrompt(_ text: String, for note: QuickNote) {
+        try? store.writePrompt(text, for: note)
+    }
+
     func delete(_ note: QuickNote) {
         store.deleteNote(note)
         refresh()
@@ -247,6 +285,7 @@ final class QuickNotesController: ObservableObject {
 
     func isTranscribing(_ note: QuickNote) -> Bool { transcribing.contains(note.id) }
     func isPolishing(_ note: QuickNote) -> Bool { polishing.contains(note.id) }
+    func isStructuringPrompt(_ note: QuickNote) -> Bool { structuringPrompt.contains(note.id) }
     func error(for note: QuickNote) -> String? { errors[note.id] }
 
     private func setError(_ id: String, _ err: String?) {

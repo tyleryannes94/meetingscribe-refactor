@@ -52,6 +52,20 @@ struct QuickNoteStore {
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 
+    /// AI-prompt version produced by PromptRewriter — the raw transcript
+    /// restructured into a TCREI-framework prompt (Task, Context, References,
+    /// Evaluate, Iterate). Optional and separate from `polished.md`: polishing
+    /// cleans speech into prose, this reshapes a request into a usable prompt.
+    func writePrompt(_ text: String, for note: QuickNote) throws {
+        try text.write(to: directory(for: note).appendingPathComponent("prompt.md"),
+                       atomically: true, encoding: .utf8)
+    }
+
+    func readPrompt(for note: QuickNote) -> String {
+        let url = directory(for: note).appendingPathComponent("prompt.md")
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    }
+
     /// Canonical recording path (the mic recorder writes here).
     func audioURL(for note: QuickNote) -> URL {
         directory(for: note).appendingPathComponent("audio.m4a")

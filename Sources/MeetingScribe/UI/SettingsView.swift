@@ -25,6 +25,8 @@ struct SettingsView: View {
     @State private var meetingRecMods: UInt32 = AppSettings.shared.meetingRecordHotkeyModifiers
     @State private var swapKeyCode: UInt32 = AppSettings.shared.dictationSwapHotkeyKeyCode
     @State private var swapMods: UInt32 = AppSettings.shared.dictationSwapHotkeyModifiers
+    @State private var promptKeyCode: UInt32 = AppSettings.shared.dictationPromptHotkeyKeyCode
+    @State private var promptMods: UInt32 = AppSettings.shared.dictationPromptHotkeyModifiers
     @State private var dictationAutoPaste: Bool = AppSettings.shared.dictationAutoPaste
     @State private var dictationUsePolished: Bool = AppSettings.shared.dictationUsePolished
     @State private var whisperUseGPU: Bool = AppSettings.shared.whisperUseGPU
@@ -178,7 +180,23 @@ struct SettingsView: View {
                         }
                         .frame(width: 90)
                     }
+                    HStack {
+                        Text("Rewrite as AI prompt")
+                        Spacer()
+                        HotkeyRecorder(keyCode: $promptKeyCode, modifiers: $promptMods)
+                        Menu("Presets") {
+                            ForEach(quickPresets, id: \.label) { preset in
+                                Button(preset.label) {
+                                    promptKeyCode = preset.key
+                                    promptMods = preset.mods
+                                }
+                            }
+                        }
+                        .frame(width: 90)
+                    }
                     Text("Click a shortcut box, then press ANY key combination to set it. After dictating, press the swap shortcut to replace the inserted text with the other version (raw ↔ polished) in place.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Text("The AI-prompt shortcut is optional. It rewrites your dictation into a structured prompt using the TCREI framework (Task, Context, References, Evaluate, Iterate) — ideal when you're dictating a request to paste into an AI. Default: F7. Press the swap shortcut to flip back to raw/polished.")
                         .font(.caption2).foregroundStyle(.secondary)
                     Toggle("Paste transcription at cursor after dictation", isOn: $dictationAutoPaste)
                     Toggle("Use the polished (cleaned-up) version by default", isOn: $dictationUsePolished)
@@ -656,6 +674,8 @@ struct SettingsView: View {
         s.meetingRecordHotkeyModifiers = meetingRecMods
         s.dictationSwapHotkeyKeyCode = swapKeyCode
         s.dictationSwapHotkeyModifiers = swapMods
+        s.dictationPromptHotkeyKeyCode = promptKeyCode
+        s.dictationPromptHotkeyModifiers = promptMods
         s.dictationAutoPaste = dictationAutoPaste
         s.dictationUsePolished = dictationUsePolished
         s.whisperUseGPU = whisperUseGPU
