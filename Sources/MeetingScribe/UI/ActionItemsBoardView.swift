@@ -136,7 +136,11 @@ extension ActionItemsView {
                     Divider()
                     projectMenuItems(for: item)
                     Divider()
-                    Button(role: .destructive) { store.delete(item.id) } label: { Text("Delete") }
+                    Button(role: .destructive) {
+                        let id = item.id, title = item.title
+                        store.delete(id)
+                        ToastCenter.shared.show("Deleted “\(title)”", undoTitle: "Undo") { store.restore(id) }
+                    } label: { Text("Delete") }
                 } label: {
                     Image(systemName: "ellipsis").foregroundStyle(.secondary)
                 }
