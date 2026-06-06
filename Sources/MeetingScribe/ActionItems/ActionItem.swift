@@ -67,6 +67,12 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// accepts the existing call sites that omit it.
     var deletedAt: Date? = nil
 
+    /// When the task was marked completed (P2-4). Distinct from `updatedAt`
+    /// (which any edit bumps), so "done today / this week" surfaces and
+    /// reporting are accurate. Set on the open→completed transition, cleared on
+    /// reopen. Optional + defaulted for back-compat.
+    var completedAt: Date? = nil
+
     var createdAt: Date
     var updatedAt: Date
 
