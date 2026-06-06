@@ -80,6 +80,10 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// of a series.
     var seriesID: String? = nil
 
+    /// Extracted from a meeting but owned by someone *else* — a "waiting-on /
+    /// delegated" item (PM-19). nil/false = my own task.
+    var delegated: Bool? = nil
+
     var createdAt: Date
     var updatedAt: Date
 

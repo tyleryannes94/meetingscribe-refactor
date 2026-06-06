@@ -316,6 +316,11 @@ extension ActionItemsView {
             }
             quickViewChip("This week", active: filter == .thisWeek) { filter = .thisWeek }
             quickViewChip("Overdue", active: filter == .overdue) { filter = .overdue }
+            if store.items.contains(where: { $0.delegated == true }) {
+                quickViewChip("Delegated", active: ownerScope == .delegated) {
+                    ownerScope = ownerScope == .delegated ? .anyone : .delegated
+                }
+            }
             Spacer()
             // Active-filter pill (only when filtering)
             if filter != .all || priorityFilter != .any {
