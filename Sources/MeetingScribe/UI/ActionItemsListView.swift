@@ -239,6 +239,12 @@ extension ActionItemsView {
                 }
             }
             .filter { item in
+                switch ownerScope {
+                case .anyone: return true
+                case .mine: return isMine(item)
+                }
+            }
+            .filter { item in
                 guard !search.isEmpty else { return true }
                 let q = search.lowercased()
                 return item.title.lowercased().contains(q)
@@ -246,6 +252,14 @@ extension ActionItemsView {
                     || item.meetingTitle.lowercased().contains(q)
             }
             .sorted(by: sort)
+    }
+
+    /// A task counts as "mine" when its owner matches one of my name aliases, or
+    /// it's unassigned (my own captured task). Drives the "My open" quick view.
+    func isMine(_ item: ActionItem) -> Bool {
+        let owner = (item.owner ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if owner.isEmpty { return true }
+        return AppSettings.shared.myNameAliases.contains(owner.lowercased())
     }
 
     func sort(_ a: ActionItem, _ b: ActionItem) -> Bool {
