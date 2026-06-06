@@ -316,6 +316,30 @@ struct TaskPageView: View {
                     }
                 }
             }
+            customPropertiesSection(item)
+        }
+    }
+
+    /// User-defined database properties for the task's project (NP-1), plus an
+    /// "Add property" menu. Empty when the task isn't in a project.
+    @ViewBuilder
+    private func customPropertiesSection(_ item: ActionItem) -> some View {
+        if let pid = item.projectID {
+            ForEach(store.propertyDefs(forProject: pid)) { def in
+                CustomPropertyRow(store: store, projectID: pid, itemID: itemID,
+                                  def: def, value: item.properties?[def.id])
+            }
+            Menu {
+                ForEach(PropertyType.allCases) { t in
+                    Button { store.addProperty(toProject: pid, name: t.label, type: t) } label: {
+                        Label(t.label, systemImage: t.systemImage)
+                    }
+                }
+            } label: {
+                Label("Add property", systemImage: "plus")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         }
     }
 
