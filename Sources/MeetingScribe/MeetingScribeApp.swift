@@ -240,6 +240,7 @@ struct MeetingScribeApp: App {
             Task { @MainActor in
                 calendar.refreshUpcoming()
                 let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
+                await notifications.syncTaskReminders(for: manager.actionItems.items)
                 if AppSettings.shared.autoRecord { autoStartIfNeeded() }
             }
         }
@@ -247,6 +248,7 @@ struct MeetingScribeApp: App {
         calendarTimer = t
         Task { @MainActor in
             let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
+            await notifications.syncTaskReminders(for: manager.actionItems.items)
         }
     }
 
@@ -427,6 +429,7 @@ struct MeetingScribeApp: App {
                 Task { @MainActor in
                     calendar.refreshUpcoming(force: true)
                     let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
+                    await notifications.syncTaskReminders(for: manager.actionItems.items)
                 }
             }
     }

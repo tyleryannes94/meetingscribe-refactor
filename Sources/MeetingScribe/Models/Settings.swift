@@ -337,6 +337,12 @@ final class AppSettings {
         set { defaults.set(newValue, forKey: Keys.notifyAtMeetingStart) }
     }
 
+    /// Whether to fire a local notification when a task's due date arrives (P2-1).
+    var notifyTaskDue: Bool {
+        get { defaults.object(forKey: "notifyTaskDue") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "notifyTaskDue") }
+    }
+
     var detectZoomImpromptu: Bool {
         get { defaults.object(forKey: Keys.detectZoomImpromptu) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.detectZoomImpromptu) }

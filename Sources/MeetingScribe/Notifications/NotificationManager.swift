@@ -135,6 +135,63 @@ final class NotificationManager: NSObject, ObservableObject {
         }
     }
 
+    /// Schedules a one-shot reminder at each incomplete task's due date, and
+    /// cancels reminders for tasks that were completed, deleted, or rescheduled
+    /// into the past (P2-1). Mirrors `syncScheduled(for:)` and is safe to call
+    /// repeatedly. Capped to the soonest 60 due tasks to stay well under the
+    /// system's pending-notification limit. Tapping deep-links to the task.
+    func syncTaskReminders(for tasks: [ActionItem], now: Date = Date()) async {
+        let center = UNUserNotificationCenter.current()
+        let existing = await center.pendingNotificationRequests()
+        let existingTaskIDs = Set(existing.map(\.identifier)).filter { $0.hasPrefix("task-reminder-") }
+
+        guard AppSettings.shared.notifyTaskDue else {
+            if !existingTaskIDs.isEmpty {
+                center.removePendingNotificationRequests(withIdentifiers: Array(existingTaskIDs))
+            }
+            return
+        }
+
+        let eligible = Self.tasksNeedingDueReminder(tasks, now: now)
+        let liveIDs = Set(eligible.map { "task-reminder-\($0.id)" })
+        let toCancel = existingTaskIDs.subtracting(liveIDs)
+        if !toCancel.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: Array(toCancel))
+        }
+
+        for t in eligible {
+            guard let due = t.dueDate else { continue }
+            let id = "task-reminder-\(t.id)"
+            // Re-add so a changed due date updates the fire time.
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+            let content = UNMutableNotificationContent()
+            content.title = "Task due: \(t.title)"
+            content.body = t.owner.flatMap { $0.isEmpty ? nil : "Assigned to \($0)" } ?? "This task is now due."
+            content.sound = .default
+            content.userInfo[deepLinkKey] = "meetingscribe://actionItem/\(t.id)"
+            let trigger = UNTimeIntervalNotificationTrigger(
+                timeInterval: max(1, due.timeIntervalSince(now)), repeats: false)
+            let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+            do {
+                try await center.add(req)
+            } catch {
+                log.error("task reminder schedule failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Pure selection of which tasks get a due-date reminder: incomplete, with a
+    /// future due date, soonest first, capped to `limit` (system notification
+    /// budget). Testable seam — no notification-center side effects.
+    nonisolated static func tasksNeedingDueReminder(_ tasks: [ActionItem], now: Date,
+                                                    limit: Int = 60) -> [ActionItem] {
+        tasks
+            .filter { $0.status != .completed && ($0.dueDate.map { $0 > now } ?? false) }
+            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+            .prefix(limit)
+            .map { $0 }
+    }
+
     /// Posts an immediate notification when transcription + summary finishes
     /// for a meeting. This is the most valuable notification — it closes the
     /// loop for the user ("your meeting is ready to review").
