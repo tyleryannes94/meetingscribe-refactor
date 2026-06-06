@@ -141,6 +141,9 @@ extension ActionItemsView {
                 if let name = store.project(for: item)?.name {
                     Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1)
                 }
+                if let owner = item.owner, !owner.isEmpty {
+                    TaskOwnerAvatar(name: owner, size: 16)
+                }
                 Spacer()
                 Menu {
                     ForEach(ActionItem.Status.allCases) { s in
