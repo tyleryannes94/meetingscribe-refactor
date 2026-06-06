@@ -172,6 +172,22 @@ final class ActionItemStoreTrashTests: XCTestCase {
         XCTAssertEqual(store.items.first { $0.id == t.id }?.sectionID, s.id, "task re-filed")
     }
 
+    // MARK: Project completion (VD-7)
+
+    func testProjectCompletionCounts() async {
+        let store = ActionItemStore()
+        await store.awaitInitialLoad()
+        let p = store.createProject(name: "P")
+        let a = store.createTask(title: "a", projectID: p.id)
+        let b = store.createTask(title: "b", projectID: p.id)
+        _ = store.createTask(title: "c", projectID: p.id)
+        store.setStatus(a.id, status: .completed)
+        store.setStatus(b.id, status: .completed)
+        let c = store.completion(forProject: p.id)
+        XCTAssertEqual(c.done, 2)
+        XCTAssertEqual(c.total, 3)
+    }
+
     // MARK: Completion timestamp (P2-4)
 
     func testCompletedAtSetKeptAndClearedOnReopen() async {
