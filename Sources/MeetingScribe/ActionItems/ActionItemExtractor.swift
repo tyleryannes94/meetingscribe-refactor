@@ -29,11 +29,13 @@ enum ActionItemExtractor {
             guard let parsed = parseLine(raw) else { continue }
             // Skip the "None." sentinel.
             if parsed.text.lowercased() == "none." || parsed.text.lowercased() == "none" { continue }
-            // Only keep action items that are MINE: owned by "Me"/"Tyler", or
-            // where my name appears in the action text (someone delegating to
-            // me, e.g. "Tyler to follow up…"). Drop items owned by others or
-            // with no clear owner.
-            guard isMine(owner: parsed.owner, text: parsed.text) else { continue }
+            // Keep action items that are MINE (owned by "Me"/the user, or where
+            // the action text addresses the user). Items owned by *others* are
+            // dropped — unless the user opts in to capturing them as
+            // "delegated / waiting-on" tasks (PM-19), in which case we keep them
+            // tagged so a "Delegated" view can surface them.
+            let mine = isMine(owner: parsed.owner, text: parsed.text)
+            if !mine && !AppSettings.shared.captureDelegatedTasks { continue }
             let item = ActionItem(
                 id: UUID().uuidString,
                 meetingID: meeting.id,
@@ -47,6 +49,7 @@ enum ActionItemExtractor {
                 dueDate: parsed.dueDate,
                 notionPageID: nil,
                 notionURL: nil,
+                delegated: mine ? nil : true,
                 createdAt: Date(),
                 updatedAt: Date()
             )

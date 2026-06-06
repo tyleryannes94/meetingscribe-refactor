@@ -34,6 +34,7 @@ struct SettingsView: View {
     @State private var whisperFlashAttn: Bool = AppSettings.shared.whisperFlashAttention
     @State private var whisperLanguage: String = AppSettings.shared.whisperLanguage
     @State private var autoExtractPeople: Bool = AppSettings.shared.autoExtractPeople
+    @State private var captureDelegated: Bool = AppSettings.shared.captureDelegatedTasks
     @State private var userName: String = AppSettings.shared.userName
     @State private var userNameAliases: String = AppSettings.shared.userNameAliases.joined(separator: ", ")
     @State private var allowRemoteOllama: Bool = AppSettings.shared.allowRemoteOllamaEndpoint
@@ -569,6 +570,9 @@ struct SettingsView: View {
                     Toggle("Auto-extract people from meetings", isOn: $autoExtractPeople)
                     Text("After a meeting is summarized, a second on-device Ollama pass lists the people mentioned in the transcript. Strong matches link to existing people automatically; uncertain ones appear as suggestions on the Today tab. Nothing leaves your machine.")
                         .font(.caption).foregroundStyle(.secondary)
+                    Toggle("Capture others' action items as “delegated / waiting-on”", isOn: $captureDelegated)
+                    Text("By default, meeting extraction keeps only action items that are yours. Enable this to also capture items owned by other participants, tagged so a “Delegated” view can track what you're waiting on.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
 
                 Section("Export to Obsidian") {
@@ -716,6 +720,7 @@ struct SettingsView: View {
         s.whisperFlashAttention = whisperFlashAttn
         s.whisperLanguage = whisperLanguage
         s.autoExtractPeople = autoExtractPeople
+        s.captureDelegatedTasks = captureDelegated
         let trimmedName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedName.isEmpty { s.userName = trimmedName }
         s.userNameAliases = userNameAliases

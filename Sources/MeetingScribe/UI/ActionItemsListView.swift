@@ -242,6 +242,7 @@ extension ActionItemsView {
                 switch ownerScope {
                 case .anyone: return true
                 case .mine: return isMine(item)
+                case .delegated: return item.delegated == true
                 }
             }
             .filter { item in

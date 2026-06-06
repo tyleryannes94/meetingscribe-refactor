@@ -101,7 +101,7 @@ struct ActionItemsView: View {
         var id: String { rawValue }
     }
     enum OwnerScope: String, CaseIterable, Identifiable {
-        case anyone, mine
+        case anyone, mine, delegated
         var id: String { rawValue }
     }
     enum GroupBy: String, CaseIterable, Identifiable {

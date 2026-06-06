@@ -343,6 +343,14 @@ final class AppSettings {
         set { defaults.set(newValue, forKey: "notifyTaskDue") }
     }
 
+    /// Whether meeting extraction keeps action items owned by *other* people as
+    /// "delegated / waiting-on" tasks instead of dropping them (PM-19). Off by
+    /// default so existing behavior is unchanged until the user opts in.
+    var captureDelegatedTasks: Bool {
+        get { defaults.object(forKey: "captureDelegatedTasks") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "captureDelegatedTasks") }
+    }
+
     var detectZoomImpromptu: Bool {
         get { defaults.object(forKey: Keys.detectZoomImpromptu) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.detectZoomImpromptu) }
