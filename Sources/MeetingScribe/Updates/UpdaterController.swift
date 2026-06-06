@@ -14,6 +14,27 @@ import Sparkle
 final class UpdaterController: ObservableObject {
     private let controller: SPUStandardUpdaterController
     @Published var canCheckForUpdates = false
+    /// When Sparkle last polled the appcast (background or manual). Surfaced in
+    /// Settings so the user can see the updater is actually running.
+    @Published var lastChecked: Date?
+    /// Mirrors Sparkle's `automaticallyChecksForUpdates`. Two-way bound by the
+    /// Settings toggle; writes through to the live updater.
+    @Published var automaticChecks: Bool = false {
+        didSet {
+            guard Self.isConfigured,
+                  controller.updater.automaticallyChecksForUpdates != automaticChecks else { return }
+            controller.updater.automaticallyChecksForUpdates = automaticChecks
+        }
+    }
+
+    /// Whether the in-app updater is live (a real EdDSA key is baked in). When
+    /// false the Settings UI explains updates aren't wired for this build.
+    var isUpdaterConfigured: Bool { Self.isConfigured }
+
+    /// The appcast URL Sparkle polls — shown in Settings for transparency.
+    var feedURLString: String {
+        (Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String) ?? "—"
+    }
 
     /// Only start Sparkle once a real EdDSA public key is baked in (see
     /// RELEASING.md). Until then the placeholder would make every launch log a
@@ -32,6 +53,12 @@ final class UpdaterController: ObservableObject {
             controller.updater.publisher(for: \.canCheckForUpdates)
                 .receive(on: RunLoop.main)
                 .assign(to: &$canCheckForUpdates)
+            controller.updater.publisher(for: \.lastUpdateCheckDate)
+                .receive(on: RunLoop.main)
+                .assign(to: &$lastChecked)
+            // Seed the toggle from the live updater. Assigning in init does not
+            // fire the didSet, so this won't write back redundantly.
+            automaticChecks = controller.updater.automaticallyChecksForUpdates
         }
     }
 
@@ -57,6 +84,13 @@ struct CheckForUpdatesCommand: View {
 @MainActor
 final class UpdaterController: ObservableObject {
     @Published var canCheckForUpdates = false
+    @Published var lastChecked: Date?
+    @Published var automaticChecks: Bool = false
+    var isUpdaterConfigured: Bool { false }
+    var feedURLString: String {
+        (Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String) ?? "—"
+    }
+    static var isConfigured: Bool { false }
     func checkForUpdates() {}
 }
 
