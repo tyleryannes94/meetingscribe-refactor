@@ -49,6 +49,8 @@ struct ActionItemsView: View {
     // Natural-language quick-add popover (P3-2).
     @State var quickAdding = false
     @State var quickAddText = ""
+    // Insights sheet (PM-12).
+    @State var showInsights = false
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board
@@ -174,6 +176,9 @@ struct ActionItemsView: View {
         }
         .sheet(isPresented: $showTrash) {
             TaskTrashView(store: store)
+        }
+        .sheet(isPresented: $showInsights) {
+            TaskInsightsView(store: store)
         }
     }
 
