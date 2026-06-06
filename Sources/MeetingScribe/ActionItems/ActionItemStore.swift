@@ -972,6 +972,50 @@ final class ActionItemStore: ObservableObject {
     func setProjectStatus(_ id: String, status: Project.Status) { updateProject(id) { $0.status = status } }
     func setProjectTargetDate(_ id: String, _ date: Date?) { updateProject(id) { $0.targetDate = date } }
 
+    // MARK: - Custom database properties (NP-1)
+
+    func propertyDefs(forProject id: String) -> [PropertyDefinition] {
+        projects.first { $0.id == id }?.propertyDefs ?? []
+    }
+    @discardableResult
+    func addProperty(toProject id: String, name: String, type: PropertyType) -> PropertyDefinition {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let def = PropertyDefinition(name: trimmed.isEmpty ? "Property" : trimmed, type: type)
+        updateProject(id) { $0.propertyDefs = ($0.propertyDefs ?? []) + [def] }
+        return def
+    }
+    func renameProperty(_ propID: String, inProject id: String, name: String) {
+        updateProject(id) {
+            guard var defs = $0.propertyDefs, let i = defs.firstIndex(where: { $0.id == propID }) else { return }
+            defs[i].name = name; $0.propertyDefs = defs
+        }
+    }
+    func setPropertyOptions(_ propID: String, inProject id: String, options: [String]) {
+        updateProject(id) {
+            guard var defs = $0.propertyDefs, let i = defs.firstIndex(where: { $0.id == propID }) else { return }
+            defs[i].options = options; $0.propertyDefs = defs
+        }
+    }
+    func deleteProperty(_ propID: String, fromProject id: String) {
+        updateProject(id) { $0.propertyDefs = ($0.propertyDefs ?? []).filter { $0.id != propID } }
+        var changed = false
+        for i in items.indices where items[i].projectID == id {
+            if items[i].properties?[propID] != nil {
+                items[i].properties?.removeValue(forKey: propID)
+                items[i].updatedAt = Date()
+                changed = true
+            }
+        }
+        if changed { save() }
+    }
+    func setPropertyValue(_ taskID: String, propID: String, _ value: PropertyValue?) {
+        update(taskID) {
+            var p = $0.properties ?? [:]
+            if let value { p[propID] = value } else { p.removeValue(forKey: propID) }
+            $0.properties = p.isEmpty ? nil : p
+        }
+    }
+
     private func updateProject(_ id: String, mutate: (inout Project) -> Void) {
         guard let idx = projects.firstIndex(where: { $0.id == id }) else { return }
         var copy = projects[idx]

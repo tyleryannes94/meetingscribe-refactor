@@ -92,6 +92,10 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// velocity reporting.
     var estimate: Double? = nil
 
+    /// Values for the project's user-defined database properties (NP-1), keyed
+    /// by PropertyDefinition.id. nil/empty = none set.
+    var properties: [String: PropertyValue]? = nil
+
     var createdAt: Date
     var updatedAt: Date
 
