@@ -84,6 +84,10 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// delegated" item (PM-19). nil/false = my own task.
     var delegated: Bool? = nil
 
+    /// Ids of tasks that must finish before this one can start (PM-2). nil/empty
+    /// = no dependencies.
+    var blockedByIDs: [String]? = nil
+
     var createdAt: Date
     var updatedAt: Date
 
