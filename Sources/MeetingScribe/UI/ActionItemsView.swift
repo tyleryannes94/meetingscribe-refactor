@@ -53,6 +53,8 @@ struct ActionItemsView: View {
     @State var showInsights = false
     // Calendar view: the month currently displayed (VD-1).
     @State var calendarMonth = Date()
+    // Keyboard navigation cursor for the list (UX-1).
+    @State var focusedTaskID: String?
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board, calendar
