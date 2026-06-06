@@ -111,7 +111,15 @@ extension ActionItemsView {
                 LazyVStack(spacing: 8) {
                     switch groupBy {
                     case .none:
-                        ForEach(projectFiltered) { selectableRow($0) }
+                        ForEach(projectFiltered) { item in
+                            selectableRow(item)
+                                .background(focusedTaskID == item.id ? NDS.brand.opacity(0.07) : Color.clear)
+                                .overlay(alignment: .leading) {
+                                    if focusedTaskID == item.id {
+                                        RoundedRectangle(cornerRadius: 1).fill(NDS.brand).frame(width: 2.5)
+                                    }
+                                }
+                        }
                     default:
                         ForEach(groupedKeys, id: \.self) { key in
                             if let rows = grouped[key] {
@@ -123,6 +131,32 @@ extension ActionItemsView {
                 .padding(16)
             }
         }
+        .focusable()
+        .onKeyPress(.downArrow) { moveFocus(1); return .handled }
+        .onKeyPress(.upArrow) { moveFocus(-1); return .handled }
+        .onKeyPress(KeyEquivalent("j")) { moveFocus(1); return .handled }
+        .onKeyPress(KeyEquivalent("k")) { moveFocus(-1); return .handled }
+        .onKeyPress(.return) { openFocused(); return .handled }
+        .onKeyPress(.space) { toggleFocusedDone(); return .handled }
+    }
+
+    // MARK: - Keyboard navigation (UX-1)
+
+    func moveFocus(_ delta: Int) {
+        let order = projectFiltered.map(\.id)
+        guard !order.isEmpty else { return }
+        if let cur = focusedTaskID, let idx = order.firstIndex(of: cur) {
+            focusedTaskID = order[min(max(idx + delta, 0), order.count - 1)]
+        } else {
+            focusedTaskID = delta >= 0 ? order.first : order.last
+        }
+    }
+    func openFocused() {
+        if let id = focusedTaskID { selectedTaskID = id }
+    }
+    func toggleFocusedDone() {
+        guard let id = focusedTaskID, let item = store.items.first(where: { $0.id == id }) else { return }
+        store.setStatus(id, status: item.status == .completed ? .open : .completed)
     }
 
     /// Wraps a row with a selection checkbox in multi-select mode. (TK-3)
