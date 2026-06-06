@@ -11,6 +11,8 @@ struct ActionItemsView: View {
 
     @State var filter: Filter = .all
     @State var priorityFilter: PriorityFilter = .any
+    /// Whether to show everyone's tasks or just the current user's (P2-2).
+    @State var ownerScope: OwnerScope = .anyone
     @State var search: String = ""
     @State var pushingIDs: Set<String> = []
     @State var lastError: String?
@@ -93,6 +95,10 @@ struct ActionItemsView: View {
     }
     enum TableSort: String, CaseIterable, Identifiable {
         case task, project, owner, priority, due
+        var id: String { rawValue }
+    }
+    enum OwnerScope: String, CaseIterable, Identifiable {
+        case anyone, mine
         var id: String { rawValue }
     }
     enum GroupBy: String, CaseIterable, Identifiable {

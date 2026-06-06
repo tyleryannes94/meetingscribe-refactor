@@ -305,6 +305,17 @@ extension ActionItemsView {
             ForEach(ViewMode.allCases) { m in
                 viewTab(m)
             }
+            Divider().frame(height: 16).overlay(NDS.divider)
+            // One-click saved-slice chips (P2-2 / UX-10) — the daily views that
+            // were previously buried in the filter menu.
+            quickViewChip("All", active: filter == .all && priorityFilter == .any && ownerScope == .anyone) {
+                filter = .all; priorityFilter = .any; ownerScope = .anyone
+            }
+            quickViewChip("My open", active: ownerScope == .mine && filter == .open) {
+                ownerScope = .mine; filter = .open; priorityFilter = .any
+            }
+            quickViewChip("This week", active: filter == .thisWeek) { filter = .thisWeek }
+            quickViewChip("Overdue", active: filter == .overdue) { filter = .overdue }
             Spacer()
             // Active-filter pill (only when filtering)
             if filter != .all || priorityFilter != .any {
@@ -388,6 +399,18 @@ extension ActionItemsView {
             .padding(.horizontal, 9).padding(.vertical, 5)
             .background(selected ? NDS.rowSelected : .clear, in: RoundedRectangle(cornerRadius: 7))
             .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    func quickViewChip(_ label: String, active: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 12, weight: active ? .semibold : .regular))
+                .padding(.horizontal, 9).padding(.vertical, 4)
+                .background(active ? NDS.brand.opacity(0.16) : Color.clear, in: Capsule())
+                .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }
