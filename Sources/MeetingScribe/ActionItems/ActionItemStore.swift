@@ -9,11 +9,24 @@ import OSLog
 final class ActionItemStore: ObservableObject {
     private let log = Logger(subsystem: "com.tyleryannes.MeetingScribe", category: "ActionItems")
 
+    /// Live tasks (deletedAt == nil). Every existing consumer binds to this and
+    /// continues to see only non-deleted items.
     @Published private(set) var items: [ActionItem] = []
+    /// Soft-deleted tasks awaiting restore or purge (P0-3). Persisted in the
+    /// same action_items.json so Trash survives relaunch; partitioned off
+    /// `items` by `deletedAt` on load.
+    @Published private(set) var trashedItems: [ActionItem] = []
     @Published private(set) var projects: [Project] = []
     @Published private(set) var labels: [TaskLabel] = []
     @Published private(set) var sections: [ProjectSection] = []
     @Published private(set) var initiatives: [Initiative] = []
+
+    /// How long a soft-deleted task lingers in Trash before automatic purge.
+    static let trashRetention: TimeInterval = 30 * 24 * 60 * 60
+
+    /// Handle to the off-main initial decode, so callers (and tests) can await
+    /// the first load before relying on the published arrays.
+    private var loadTask: Task<Void, Never>?
 
     private var fileURL: URL {
         AppSettings.shared.storageDir.appendingPathComponent("action_items.json")
@@ -38,30 +51,63 @@ final class ActionItemStore: ObservableObject {
         // task, then publish the arrays back on the main actor.
         let itemsURL = fileURL, projURL = projectsURL, lblURL = labelsURL
         let secURL = sectionsURL, initURL = initiativesURL
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let items: [ActionItem]        = Self.decodeArray(itemsURL, version: Self.actionItemSchemaVersion)
-            let projects: [Project]        = Self.decodeArray(projURL, version: Self.projectSchemaVersion)
-            let labels: [TaskLabel]        = Self.decodeArray(lblURL, version: Self.labelSchemaVersion)
-            let sections: [ProjectSection] = Self.decodeArray(secURL, version: Self.sectionSchemaVersion)
-            let initiatives: [Initiative]  = Self.decodeArray(initURL, version: Self.initiativeSchemaVersion)
+        loadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let allItems: [ActionItem]     = Self.decodeArray(itemsURL, version: Self.actionItemSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.actionItems)
+            let projects: [Project]        = Self.decodeArray(projURL, version: Self.projectSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.projects)
+            let labels: [TaskLabel]        = Self.decodeArray(lblURL, version: Self.labelSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.labels)
+            let sections: [ProjectSection] = Self.decodeArray(secURL, version: Self.sectionSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.sections)
+            let initiatives: [Initiative]  = Self.decodeArray(initURL, version: Self.initiativeSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.initiatives)
+            // Partition tasks into live vs. trashed by the soft-delete tombstone.
+            let live    = allItems.filter { $0.deletedAt == nil }
+            let trashed = allItems.filter { $0.deletedAt != nil }
             await MainActor.run {
                 guard let self else { return }
-                self.items = items
+                self.items = live
+                self.trashedItems = trashed
                 self.projects = projects
                 self.labels = labels
                 self.sections = sections
                 self.initiatives = initiatives
+                // Bound the Trash on launch (drops items past the retention
+                // window; only writes if something was actually purged).
+                self.purgeExpiredTrash()
             }
         }
     }
 
+    /// Awaits the off-main initial decode. Useful for tests (mutate
+    /// deterministically after load) and for any caller that must not race the
+    /// first publish. No-op once the load has completed.
+    func awaitInitialLoad() async {
+        await loadTask?.value
+    }
+
     /// Off-main read + decode of one schema-enveloped JSON array. Returns [] on
-    /// any failure — matches the old per-loader behavior.
-    nonisolated private static func decodeArray<T: Codable>(_ url: URL, version: Int) -> [T] {
-        guard let data = try? Data(contentsOf: url),
-              let arr: [T] = try? SchemaEnvelope.decode([T].self, from: data,
-                                                        currentVersion: version,
-                                                        decoder: SharedCoders.decoder())
+    /// any failure — matches the old per-loader behavior. When the on-disk
+    /// version is older than `version`, the file is backed up and `migrate`
+    /// transforms the payload (P0-5 / BE-18); with no version skew `migrate` is
+    /// never invoked, so today's pinned-at-1 files decode exactly as before.
+    nonisolated private static func decodeArray<T: Codable>(
+        _ url: URL, version: Int,
+        migrate: ((_ payload: [T], _ from: Int, _ to: Int) -> [T])? = nil
+    ) -> [T] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        let wrapped: (([T], Int, Int) -> [T])? = migrate.map { m in
+            { payload, from, to in
+                TaskSchemaMigrations.backupBeforeMigration(url, from: from, to: to)
+                return m(payload, from, to)
+            }
+        }
+        guard let arr: [T] = try? SchemaEnvelope.decode(
+            [T].self, from: data,
+            currentVersion: version,
+            decoder: SharedCoders.decoder(),
+            migrate: wrapped)
         else { return [] }
         return arr
     }
@@ -444,12 +490,16 @@ final class ActionItemStore: ObservableObject {
         for i in items where i.meetingID == meetingID {
             bySignature[i.signature] = i
         }
+        // Respect deletions: if the user trashed an extracted task, don't let a
+        // re-extract resurrect it as a fresh live duplicate.
+        let trashedSignatures = Set(trashedItems.filter { $0.meetingID == meetingID }.map { $0.signature })
 
         var nextItems: [ActionItem] = items.filter { $0.meetingID != meetingID }
         var seenSignatures = Set<String>()
 
         for ext in extracted {
             seenSignatures.insert(ext.signature)
+            if trashedSignatures.contains(ext.signature) { continue }
             if var existing = bySignature[ext.signature] {
                 // Preserve user-edited fields; refresh meeting metadata.
                 existing.meetingTitle = ext.meetingTitle
@@ -479,9 +529,88 @@ final class ActionItemStore: ObservableObject {
         save()
     }
 
+    /// Soft-delete a task: move it to Trash (recoverable) rather than destroying
+    /// it (P0-3). Replaces the old hard remove so a misclick — from a row menu,
+    /// the task page, a board card, or a bulk action — is never unrecoverable.
     func delete(_ id: String) {
-        items.removeAll { $0.id == id }
+        moveToTrash(ids: [id])
+    }
+
+    /// Soft-delete several tasks in one write (bulk delete). Returns the ids that
+    /// were actually trashed, so callers can offer a single "Undo".
+    @discardableResult
+    func delete(ids: [String]) -> [String] {
+        moveToTrash(ids: ids)
+    }
+
+    @discardableResult
+    private func moveToTrash(ids: [String]) -> [String] {
+        let idSet = Set(ids)
+        guard !idSet.isEmpty else { return [] }
+        let now = Date()
+        var moved: [String] = []
+        // Iterate back-to-front so removals don't shift unseen indices.
+        for idx in items.indices.reversed() where idSet.contains(items[idx].id) {
+            var it = items.remove(at: idx)
+            it.deletedAt = now
+            it.updatedAt = now
+            trashedItems.append(it)
+            moved.append(it.id)
+        }
+        guard !moved.isEmpty else { return [] }
         save()
+        return moved
+    }
+
+    /// Restore a single trashed task back to the live list (the toast "Undo").
+    @discardableResult
+    func restore(_ id: String) -> Bool {
+        !restore(ids: [id]).isEmpty
+    }
+
+    /// Restore several trashed tasks at once (bulk undo). Returns restored ids.
+    @discardableResult
+    func restore(ids: [String]) -> [String] {
+        let idSet = Set(ids)
+        guard !idSet.isEmpty else { return [] }
+        let now = Date()
+        var restored: [String] = []
+        for idx in trashedItems.indices.reversed() where idSet.contains(trashedItems[idx].id) {
+            var it = trashedItems.remove(at: idx)
+            it.deletedAt = nil
+            it.updatedAt = now
+            items.append(it)
+            restored.append(it.id)
+        }
+        guard !restored.isEmpty else { return [] }
+        save()
+        return restored
+    }
+
+    /// Permanently remove one task from Trash (irreversible).
+    func purge(_ id: String) {
+        let before = trashedItems.count
+        trashedItems.removeAll { $0.id == id }
+        if trashedItems.count != before { save() }
+    }
+
+    /// Permanently empty the whole Trash (irreversible).
+    func emptyTrash() {
+        guard !trashedItems.isEmpty else { return }
+        trashedItems.removeAll()
+        save()
+    }
+
+    /// Drop trashed tasks whose tombstone is older than the retention window.
+    /// Called on launch; safe to call anytime. Only persists if it changed.
+    func purgeExpiredTrash(olderThan retention: TimeInterval = ActionItemStore.trashRetention,
+                           now: Date = Date()) {
+        let before = trashedItems.count
+        trashedItems.removeAll { t in
+            guard let deleted = t.deletedAt else { return false }
+            return now.timeIntervalSince(deleted) > retention
+        }
+        if trashedItems.count != before { save() }
     }
 
     func setStatus(_ id: String, status: ActionItem.Status) {
@@ -659,14 +788,19 @@ final class ActionItemStore: ObservableObject {
         if let arr: [ActionItem] = try? SchemaEnvelope.decode(
             [ActionItem].self, from: data,
             currentVersion: Self.actionItemSchemaVersion,
-            decoder: SharedCoders.decoder()
+            decoder: SharedCoders.decoder(),
+            migrate: TaskSchemaMigrations.actionItems
         ) {
-            items = arr
+            items = arr.filter { $0.deletedAt == nil }
+            trashedItems = arr.filter { $0.deletedAt != nil }
         }
     }
 
+    /// Persists live + trashed tasks together (one file, partitioned on load by
+    /// the soft-delete tombstone) so Trash survives relaunch and the on-disk
+    /// MCP file contract is unchanged apart from the optional `deletedAt` field.
     private func save() {
-        writeEnvelope(items, to: fileURL,
+        writeEnvelope(items + trashedItems, to: fileURL,
                       version: Self.actionItemSchemaVersion,
                       tag: "ActionItemStore.save")
     }

@@ -185,10 +185,16 @@ extension ActionItemsView {
         for id in taskSelection { store.setPriority(id, priority: p) }
     }
     func bulkDeleteTasks() {
-        let ids = taskSelection
-        for id in ids { store.delete(id) }
+        let ids = Array(taskSelection)
+        guard !ids.isEmpty else { return }
+        let trashed = store.delete(ids: ids)
         taskSelection = []
         taskSelectMode = false
+        let n = trashed.count
+        guard n > 0 else { return }
+        ToastCenter.shared.show("Deleted \(n) \(n == 1 ? "task" : "tasks")", undoTitle: "Undo") {
+            store.restore(ids: trashed)
+        }
     }
 
     // MARK: - Filtered data
@@ -355,7 +361,11 @@ extension ActionItemsView {
             onAddSubtask: { store.addSubtask(item.id, title: $0) },
             onToggleSubtask: { store.toggleSubtask(item.id, subtaskID: $0) },
             onDeleteSubtask: { store.deleteSubtask(item.id, subtaskID: $0) },
-            onDelete: { store.delete(item.id) },
+            onDelete: {
+                let id = item.id, title = item.title
+                store.delete(id)
+                ToastCenter.shared.show("Deleted “\(title)”", undoTitle: "Undo") { store.restore(id) }
+            },
             onPush: { pushToNotion(item) },
             onOpenNotion: { url in
                 if let u = URL(string: url) { NSWorkspace.shared.open(u) }

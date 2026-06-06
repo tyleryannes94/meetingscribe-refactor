@@ -91,7 +91,14 @@ struct TaskPageView: View {
                 .buttonStyle(.plain)
             }
             Menu {
-                Button(role: .destructive) { store.delete(itemID); onClose() } label: {
+                Button(role: .destructive) {
+                    let title = item.title
+                    store.delete(itemID)
+                    onClose()
+                    ToastCenter.shared.show("Deleted “\(title)”", undoTitle: "Undo") {
+                        store.restore(itemID)
+                    }
+                } label: {
                     Label("Delete task", systemImage: "trash")
                 }
             } label: {

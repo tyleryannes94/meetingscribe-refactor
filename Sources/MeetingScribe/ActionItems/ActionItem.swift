@@ -61,6 +61,12 @@ struct ActionItem: Identifiable, Codable, Hashable {
     var notionPageID: String?
     var notionURL: String?
 
+    /// Soft-delete tombstone (P0-3). nil ⇒ live; non-nil ⇒ in Trash and
+    /// recoverable until purged (default 30 days). Optional + defaulted so old
+    /// action_items.json decodes and the synthesized memberwise init still
+    /// accepts the existing call sites that omit it.
+    var deletedAt: Date? = nil
+
     var createdAt: Date
     var updatedAt: Date
 
@@ -68,6 +74,8 @@ struct ActionItem: Identifiable, Codable, Hashable {
 
     var subtaskList: [Subtask] { subtasks ?? [] }
     var labels: [String] { labelIDs ?? [] }
+    /// In Trash (soft-deleted) and excluded from all normal views.
+    var isTrashed: Bool { deletedAt != nil }
     /// A task with no originating meeting (created manually or imported).
     var isManual: Bool { meetingID.isEmpty }
     var subtaskProgress: (done: Int, total: Int) {
