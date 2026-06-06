@@ -172,6 +172,27 @@ final class ActionItemStoreTrashTests: XCTestCase {
         XCTAssertEqual(store.items.first { $0.id == t.id }?.sectionID, s.id, "task re-filed")
     }
 
+    // MARK: Completion timestamp (P2-4)
+
+    func testCompletedAtSetKeptAndClearedOnReopen() async {
+        let store = ActionItemStore()
+        await store.awaitInitialLoad()
+        let t = store.createTask(title: "x")
+        XCTAssertNil(store.items.first { $0.id == t.id }?.completedAt)
+
+        store.setStatus(t.id, status: .completed)
+        let stamp = store.items.first { $0.id == t.id }?.completedAt
+        XCTAssertNotNil(stamp, "completing stamps completedAt")
+
+        // Re-completing keeps the original timestamp (idempotent).
+        store.setStatus(t.id, status: .completed)
+        XCTAssertEqual(store.items.first { $0.id == t.id }?.completedAt, stamp)
+
+        // Reopening clears it.
+        store.setStatus(t.id, status: .open)
+        XCTAssertNil(store.items.first { $0.id == t.id }?.completedAt)
+    }
+
     // MARK: Off-main coalesced writes (P0-1)
 
     func testCoordinatorCoalescesToLatestBytesOnFlush() {

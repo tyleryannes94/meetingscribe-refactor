@@ -14,6 +14,7 @@ final class TaskQueryTests: XCTestCase {
                       project: String? = nil,
                       owner: String? = nil,
                       due: TimeInterval? = nil,
+                      completed: TimeInterval? = nil,
                       labels: [String]? = nil,
                       trashed: Bool = false) -> ActionItem {
         ActionItem(id: id, meetingID: "", meetingTitle: "", meetingDate: now,
@@ -21,6 +22,7 @@ final class TaskQueryTests: XCTestCase {
                    priority: priority, dueDate: due.map { now.addingTimeInterval($0) },
                    projectID: project, labelIDs: labels,
                    deletedAt: trashed ? now : nil,
+                   completedAt: completed.map { now.addingTimeInterval($0) },
                    createdAt: now, updatedAt: now)
     }
 
@@ -59,6 +61,16 @@ final class TaskQueryTests: XCTestCase {
 
         let week = TaskQuery(filters: .init(dueWithinDays: 7))
         XCTAssertEqual(TaskQueryEngine.evaluate(week, over: items, now: now).map(\.id), ["soon"])
+    }
+
+    func testCompletedWithinDays() {
+        let items = [
+            task("recent", status: .completed, completed: -2 * 86400),  // done 2 days ago
+            task("old", status: .completed, completed: -10 * 86400),    // done 10 days ago
+            task("open")                                                // never completed
+        ]
+        let week = TaskQuery(filters: .init(completedWithinDays: 7))
+        XCTAssertEqual(TaskQueryEngine.evaluate(week, over: items, now: now).map(\.id), ["recent"])
     }
 
     func testLabelsRequireAll() {

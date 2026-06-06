@@ -35,6 +35,9 @@ struct TaskQuery: Codable, Hashable, Sendable {
         var overdue: Bool?
         /// Due between now and now + N days (inclusive), not completed.
         var dueWithinDays: Int?
+        /// Completed within the last N days (uses `completedAt`) — powers
+        /// "done today / this week".
+        var completedWithinDays: Int?
         /// Case-insensitive substring across title / notes / owner.
         var search: String?
         /// When false, completed tasks are excluded regardless of `statuses`.
@@ -46,6 +49,7 @@ struct TaskQuery: Codable, Hashable, Sendable {
              ownerPersonID: String? = nil,
              overdue: Bool? = nil,
              dueWithinDays: Int? = nil,
+             completedWithinDays: Int? = nil,
              search: String? = nil,
              includeCompleted: Bool = true) {
             self.statuses = statuses
@@ -54,6 +58,7 @@ struct TaskQuery: Codable, Hashable, Sendable {
             self.ownerPersonID = ownerPersonID
             self.overdue = overdue
             self.dueWithinDays = dueWithinDays
+            self.completedWithinDays = completedWithinDays
             self.search = search
             self.includeCompleted = includeCompleted
         }
@@ -144,6 +149,11 @@ enum TaskQueryEngine {
             guard let due = item.dueDate, item.status != .completed else { return false }
             let horizon = Calendar.current.date(byAdding: .day, value: days, to: now) ?? now
             if due < now || due > horizon { return false }
+        }
+        if let days = f.completedWithinDays {
+            guard let done = item.completedAt else { return false }
+            let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: now) ?? now
+            if done < cutoff { return false }
         }
         if let raw = f.search?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
             let needle = raw.lowercased()

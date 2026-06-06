@@ -633,7 +633,18 @@ final class ActionItemStore: ObservableObject {
     }
 
     func setStatus(_ id: String, status: ActionItem.Status) {
-        update(id) { $0.status = status }
+        update(id) {
+            let wasCompleted = $0.status == .completed
+            $0.status = status
+            // Stamp a real completion time (P2-4) — distinct from updatedAt,
+            // which any edit bumps. Set on the open→completed transition, cleared
+            // when reopened; re-completing keeps the original timestamp.
+            if status == .completed {
+                if !wasCompleted { $0.completedAt = Date() }
+            } else {
+                $0.completedAt = nil
+            }
+        }
     }
     func setPriority(_ id: String, priority: ActionItem.Priority) {
         update(id) { $0.priority = priority }
