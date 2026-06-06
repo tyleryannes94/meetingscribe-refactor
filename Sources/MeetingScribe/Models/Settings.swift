@@ -351,6 +351,17 @@ final class AppSettings {
         set { defaults.set(newValue, forKey: "captureDelegatedTasks") }
     }
 
+    /// Per-project last-used task view mode (NP-3), so each project reopens in
+    /// the view the user left it in.
+    func savedTaskViewMode(forProject id: String) -> String? {
+        (defaults.dictionary(forKey: "tasks.projectViews") as? [String: String])?[id]
+    }
+    func setSavedTaskViewMode(_ mode: String, forProject id: String) {
+        var d = (defaults.dictionary(forKey: "tasks.projectViews") as? [String: String]) ?? [:]
+        d[id] = mode
+        defaults.set(d, forKey: "tasks.projectViews")
+    }
+
     var detectZoomImpromptu: Bool {
         get { defaults.object(forKey: Keys.detectZoomImpromptu) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.detectZoomImpromptu) }

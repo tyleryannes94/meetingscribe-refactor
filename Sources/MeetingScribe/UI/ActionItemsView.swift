@@ -174,7 +174,20 @@ struct ActionItemsView: View {
             manager.refreshPastMeetings()
             manager.backfillActionItemsIfNeeded()
         }
-        .onChange(of: selectedProjectID) { _, _ in selectedTaskID = nil }
+        .onChange(of: selectedProjectID) { _, _ in
+            selectedTaskID = nil
+            // Restore the project's last-used view (NP-3).
+            if let pid = realSelectedProjectID,
+               let saved = AppSettings.shared.savedTaskViewMode(forProject: pid),
+               let mode = ViewMode(rawValue: saved) {
+                viewMode = mode
+            }
+        }
+        .onChange(of: viewMode) { _, mode in
+            if let pid = realSelectedProjectID {
+                AppSettings.shared.setSavedTaskViewMode(mode.rawValue, forProject: pid)
+            }
+        }
         .onChange(of: selectedMeetingID) { _, _ in selectedTaskID = nil }
         .onChange(of: selectedInitiativeID) { _, v in
             if v != nil { selectedTaskID = nil; selectedMeetingID = nil }
