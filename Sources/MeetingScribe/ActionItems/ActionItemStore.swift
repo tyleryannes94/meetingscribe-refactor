@@ -222,6 +222,8 @@ final class ActionItemStore: ObservableObject {
             updatedAt: now)
         items.append(item)
         save()
+        TaskChangeLog.shared.record(.create, entity: .task, id: item.id,
+                                    summary: "Created “\(item.title)”")
         return item
     }
 
@@ -273,6 +275,10 @@ final class ActionItemStore: ObservableObject {
             }
         }
         save(); saveProjects()
+        if !tasks.isEmpty {
+            TaskChangeLog.shared.record(.merge, entity: .task, id: source,
+                                        summary: "Imported \(created) new task(s) from \(source)")
+        }
         return created
     }
 
@@ -559,6 +565,9 @@ final class ActionItemStore: ObservableObject {
         }
         guard !moved.isEmpty else { return [] }
         save()
+        for mid in moved {
+            TaskChangeLog.shared.record(.delete, entity: .task, id: mid, summary: "Moved to Trash")
+        }
         return moved
     }
 
@@ -584,6 +593,9 @@ final class ActionItemStore: ObservableObject {
         }
         guard !restored.isEmpty else { return [] }
         save()
+        for rid in restored {
+            TaskChangeLog.shared.record(.restore, entity: .task, id: rid, summary: "Restored from Trash")
+        }
         return restored
     }
 
@@ -669,6 +681,8 @@ final class ActionItemStore: ObservableObject {
         copy.updatedAt = Date()
         items[idx] = copy
         save()
+        TaskChangeLog.shared.record(.update, entity: .task, id: id,
+                                    summary: "Updated “\(copy.title)”")
     }
 
     // MARK: - Projects
