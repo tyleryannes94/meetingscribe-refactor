@@ -383,6 +383,9 @@ extension ActionItemsView {
                 Button { showInsights = true } label: {
                     Label("Insights", systemImage: "chart.bar.xaxis")
                 }
+                Button { exportTasksCSV() } label: {
+                    Label("Export tasks (CSV)…", systemImage: "square.and.arrow.up")
+                }
                 Button {
                     showTrash = true
                 } label: {
@@ -460,6 +463,18 @@ extension ActionItemsView {
         if viewMode == .table || viewMode == .board { viewMode = .list }
         if filter == .completed { filter = .all }
         // Popover stays open + cleared for rapid multi-entry; Esc closes it.
+    }
+
+    func exportTasksCSV() {
+        let csv = TaskExporter.csv(store.items,
+                                   projectName: { store.project(id: $0)?.name },
+                                   labelName: { store.label(id: $0)?.name })
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "tasks.csv"
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            try? Data(csv.utf8).write(to: url)
+        }
     }
 
     func addTask() {
