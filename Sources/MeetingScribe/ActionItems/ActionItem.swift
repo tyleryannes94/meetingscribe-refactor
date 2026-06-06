@@ -73,6 +73,13 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// reopen. Optional + defaulted for back-compat.
     var completedAt: Date? = nil
 
+    /// Repeat rule (P2-5). When set, completing the task spawns the next
+    /// instance with the dates rolled forward. nil = one-shot.
+    var recurrence: RecurrenceRule? = nil
+    /// Groups instances of a recurring task (the original's id). nil = not part
+    /// of a series.
+    var seriesID: String? = nil
+
     var createdAt: Date
     var updatedAt: Date
 

@@ -633,18 +633,56 @@ final class ActionItemStore: ObservableObject {
     }
 
     func setStatus(_ id: String, status: ActionItem.Status) {
+        let wasCompleted = items.first(where: { $0.id == id })?.status == .completed
         update(id) {
-            let wasCompleted = $0.status == .completed
+            let was = $0.status == .completed
             $0.status = status
             // Stamp a real completion time (P2-4) — distinct from updatedAt,
             // which any edit bumps. Set on the open→completed transition, cleared
             // when reopened; re-completing keeps the original timestamp.
             if status == .completed {
-                if !wasCompleted { $0.completedAt = Date() }
+                if !was { $0.completedAt = Date() }
             } else {
                 $0.completedAt = nil
             }
         }
+        // Spawn the next occurrence of a recurring task on first completion (P2-5).
+        if status == .completed, !wasCompleted,
+           let done = items.first(where: { $0.id == id }), let rule = done.recurrence {
+            spawnNextOccurrence(of: done, rule: rule)
+        }
+    }
+
+    /// Set or clear a task's repeat rule (P2-5).
+    func setRecurrence(_ id: String, _ rule: RecurrenceRule?) {
+        update(id) { $0.recurrence = rule }
+    }
+
+    /// Creates the next instance of a recurring task when the current one is
+    /// completed: a fresh open copy with the due (and start) dates rolled
+    /// forward, subtasks reset, and external links cleared. The completed
+    /// instance stays as history; instances share a `seriesID`.
+    private func spawnNextOccurrence(of item: ActionItem, rule: RecurrenceRule) {
+        let base = item.dueDate ?? item.startDate ?? Date()
+        guard let nextDue = rule.next(after: base) else { return }
+        var copy = item
+        copy.id = UUID().uuidString
+        copy.status = .open
+        copy.completedAt = nil
+        copy.dueDate = nextDue
+        if let start = item.startDate, let due = item.dueDate {
+            // Preserve the start→due offset on the new instance.
+            copy.startDate = nextDue.addingTimeInterval(-due.timeIntervalSince(start))
+        }
+        copy.subtasks = item.subtasks?.map { var s = $0; s.done = false; return s }
+        copy.seriesID = item.seriesID ?? item.id
+        copy.notionPageID = nil; copy.notionURL = nil
+        copy.externalID = nil; copy.externalURL = nil
+        copy.createdAt = Date(); copy.updatedAt = Date()
+        items.append(copy)
+        save()
+        TaskChangeLog.shared.record(.create, entity: .task, id: copy.id,
+                                    summary: "Recurring: next “\(copy.title)”")
     }
     func setPriority(_ id: String, priority: ActionItem.Priority) {
         update(id) { $0.priority = priority }
