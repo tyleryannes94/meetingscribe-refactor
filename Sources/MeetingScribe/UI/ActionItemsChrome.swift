@@ -362,6 +362,13 @@ extension ActionItemsView {
                 Button {
                     manager.backfillActionItemsIfNeeded(force: true)
                 } label: { Label("Re-extract from meetings", systemImage: "arrow.clockwise") }
+                Divider()
+                Button {
+                    showTrash = true
+                } label: {
+                    Label(store.trashedItems.isEmpty ? "Trash" : "Trash (\(store.trashedItems.count))",
+                          systemImage: "trash")
+                }
             } label: {
                 Image(systemName: "ellipsis")
             }

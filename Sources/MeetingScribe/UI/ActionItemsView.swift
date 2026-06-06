@@ -42,6 +42,8 @@ struct ActionItemsView: View {
     // Resizable, persisted Tasks sidebar width (TK-8 — was a fixed 230).
     @AppStorage("tasks.railWidth") var railWidth: Double = 230
     @State var railDragStart: Double?
+    // Trash sheet (P0-3): restore or permanently remove soft-deleted tasks.
+    @State var showTrash = false
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board
@@ -160,6 +162,9 @@ struct ActionItemsView: View {
         .onChange(of: selectedMeetingID) { _, _ in selectedTaskID = nil }
         .onChange(of: selectedInitiativeID) { _, v in
             if v != nil { selectedTaskID = nil; selectedMeetingID = nil }
+        }
+        .sheet(isPresented: $showTrash) {
+            TaskTrashView(store: store)
         }
     }
 
