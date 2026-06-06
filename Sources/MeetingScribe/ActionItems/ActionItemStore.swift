@@ -234,6 +234,26 @@ final class ActionItemStore: ObservableObject {
         return item
     }
 
+    /// Creates a task from a one-line natural-language capture (P3-2): parses
+    /// `!priority`, `#label`, and a date out of the string, applies them, and
+    /// creates/links labels by name. Returns the freshly stored task.
+    @discardableResult
+    func createTask(parsing raw: String, projectID: String? = nil,
+                    sectionID: String? = nil, now: Date = Date()) -> ActionItem {
+        let parsed = TaskQuickAddParser.parse(raw, now: now)
+        let fallback = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = parsed.title.isEmpty ? fallback : parsed.title
+        let created = createTask(title: title, projectID: projectID, sectionID: sectionID,
+                                 priority: parsed.priority ?? .medium)
+        if let due = parsed.dueDate { setDueDate(created.id, dueDate: due) }
+        for name in parsed.labelNames {
+            let label = labels.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+                ?? createLabel(name: name)
+            toggleLabel(created.id, labelID: label.id)
+        }
+        return items.first { $0.id == created.id } ?? created
+    }
+
     /// Merges a batch of tasks imported from an external system (Linear /
     /// Notion), deduped by (source, externalID) — or by notionPageID for
     /// items we previously pushed. Local-only fields (projectID, sectionID,
