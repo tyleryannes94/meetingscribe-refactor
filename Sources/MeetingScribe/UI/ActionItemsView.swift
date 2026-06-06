@@ -51,9 +51,11 @@ struct ActionItemsView: View {
     @State var quickAddText = ""
     // Insights sheet (PM-12).
     @State var showInsights = false
+    // Calendar view: the month currently displayed (VD-1).
+    @State var calendarMonth = Date()
 
     enum ViewMode: String, CaseIterable, Identifiable {
-        case list, table, board
+        case list, table, board, calendar
         var id: String { rawValue }
         var label: String { rawValue.capitalized }
         var systemImage: String {
@@ -61,6 +63,7 @@ struct ActionItemsView: View {
             case .list: return "list.bullet"
             case .table: return "tablecells"
             case .board: return "rectangle.split.3x1"
+            case .calendar: return "calendar"
             }
         }
     }
@@ -209,6 +212,8 @@ struct ActionItemsView: View {
             if projectFiltered.isEmpty { emptyState } else { tableBody }
         case .board:
             boardBody
+        case .calendar:
+            calendarBody
         }
     }
 }
