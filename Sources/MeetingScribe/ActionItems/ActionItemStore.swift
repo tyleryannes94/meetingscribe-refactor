@@ -153,6 +153,13 @@ final class ActionItemStore: ObservableObject {
         items.filter { $0.status != .completed }.sorted(by: defaultSort)
     }
 
+    /// Run a structured query over the live tasks (BE-7). The single composable
+    /// read path that views, badges, saved views (Phase 2), and the agent API
+    /// (Phase 6) converge on, replacing scattered bespoke filter/sort chains.
+    func tasks(matching query: TaskQuery, now: Date = Date()) -> [ActionItem] {
+        TaskQueryEngine.evaluate(query, over: items, now: now)
+    }
+
     private func defaultSort(_ a: ActionItem, _ b: ActionItem) -> Bool {
         // Completed sinks to the bottom.
         if a.status == .completed && b.status != .completed { return false }
