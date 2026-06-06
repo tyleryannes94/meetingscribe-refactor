@@ -148,6 +148,20 @@ struct TaskPageView: View {
                 } label: { NotionChip(item.priority.label, color: priorityColor(item.priority)) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
+            NotionPropertyRow(icon: "repeat", label: "Repeat") {
+                Menu {
+                    Button("Don't repeat") { store.setRecurrence(itemID, nil) }
+                    Divider()
+                    ForEach(RecurrenceRule.Frequency.allCases) { f in
+                        Button(f.label) { store.setRecurrence(itemID, RecurrenceRule(frequency: f)) }
+                    }
+                } label: {
+                    NotionChip(item.recurrence?.label ?? "None",
+                               color: item.recurrence == nil ? NDS.textTertiary : NDS.brand,
+                               systemImage: "repeat")
+                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            }
             NotionPropertyRow(icon: "person", label: "Assignee") {
                 HStack(spacing: 6) {
                     TextField("Empty", text: $assigneeDraft)
