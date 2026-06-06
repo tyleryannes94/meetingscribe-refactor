@@ -188,6 +188,30 @@ final class ActionItemStoreTrashTests: XCTestCase {
         XCTAssertEqual(c.total, 3)
     }
 
+    // MARK: Dependencies (PM-2)
+
+    func testBlockingCycleGuardAndCompletionClearsBlock() async {
+        let store = ActionItemStore()
+        await store.awaitInitialLoad()
+        let a = store.createTask(title: "A")
+        let b = store.createTask(title: "B")
+
+        store.toggleBlocker(b.id, blockerID: a.id)            // B blocked by A
+        XCTAssertTrue(store.isBlocked(store.items.first { $0.id == b.id }!))
+
+        store.setStatus(a.id, status: .completed)             // A done → B unblocked
+        XCTAssertFalse(store.isBlocked(store.items.first { $0.id == b.id }!))
+
+        store.toggleBlocker(a.id, blockerID: b.id)            // would cycle → refused
+        XCTAssertNil(store.items.first { $0.id == a.id }?.blockedByIDs)
+
+        store.toggleBlocker(a.id, blockerID: a.id)            // self → refused
+        XCTAssertNil(store.items.first { $0.id == a.id }?.blockedByIDs)
+
+        store.toggleBlocker(b.id, blockerID: a.id)            // toggle off
+        XCTAssertNil(store.items.first { $0.id == b.id }?.blockedByIDs)
+    }
+
     // MARK: Completion timestamp (P2-4)
 
     func testCompletedAtSetKeptAndClearedOnReopen() async {

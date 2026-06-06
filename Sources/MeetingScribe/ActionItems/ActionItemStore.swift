@@ -763,6 +763,48 @@ final class ActionItemStore: ObservableObject {
         update(id) { $0.projectID = projectID }
     }
 
+    // MARK: - Dependencies (PM-2)
+
+    /// Add or remove `blockerID` as a blocker of `id`. Guards self-links and
+    /// cycles (won't add an edge that would make the blocked-by graph circular).
+    func toggleBlocker(_ id: String, blockerID: String) {
+        guard id != blockerID else { return }
+        let alreadyLinked = (items.first { $0.id == id }?.blockedByIDs ?? []).contains(blockerID)
+        // Only run the cycle guard when adding a new edge.
+        if !alreadyLinked && reachableViaBlockers(from: blockerID, target: id) { return }
+        update(id) {
+            var ids = $0.blockedByIDs ?? []
+            if let idx = ids.firstIndex(of: blockerID) { ids.remove(at: idx) } else { ids.append(blockerID) }
+            $0.blockedByIDs = ids.isEmpty ? nil : ids
+        }
+    }
+
+    /// A task is blocked when it has at least one blocker that still exists and
+    /// isn't completed.
+    func isBlocked(_ item: ActionItem) -> Bool {
+        guard let ids = item.blockedByIDs, !ids.isEmpty else { return false }
+        return ids.contains { bid in
+            items.first { $0.id == bid }.map { $0.status != .completed } ?? false
+        }
+    }
+
+    /// The live blocker tasks for an item, in declared order.
+    func blockers(for item: ActionItem) -> [ActionItem] {
+        (item.blockedByIDs ?? []).compactMap { bid in items.first { $0.id == bid } }
+    }
+
+    /// True if `target` is reachable by following `start`'s blockedBy chain.
+    private func reachableViaBlockers(from start: String, target: String) -> Bool {
+        var visited = Set<String>()
+        var stack = [start]
+        while let cur = stack.popLast() {
+            if cur == target { return true }
+            guard visited.insert(cur).inserted else { continue }
+            if let t = items.first(where: { $0.id == cur }) { stack.append(contentsOf: t.blockedByIDs ?? []) }
+        }
+        return false
+    }
+
     private func update(_ id: String, mutate: (inout ActionItem) -> Void) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
         var copy = items[idx]
