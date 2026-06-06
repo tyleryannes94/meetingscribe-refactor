@@ -85,8 +85,17 @@ extension ActionItemsView {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             projectCell(item).frame(width: 140, alignment: .leading)
-            Text(item.owner ?? "—").font(.caption).foregroundStyle(.secondary)
-                .frame(width: 90, alignment: .leading)
+            Group {
+                if let owner = item.owner, !owner.isEmpty {
+                    HStack(spacing: 5) {
+                        TaskOwnerAvatar(name: owner, size: 16)
+                        Text(owner).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                } else {
+                    Text("—").font(.caption).foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: 90, alignment: .leading)
             Menu {
                 ForEach(ActionItem.Priority.allCases) { p in
                     Button(p.label) { store.setPriority(item.id, priority: p) }
