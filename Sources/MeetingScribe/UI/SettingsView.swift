@@ -4,6 +4,7 @@ import Carbon.HIToolbox
 @available(macOS 14.0, *)
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var updater: UpdaterController
 
     @State private var storageDir: String = AppSettings.shared.storageDir.path
     @State private var whisperBinary: String = AppSettings.shared.whisperBinary
@@ -90,6 +91,39 @@ struct SettingsView: View {
                     }
                     Text("Checks the transcription model, Ollama, disk space, and macOS permissions.")
                         .font(.caption2).foregroundStyle(.secondary)
+                }
+                Section("Software Update") {
+                    HStack {
+                        Button {
+                            updater.checkForUpdates()
+                        } label: {
+                            Label("Check for Updates", systemImage: "arrow.down.circle")
+                        }
+                        .disabled(!updater.canCheckForUpdates)
+                        Spacer()
+                        if let last = updater.lastChecked {
+                            Text("Last checked \(last.formatted(.relative(presentation: .named)))")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    if updater.isUpdaterConfigured {
+                        Toggle("Check for updates automatically", isOn: $updater.automaticChecks)
+                        Text("Pulls the latest release from this repo and installs it. Each update is downloaded from the project's GitHub Releases and verified against the app's built-in signing key before it's applied — no reinstall by hand.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        HStack(alignment: .top, spacing: 4) {
+                            Text("Feed:").font(.caption2).foregroundStyle(.secondary)
+                            Text(updater.feedURLString)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    } else {
+                        Label("In-app updates aren't available in this build (no signing key).",
+                              systemImage: "exclamationmark.triangle")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        Text("Reinstall from source with install.sh to get the latest. Signed auto-updates require a release built through the GitHub Actions release workflow (see RELEASING.md).")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
                 Section("You") {
                     TextField("Your name", text: $userName)

@@ -340,7 +340,7 @@ A few facts worth knowing if you care about where data goes:
 - **No telemetry**. The app makes zero network calls for analytics, crash reports, feature flags, or any other "phone home" pattern.
 - **All AI runs locally**. Whisper and Ollama are both local. The chat, transcription, summarization, person extraction, and analysis features never call out to OpenAI / Anthropic / anyone.
 - **The only outbound traffic** comes from integrations YOU configured: Linear / Notion / Google Drive API calls when you sync. And only against their APIs — your data isn't relayed through a third-party MeetingScribe server.
-- **Apple notarization / updates**: Sparkle checks for app updates against the GitHub releases page. That's the only background network call. You can disable it in Settings.
+- **Apple notarization / updates**: Sparkle checks for app updates against the GitHub releases page. That's the only background network call. Settings → **Software Update** has a "Check for Updates" button (also in the app menu), an automatic-check toggle you can turn off, the last-checked time, and the feed URL. Updates are downloaded from the project's GitHub Releases and verified against the app's built-in EdDSA signing key before they're applied.
 
 ---
 
