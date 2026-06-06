@@ -967,6 +967,7 @@ final class ActionItemStore: ObservableObject {
     func setProjectBody(_ id: String, body: String) { updateProject(id) { $0.body = body } }
     func setProjectIcon(_ id: String, icon: String?) { updateProject(id) { $0.icon = icon } }
     func setProjectStatus(_ id: String, status: Project.Status) { updateProject(id) { $0.status = status } }
+    func setProjectTargetDate(_ id: String, _ date: Date?) { updateProject(id) { $0.targetDate = date } }
 
     private func updateProject(_ id: String, mutate: (inout Project) -> Void) {
         guard let idx = projects.firstIndex(where: { $0.id == id }) else { return }
