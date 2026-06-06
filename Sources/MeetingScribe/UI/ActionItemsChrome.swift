@@ -390,6 +390,9 @@ extension ActionItemsView {
                 Button { exportTasksCSV() } label: {
                     Label("Export tasks (CSV)…", systemImage: "square.and.arrow.up")
                 }
+                Button { importTasksCSV() } label: {
+                    Label("Import tasks (CSV)…", systemImage: "square.and.arrow.down")
+                }
                 Button { showShortcuts = true } label: {
                     Label("Keyboard shortcuts", systemImage: "keyboard")
                 }
@@ -481,6 +484,24 @@ extension ActionItemsView {
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
             try? Data(csv.utf8).write(to: url)
+        }
+    }
+
+    func importTasksCSV() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url,
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let pid = realSelectedProjectID
+        if let pid, let p = store.project(id: pid), !store.pageHasDatabase(p) {
+            store.setProjectDatabaseEnabled(pid, true)
+        }
+        for row in TaskCSVImporter.parse(text) {
+            let t = store.createTask(title: row.title, projectID: pid,
+                                     status: row.status ?? .open, priority: row.priority ?? .medium)
+            if let due = row.dueDate { store.setDueDate(t.id, dueDate: due) }
+            if let owner = row.owner { store.setOwner(t.id, owner: owner) }
         }
     }
 
