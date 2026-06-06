@@ -47,7 +47,11 @@ extension ActionItemsView {
                 if let sectionID {
                     Menu {
                         Button("Rename…") { renameSectionID = sectionID; renameSectionDraft = name }
-                        Button(role: .destructive) { store.deleteSection(sectionID) } label: { Text("Delete section") }
+                        Button(role: .destructive) {
+                            if let undo = store.deleteSectionWithUndo(sectionID) {
+                                ToastCenter.shared.show("Deleted section “\(name)”", undoTitle: "Undo", undo: undo)
+                            }
+                        } label: { Text("Delete section") }
                     } label: { Image(systemName: "ellipsis") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                     .accessibilityLabel("Section options")

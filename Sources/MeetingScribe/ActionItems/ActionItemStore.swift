@@ -743,6 +743,70 @@ final class ActionItemStore: ObservableObject {
         save()
     }
 
+    // MARK: - Undoable deletes for projects / sections / initiatives (P0-3)
+    //
+    // These secondary entities aren't soft-deleted into a Trash array (only
+    // tasks are); instead each delete returns a closure that reinstates the
+    // entity AND the links it severed, so callers can offer an "Undo" toast —
+    // the same safety net the People/Tags tabs use. Returns nil if the id is
+    // already gone (caller skips the toast).
+
+    /// Delete a project and return a closure that restores it and re-links the
+    /// tasks it detached.
+    func deleteProjectWithUndo(_ id: String) -> (() -> Void)? {
+        guard let snapshot = projects.first(where: { $0.id == id }) else { return nil }
+        let relinkItemIDs = items.filter { $0.projectID == id }.map(\.id)
+        deleteProject(id)
+        return { [weak self] in
+            guard let self else { return }
+            self.upsertProject(snapshot)
+            for iid in relinkItemIDs { self.setProject(iid, projectID: id) }
+        }
+    }
+
+    /// Delete a page (reparenting its children) and return a restore closure
+    /// that puts the page back and re-attaches both its children and its tasks.
+    func deleteProjectKeepingChildrenWithUndo(_ id: String) -> (() -> Void)? {
+        guard let snapshot = projects.first(where: { $0.id == id }) else { return nil }
+        let childIDs = projects.filter { $0.parentID == id }.map(\.id)
+        let relinkItemIDs = items.filter { $0.projectID == id }.map(\.id)
+        deleteProjectKeepingChildren(id)
+        return { [weak self] in
+            guard let self else { return }
+            self.upsertProject(snapshot)
+            for cid in childIDs { self.setProjectParent(cid, parentID: id) }
+            for iid in relinkItemIDs { self.setProject(iid, projectID: id) }
+        }
+    }
+
+    /// Delete an initiative and return a closure that restores it and re-links
+    /// the projects it detached.
+    func deleteInitiativeWithUndo(_ id: String) -> (() -> Void)? {
+        guard let snapshot = initiatives.first(where: { $0.id == id }) else { return nil }
+        let relinkProjectIDs = projects.filter { $0.initiativeID == id }.map(\.id)
+        deleteInitiative(id)
+        return { [weak self] in
+            guard let self else { return }
+            self.initiatives.append(snapshot)
+            self.saveInitiatives()
+            for pid in relinkProjectIDs { self.setProjectInitiative(pid, initiativeID: id) }
+        }
+    }
+
+    /// Delete a section and return a closure that restores it and re-files the
+    /// tasks it detached.
+    func deleteSectionWithUndo(_ id: String) -> (() -> Void)? {
+        guard let snapshot = sections.first(where: { $0.id == id }) else { return nil }
+        let refileItemIDs = items.filter { $0.sectionID == id }.map(\.id)
+        deleteSection(id)
+        return { [weak self] in
+            guard let self else { return }
+            self.sections.append(snapshot)
+            self.saveSections()
+            for iid in refileItemIDs { self.setSection(iid, sectionID: id) }
+        }
+    }
+
     /// True if this page should render a task database (explicit flag, or
     /// inferred from having tasks for back-compat).
     func pageHasDatabase(_ project: Project) -> Bool {

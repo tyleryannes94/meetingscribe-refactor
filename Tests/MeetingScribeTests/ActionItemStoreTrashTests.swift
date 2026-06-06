@@ -138,6 +138,40 @@ final class ActionItemStoreTrashTests: XCTestCase {
                        "trashed extracted task is not resurrected on re-extract")
     }
 
+    // MARK: Undoable entity deletes (P0-3)
+
+    func testDeleteProjectUndoRestoresProjectAndLinks() async {
+        let store = ActionItemStore()
+        await store.awaitInitialLoad()
+        let p = store.createProject(name: "Launch")
+        let t = store.createTask(title: "task", projectID: p.id)
+
+        let undo = store.deleteProjectWithUndo(p.id)
+        XCTAssertNotNil(undo)
+        XCTAssertNil(store.project(id: p.id), "project removed")
+        XCTAssertNil(store.items.first { $0.id == t.id }?.projectID, "task unlinked")
+
+        undo?()
+        XCTAssertNotNil(store.project(id: p.id), "project restored")
+        XCTAssertEqual(store.items.first { $0.id == t.id }?.projectID, p.id, "task re-linked")
+    }
+
+    func testDeleteSectionUndoRestoresSectionAndRefilesTasks() async {
+        let store = ActionItemStore()
+        await store.awaitInitialLoad()
+        let p = store.createProject(name: "P")
+        let s = store.createSection(projectID: p.id, name: "Backlog")
+        let t = store.createTask(title: "task", projectID: p.id, sectionID: s.id)
+
+        let undo = store.deleteSectionWithUndo(s.id)
+        XCTAssertNotNil(undo)
+        XCTAssertNil(store.items.first { $0.id == t.id }?.sectionID, "task pulled out of section")
+
+        undo?()
+        XCTAssertTrue(store.sections.contains { $0.id == s.id }, "section restored")
+        XCTAssertEqual(store.items.first { $0.id == t.id }?.sectionID, s.id, "task re-filed")
+    }
+
     // MARK: Off-main coalesced writes (P0-1)
 
     func testCoordinatorCoalescesToLatestBytesOnFlush() {

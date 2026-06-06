@@ -198,7 +198,10 @@ struct ProjectRail: View {
             if let id, id != ActionItemsView.noProjectSentinel {
                 Button(role: .destructive) {
                     if selectedProjectID == id { selectedProjectID = nil }
-                    store.deleteProject(id)
+                    let name = store.project(id: id)?.name ?? "project"
+                    if let undo = store.deleteProjectWithUndo(id) {
+                        ToastCenter.shared.show("Deleted “\(name)”", undoTitle: "Undo", undo: undo)
+                    }
                 } label: { Label("Delete project", systemImage: "trash") }
             }
         }
@@ -313,7 +316,10 @@ struct PageTreeNode: View {
             Button("Add sub-page") { addingChild = true; expanded.insert(project.id) }
             Button(role: .destructive) {
                 if selectedProjectID == project.id { selectedProjectID = nil }
-                store.deleteProjectKeepingChildren(project.id)
+                let name = project.name
+                if let undo = store.deleteProjectKeepingChildrenWithUndo(project.id) {
+                    ToastCenter.shared.show("Deleted “\(name)”", undoTitle: "Undo", undo: undo)
+                }
             } label: { Label("Delete page", systemImage: "trash") }
         }
     }
@@ -393,7 +399,10 @@ struct InitiativeNode: View {
             .contextMenu {
                 Button(role: .destructive) {
                     if selectedInitiativeID == initiative.id { selectedInitiativeID = nil }
-                    store.deleteInitiative(initiative.id)
+                    let name = initiative.name
+                    if let undo = store.deleteInitiativeWithUndo(initiative.id) {
+                        ToastCenter.shared.show("Deleted “\(name)”", undoTitle: "Undo", undo: undo)
+                    }
                 } label: { Label("Delete initiative", systemImage: "trash") }
             }
 
