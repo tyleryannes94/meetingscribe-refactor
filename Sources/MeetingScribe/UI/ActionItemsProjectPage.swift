@@ -35,9 +35,14 @@ struct ProjectPageHeader: View {
                 .textFieldStyle(.plain)
                 .font(NDS.pageTitle)
                 Spacer()
-                if store.items(forProject: project.id).count > 0 {
-                    Text("\(store.items(forProject: project.id).count) tasks")
-                        .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                let progress = store.completion(forProject: project.id)
+                if progress.total > 0 {
+                    HStack(spacing: 6) {
+                        ProgressView(value: Double(progress.done), total: Double(progress.total))
+                            .frame(width: 72).controlSize(.small).tint(NDS.brand)
+                        Text("\(progress.done)/\(progress.total)")
+                            .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                    }
                 }
                 if !bodyFills {
                     Button { withAnimation { expanded.toggle() } } label: {

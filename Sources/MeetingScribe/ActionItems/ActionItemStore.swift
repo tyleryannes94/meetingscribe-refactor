@@ -140,6 +140,19 @@ final class ActionItemStore: ObservableObject {
         items.filter { $0.projectID == projectID && $0.status != .completed }.count
     }
 
+    /// (done, total) live tasks for a project — drives a % complete indicator (VD-7).
+    func completion(forProject projectID: String) -> (done: Int, total: Int) {
+        let scoped = items.filter { $0.projectID == projectID }
+        return (scoped.filter { $0.status == .completed }.count, scoped.count)
+    }
+
+    /// (done, total) across all of an initiative's projects (VD-7).
+    func completion(forInitiative initiativeID: String) -> (done: Int, total: Int) {
+        let pids = Set(projects.filter { $0.initiativeID == initiativeID }.map { $0.id })
+        let scoped = items.filter { $0.projectID.map { pids.contains($0) } ?? false }
+        return (scoped.filter { $0.status == .completed }.count, scoped.count)
+    }
+
     /// Items whose source meeting was today or yesterday (any status).
     func todayAndYesterday(now: Date = Date()) -> [ActionItem] {
         let cal = Calendar.current
