@@ -51,6 +51,8 @@ struct ActionItemsView: View {
     @State var quickAddText = ""
     // Insights sheet (PM-12).
     @State var showInsights = false
+    // Keyboard shortcuts cheat-sheet (UX-22).
+    @State var showShortcuts = false
     // Calendar view: the month currently displayed (VD-1).
     @State var calendarMonth = Date()
     // Keyboard navigation cursor for the list (UX-1).
@@ -197,6 +199,9 @@ struct ActionItemsView: View {
         }
         .sheet(isPresented: $showInsights) {
             TaskInsightsView(store: store)
+        }
+        .sheet(isPresented: $showShortcuts) {
+            TaskShortcutsView()
         }
     }
 

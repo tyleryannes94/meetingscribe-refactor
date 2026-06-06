@@ -386,6 +386,9 @@ extension ActionItemsView {
                 Button { exportTasksCSV() } label: {
                     Label("Export tasks (CSV)…", systemImage: "square.and.arrow.up")
                 }
+                Button { showShortcuts = true } label: {
+                    Label("Keyboard shortcuts", systemImage: "keyboard")
+                }
                 Button {
                     showTrash = true
                 } label: {
