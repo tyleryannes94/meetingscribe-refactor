@@ -15,6 +15,8 @@ struct ProjectPageHeader: View {
     @State private var nameDraft: String = ""
     @State private var bodyDraft: String = ""
     @State private var expanded = true
+    @State private var showTargetPicker = false
+    @State private var targetDraft = Date()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -44,6 +46,7 @@ struct ProjectPageHeader: View {
                             .font(NDS.small).foregroundStyle(NDS.textTertiary)
                     }
                 }
+                targetDateControl
                 if !bodyFills {
                     Button { withAnimation { expanded.toggle() } } label: {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
@@ -67,6 +70,58 @@ struct ProjectPageHeader: View {
         .frame(maxHeight: bodyFills ? .infinity : nil, alignment: .top)
         .onAppear { nameDraft = project.name; bodyDraft = project.body }
         .onChange(of: project.id) { _, _ in nameDraft = project.name; bodyDraft = project.body }
+    }
+
+    private var targetDateControl: some View {
+        Button {
+            targetDraft = project.targetDate ?? Date()
+            showTargetPicker = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "target").font(.system(size: 11))
+                Text(project.targetDate.map(targetLabel) ?? "Set target")
+            }
+            .font(NDS.small).foregroundStyle(targetColor)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showTargetPicker) {
+            VStack(alignment: .leading, spacing: 10) {
+                DatePicker("Target date", selection: $targetDraft, displayedComponents: .date)
+                    .datePickerStyle(.graphical).labelsHidden()
+                HStack {
+                    if project.targetDate != nil {
+                        Button("Clear") {
+                            store.setProjectTargetDate(project.id, nil); showTargetPicker = false
+                        }
+                    }
+                    Spacer()
+                    Button("Done") {
+                        store.setProjectTargetDate(project.id, Calendar.current.startOfDay(for: targetDraft))
+                        showTargetPicker = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(14).frame(width: 280)
+        }
+    }
+
+    private func targetLabel(_ d: Date) -> String {
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: d)).day ?? 0
+        if days == 0 { return "Due today" }
+        if days < 0 { return "\(-days)d overdue" }
+        return "\(days)d left"
+    }
+
+    private var targetColor: Color {
+        guard let d = project.targetDate else { return NDS.textTertiary }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let due = cal.startOfDay(for: d)
+        if due < today { return .red }
+        if due == today { return .orange }
+        return NDS.textSecondary
     }
 
     private var metaRow: some View {

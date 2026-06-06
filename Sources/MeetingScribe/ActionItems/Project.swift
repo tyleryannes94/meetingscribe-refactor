@@ -30,6 +30,9 @@ struct Project: Identifiable, Codable, Hashable {
     var meetingIDs: [String]?
     /// Linear project id this is associated with (for Linear sync).
     var linearProjectID: String?
+    /// Optional target / due date for the project (PM-3). Drives the "due in N
+    /// days" header chip. Optional so existing projects.json still decodes.
+    var targetDate: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -51,6 +54,7 @@ struct Project: Identifiable, Codable, Hashable {
          initiativeID: String? = nil,
          meetingIDs: [String]? = nil,
          linearProjectID: String? = nil,
+         targetDate: Date? = nil,
          createdAt: Date = Date(),
          updatedAt: Date = Date()) {
         self.id = id
@@ -65,6 +69,7 @@ struct Project: Identifiable, Codable, Hashable {
         self.initiativeID = initiativeID
         self.meetingIDs = meetingIDs
         self.linearProjectID = linearProjectID
+        self.targetDate = targetDate
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
