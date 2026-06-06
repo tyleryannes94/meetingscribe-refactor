@@ -168,6 +168,20 @@ extension ActionItemsView {
                     }
                 } label: { Label("Priority", systemImage: "flag") }
                 .menuStyle(.borderlessButton).fixedSize()
+                Menu {
+                    Button("No project") { bulkMoveProject(nil) }
+                    Divider()
+                    ForEach(store.projects) { p in Button(p.name) { bulkMoveProject(p.id) } }
+                } label: { Label("Project", systemImage: "folder") }
+                .menuStyle(.borderlessButton).fixedSize()
+                Menu {
+                    Button("Today") { bulkSetDue(Self.startOfToday()) }
+                    Button("Tomorrow") { bulkSetDue(Self.daysFromToday(1)) }
+                    Button("Next week") { bulkSetDue(Self.daysFromToday(7)) }
+                    Divider()
+                    Button("Clear due date") { bulkSetDue(nil) }
+                } label: { Label("Due", systemImage: "calendar") }
+                .menuStyle(.borderlessButton).fixedSize()
                 Button(role: .destructive) { bulkDeleteTasks() } label: {
                     Label("Delete", systemImage: "trash")
                 }
@@ -187,6 +201,12 @@ extension ActionItemsView {
     }
     func bulkSetPriority(_ p: ActionItem.Priority) {
         for id in taskSelection { store.setPriority(id, priority: p) }
+    }
+    func bulkMoveProject(_ projectID: String?) {
+        for id in taskSelection { store.setProject(id, projectID: projectID) }
+    }
+    func bulkSetDue(_ date: Date?) {
+        for id in taskSelection { store.setDueDate(id, dueDate: date) }
     }
     func bulkDeleteTasks() {
         let ids = Array(taskSelection)
