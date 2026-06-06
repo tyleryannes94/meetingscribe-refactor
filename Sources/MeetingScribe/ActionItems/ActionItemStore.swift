@@ -878,12 +878,13 @@ final class ActionItemStore: ObservableObject {
     private func writeEnvelope<T: Codable>(_ payload: T, to url: URL,
                                            version: Int, tag: String) {
         do {
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true)
+            // Encode on the main actor (cheap for these small files), then hand
+            // the bytes to the coordinator, which writes off-main, coalesced and
+            // debounced (P0-1). Removes the synchronous full-file disk write that
+            // ran on the UI thread on every single mutation.
             let env = SchemaEnvelope(version: version, data: payload)
             let data = try SharedCoders.encoder(pretty: true, sorted: true).encode(env)
-            try data.write(to: url, options: [.atomic])
+            TaskPersistenceCoordinator.shared.write(data, to: url)
         } catch {
             log.error("\(tag, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             ErrorReporter.shared.report(error, category: .storage,

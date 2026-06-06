@@ -75,6 +75,9 @@ final class ActionItemStoreTrashTests: XCTestCase {
         _ = store1.createTask(title: "keep")
         let gone = store1.createTask(title: "trash me")
         store1.delete(gone.id)
+        // Writes are now debounced/off-main (P0-1); force them to disk before a
+        // fresh store reads the file.
+        TaskPersistenceCoordinator.shared.flushNow()
 
         // A fresh store reads the same file: live and trashed partition correctly.
         let store2 = ActionItemStore()
@@ -133,6 +136,19 @@ final class ActionItemStoreTrashTests: XCTestCase {
         store.reconcileExtracted([extracted], for: meetingID)
         XCTAssertFalse(store.items.contains { $0.meetingID == meetingID },
                        "trashed extracted task is not resurrected on re-extract")
+    }
+
+    // MARK: Off-main coalesced writes (P0-1)
+
+    func testCoordinatorCoalescesToLatestBytesOnFlush() {
+        let url = tempRoot.appendingPathComponent("coord_test.json")
+        // Long debounce so neither write lands before the explicit flush.
+        let coord = TaskPersistenceCoordinator(debounce: 30)
+        coord.write(Data("first".utf8), to: url)
+        coord.write(Data("second".utf8), to: url)
+        coord.flushNow()
+        XCTAssertEqual(try? String(contentsOf: url, encoding: .utf8), "second",
+                       "only the latest coalesced bytes for a path are written")
     }
 
     // MARK: Migration seam
