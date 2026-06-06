@@ -132,7 +132,9 @@ extension ActionItemsView {
     func projectPane(_ project: Project) -> some View {
         let kids = store.childProjects(of: project.id)
         if store.pageHasDatabase(project) {
-            ProjectPageHeader(store: store, project: project, bodyFills: false)
+            ProjectPageHeader(store: store, project: project, bodyFills: false,
+                              onOpenInitiative: { selectedInitiativeID = $0 },
+                              onOpenProject: { selectedProjectID = $0 })
             if !kids.isEmpty { subPagesSection(project, kids: kids) }
             Divider().overlay(NDS.divider)
             toolbar
@@ -142,7 +144,9 @@ extension ActionItemsView {
             // Free-form page: the markdown editor IS the page. Sections are
             // headings, to-dos are checkboxes — all authored inline. A
             // database is the one thing you add as a separate block.
-            ProjectPageHeader(store: store, project: project, bodyFills: true)
+            ProjectPageHeader(store: store, project: project, bodyFills: true,
+                              onOpenInitiative: { selectedInitiativeID = $0 },
+                              onOpenProject: { selectedProjectID = $0 })
             docFooter(project, kids: kids)
         }
     }
