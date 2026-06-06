@@ -200,6 +200,20 @@ struct TaskPageView: View {
                     .help("Add or remove a blocking task")
                 }
             }
+            NotionPropertyRow(icon: "gauge.medium", label: "Estimate") {
+                Menu {
+                    Button("None") { store.setEstimate(itemID, nil) }
+                    Divider()
+                    ForEach([1.0, 2, 3, 5, 8, 13], id: \.self) { v in
+                        Button("\(Int(v)) pt\(v == 1 ? "" : "s")") { store.setEstimate(itemID, v) }
+                    }
+                } label: {
+                    NotionChip(item.estimate.map { "\(Int($0)) pt\($0 == 1 ? "" : "s")" } ?? "None",
+                               color: item.estimate == nil ? NDS.textTertiary : NDS.brand,
+                               systemImage: "gauge.medium")
+                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            }
             NotionPropertyRow(icon: "person", label: "Assignee") {
                 HStack(spacing: 6) {
                     TextField("Empty", text: $assigneeDraft)

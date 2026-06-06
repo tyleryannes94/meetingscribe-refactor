@@ -723,6 +723,9 @@ final class ActionItemStore: ObservableObject {
     func setDueDate(_ id: String, dueDate: Date?) {
         update(id) { $0.dueDate = dueDate }
     }
+    func setEstimate(_ id: String, _ value: Double?) {
+        update(id) { $0.estimate = value }
+    }
     func setTitle(_ id: String, title: String) {
         update(id) { $0.title = title }
     }
