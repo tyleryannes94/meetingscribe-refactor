@@ -88,6 +88,10 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// = no dependencies.
     var blockedByIDs: [String]? = nil
 
+    /// Effort estimate in points (PM-4). nil = unestimated. Powers capacity and
+    /// velocity reporting.
+    var estimate: Double? = nil
+
     var createdAt: Date
     var updatedAt: Date
 
