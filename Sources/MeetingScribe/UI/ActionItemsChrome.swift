@@ -359,10 +359,11 @@ extension ActionItemsView {
 
             if manager.isSyncingTasks { ProgressView().controlSize(.small) }
 
-            Button { addTask() } label: { Label("New", systemImage: "plus") }
+            Button { quickAdding = true } label: { Label("New", systemImage: "plus") }
                 .buttonStyle(UntitledPrimaryButtonStyle())
                 .keyboardShortcut("n", modifiers: [.command, .option])
                 .help("Create a new task (⌥⌘N)")
+                .popover(isPresented: $quickAdding, arrowEdge: .bottom) { quickAddPopover }
 
             // Overflow
             Menu {
@@ -424,6 +425,35 @@ extension ActionItemsView {
 
     /// Creates a manual task, scoped to the currently-selected project, and
     /// opens it for editing in the list view.
+    /// Natural-language quick-add (P3-2). One line → a fully-specified task.
+    var quickAddPopover: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Email Sarah friday !high #work", text: $quickAddText)
+                .textFieldStyle(.plain)
+                .font(NDS.body)
+                .frame(width: 320)
+                .onSubmit { commitQuickAdd() }
+            Text("Type a task — add !priority, #label, or a date like “tomorrow”.")
+                .font(NDS.small).foregroundStyle(NDS.textTertiary)
+        }
+        .padding(14)
+    }
+
+    func commitQuickAdd() {
+        let raw = quickAddText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { quickAdding = false; return }
+        let pid = realSelectedProjectID
+        // Adding a task to a doc-only page turns its database on.
+        if let pid, let p = store.project(id: pid), !store.pageHasDatabase(p) {
+            store.setProjectDatabaseEnabled(pid, true)
+        }
+        _ = store.createTask(parsing: raw, projectID: pid)
+        quickAddText = ""
+        if viewMode == .table || viewMode == .board { viewMode = .list }
+        if filter == .completed { filter = .all }
+        // Popover stays open + cleared for rapid multi-entry; Esc closes it.
+    }
+
     func addTask() {
         let pid = (selectedProjectID == Self.noProjectSentinel) ? nil : selectedProjectID
         // Adding a task to a doc-only page turns its database on.

@@ -46,6 +46,9 @@ struct ActionItemsView: View {
     @State var railDragStart: Double?
     // Trash sheet (P0-3): restore or permanently remove soft-deleted tasks.
     @State var showTrash = false
+    // Natural-language quick-add popover (P3-2).
+    @State var quickAdding = false
+    @State var quickAddText = ""
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board
