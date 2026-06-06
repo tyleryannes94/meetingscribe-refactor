@@ -59,7 +59,7 @@ struct ActionItemsView: View {
     @State var focusedTaskID: String?
 
     enum ViewMode: String, CaseIterable, Identifiable {
-        case list, table, board, calendar
+        case list, table, board, calendar, gallery
         var id: String { rawValue }
         var label: String { rawValue.capitalized }
         var systemImage: String {
@@ -68,6 +68,7 @@ struct ActionItemsView: View {
             case .table: return "tablecells"
             case .board: return "rectangle.split.3x1"
             case .calendar: return "calendar"
+            case .gallery: return "square.grid.2x2"
             }
         }
     }
@@ -234,6 +235,8 @@ struct ActionItemsView: View {
             boardBody
         case .calendar:
             calendarBody
+        case .gallery:
+            if projectFiltered.isEmpty { emptyState } else { galleryBody }
         }
     }
 }
