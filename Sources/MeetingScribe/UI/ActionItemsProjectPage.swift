@@ -12,6 +12,9 @@ struct ProjectPageHeader: View {
     /// content and fills available height — write sections (`#`) and to-dos
     /// (`- [ ]`) freely. When false, it's a compact description above a database.
     var bodyFills: Bool = false
+    /// Breadcrumb navigation callbacks (VD-12).
+    var onOpenInitiative: ((String) -> Void)? = nil
+    var onOpenProject: ((String) -> Void)? = nil
     @State private var nameDraft: String = ""
     @State private var bodyDraft: String = ""
     @State private var expanded = true
@@ -20,6 +23,7 @@ struct ProjectPageHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            breadcrumbBar
             HStack(spacing: 11) {
                 Menu {
                     ForEach(["doc.text", "folder.fill", "star.fill", "flag.fill", "bolt.fill",
@@ -122,6 +126,42 @@ struct ProjectPageHeader: View {
         if due < today { return .red }
         if due == today { return .orange }
         return NDS.textSecondary
+    }
+
+    @ViewBuilder
+    private var breadcrumbBar: some View {
+        let crumbs = breadcrumbItems
+        if !crumbs.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(Array(crumbs.enumerated()), id: \.offset) { _, c in
+                    Button {
+                        if c.isInitiative { onOpenInitiative?(c.id) } else { onOpenProject?(c.id) }
+                    } label: {
+                        Text(c.name).font(NDS.small).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(NDS.textTertiary)
+                }
+            }
+        }
+    }
+
+    /// Ancestor chain (Initiative › parent pages…) above the current project.
+    private var breadcrumbItems: [(id: String, name: String, isInitiative: Bool)] {
+        var result: [(String, String, Bool)] = []
+        if let iid = project.initiativeID, let initiative = store.initiative(id: iid) {
+            result.append((iid, initiative.name, true))
+        }
+        var chain: [Project] = []
+        var pid = project.parentID
+        var hops = 0
+        while let p = pid, hops < 50, let proj = store.project(id: p) {
+            chain.insert(proj, at: 0)
+            pid = proj.parentID
+            hops += 1
+        }
+        for p in chain { result.append((p.id, p.name, false)) }
+        return result
     }
 
     private var metaRow: some View {
