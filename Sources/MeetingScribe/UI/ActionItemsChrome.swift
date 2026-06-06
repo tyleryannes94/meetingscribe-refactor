@@ -380,6 +380,9 @@ extension ActionItemsView {
                     manager.backfillActionItemsIfNeeded(force: true)
                 } label: { Label("Re-extract from meetings", systemImage: "arrow.clockwise") }
                 Divider()
+                Button { showInsights = true } label: {
+                    Label("Insights", systemImage: "chart.bar.xaxis")
+                }
                 Button {
                     showTrash = true
                 } label: {
