@@ -1,108 +1,131 @@
-# Tyler — TODO / Action Items
+# Tyler — Step-by-Step TODO / Runbook
 
-Everything that needs **you** (a Mac, decisions, or access) to move the
-Projects/Tasks "replace Notion" build forward. Written by Claude Code; updated as
-work lands. Newest/most-important at the top.
+Every action that needs **you** (a Mac, a decision, or repo access) to move the
+Projects/Tasks "replace Notion" build forward — in order, with exact commands.
+Check items off as you go. Written/maintained by Claude Code.
 
-Session: https://claude.ai/code/session_01Df4fWaHZV9CWbJ1ZqWxwZh
+Session to resume me: https://claude.ai/code/session_01Df4fWaHZV9CWbJ1ZqWxwZh
+
+**Context in one line:** I merged 30 unverified code PRs across all 7 phases this
+session. There's no Swift toolchain in my environment and the macOS CI runner
+never gets assigned, so *nothing has been compiled.* Your job below is to verify
+it, then unblock the remaining high-risk work.
 
 ---
 
-## 🔴 P0 — Do this first: validate the build
+## STEP 1 — Pull and build (do this first) 🔴
 
-I've merged **27 code PRs into `main` this session, none of them compiled** —
-there's no Swift toolchain in my environment and the macOS CI runner never gets
-assigned (see next item), so I've hand-reviewed every line but cannot guarantee
-it builds.
-
-**On your Mac:**
 ```bash
 cd ~/MeetingScribeRefactor
-git checkout main && git pull
-swift build -c release && swift test
+git checkout main
+git pull
+swift build -c release
 ```
-- ✅ If green: reply "build is green" and I'll proceed into the high-risk items
-  with a real safety net.
-- ❌ If red: **paste me the compiler errors / failing tests** and I'll fix them
-  immediately. Most likely suspects if anything broke:
-  - `TaskPersistenceCoordinator` (`@unchecked Sendable`, the `NotificationCenter`
-    observer closures).
-  - SwiftUI detail in the newer views (`ActionItemsCalendarView`,
-    `CustomPropertyRow`, `TaskInsightsView`, `TaskTrashView`, `TaskShortcutsView`).
-  - `onKeyPress` usage in `ActionItemsListView` (keyboard nav).
-  - Memberwise-init / `Codable` on the new `ActionItem` / `Project` fields.
+
+- [ ] **Build succeeded** → go to STEP 2.
+- [ ] **Build FAILED** → copy the FULL error output and **paste it to me in the
+      session** (link above). I'll push fixes. Re-run `swift build -c release`
+      after each fix until green. Likely first-failure suspects (so you know what
+      you're looking at):
+  - `TaskPersistenceCoordinator.swift` — `@unchecked Sendable` / `NotificationCenter` closures
+  - `ActionItemsCalendarView.swift`, `ActionItemsGalleryView.swift`, `CustomPropertyRow.swift`,
+    `TaskInsightsView.swift` — SwiftUI generics/bindings
+  - `ActionItemsListView.swift` — `onKeyPress` keyboard nav
+  - New optional fields on `ActionItem`/`Project` — memberwise init / `Codable`
+
+## STEP 2 — Run the tests
+
+```bash
+swift test
+```
+
+- [ ] **All tests pass** → go to STEP 3.
+- [ ] **Tests FAILED** → paste me the failing test names + output. I'll fix.
+      (New test files this session: `ActionItemStoreTrashTests`, `TaskChangeLogTests`,
+      `TaskQueryTests`, `RecurrenceTests`, `TaskReminderTests`, `TaskQuickAddParserTests`,
+      `TaskPropertiesTests`, `TaskExporterTests`, `TaskCSVImporterTests`, plus delegated
+      cases in `ActionItemExtractorTests`.)
+
+## STEP 3 — Build & launch the app, smoke-test
+
+```bash
+make app        # or: make dev
+```
+Open the app, go to the **Tasks** tab, and check each:
+
+- [ ] Record a ~30s meeting → transcript + summary + extracted action items appear (pipeline not regressed).
+- [ ] Delete a task → "Undo" toast appears → undo works.
+- [ ] Toolbar overflow (•••) → **Trash** → Restore / Empty work.
+- [ ] **New task (⌥⌘N)** → type `Email Sarah friday !high #marketing` → it parses date/priority/label.
+- [ ] Switch a project between **List / Table / Board / Calendar / Gallery**; reopen the project → it remembers the view.
+- [ ] Open a task in a project → **Add property** (try number, select, checkbox, date) → set/edit/delete.
+- [ ] Make a task **recurring** (Repeat row) + give it a due date → complete it → a fresh instance appears.
+- [ ] Click the task list, then use **J/K / arrows / Return / Space** (keyboard nav).
+- [ ] Toolbar overflow → **Insights**, **Export tasks (CSV)**, **Import tasks (CSV)**, **Keyboard shortcuts**.
+- [ ] Set a task **due date** → confirm a reminder is scheduled (it fires at the due time).
+
+- [ ] Anything broken or wrong → describe it to me in the session, I'll fix.
+
+## STEP 4 — Tell me the result
+
+In the session, reply with **one** of:
+- [ ] **"build is green"** (compiles + tests pass) — I'll start the remaining high-risk work (STEP 6).
+- [ ] Paste of errors — I fix, you re-run STEP 1–2.
 
 ---
 
-## 🟠 P1 — Fix CI so there's a real gate
+## STEP 5 — Fix the macOS CI runner (so there's a real gate) 🟠
 
-Every CI run since **2026-06-02** fails in ~3 seconds with `runner_id: 0` and no
-logs — the `macos-15` GitHub Actions runner is **never assigned** (it failed even
-on a docs-only PR and on `main`). The last green run was 2026-06-01.
+Optional but strongly recommended — without it, I keep working blind.
 
-**What to check:**
-- GitHub Actions **macOS runner minutes / billing** for the repo/org (macOS
-  minutes are metered separately and commonly run out).
-- Whether org policy disabled GitHub-hosted runners.
-- `.github/workflows/ci.yml` pins `runs-on: macos-15` — confirm that label is
-  available to the account.
+CI has failed on **every** run since 2026-06-02 (including `main` and docs-only
+PRs): `runs-on: macos-15` jobs end in ~3s with `runner_id: 0` and no logs — the
+runner is never assigned. Last green run: 2026-06-01.
 
-Until this is fixed, **I cannot verify anything I write.** Restoring CI is the
-single biggest unblock for the remaining work.
-
----
-
-## 🟡 P2 — Decisions I need from you before I build the riskiest items
-
-I deliberately have **not** built these blind. Tell me how to proceed once the
-build is green (or greenlight them anyway):
-
-1. **JSON → SQLite migration (`BE-3`)** — moves your **live task data** to a new
-   store with a one-time migration. Data-destructive if a blind bug slips in.
-   *I will not merge this without a working build gate or your explicit go-ahead
-   knowing the risk.* It unlocks scale (10k+ tasks), FTS, relations, rollups.
-2. **Block-based doc editor (`NP-4`)** — replaces the markdown page body with real
-   blocks (toggles, callouts, embeds, synced blocks). Large; reshapes the editor.
-3. **Two-way external sync (`PM-18` / `BE-8`)** — write local edits back to
-   Notion/Linear with conflict resolution. Touches networking + a CRDT-ish merge.
-4. **Automation/rules engine (`BE-12`)**, **repository split (`BE-2`)**,
-   **provider abstraction (`BE-14`)** — large internal refactors; high blind-compile
-   risk, low immediate user-visible payoff. Best done with CI green.
-
-> Default if you say nothing: I keep building the **lower-risk** remaining items
-> (backlinks, breadcrumbs, more views, polish) and hold the five above for a gate.
+- [ ] GitHub → repo **Settings → Actions → General**: confirm Actions are enabled.
+- [ ] **Billing → Plans and usage**: confirm **macOS Actions minutes** aren't exhausted
+      (macOS minutes are metered separately and commonly run out).
+- [ ] Confirm the org allows **GitHub-hosted runners** and the `macos-15` label.
+- [ ] Re-run a failed job (Actions tab → a recent CI run → "Re-run jobs") and confirm it now picks up a runner.
+- [ ] Tell me once CI is green — I'll switch to validating each PR via CI instead of asking you to build locally.
 
 ---
 
-## 🟢 P3 — Optional: turn on / try the new features
+## STEP 6 — Decisions: greenlight the remaining high-risk phases ⚠️
 
-These shipped this session and are ready to use (once the build is confirmed):
+These are the only audit items I have **not** built — each is large and
+build-breaking-prone, so I held them for a gate. After the build is green (STEP 4),
+reply telling me which to do (any order; I'll do one PR at a time and you verify each):
 
-- **Delegated tasks (the moat):** off by default. Enable in
-  **Settings → People (second brain) → "Capture others' action items as
-  delegated/waiting-on."** Then a **Delegated** chip appears in the Tasks toolbar.
-- **Due reminders:** on by default (`Settings` key `notifyTaskDue`). Make sure
-  macOS Notification permission is granted.
-- **Quick-add:** ⌥⌘N → type e.g. `Email Sarah friday !high #marketing`.
-- **Keyboard nav:** click the task list, then `J`/`K`/arrows, `Return`, `Space`.
-  (Full list: Tasks toolbar overflow → **Keyboard shortcuts**.)
-- **Calendar / Insights / Trash / CSV export:** view switcher + toolbar overflow.
-- **Custom properties:** open a task in a project → **Add property**.
+- [ ] **A. JSON → SQLite migration (`BE-3`)** — moves your **live task data** to a new
+      engine with a one-time migration. *Highest risk: a bug could corrupt task data.*
+      I'll back up before migrating, but I want your explicit go-ahead. Unlocks scale
+      (10k+ tasks), full-text search, relations/rollups.
+- [ ] **B. Block-based doc editor (`NP-4`)** — replaces the markdown page body with real
+      blocks (toggles, callouts, embeds, synced blocks).
+- [ ] **C. Two-way external sync (`PM-18` / `BE-8`)** — write local edits back to
+      Notion/Linear with conflict resolution.
+- [ ] **D. Automation / rules engine (`BE-12`)** — "when status→Done, set X", etc.
+- [ ] **E. Repository split (`BE-2`) + provider abstraction (`BE-14`)** — internal refactors;
+      no user-visible change, but they de-risk A/C.
 
-### Smoke-test checklist (when validating)
-- [ ] Record a ~30s meeting → transcript + summary + extracted action items still work.
-- [ ] Delete a task → "Undo" toast; check Trash → Restore.
-- [ ] Quick-add with `!high`, `#label`, and a date.
-- [ ] Switch a project between List / Board / Table / Calendar; reopen → view persists.
-- [ ] Add a custom property to a task; set/edit/delete it.
-- [ ] Complete a recurring task → next instance appears.
-- [ ] Set a due date → reminder fires (or appears in pending notifications).
+> If you just say "keep going", I'll do **B, D, E** (non-data-destructive) first and
+> hold **A** (SQLite) and **C** (sync) for an explicit OK, since those touch live data
+> / networking.
 
 ---
 
-## ✅ Done this session (reference)
+## STEP 7 — (Optional) turn on the new opt-in features
 
-27 code PRs across Phases 0–6 (safety, data spine, daily loop, interaction speed,
-visual, Notion-class custom properties, meeting-AI moat + planning). Full audit and
-plan live in `docs/audit4/`.
+- [ ] **Delegated/waiting-on tasks (the moat):** Settings → **People (second brain)** →
+      toggle **"Capture others' action items as delegated/waiting-on."** A **Delegated**
+      chip then appears in the Tasks toolbar.
+- [ ] **Due reminders:** on by default; ensure macOS **Notification** permission is granted for MeetingScribe.
+
+---
+
+## Reference — what shipped this session (no action needed)
+
+30 code PRs (#54–#84, excl. docs) across Phases 0–6. Full audit, master plan, and
+build playbook are in `docs/audit4/`. This runbook is the only thing that needs *you*.
 </content>
