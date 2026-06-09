@@ -288,7 +288,7 @@ final class ActionItemStore: ObservableObject {
             let signature = "\(meetingID)::\(title.lowercased())"
             guard !live.contains(signature), !trashed.contains(signature),
                   seen.insert(signature).inserted else { continue }
-            let item = ActionItem(
+            var item = ActionItem(
                 id: UUID().uuidString,
                 meetingID: meetingID,
                 meetingTitle: meetingTitle,
@@ -312,6 +312,8 @@ final class ActionItemStore: ObservableObject {
                 notionURL: nil,
                 createdAt: now,
                 updatedAt: now)
+            // Pushed tasks are user-authored → confirmed, never in triage.
+            item.confirmedAt = now
             items.append(item)
             created.append(item)
         }
@@ -323,6 +325,69 @@ final class ActionItemStore: ObservableObject {
                     : "Pushed \(created.count) tasks from “\(meetingTitle)”")
         }
         return created
+    }
+
+    // MARK: - Triage inbox & smart views (redesign §5B / §5C)
+
+    /// Meeting-extracted items still awaiting review — the Triage inbox source.
+    /// Soonest-due first, then newest. Excludes confirmed, completed, trashed.
+    var pendingTriage: [ActionItem] {
+        items.filter { $0.needsTriage }
+            .sorted { a, b in
+                let da = a.dueDate ?? .distantFuture, db = b.dueDate ?? .distantFuture
+                return da != db ? da < db : a.createdAt > b.createdAt   // soonest-due, then newest
+            }
+    }
+
+    /// Confirm one or more items out of triage (optionally filing them under a
+    /// project). Idempotent — already-confirmed items keep their timestamp.
+    func confirm(ids: [String], projectID: String? = nil) {
+        guard !ids.isEmpty else { return }
+        let now = Date()
+        var changed = false
+        let idSet = Set(ids)
+        for i in items.indices where idSet.contains(items[i].id) {
+            if items[i].confirmedAt == nil { items[i].confirmedAt = now; changed = true }
+            if let projectID { items[i].projectID = projectID; changed = true }
+            if changed { items[i].updatedAt = now }
+        }
+        if changed { save() }
+    }
+
+    func confirm(_ id: String, projectID: String? = nil) { confirm(ids: [id], projectID: projectID) }
+
+    /// Confirm every item currently in the triage inbox. Returns the count moved.
+    @discardableResult
+    func confirmAllTriage() -> Int {
+        let ids = pendingTriage.map(\.id)
+        confirm(ids: ids)
+        return ids.count
+    }
+
+    /// Tasks that belong in the regular workspace: active, not awaiting triage.
+    private var workspaceTasks: [ActionItem] { items.filter { !$0.needsTriage } }
+
+    /// Overdue: due before today and not completed.
+    var overdueTasks: [ActionItem] {
+        let start = Calendar.current.startOfDay(for: Date())
+        return workspaceTasks.filter {
+            $0.status != .completed && ($0.dueDate.map { $0 < start } ?? false)
+        }
+    }
+
+    /// My day: due today (and not completed).
+    var myDayTasks: [ActionItem] {
+        workspaceTasks.filter {
+            $0.status != .completed && ($0.dueDate.map { Calendar.current.isDateInToday($0) } ?? false)
+        }
+    }
+
+    /// This week: due within the current calendar week (and not completed).
+    var thisWeekTasks: [ActionItem] {
+        guard let week = Calendar.current.dateInterval(of: .weekOfYear, for: Date()) else { return [] }
+        return workspaceTasks.filter {
+            $0.status != .completed && ($0.dueDate.map { week.contains($0) } ?? false)
+        }
     }
 
     /// Split freeform note text into one task draft per non-empty line,
@@ -668,6 +733,7 @@ final class ActionItemStore: ObservableObject {
                 || s.notionPageID != nil
                 || s.priority != .medium
                 || s.dueDate != nil
+                || s.confirmedAt != nil          // confirmed out of triage → keep
             if userTouched { nextItems.append(s) }
         }
 

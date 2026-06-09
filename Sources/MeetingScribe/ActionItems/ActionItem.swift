@@ -84,6 +84,13 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// delegated" item (PM-19). nil/false = my own task.
     var delegated: Bool? = nil
 
+    /// When the user confirmed this meeting-extracted item out of the Triage
+    /// inbox (redesign §5B). nil = still awaiting review. Tasks the user pushes
+    /// from notes are confirmed at creation. Optional → old action_items.json
+    /// decodes as nil (so all legacy extracted items start in triage, which is
+    /// the correct, reviewable default).
+    var confirmedAt: Date? = nil
+
     /// Ids of tasks that must finish before this one can start (PM-2). nil/empty
     /// = no dependencies.
     var blockedByIDs: [String]? = nil
@@ -107,6 +114,13 @@ struct ActionItem: Identifiable, Codable, Hashable {
     var isTrashed: Bool { deletedAt != nil }
     /// A task with no originating meeting (created manually or imported).
     var isManual: Bool { meetingID.isEmpty }
+    /// True once confirmed out of triage (or if it never needed triage).
+    var isConfirmed: Bool { confirmedAt != nil }
+    /// A meeting-extracted item still awaiting review in the Triage inbox:
+    /// it came from a meeting, hasn't been confirmed, isn't done, isn't trashed.
+    var needsTriage: Bool {
+        !meetingID.isEmpty && confirmedAt == nil && status != .completed && deletedAt == nil
+    }
     var subtaskProgress: (done: Int, total: Int) {
         let list = subtaskList
         return (list.filter { $0.done }.count, list.count)
