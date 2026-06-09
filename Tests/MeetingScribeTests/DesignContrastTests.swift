@@ -8,17 +8,17 @@ import XCTest
 /// faint-gray-text regression can't come back silently.
 final class DesignContrastTests: XCTestCase {
 
-    // Dark scheme (the app's primary surface).
-    private let bgDark:  (Double, Double, Double) = (28, 27, 25)
-    private let primaryDark:   (Double, Double, Double, Double) = (242, 239, 230, 1)
-    private let secondaryDark: (Double, Double, Double, Double) = (210, 204, 190, 0.78)
-    private let tertiaryDark:  (Double, Double, Double, Double) = (210, 204, 190, 0.58)
+    // Dark scheme (the app's primary surface) — Bloom plum-ink (designs/bloom.css).
+    private let bgDark:  (Double, Double, Double) = (21, 18, 26)
+    private let primaryDark:   (Double, Double, Double, Double) = (243, 238, 246, 1)
+    private let secondaryDark: (Double, Double, Double, Double) = (243, 238, 246, 0.68)
+    private let tertiaryDark:  (Double, Double, Double, Double) = (243, 238, 246, 0.44)
 
-    // Light scheme.
-    private let bgLight:  (Double, Double, Double) = (248, 247, 245)
-    private let primaryLight:   (Double, Double, Double, Double) = (26, 25, 23, 1)
-    private let secondaryLight: (Double, Double, Double, Double) = (26, 25, 23, 0.64)
-    private let tertiaryLight:  (Double, Double, Double, Double) = (26, 25, 23, 0.52)
+    // Light scheme (fallback).
+    private let bgLight:  (Double, Double, Double) = (248, 246, 250)
+    private let primaryLight:   (Double, Double, Double, Double) = (28, 22, 38, 1)
+    private let secondaryLight: (Double, Double, Double, Double) = (28, 22, 38, 0.66)
+    private let tertiaryLight:  (Double, Double, Double, Double) = (28, 22, 38, 0.50)
 
     private func ratio(_ fg: (Double, Double, Double, Double),
                        _ bg: (Double, Double, Double)) -> Double {
