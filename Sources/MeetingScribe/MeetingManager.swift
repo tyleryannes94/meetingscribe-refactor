@@ -588,6 +588,30 @@ final class MeetingManager: ObservableObject {
         }
     }
 
+    /// Add an attendee (a name, an email, or "Name <email>") to a meeting and
+    /// persist it (redesign §4D — "add {person} to a meeting"). Returns the
+    /// updated meeting, or nil if it was a no-op (blank / already present).
+    @discardableResult
+    func addAttendee(_ attendee: String, to meeting: Meeting) -> Meeting? {
+        guard let updated = Self.meeting(meeting, addingAttendee: attendee) else { return nil }
+        let primary = tagStore.primaryTag(for: meeting)
+        try? store.writeMeeting(updated, primaryTag: primary)
+        refreshPastMeetings(force: true)
+        return updated
+    }
+
+    /// Pure, disk-free attendee-dedup helper (testable). Case-insensitive on the
+    /// whole attendee string; returns nil when blank or already present.
+    nonisolated static func meeting(_ meeting: Meeting, addingAttendee attendee: String) -> Meeting? {
+        let trimmed = attendee.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !meeting.attendees.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame })
+        else { return nil }
+        var m = meeting
+        m.attendees.append(trimmed)
+        return m
+    }
+
     /// Push selected notes / action items from a meeting into the Tasks tab
     /// (cross-tab integration). Returns the newly-created tasks. `lines` are
     /// freeform note lines (markdown prefixes are stripped); `drafts` are

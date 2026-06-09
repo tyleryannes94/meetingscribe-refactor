@@ -544,6 +544,30 @@ final class PeopleStore: ObservableObject {
         personIndex[id]
     }
 
+    // MARK: - Email + attendee linkage (redesign §3E / §4A)
+
+    /// Add an email to a person (deduped + normalized). Returns the updated
+    /// person, or nil if the id is unknown, the email is blank, or it was
+    /// already present. Backs the inline "+ Add email" affordance (§4A).
+    @discardableResult
+    func addEmail(_ email: String, to personID: String) -> Person? {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, var p = person(by: personID) else { return nil }
+        let before = p.emails.count
+        p.emails = dedupeEmails(p.emails + [trimmed])
+        guard p.emails.count > before else { return nil }   // duplicate → no-op
+        updatePerson(p)
+        return person(by: personID)
+    }
+
+    /// The person whose emails include `email` (normalized). Powers
+    /// attendee-chip → Person deep-linking (§3E); nil when no one matches.
+    func person(forEmail email: String) -> Person? {
+        let norm = PersonMatching.normalizeEmail(email)
+        guard !norm.isEmpty else { return nil }
+        return people.first { $0.emails.contains { PersonMatching.normalizeEmail($0) == norm } }
+    }
+
     /// Re-insert a previously-deleted person (same id) and their encounters, for
     /// Undo. Photos and reciprocal relationships removed at delete aren't
     /// restored, but identity/contact/notes/tags/encounters are. (V5 DI-3)
