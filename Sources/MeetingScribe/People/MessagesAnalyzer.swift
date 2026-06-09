@@ -53,7 +53,45 @@ enum MessagesAnalyzer {
     /// A recent message for the optional Ollama topic summary.
     struct Snippet { let fromMe: Bool; let date: Date; let text: String }
 
-    static func analyze(person: Person, recentLimit: Int = 60) throws -> (stats: Stats, recent: [Snippet]) {
+    /// What slice of the conversation to analyze. Lets the user pick a window
+    /// instead of being forced to all-time history. `.allTime` keeps the
+    /// original behavior (and is the default so existing callers are unchanged).
+    enum MessageWindow: Equatable, Hashable {
+        case allTime
+        case lastDays(Int)
+        case since(Date)
+        case between(Date, Date)
+
+        /// Lower/upper bounds in chat.db's "Apple nanoseconds since 2001" scale
+        /// (nil = unbounded). Modern chat.db rows use the ns scale.
+        func appleDateBounds(now: Date = Date()) -> (lower: Int64?, upper: Int64?) {
+            func ns(_ d: Date) -> Int64 { Int64(d.timeIntervalSinceReferenceDate * 1_000_000_000) }
+            switch self {
+            case .allTime:              return (nil, nil)
+            case .lastDays(let n):      return (ns(now.addingTimeInterval(-Double(max(0, n)) * 86400)), nil)
+            case .since(let d):         return (ns(d), nil)
+            case .between(let a, let b): return (ns(min(a, b)), ns(max(a, b)))
+            }
+        }
+
+        /// Short human label for menus / headers.
+        var label: String {
+            switch self {
+            case .allTime:          return "All time"
+            case .lastDays(let n):  return "Last \(n) days"
+            case .since:            return "Since date"
+            case .between:          return "Date range"
+            }
+        }
+
+        /// The fixed presets a picker offers (custom ranges are built separately).
+        static let presets: [MessageWindow] =
+            [.allTime, .lastDays(30), .lastDays(90), .lastDays(365)]
+    }
+
+    static func analyze(person: Person,
+                        recentLimit: Int = 60,
+                        scope: MessageWindow = .allTime) throws -> (stats: Stats, recent: [Snippet]) {
         guard FileManager.default.fileExists(atPath: chatDBURL.path) else {
             throw AnalyzeError.needsFullDiskAccess
         }
@@ -91,7 +129,7 @@ enum MessagesAnalyzer {
         let cutoff30Ns = Int64((nowSec - 30 * 86400) * 1_000_000_000)
         let cutoff90Ns = Int64((nowSec - 90 * 86400) * 1_000_000_000)
 
-        let chatFilter = """
+        var chatFilter = """
         WHERE cmj.chat_id IN (
             SELECT chj.chat_id FROM chat_handle_join chj
             WHERE chj.handle_id IN (\(idList))
@@ -100,6 +138,12 @@ enum MessagesAnalyzer {
             )
         )
         """
+        // Apply the requested time window. Both the stats and snippet queries
+        // build off `chatFilter` and reference `m.date`, so appending the date
+        // bounds here scopes both consistently. (Integer literals — no binding.)
+        let (lowerBound, upperBound) = scope.appleDateBounds()
+        if let lowerBound { chatFilter += "\n            AND m.date >= \(lowerBound)" }
+        if let upperBound { chatFilter += "\n            AND m.date <= \(upperBound)" }
 
         // --- 1) Aggregate stats ---
         let statsSQL = """

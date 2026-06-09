@@ -229,6 +229,8 @@ struct PersonDetailView: View {
     @State private var messageStats: MessagesAnalyzer.Stats?
     @State private var messageError: String?
     @State private var analyzingMessages = false
+    /// Which slice of the conversation the stats reflect (user-selectable).
+    @State private var messageWindow: MessagesAnalyzer.MessageWindow = .allTime
     @State private var analysisOutput: AnalysisOutput?
     @State private var analysisRunning: ConversationAnalysisPreset?
     @State private var customPromptDraft = ""
@@ -1461,14 +1463,22 @@ struct PersonDetailView: View {
                 if analyzingMessages {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button { analyzeMessages() } label: { Label("Analyze", systemImage: "message") }
-                        .buttonStyle(.borderless).font(NDS.small)
+                    // Pick WHAT to analyze instead of forcing all-time history.
+                    Menu {
+                        ForEach(MessagesAnalyzer.MessageWindow.presets, id: \.self) { window in
+                            Button(window.label) { analyzeMessages(scope: window) }
+                        }
+                    } label: {
+                        Label("Analyze", systemImage: "message")
+                    }
+                    .menuStyle(.borderlessButton).fixedSize().font(NDS.small)
                 }
             }
             if let err = messageError {
                 Text(err).font(NDS.small).foregroundStyle(NDS.textTertiary)
             } else if let s = messageStats {
                 VStack(alignment: .leading, spacing: 6) {
+                    statRow("Window", messageWindow.label)
                     statRow("Total", "\(s.total)  ·  \(s.sent) sent / \(s.received) received")
                     if let last = s.lastDate { statRow("Last message", Self.dateFormatter.string(from: last)) }
                     statRow("Recent", "\(s.last30) in 30d  ·  \(s.last90) in 90d")
@@ -1693,16 +1703,17 @@ struct PersonDetailView: View {
         }
     }
 
-    private func analyzeMessages() {
+    private func analyzeMessages(scope: MessagesAnalyzer.MessageWindow = .allTime) {
         analyzingMessages = true
         messageError = nil
+        messageWindow = scope
         // Reset any prior preset output so the user knows the stats
         // refresh isn't carrying stale analysis text.
         analysisOutput = nil
         let target = current
         Task.detached(priority: .userInitiated) {
             do {
-                let (stats, _) = try MessagesAnalyzer.analyze(person: target)
+                let (stats, _) = try MessagesAnalyzer.analyze(person: target, scope: scope)
                 await MainActor.run { self.messageStats = stats; self.analyzingMessages = false }
             } catch {
                 await MainActor.run {
