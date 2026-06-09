@@ -251,6 +251,19 @@ extension UnifiedMeetingDetail {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                // Confirm this meeting's unreviewed action items out of the
+                // Triage inbox and into the Tasks workspace (redesign §3D).
+                let unconfirmed = items.filter { $0.needsTriage }
+                if !unconfirmed.isEmpty {
+                    Button {
+                        manager.actionItems.confirm(ids: unconfirmed.map(\.id))
+                    } label: {
+                        Label("Add \(unconfirmed.count) → Tasks", systemImage: "arrow.right.circle")
+                            .labelStyle(.titleAndIcon).font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Confirm these action items into the Tasks workspace")
+                }
                 Button { addActionItem() } label: {
                     Label("Add", systemImage: "plus")
                         .labelStyle(.titleAndIcon).font(.caption)

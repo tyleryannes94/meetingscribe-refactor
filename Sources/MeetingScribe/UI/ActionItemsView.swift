@@ -74,6 +74,7 @@ struct ActionItemsView: View {
     }
     static let noProjectSentinel = "__none__"
     static let homeSentinel = "__home__"
+    static let triageSentinel = "__triage__"
 
     enum Filter: String, CaseIterable, Identifiable {
         case all, thisWeek, open, inProgress, completed, upcoming, overdue
@@ -161,6 +162,11 @@ struct ActionItemsView: View {
                                    onOpenProject: { pid in
                                        selectedInitiativeID = nil; selectedProjectID = pid
                                    })
+                } else if selectedProjectID == Self.triageSentinel && selectedMeetingID == nil {
+                    TriageInboxView(store: store) { mid in
+                        selectedMeetingID = mid
+                        selectedProjectID = nil
+                    }
                 } else if selectedProjectID == Self.homeSentinel && selectedMeetingID == nil {
                     tasksDashboard
                 } else if let mid = selectedMeetingID,

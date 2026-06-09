@@ -45,6 +45,10 @@ struct ProjectRail: View {
                 VStack(alignment: .leading, spacing: 2) {
                     railItem(title: "Home", icon: "house.fill", count: 0,
                              id: ActionItemsView.homeSentinel)
+                    // Triage inbox — meeting-extracted items awaiting review (§5B).
+                    railItem(title: "Triage inbox", icon: "tray.and.arrow.down.fill",
+                             count: store.pendingTriage.count,
+                             id: ActionItemsView.triageSentinel)
                     railItem(title: "All tasks", icon: "tray.full",
                              count: store.items.filter { $0.status != .completed }.count,
                              id: nil)
