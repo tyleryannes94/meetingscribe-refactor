@@ -59,7 +59,7 @@ struct MarkdownEditor: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 4, height: 8)
         textView.font = MarkdownStyle.bodyFont
         textView.textColor = NSColor.labelColor
-        textView.insertionPointColor = NSColor.controlAccentColor
+        textView.insertionPointColor = MarkdownStyle.caretColor
         textView.string = text
         textView.delegate = context.coordinator
         textView.placeholderString = placeholder ?? ""
@@ -197,7 +197,7 @@ final class MarkdownNSTextView: NSTextView {
 
 @available(macOS 14.0, *)
 enum MarkdownStyle {
-    static let bodyFont = NSFont.systemFont(ofSize: 14)
+    static let bodyFont = NSFont(name: "Plus Jakarta Sans", size: 14) ?? NSFont.systemFont(ofSize: 14)
     static let h1Font   = NSFont.systemFont(ofSize: 26, weight: .bold)
     static let h2Font   = NSFont.systemFont(ofSize: 22, weight: .bold)
     static let h3Font   = NSFont.systemFont(ofSize: 18, weight: .semibold)
@@ -386,9 +386,14 @@ enum MarkdownStyle {
 
     private static func defaultParagraph() -> NSMutableParagraphStyle {
         let p = NSMutableParagraphStyle()
-        p.lineSpacing = 2; p.paragraphSpacing = 4
+        // Notion-parity airy line height (§3C) instead of a flat 2pt spacing.
+        p.lineHeightMultiple = 1.5
+        p.lineSpacing = 2; p.paragraphSpacing = 6
         return p
     }
+
+    /// Coral editor caret (§3C). #ff9173.
+    static let caretColor = NSColor(srgbRed: 1.0, green: 0x91/255.0, blue: 0x73/255.0, alpha: 1)
 
     private static func italicFont() -> NSFont {
         let descriptor = NSFont.systemFont(ofSize: 14).fontDescriptor
@@ -715,7 +720,8 @@ struct RichMarkdownEditor: View {
 
     private func tbButton(_ label: String, help: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label).font(.caption.weight(.semibold))
+            Text(label).scaledFont(12, weight: .heavy, relativeTo: .caption)
+                .foregroundStyle(NDS.textSecondary)
                 .frame(minWidth: 24)
                 .padding(.vertical, 3).padding(.horizontal, 4)
         }
@@ -725,7 +731,8 @@ struct RichMarkdownEditor: View {
 
     private func tbIcon(_ system: String, help: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: system).font(.caption)
+            Image(systemName: system).scaledFont(12, weight: .semibold)
+                .foregroundStyle(NDS.textSecondary)
                 .frame(minWidth: 24)
                 .padding(.vertical, 3).padding(.horizontal, 4)
         }
