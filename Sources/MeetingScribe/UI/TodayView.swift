@@ -363,7 +363,8 @@ struct TodayView: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(todayLong())
-                    .scaledFont(30, weight: .bold)
+                    .scaledFont(30, weight: .heavy, relativeTo: .largeTitle, kind: .display)
+                    .tracking(-0.8)
                     .foregroundStyle(.primary)
                 Text(subtitleString())
                     .font(.callout)
@@ -418,16 +419,16 @@ struct TodayView: View {
             // Secondary actions — compact pills
             FlowLayout(spacing: 8) {
                 QuickPill(title: "Voice note", systemImage: "mic.fill",
-                          tint: NDS.selectColor("orange")) {
+                          tint: NDS.gold) {
                     Task { await manager.startQuickNote() }
                 }
                 QuickPill(title: "New task", systemImage: "checklist",
-                          tint: NDS.selectColor("green")) {
+                          tint: NDS.mint) {
                     manager.actionItems.createTask(title: "New task")
                     router.section = .actions
                 }
                 QuickPill(title: "New page", systemImage: "doc.badge.plus",
-                          tint: NDS.brand) {
+                          tint: NDS.lilac) {
                     _ = manager.actionItems.createProject(name: "Untitled")
                     router.section = .actions
                 }
@@ -440,33 +441,28 @@ struct TodayView: View {
     @ViewBuilder
     private var upNextCard: some View {
         if !isRecording, let m = nextMeeting {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("UP NEXT")
-                        .scaledFont(11, weight: .semibold)
-                        .foregroundStyle(NDS.brand).tracking(0.6)
-                    Text(m.displayTitle)
-                        .scaledFont(15, weight: .semibold)
-                        .foregroundStyle(NDS.textPrimary).lineLimit(1)
-                    Text(relativeStart(m))
-                        .scaledFont(12).foregroundStyle(NDS.textSecondary)
-                }
-                Spacer()
-                if m.conferenceURL != nil {
-                    Button { Task { await manager.switchToRecording(m) } } label: {
-                        Label("Join & record", systemImage: "video.fill")
+            MSTintedHeaderCard(label: "Up next") {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(m.displayTitle)
+                            .scaledFont(16, weight: .bold, relativeTo: .headline, kind: .display)
+                            .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                        Text(relativeStart(m))
+                            .scaledFont(12).foregroundStyle(NDS.textSecondary)
                     }
-                    .buttonStyle(MSPrimaryButtonStyle())
+                    Spacer()
+                    if m.conferenceURL != nil {
+                        Button { Task { await manager.switchToRecording(m) } } label: {
+                            Label("Join & record", systemImage: "video.fill")
+                        }
+                        .buttonStyle(MSPrimaryButtonStyle())
+                    }
+                    Button { router.openMeeting(m) } label: {
+                        Label("Open", systemImage: "chevron.right")
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
                 }
-                Button { router.openMeeting(m) } label: {
-                    Label("Open", systemImage: "chevron.right")
-                }
-                .buttonStyle(MSSecondaryButtonStyle())
             }
-            .padding(16)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NDS.fieldBg))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(NDS.brand.opacity(0.3), lineWidth: 1))
         }
     }
 
@@ -681,17 +677,17 @@ struct ToolbarPillButton: View {
 
     private var background: AnyShapeStyle {
         switch prominence {
-        case .primary:   return AnyShapeStyle(NDS.brand)
+        case .primary:   return AnyShapeStyle(NDS.accentGradient)
         case .secondary: return AnyShapeStyle(NDS.fieldBg)
         }
     }
     private var foreground: Color {
-        prominence == .primary ? .white : .primary
+        prominence == .primary ? NDS.onAccent : .primary
     }
     private var borderColor: Color {
         prominence == .primary ? .clear : NDS.hairline
     }
     private var shadow: Color {
-        prominence == .primary ? NDS.brand.opacity(0.2) : .clear
+        prominence == .primary ? NDS.accent.opacity(0.32) : .clear
     }
 }

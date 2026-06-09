@@ -31,9 +31,11 @@ extension ActionItemsView {
     func boardColumn(_ status: ActionItem.Status) -> some View {
         let items = columnItems(status)
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
+                Circle().fill(NDS.status(status)).frame(width: 8, height: 8)
                 Image(systemName: status.systemImage)
-                Text(status.label).font(.callout.weight(.semibold))
+                    .scaledFont(11, weight: .semibold).foregroundStyle(NDS.status(status))
+                Text(status.label).font(.callout.weight(.bold))
                 Text("\(items.count)").font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
                 Spacer()

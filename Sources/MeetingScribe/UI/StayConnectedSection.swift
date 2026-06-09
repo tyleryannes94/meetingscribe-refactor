@@ -36,24 +36,17 @@ struct StayConnectedSection: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "heart.circle")
-                        .foregroundStyle(.pink)
+                        .foregroundStyle(NDS.gold)
                     Text("Stay connected")
-                        .scaledFont(15, weight: .semibold)
+                        .scaledFont(15, weight: .bold)
                     Spacer()
                 }
 
                 ForEach(items) { person in
                     HStack(spacing: 12) {
-                        // Avatar + emoji type badge
+                        // Squircle avatar + emoji type badge
                         ZStack(alignment: .bottomTrailing) {
-                            Circle()
-                                .fill(NDS.brand.opacity(0.15))
-                                .frame(width: 36, height: 36)
-                                .overlay(
-                                    Text(String(person.displayName.prefix(1)))
-                                        .scaledFont(14, weight: .bold)
-                                        .foregroundStyle(NDS.brand)
-                                )
+                            MSAvatar(name: person.displayName, size: 36)
                             Text(person.relationshipType.emoji)
                                 .scaledFont(10)
                                 .offset(x: 4, y: 4)
@@ -61,10 +54,10 @@ struct StayConnectedSection: View {
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(person.displayName)
-                                .scaledFont(13, weight: .semibold)
+                                .scaledFont(13, weight: .bold)
                             Text("\(overdueDays(person)) day\(overdueDays(person) == 1 ? "" : "s") overdue")
                                 .font(.caption)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(NDS.gold)
                         }
 
                         Spacer()
@@ -74,11 +67,8 @@ struct StayConnectedSection: View {
                             quickLogTarget = person
                         } label: {
                             Label("Log", systemImage: "plus.circle.fill")
-                                .font(.caption.weight(.medium))
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .tint(.pink)
+                        .buttonStyle(MSPrimaryButtonStyle())
 
                         // Open profile
                         Button {
@@ -91,7 +81,9 @@ struct StayConnectedSection: View {
                         .buttonStyle(.plain)
                     }
                     .padding(10)
-                    .background(Color.pink.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+                    .background(NDS.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+                    .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius)
+                        .strokeBorder(NDS.gold.opacity(0.35), lineWidth: 1))
                 }
             }
             .sheet(item: $quickLogTarget) { person in
