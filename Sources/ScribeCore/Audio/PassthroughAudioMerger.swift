@@ -2,20 +2,23 @@ import Foundation
 @preconcurrency import AVFoundation
 import OSLog
 
-/// Concatenates multiple AAC `.m4a` audio files into one output `.m4a`
-/// WITHOUT re-encoding. Was previously `AVAssetExportPresetAppleM4A`, which
-/// always re-encoded the entire concatenated stream — tens of seconds to
-/// minutes of pure waste on long meetings (audit 3.3).
+/// Concatenates multiple AAC `.m4a` audio files into one output `.m4a`.
 ///
-/// Approach: use `AVAssetReaderTrackOutput` with `outputSettings: nil` to
-/// read packetized (compressed) samples, then write them straight through
-/// `AVAssetWriterInput(mediaType: .audio, outputSettings: nil)`. The packet
-/// payloads are copied byte-for-byte; only the container is rewritten.
+/// History: an early version used `AVAssetExportPresetAppleM4A`, which always
+/// re-encoded (tens of seconds of waste on long meetings — audit 3.3). It was
+/// replaced by a hand-rolled `AVAssetReader`→`AVAssetWriter` passthrough mux,
+/// but that called `requestMediaDataWhenReady` once per segment — and that API
+/// may only be called ONCE per writer input. The second call threw an uncaught
+/// AVFoundation `NSException`, so EVERY multi-segment merge crashed the app with
+/// SIGABRT (single-segment recordings took a plain copy path and were unaffected,
+/// which is why the bug hid). It also fought AAC encoder priming / edit lists.
 ///
-/// Properly reports progress via fine-grained logging hooks. Fail-soft:
-/// if a single segment can't be opened (corruption, write interrupted by a
-/// crash), it's skipped with a logged warning rather than failing the whole
-/// merge.
+/// Current approach: build an `AVMutableComposition`, insert each segment's audio
+/// track in order (which respects per-segment edit lists / priming), and export
+/// once. We prefer `AVAssetExportPresetPassthrough` (no re-encode); if the
+/// sources aren't passthrough-compatible we fall back to `AVAssetExportPresetAppleM4A`
+/// (re-encode) so recovery still produces a valid, complete file. Fail-soft: a
+/// single unreadable segment is skipped with a warning rather than aborting.
 enum PassthroughAudioMerger {
     private static let log = Logger(subsystem: "com.tyleryannes.MeetingScribe",
                                     category: "AudioMerger")
@@ -41,148 +44,71 @@ enum PassthroughAudioMerger {
     }
 
     static func merge(segments: [URL], into output: URL) async throws {
-        guard let first = segments.first else { throw MergeError.noSegments }
+        guard !segments.isEmpty else { throw MergeError.noSegments }
 
-        // Use the first segment's format description to seed the writer.
-        let firstAsset = AVURLAsset(url: first)
-        let firstTracks = try await firstAsset.loadTracks(withMediaType: .audio)
-        guard let firstTrack = firstTracks.first else {
-            throw MergeError.readerInit(first, "no audio track")
+        // Concatenate every segment into one composition track, in order.
+        let composition = AVMutableComposition()
+        guard let compTrack = composition.addMutableTrack(
+                withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw MergeError.writerInit("could not add composition audio track")
         }
-        let formatDescs = try await firstTrack.load(.formatDescriptions)
-        guard let formatDesc = formatDescs.first else {
-            throw MergeError.readerInit(first, "no format descriptions")
-        }
-
-        try? FileManager.default.removeItem(at: output)
-        let writer: AVAssetWriter
-        do {
-            writer = try AVAssetWriter(outputURL: output, fileType: .m4a)
-        } catch {
-            throw MergeError.writerInit(error.localizedDescription)
-        }
-        // `outputSettings: nil` + `sourceFormatHint: formatDesc` = passthrough.
-        let writerInput = AVAssetWriterInput(mediaType: .audio,
-                                             outputSettings: nil,
-                                             sourceFormatHint: formatDesc)
-        writerInput.expectsMediaDataInRealTime = false
-        writer.add(writerInput)
-
-        guard writer.startWriting() else {
-            throw MergeError.writerInit(writer.error?.localizedDescription ?? "unknown")
-        }
-        writer.startSession(atSourceTime: .zero)
 
         var cursor: CMTime = .zero
-        let appendQueue = DispatchQueue(label: "MeetingScribe.Merger.append")
-
+        var inserted = 0
         for url in segments {
             do {
-                let written = try await appendSegment(url: url,
-                                                       to: writerInput,
-                                                       on: appendQueue,
-                                                       startingAt: cursor)
-                cursor = cursor + written
+                let asset = AVURLAsset(url: url)
+                let tracks = try await asset.loadTracks(withMediaType: .audio)
+                guard let track = tracks.first else {
+                    throw MergeError.readerInit(url, "no audio track")
+                }
+                let duration = try await asset.load(.duration)
+                guard duration.isValid, duration > .zero else {
+                    throw MergeError.readerInit(url, "zero/invalid duration")
+                }
+                try compTrack.insertTimeRange(CMTimeRange(start: .zero, duration: duration),
+                                              of: track, at: cursor)
+                cursor = cursor + duration
+                inserted += 1
             } catch {
-                // Soft-fail on a single bad segment so a crash-truncated
-                // file at the end of a long meeting doesn't lose the rest.
+                // Soft-fail on a single bad segment so a crash-truncated file at
+                // the end of a long meeting doesn't lose the rest.
                 log.error("Skipping bad segment \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 AppLog.warn("AudioMerger", "Skipped segment during merge",
                             ["url": url.path, "error": error.localizedDescription])
             }
         }
+        guard inserted > 0 else { throw MergeError.writerFailed("no readable segments") }
 
-        writerInput.markAsFinished()
-
-        let finalStatus = await withCheckedContinuation { (cont: CheckedContinuation<AVAssetWriter.Status, Never>) in
-            writer.finishWriting {
-                cont.resume(returning: writer.status)
+        // Prefer passthrough (no re-encode); fall back to re-encode if the
+        // sources aren't passthrough-compatible, so recovery never fails outright.
+        let (status, error) = await export(composition, to: output,
+                                           preset: AVAssetExportPresetPassthrough)
+        if status != .completed {
+            log.notice("Passthrough export failed (\(error?.localizedDescription ?? "unknown", privacy: .public)); retrying with re-encode.")
+            let (status2, error2) = await export(composition, to: output,
+                                                 preset: AVAssetExportPresetAppleM4A)
+            if status2 != .completed {
+                throw MergeError.writerFailed(error2?.localizedDescription
+                                              ?? error?.localizedDescription ?? "unknown")
             }
         }
-        if finalStatus == .failed {
-            throw MergeError.writerFailed(writer.error?.localizedDescription ?? "unknown")
-        }
-        log.info("Merged \(segments.count) segments → \(output.lastPathComponent, privacy: .public) (\(cursor.seconds, format: .fixed(precision: 1))s)")
+        log.info("Merged \(inserted) segments → \(output.lastPathComponent, privacy: .public) (\(cursor.seconds, format: .fixed(precision: 1))s)")
     }
 
-    /// Reads one segment's packetized samples and appends them to the
-    /// writer input, rebased so the segment starts at `startingAt`.
-    /// Returns the duration of audio appended (so the caller can advance
-    /// its cursor).
-    private static func appendSegment(url: URL,
-                                       to writerInput: AVAssetWriterInput,
-                                       on queue: DispatchQueue,
-                                       startingAt cursor: CMTime) async throws -> CMTime {
-        let asset = AVURLAsset(url: url)
-        let tracks = try await asset.loadTracks(withMediaType: .audio)
-        guard let track = tracks.first else {
-            throw MergeError.readerInit(url, "no audio track")
+    /// Runs one export pass with the given preset. Removes any prior output
+    /// first. Returns the terminal status + error (never throws).
+    private static func export(_ composition: AVMutableComposition, to output: URL,
+                               preset: String) async -> (AVAssetExportSession.Status, Error?) {
+        try? FileManager.default.removeItem(at: output)
+        guard let session = AVAssetExportSession(asset: composition, presetName: preset) else {
+            return (.failed, MergeError.writerInit("export session init (\(preset))"))
         }
-        let duration = try await asset.load(.duration)
-
-        let reader: AVAssetReader
-        do { reader = try AVAssetReader(asset: asset) }
-        catch { throw MergeError.readerInit(url, error.localizedDescription) }
-
-        // outputSettings: nil → packetized passthrough (no decode).
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
-        guard reader.canAdd(output) else {
-            throw MergeError.readerInit(url, "reader can't add packetized output")
+        session.outputURL = output
+        session.outputFileType = .m4a
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            session.exportAsynchronously { cont.resume() }
         }
-        reader.add(output)
-        guard reader.startReading() else {
-            throw MergeError.readerInit(url, reader.error?.localizedDescription ?? "startReading failed")
-        }
-
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            writerInput.requestMediaDataWhenReady(on: queue) {
-                while writerInput.isReadyForMoreMediaData {
-                    guard let sample = output.copyNextSampleBuffer() else {
-                        // Done — either end of stream or reader failed.
-                        if reader.status == .completed {
-                            cont.resume()
-                        } else if reader.status == .failed {
-                            cont.resume(throwing:
-                                MergeError.readerFailed(url, reader.error?.localizedDescription ?? "unknown"))
-                        } else {
-                            cont.resume()
-                        }
-                        return
-                    }
-                    if let rebased = Self.rebase(sample, by: cursor) {
-                        writerInput.append(rebased)
-                    } else {
-                        writerInput.append(sample)
-                    }
-                }
-            }
-        }
-
-        return duration
-    }
-
-    /// Rebase a sample's PTS by `offset` so concatenated segments form a
-    /// monotonic timeline. Returns nil on failure (caller falls back to
-    /// the un-rebased buffer, which is occasionally good enough).
-    private static func rebase(_ sample: CMSampleBuffer, by offset: CMTime) -> CMSampleBuffer? {
-        var count: CMItemCount = 0
-        CMSampleBufferGetSampleTimingInfoArray(sample, entryCount: 0, arrayToFill: nil, entriesNeededOut: &count)
-        var infos = [CMSampleTimingInfo](repeating: .init(), count: Int(count))
-        CMSampleBufferGetSampleTimingInfoArray(sample, entryCount: count, arrayToFill: &infos, entriesNeededOut: nil)
-        for i in 0..<infos.count {
-            if infos[i].presentationTimeStamp.isValid {
-                infos[i].presentationTimeStamp = infos[i].presentationTimeStamp + offset
-            }
-            if infos[i].decodeTimeStamp.isValid {
-                infos[i].decodeTimeStamp = infos[i].decodeTimeStamp + offset
-            }
-        }
-        var out: CMSampleBuffer?
-        let status = CMSampleBufferCreateCopyWithNewTiming(allocator: kCFAllocatorDefault,
-                                                            sampleBuffer: sample,
-                                                            sampleTimingEntryCount: count,
-                                                            sampleTimingArray: infos,
-                                                            sampleBufferOut: &out)
-        return status == noErr ? out : nil
+        return (session.status, session.error)
     }
 }

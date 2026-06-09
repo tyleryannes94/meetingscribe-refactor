@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 @testable import MeetingScribe
 
 /// Regression for crash-recovery audio merge. `mergeSegments` used to
@@ -53,5 +54,46 @@ final class AudioMergeRecoveryTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: sysOut), bytes)
         XCTAssertEqual(merged.system?.lastPathComponent, "system.m4a")
         XCTAssertNil(merged.mic)
+    }
+
+    /// Two real AAC segments must concatenate WITHOUT crashing. The old merger
+    /// called `requestMediaDataWhenReady` once per segment; the second call
+    /// threw an uncaught AVFoundation NSException → SIGABRT, so this exact path
+    /// (the normal end-of-recording finalize for any 2+ segment call) aborted
+    /// the app. Generates silence so it doesn't depend on fixtures.
+    func testMergeTwoRealSegmentsConcatenatesWithoutCrashing() async throws {
+        let dir = try makeMeetingDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let s1 = dir.appendingPathComponent("audio/mic-002.m4a")
+        let s2 = dir.appendingPathComponent("audio/mic-003.m4a")
+        try Self.writeSilentAAC(to: s1, seconds: 0.6)
+        try Self.writeSilentAAC(to: s2, seconds: 0.6)
+
+        try await PassthroughAudioMerger.merge(segments: [s1, s2],
+                                               into: dir.appendingPathComponent("mic.m4a"))
+
+        let out = dir.appendingPathComponent("mic.m4a")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: out.path))
+        let dur = try await AVURLAsset(url: out).load(.duration).seconds
+        // ~1.2s if both segments made it; ~0.6s would mean the second was dropped.
+        XCTAssertGreaterThan(dur, 1.0, "both segments should be present in the merge")
+    }
+
+    /// Write `seconds` of AAC-encoded silence to `url` as a valid `.m4a`.
+    private static func writeSilentAAC(to url: URL, seconds: Double) throws {
+        let sampleRate = 44_100.0
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 1
+        ]
+        let file = try AVAudioFile(forWriting: url, settings: settings)
+        let frames = AVAudioFrameCount(sampleRate * seconds)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat,
+                                            frameCapacity: frames) else {
+            throw NSError(domain: "test", code: 1)
+        }
+        buffer.frameLength = frames   // zero-filled → silence
+        try file.write(from: buffer)
     }
 }
