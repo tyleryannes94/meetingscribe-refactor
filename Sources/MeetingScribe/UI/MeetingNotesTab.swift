@@ -26,9 +26,44 @@ var currentNotesEditor: some View {
                                placeholder: "Type / for blocks, @ to link a meeting…",
                                mentionProvider: { manager.workspaceEntities() })
                 .padding(.horizontal, 8).padding(.bottom, 8)
+            if let m = meeting,
+               !noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(spacing: 8) {
+                    Button { pushNoteTodosToTasks(m) } label: {
+                        Label("Push to-dos → Tasks", systemImage: "arrow.right.circle")
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
+                    .help("Turn checkbox / TODO lines into tasks linked to this meeting")
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8).padding(.bottom, 8)
+            }
             backlinksPanel
             relatedMeetingsPanel
         }
+    }
+
+    /// Parse the notes editor for action-item-like lines (checkboxes / TODO:)
+    /// and push them into Tasks, linked to this meeting (§3C). No-op lines and
+    /// already-pushed duplicates are skipped by the store.
+    func pushNoteTodosToTasks(_ m: Meeting) {
+        let markers = ["- [ ]", "- [x]", "- [X]", "* [ ]", "[ ]", "todo:", "- todo"]
+        let drafts: [ActionItemStore.TaskDraft] = noteDraft.components(separatedBy: .newlines).compactMap { raw in
+            var t = raw.trimmingCharacters(in: .whitespaces)
+            let lower = t.lowercased()
+            guard markers.contains(where: { lower.hasPrefix($0) }) else { return nil }
+            for prefix in ["- [ ]", "- [x]", "- [X]", "* [ ]", "[ ]", "TODO:", "Todo:", "todo:", "- TODO:", "- todo:"]
+            where t.hasPrefix(prefix) {
+                t = String(t.dropFirst(prefix.count)); break
+            }
+            t = t.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : ActionItemStore.TaskDraft(title: t)
+        }
+        guard !drafts.isEmpty else {
+            ToastCenter.shared.show("No to-do lines found — use “- [ ] …” or “TODO: …”")
+            return
+        }
+        manager.pushToTasks(meeting: m, drafts: drafts)
     }
 
     /// Right pane of the recurring layout: either the current call's editor or
