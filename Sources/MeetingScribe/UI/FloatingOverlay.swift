@@ -69,14 +69,11 @@ final class FloatingOverlayController: ObservableObject {
     }
 
     private func handleMeetingState(_ s: RecordingState) {
-        switch s {
-        case .recording(_, let startedAt):
-            transition(to: .meetingRecording(startedAt: startedAt))
-        case .idle, .error, .starting, .stopping:
-            // Only clear the overlay if IT was showing the meeting HUD — a
-            // concurrent voice note keeps its own state.
-            if case .meetingRecording = state { transition(to: .hidden) }
-        }
+        // §2: meeting recording is surfaced IN-APP (MeetingRecordDock), never as
+        // a floating system hover overlay — the hover is reserved for voice
+        // notes. So we no longer promote meetings to the HUD; we only
+        // defensively clear any stale meeting HUD that might be showing.
+        if case .meetingRecording = state { transition(to: .hidden) }
     }
 
     /// Map the sub-controller's RecordState to the legacy QuickRecordState
@@ -286,16 +283,15 @@ private struct RecordingPill: View {
         HStack(spacing: 14) {
             PulsingDot()
             VStack(alignment: .leading, spacing: 2) {
-                Text("Recording")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.primary)
+                Text("VOICE NOTE · OVER ANY APP")
+                    .scaledFont(9, weight: .heavy, relativeTo: .caption2).tracking(0.8)
+                    .foregroundStyle(NDS.gold)
                 Text(elapsedString())
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(.callout.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.primary)
             }
-            AudioLevelMeter(micLevel: controller.manager?.recordingMonitor.voiceNoteLevel ?? 0,
-                            systemLevel: 0,
-                            bars: 14, height: 24)
+            AudioLevelMeter(level: controller.manager?.recordingMonitor.voiceNoteLevel ?? 0,
+                            tint: NDS.gold, bars: 14, height: 24)
                 .frame(width: 130)
             Spacer()
             OverlayButton(label: "End",
