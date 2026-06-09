@@ -270,6 +270,20 @@ struct PersonDetailView: View {
     @State private var analysisRunning: ConversationAnalysisPreset?
     @State private var customPromptDraft = ""
     @State private var showCustomPrompt = false
+    // Two-pane work area (§4B): which tab is showing in the right pane.
+    @State private var personTab: PersonTab = .overview
+    enum PersonTab: String, CaseIterable, Hashable {
+        case overview, meetings, tasks, messages, notes
+        var label: String {
+            switch self {
+            case .overview: return "Overview"
+            case .meetings: return "Meetings"
+            case .tasks:    return "Tasks"
+            case .messages: return "Messages"
+            case .notes:    return "Notes"
+            }
+        }
+    }
     // Analyze popover (§4C): pick WHAT to analyze × the TIME RANGE.
     @State private var showAnalyzePopover = false
     @State private var analyzePreset: ConversationAnalysisPreset = .relationshipSummary
@@ -300,43 +314,10 @@ struct PersonDetailView: View {
         // visible at once, with the AI chat embedded as a persistent right column
         // instead of a toggled rail.
         HSplitView {
-            // Pinned section jump-rail above the scroll so the long single-page
-            // profile stays navigable. (U3 — wayfinding)
-            ScrollViewReader { proxy in
-                VStack(spacing: 0) {
-                    sectionNav(proxy)
-                        .padding(.top, NDS.splitPaneTopInset)
-                        .padding(.horizontal, 28).padding(.bottom, 8)
-                        .background(NDS.bg)
-                    Divider().overlay(NDS.divider)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 22) {
-                            identityPanel.id("top")
-                            tagsEditSection.id("nav-tags")
-                            if !current.photoRelativePaths.isEmpty { photosSection }
-                            contactRows.id("nav-contact")
-                            if !current.bio.isEmpty || editingIdentity { notes }
-                            favoritesEditSection
-                            aiSuggestionsSection.id("nav-ai")
-                            relationshipsSection.id("nav-relationships")
-                            encountersSection.id("nav-encounters")
-                            if !current.meetingMentions.isEmpty { mentionedInSection }
-                            meetingHistorySection.id("nav-meetings")
-                            decisionsSection
-                            tasksSection.id("nav-tasks")
-                            memoriesSection.id("nav-notes")
-                            attachedNotesSection
-                            messagesSection.id("nav-messages")
-                            provenanceFooter
-                        }
-                        .padding(.horizontal, 28).padding(.bottom, 28).padding(.top, 16)
-                        .frame(maxWidth: 920, alignment: .leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-            }
-            .frame(minWidth: 460, idealWidth: 640)
-            .background(NDS.bg)
+            // Two-pane detail (§4): fixed identity/contact pane + tabbed work area.
+            detailPane
+                .frame(minWidth: 560, idealWidth: 760)
+                .background(NDS.bg)
 
             personChatColumn
                 .frame(minWidth: 320, idealWidth: 380, maxWidth: 480)
@@ -378,7 +359,85 @@ struct PersonDetailView: View {
         }
     }
 
-    // MARK: - Section jump-rail (U3)
+    // MARK: - Two-pane detail (§4)
+
+    /// Fixed identity/contact pane on the left + tabbed work area on the right.
+    private var detailPane: some View {
+        HStack(spacing: 0) {
+            identityPane
+                .frame(width: 300)
+                .background(NDS.sidebarBg)
+            Divider().overlay(NDS.divider)
+            workArea
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// Always-present summary of the person (§4A): identity, tags, contact,
+    /// relationships, cadence/encounters, photos. Scrolls on its own.
+    private var identityPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                identityPanel
+                tagsEditSection
+                contactRows
+                relationshipsSection
+                encountersSection
+                if !current.photoRelativePaths.isEmpty { photosSection }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, NDS.splitPaneTopInset)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Right pane: pill tab bar (§4B) + the selected tab's content.
+    private var workArea: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: NDS.splitPaneTopInset)
+            HStack {
+                MSPillTabs(tabs: PersonTab.allCases.map { ($0, $0.label) }, selection: $personTab)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20).padding(.bottom, 10)
+            Divider().overlay(NDS.divider)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    workContent
+                }
+                .padding(20)
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .animation(.easeOut(duration: 0.18), value: personTab)
+            }
+        }
+        .background(NDS.bg)
+    }
+
+    @ViewBuilder
+    private var workContent: some View {
+        switch personTab {
+        case .overview:
+            if !current.bio.isEmpty || editingIdentity { notes }
+            favoritesEditSection
+            aiSuggestionsSection
+            provenanceFooter
+        case .meetings:
+            meetingHistorySection
+            if !current.meetingMentions.isEmpty { mentionedInSection }
+            decisionsSection
+        case .tasks:
+            tasksSection
+        case .messages:
+            messagesSection
+        case .notes:
+            memoriesSection
+            attachedNotesSection
+        }
+    }
+
+    // MARK: - Section jump-rail (U3, legacy — superseded by the work-area tabs)
 
     /// Chips for the present sections; tapping scrolls the profile to that anchor.
     @ViewBuilder
