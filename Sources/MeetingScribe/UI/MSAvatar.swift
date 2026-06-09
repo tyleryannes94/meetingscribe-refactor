@@ -11,6 +11,11 @@ struct MSAvatar: View {
     var image: NSImage? = nil
     var size: CGFloat = 18
 
+    /// Squircle corner radius (Bloom uses 34% of the side).
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: size * 0.34, style: .continuous)
+    }
+
     var body: some View {
         Group {
             if let image {
@@ -19,15 +24,15 @@ struct MSAvatar: View {
                     .scaledToFill()
             } else {
                 Text(initials)
-                    .font(.system(size: size * 0.42, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.custom(NDS.psName(.body, .heavy), fixedSize: size * 0.42))
+                    .foregroundStyle(NDS.avatarText)
                     .frame(width: size, height: size)
-                    .background(NDS.selectColor(name))
+                    .background(NDS.avatarGradient(name))
             }
         }
         .frame(width: size, height: size)
-        .clipShape(Circle())
-        .overlay(Circle().strokeBorder(NDS.hairline, lineWidth: 0.5))
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(NDS.hairline, lineWidth: 0.5))
         .accessibilityLabel(name.isEmpty ? "No owner" : name)
     }
 
@@ -49,17 +54,19 @@ struct MSAvatarStack: View {
     var body: some View {
         let shown = names.prefix(max)
         let overflow = names.count - shown.count
-        HStack(spacing: -size * 0.34) {
+        let squircle = RoundedRectangle(cornerRadius: size * 0.34, style: .continuous)
+        HStack(spacing: -size * 0.28) {
             ForEach(Array(shown.enumerated()), id: \.offset) { _, n in
                 MSAvatar(name: n, size: size)
+                    .overlay(squircle.strokeBorder(NDS.fieldBg, lineWidth: 2))
             }
             if overflow > 0 {
                 Text("+\(overflow)")
-                    .font(.system(size: size * 0.4, weight: .semibold))
+                    .font(.custom(NDS.psName(.body, .bold), fixedSize: size * 0.4))
                     .foregroundStyle(NDS.textSecondary)
                     .frame(width: size, height: size)
-                    .background(NDS.fieldBg, in: Circle())
-                    .overlay(Circle().strokeBorder(NDS.hairline, lineWidth: 0.5))
+                    .background(NDS.surface2, in: squircle)
+                    .overlay(squircle.strokeBorder(NDS.fieldBg, lineWidth: 2))
             }
         }
         .accessibilityElement(children: .combine)

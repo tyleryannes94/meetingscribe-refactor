@@ -424,14 +424,7 @@ struct PersonDetailView: View {
         VStack(alignment: .leading, spacing: 14) {
             // Avatar + name
             HStack(alignment: .center, spacing: 12) {
-                Circle()
-                    .fill(NDS.selectColor(current.displayName))
-                    .frame(width: 52, height: 52)
-                    .overlay(
-                        Text(initials(for: current.displayName))
-                            .scaledFont(20, weight: .bold)
-                            .foregroundStyle(.white)
-                    )
+                MSAvatar(name: current.displayName, size: 56)
                 if editingIdentity {
                     VStack(alignment: .leading, spacing: 6) {
                         TextField("Name", text: $draftName)
@@ -450,7 +443,7 @@ struct PersonDetailView: View {
                 } else {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(current.displayName)
-                            .scaledFont(17, weight: .bold)
+                            .scaledFont(22, weight: .heavy, relativeTo: .title, kind: .display)
                             .foregroundStyle(NDS.textPrimary)
                         if !subtitle.isEmpty {
                             Text(subtitle)
@@ -923,13 +916,6 @@ struct PersonDetailView: View {
             )
         }
         .background(NDS.sidebarBg)
-    }
-
-    private func initials(for name: String) -> String {
-        let parts = name.components(separatedBy: " ").filter { !$0.isEmpty }
-        guard !parts.isEmpty else { return "?" }
-        if parts.count >= 2 { return String(parts[0].prefix(1)) + String(parts[1].prefix(1)) }
-        return String(parts[0].prefix(2))
     }
 
     // MARK: - Meeting history (right column, Meetings tab)

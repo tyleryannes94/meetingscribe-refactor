@@ -18,9 +18,12 @@ enum NDS {
     /// translucent title-bar / toolbar (macOS Tahoe). Shared by the People list
     /// and detail panes so they line up instead of repeating a magic 60. (req #1)
     static let splitPaneTopInset: CGFloat = 60
-    static let radius: CGFloat = 8       // increased from 6
-    static let rowRadius: CGFloat = 8
-    static let cardRadius: CGFloat = 12  // card-level rounding (was hardcoded 14)
+    // Bloom is chunkier/rounder — radii bumped to match `designs/bloom.css`
+    // (--r-ctl 14, --r-card 20). Chips/badges/nav/tabs go fully rounded
+    // (Capsule) at their call sites.
+    static let radius: CGFloat = 14      // controls/fields (--r-ctl); was 8
+    static let rowRadius: CGFloat = 12   // list rows; was 8
+    static let cardRadius: CGFloat = 20  // cards (--r-card); was 12
 
     // MARK: Button dimension tokens
     // Minimum 44pt invisible tap target via .minTap() extension below
@@ -32,32 +35,59 @@ enum NDS {
     static let buttonHPadMd:     CGFloat = 14
     static let buttonHPadSm:     CGFloat = 12
 
-    // MARK: Color
-    /// Brand accent — kept as the familiar purple.
-    static let brand = Color(hex: "#7F56D9") ?? .purple
-    static let brandHover = Color(hex: "#9E77ED") ?? .purple
+    // MARK: Color — "Bloom" (dark-mode-first). Values from designs/bloom.css.
+    //
+    // The heart of Bloom is a plum-ink base with coral (primary CTA), lilac
+    // (brand/nav), mint/sky/gold accents. `brand` is now LILAC — it drives nav
+    // selection, focus rings, and `.tint`. Primary CTAs use the CORAL gradient
+    // (see `accent`/`accentGradient` + MSPrimaryButtonStyle), NOT `brand`.
+    static let brand = lilac
+    static let brandHover = Color(hex: "#cbb8ff") ?? lilac
 
-    /// Warm neutral palette — replaces the cold blue-navy.
-    /// Dark: warm near-black (#1C1B19). Light: warm off-white (#F8F7F5).
-    /// All interactive surfaces use warm-tinted grays for a more premium,
-    /// less eye-straining feel compared to the previous blue-navy system.
-    static let bg          = dyn(dark: (28, 27, 25, 1),     light: (248, 247, 245, 1))   // #1c1b19 / #f8f7f5
-    static let sidebarBg   = dyn(dark: (22, 21, 19, 1),     light: (240, 238, 233, 1))   // #161513 / #f0eee9
-    static let rightRailBg = dyn(dark: (25, 24, 22, 1),     light: (244, 242, 238, 1))   // #191816 / #f4f2ee
-    static let rowHover    = dyn(dark: (255, 245, 225, 0.06), light: (100, 80, 40, 0.06))
-    static let rowSelected = brand.opacity(0.13)
-    static let divider     = dyn(dark: (255, 245, 225, 0.09), light: (100, 80, 40, 0.10))
-    static let hairline    = dyn(dark: (255, 245, 225, 0.13), light: (100, 80, 40, 0.14))
-    static let textPrimary   = dyn(dark: (242, 239, 230, 1),  light: (26, 25, 23, 1))    // #f2efe6 / #1a1917
-    // Contrast-retuned for WCAG AA legibility (AV-3) — tertiary was 0.42/0.38,
-    // too faint against bg; raised so secondary/tertiary text stays readable.
-    static let textSecondary = dyn(dark: (210, 204, 190, 0.78), light: (26, 25, 23, 0.64))
-    static let textTertiary  = dyn(dark: (210, 204, 190, 0.58), light: (26, 25, 23, 0.52))
-    static let fieldBg       = dyn(dark: (255, 245, 225, 0.055), light: (100, 80, 40, 0.045))
-    static let segmentActiveBg = dyn(dark: (255, 245, 225, 0.13), light: (255, 255, 255, 1))
-    /// Subtle warm lane fill for kanban columns / grouped bands (DV-19). Replaces
-    /// the cold AppKit control-background board fills.
-    static let columnBg = dyn(dark: (255, 245, 225, 0.035), light: (100, 80, 40, 0.03))
+    // --- Accents (signature Bloom hues; identical across appearances) ---
+    /// Coral — primary CTAs, active tab, brand mark, ambient glow.
+    static let accent      = Color(hex: "#ff9173") ?? .orange
+    static let accentEnd   = Color(hex: "#f06a4c") ?? .orange   // coral gradient end (--accent-2)
+    static let accentSoft  = (Color(hex: "#ff9173") ?? .orange).opacity(0.16)
+    /// Lilac — brand / nav accent (active nav icon, selection, "New page").
+    static let lilac       = Color(hex: "#b79cff") ?? .purple
+    static let lilacSoft   = (Color(hex: "#b79cff") ?? .purple).opacity(0.16)
+    static let mint        = Color(hex: "#74e0bc") ?? .green   // success / done
+    static let sky         = Color(hex: "#8ab4ff") ?? .blue    // info / in progress
+    static let gold        = Color(hex: "#ffce6b") ?? .yellow  // warning / due today / voice
+    static let danger      = Color(hex: "#ff7a8a") ?? .red     // overdue / high / destructive
+
+    /// Coral primary-CTA gradient (135° #ff9173 → #f06a4c).
+    static let accentGradient = LinearGradient(
+        colors: [accent, accentEnd],
+        startPoint: .topLeading, endPoint: .bottomTrailing)
+    /// Near-black warm label that sits on the coral fill (`#2a1208`).
+    static let onAccent = Color(hex: "#2a1208") ?? .black
+    /// Brand-mark gradient (coral → lilac).
+    static let brandMarkGradient = LinearGradient(
+        colors: [accent, lilac],
+        startPoint: .topLeading, endPoint: .bottomTrailing)
+
+    /// Plum-ink surfaces & text. Dark is the design target; light values are a
+    /// tasteful fallback so the app stays legible if the user picks Light.
+    static let bg          = dyn(dark: (21, 18, 26, 1),       light: (248, 246, 250, 1))   // #15121a
+    static let sidebarBg   = dyn(dark: (16, 13, 21, 1),       light: (240, 237, 244, 1))   // #100d15
+    static let rightRailBg = dyn(dark: (30, 25, 37, 1),       light: (244, 241, 247, 1))   // #1e1925
+    // Hover/selected rows pick up a lilac-soft wash (Bloom "rows get lilac-soft bg").
+    static let rowHover    = dyn(dark: (183, 156, 255, 0.12), light: (120, 90, 220, 0.08))
+    static let rowSelected = lilac.opacity(0.16)
+    static let divider     = dyn(dark: (245, 238, 250, 0.09), light: (40, 25, 60, 0.10))   // --line
+    static let hairline    = dyn(dark: (245, 238, 250, 0.16), light: (40, 25, 60, 0.16))   // --line-2
+    static let textPrimary   = dyn(dark: (243, 238, 246, 1),   light: (28, 22, 38, 1))     // #f3eef6
+    static let textSecondary = dyn(dark: (243, 238, 246, 0.68), light: (28, 22, 38, 0.66)) // --txt-2
+    static let textTertiary  = dyn(dark: (243, 238, 246, 0.44), light: (28, 22, 38, 0.50)) // --txt-3
+    // Card / field fill — the opaque `--surface` plum (#1e1925).
+    static let fieldBg       = dyn(dark: (30, 25, 37, 1),      light: (255, 255, 255, 1))
+    // Elevated / segment-thumb / gray-chip fill — `--surface-2` (#271f31).
+    static let segmentActiveBg = dyn(dark: (39, 31, 49, 1),    light: (236, 232, 242, 1))
+    static let surface2        = dyn(dark: (39, 31, 49, 1),    light: (236, 232, 242, 1))
+    /// Subtle lane fill for kanban columns / grouped bands (DV-19).
+    static let columnBg = dyn(dark: (245, 238, 250, 0.035),   light: (40, 25, 60, 0.03))
 
     /// Builds a single SwiftUI `Color` backed by a dynamic `NSColor` that
     /// resolves to the `dark` or `light` sRGB tuple (r, g, b in 0–255, a in
@@ -71,33 +101,97 @@ enum NDS {
         })
     }
 
-    // MARK: Type
+    // MARK: Type — Bloom fonts
     //
-    // Tokens are mapped to semantic text styles so they scale with Dynamic Type
-    // / the system text-size setting (D5-2). Styles were chosen to keep the
-    // default-size appearance close to the previous fixed points (within ~2pt):
-    //   largeTitle≈34, title≈28, body≈17→callout 16, footnote≈13, caption≈12,
-    //   caption2≈11. `.weight()` preserves scaling.
-    static let title = Font.system(.largeTitle).weight(.heavy)        // was 32
-    static let pageTitle = Font.system(.title).weight(.bold)          // was 26
-    static let sectionLabel = Font.system(.caption).weight(.semibold) // was 12
-    static let body = Font.system(.callout)                           // was 14
-    static let small = Font.system(.footnote)                         // was 12
-    static let tiny = Font.system(.caption2)                          // was 11
+    // Display (page titles, brand wordmark, big numbers) → Bricolage Grotesque.
+    // Everything else → Plus Jakarta Sans. Both are bundled under
+    // Resources/Fonts and auto-registered via ATSApplicationFontsPath in
+    // Info.plist. The `relativeTo:` form keeps Dynamic-Type scaling (D5-2); if a
+    // font fails to load (e.g. in unit tests) SwiftUI falls back to the system
+    // font, so nothing crashes.
+    static let displayFamily = "Bricolage Grotesque"
+    static let bodyFamily    = "Plus Jakarta Sans"
+
+    /// Which Bloom family a token/text uses.
+    enum FontKind { case body, display }
+
+    /// The exact bundled PostScript instance for a (family, weight). We select
+    /// the discrete static weight directly instead of applying SwiftUI's
+    /// `.weight()` to a single family name — that produces fractional weight
+    /// traits CoreText can't map (noisy "Unable to update Font Descriptor's
+    /// weight" logs) and risks picking the wrong member. Bricolage only ships
+    /// SemiBold/Bold/ExtraBold, so lighter display weights round up to SemiBold.
+    static func psName(_ kind: FontKind, _ weight: Font.Weight) -> String {
+        switch kind {
+        case .display:
+            switch weight {
+            case .bold:            return "BricolageGrotesque-Bold"
+            case .heavy, .black:   return "BricolageGrotesque-ExtraBold"
+            default:               return "BricolageGrotesque-SemiBold"
+            }
+        case .body:
+            switch weight {
+            case .medium:          return "PlusJakartaSans-Medium"
+            case .semibold:        return "PlusJakartaSans-SemiBold"
+            case .bold:            return "PlusJakartaSans-Bold"
+            case .heavy, .black:   return "PlusJakartaSans-ExtraBold"
+            default:               return "PlusJakartaSans-Regular"
+            }
+        }
+    }
+
+    /// Scaled custom font. `display` → Bricolage Grotesque, `body` → Plus
+    /// Jakarta Sans. Dynamic-Type-aware via `relativeTo`.
+    static func font(_ kind: FontKind = .body, _ size: CGFloat,
+                     weight: Font.Weight = .regular,
+                     relativeTo style: Font.TextStyle = .body) -> Font {
+        Font.custom(psName(kind, weight), size: size, relativeTo: style)
+    }
+
+    static let title = font(.display, 30, weight: .heavy, relativeTo: .largeTitle)   // h1 30/800
+    static let pageTitle = font(.display, 25, weight: .heavy, relativeTo: .title)    // detail 25/800
+    static let sectionLabel = font(.body, 11, weight: .bold, relativeTo: .caption)   // eyebrow 11/700
+    static let body = font(.body, 14, relativeTo: .callout)
+    static let small = font(.body, 12, weight: .medium, relativeTo: .footnote)
+    static let tiny = font(.body, 11, weight: .medium, relativeTo: .caption2)
 
     // MARK: Notion-style named colors for select/status chips.
     /// Notion's muted palette — chips use a low-alpha fill with a saturated text.
+    /// Retuned to the Bloom accent family so tag chips read as part of the
+    /// dark, saturated palette (lilac/mint/sky/gold/coral/danger) instead of the
+    /// old muted Notion hues.
     static let palette: [(name: String, color: Color)] = [
-        ("gray",   Color(hex: "#9B9B9B")!),
-        ("brown",  Color(hex: "#A27763")!),
-        ("orange", Color(hex: "#D9730D")!),
-        ("yellow", Color(hex: "#CB912F")!),
-        ("green",  Color(hex: "#448361")!),
-        ("blue",   Color(hex: "#337EA9")!),
-        ("purple", Color(hex: "#9065B0")!),
-        ("pink",   Color(hex: "#C14C8A")!),
-        ("red",    Color(hex: "#D44C47")!)
+        ("gray",   Color(hex: "#9b93a8")!),
+        ("brown",  Color(hex: "#8ab4ff")!),   // → sky (medium / in-progress / open)
+        ("orange", Color(hex: "#ff9173")!),   // → coral (engineering / urgent / high)
+        ("yellow", Color(hex: "#ffce6b")!),   // → gold
+        ("green",  Color(hex: "#74e0bc")!),   // → mint (product / done / low)
+        ("blue",   Color(hex: "#8ab4ff")!),   // → sky
+        ("purple", Color(hex: "#b79cff")!),   // → lilac (design)
+        ("pink",   Color(hex: "#e58fd0")!),
+        ("red",    Color(hex: "#ff7a8a")!)    // → danger
     ]
+
+    /// The five Bloom avatar gradient pairs (coral / mint / lilac / sky / gold),
+    /// from `designs/bloom.css`. Monograms sit on these in dark warm text.
+    static let avatarGradients: [(Color, Color)] = [
+        (Color(hex: "#ff9173")!, Color(hex: "#f06a4c")!),  // coral
+        (Color(hex: "#74e0bc")!, Color(hex: "#46c79f")!),  // mint
+        (Color(hex: "#b79cff")!, Color(hex: "#9a7af0")!),  // lilac
+        (Color(hex: "#8ab4ff")!, Color(hex: "#6b96ec")!),  // sky
+        (Color(hex: "#ffce6b")!, Color(hex: "#f0b43f")!)   // gold
+    ]
+    /// Dark warm monogram color that sits on every avatar gradient (#241636).
+    static let avatarText = Color(hex: "#241636") ?? .black
+
+    /// Deterministic avatar gradient for a name (stable across launches).
+    static func avatarGradient(_ name: String) -> LinearGradient {
+        var hash = 5381
+        for b in name.lowercased().utf8 { hash = ((hash << 5) &+ hash) &+ Int(b) }
+        let pair = avatarGradients[abs(hash) % avatarGradients.count]
+        return LinearGradient(colors: [pair.0, pair.1],
+                              startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
 
     /// Deterministic color for an arbitrary tag/select/team string.
     static func selectColor(_ s: String) -> Color {
@@ -139,7 +233,8 @@ enum NDS {
     static let motionStandard: Double = 0.22
     static let motionSlow:     Double = 0.35
     /// Canonical spring for view/page transitions and hover affordances.
-    static let springStandard: Animation = .spring(response: 0.34, dampingFraction: 0.86)
+    /// Bloom personality: a touch livelier/bouncier than the old 0.34/0.86.
+    static let springStandard: Animation = .spring(response: 0.32, dampingFraction: 0.80)
 
     // MARK: Semantic status / priority / due colors (DV-5 / VD-5 / DV-8)
     //
@@ -151,10 +246,10 @@ enum NDS {
     // color alone — colorblind-safe.
     static func priority(_ p: ActionItem.Priority) -> Color {
         switch p {
-        case .low:    return palette[0].color   // gray
-        case .medium: return palette[5].color   // blue
-        case .high:   return palette[2].color   // orange
-        case .urgent: return palette[8].color   // red
+        case .low:    return textTertiary   // none/hidden — bar suppressed at call site
+        case .medium: return gold           // --warn
+        case .high:   return danger         // --danger
+        case .urgent: return danger         // --danger (glyph distinguishes from high)
         }
     }
     /// Non-color redundancy for priority, shown alongside the color.
@@ -168,18 +263,18 @@ enum NDS {
     }
     static func status(_ s: ActionItem.Status) -> Color {
         switch s {
-        case .open:       return palette[5].color  // blue
-        case .inProgress: return palette[2].color  // orange
-        case .completed:  return palette[4].color  // green
+        case .open:       return sky    // --info
+        case .inProgress: return gold   // --warn
+        case .completed:  return mint   // --ok
         }
     }
-    /// Overdue → red, due today → amber, otherwise neutral. Completed never reads
-    /// as overdue. Centralizes the duplicated `dueColor` helpers.
+    /// Overdue → danger, due today → gold, otherwise neutral. Completed never
+    /// reads as overdue. Centralizes the duplicated `dueColor` helpers.
     static func due(_ date: Date?, status: ActionItem.Status) -> Color {
         guard let date, status != .completed else { return textSecondary }
         let startOfToday = Calendar.current.startOfDay(for: Date())
-        if date < startOfToday { return palette[8].color }                  // overdue → red
-        if Calendar.current.isDateInToday(date) { return palette[2].color } // today  → orange
+        if date < startOfToday { return danger }                  // overdue → danger
+        if Calendar.current.isDateInToday(date) { return gold }   // today  → gold
         return textSecondary
     }
 
@@ -225,29 +320,34 @@ extension View {
         }
     }
 
-    /// A fixed-size system font that STILL scales with Dynamic Type / the system
+    /// A fixed-size Bloom font that STILL scales with Dynamic Type / the system
     /// text-size setting (D5-2). Keeps the design's exact point size at the
     /// default setting but grows/shrinks with the user's preference — use this
     /// instead of a bare `.font(.system(size:))` so low-vision users aren't
-    /// locked out. `style` anchors the scaling curve.
+    /// locked out. `style` anchors the scaling curve; `kind` picks the Bloom
+    /// family (`.body` = Plus Jakarta Sans, `.display` = Bricolage Grotesque).
     func scaledFont(_ size: CGFloat,
                     weight: Font.Weight = .regular,
-                    relativeTo style: Font.TextStyle = .body) -> some View {
-        modifier(ScaledSystemFont(size: size, weight: weight, relativeTo: style))
+                    relativeTo style: Font.TextStyle = .body,
+                    kind: NDS.FontKind = .body) -> some View {
+        modifier(ScaledSystemFont(size: size, weight: weight, relativeTo: style, kind: kind))
     }
 }
 
-/// Backing modifier for `View.scaledFont` — `@ScaledMetric` does the scaling.
+/// Backing modifier for `View.scaledFont` — `@ScaledMetric` does the scaling,
+/// then a Bloom custom font is applied at the scaled size.
 @available(macOS 14.0, *)
 private struct ScaledSystemFont: ViewModifier {
     @ScaledMetric private var size: CGFloat
     private let weight: Font.Weight
-    init(size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle) {
+    private let kind: NDS.FontKind
+    init(size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle, kind: NDS.FontKind) {
         _size = ScaledMetric(wrappedValue: size, relativeTo: style)
         self.weight = weight
+        self.kind = kind
     }
     func body(content: Content) -> some View {
-        content.font(.system(size: size, weight: weight))
+        content.font(.custom(NDS.psName(kind, weight), fixedSize: size))
     }
 }
 
@@ -264,11 +364,11 @@ struct NotionChip: View {
         self.systemImage = systemImage
     }
     var body: some View {
-        HStack(spacing: 4) {
-            if let systemImage { Image(systemName: systemImage).scaledFont(9, weight: .bold) }
-            Text(text).scaledFont(11.5, weight: .medium, relativeTo: .caption)
+        HStack(spacing: 5) {
+            if let systemImage { Image(systemName: systemImage).scaledFont(10, weight: .bold) }
+            Text(text).scaledFont(11.5, weight: .bold, relativeTo: .caption)
         }
-        .padding(.horizontal, 7).padding(.vertical, 2)
+        .padding(.horizontal, 11).padding(.vertical, 4)
         .foregroundStyle(color)
         .background(color.opacity(0.16), in: Capsule())
         .lineLimit(1)
@@ -343,17 +443,21 @@ struct NotionIconButton: View {
 
 // MARK: - Untitled UI-style buttons
 
-/// Solid brand button (primary action).
+/// Solid primary button (coral gradient + glow) — legacy alias kept for older
+/// call sites; matches `MSPrimaryButtonStyle`.
 struct UntitledPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaledFont(13, weight: .semibold)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(NDS.brand.opacity(configuration.isPressed ? 0.85 : 1),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .shadow(color: NDS.brand.opacity(0.25), radius: 6, y: 2)
+            .scaledFont(13, weight: .bold)
+            .foregroundStyle(NDS.onAccent)
+            .padding(.horizontal, 15).padding(.vertical, 9)
+            .background(NDS.accentGradient,
+                        in: RoundedRectangle(cornerRadius: NDS.radius, style: .continuous))
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .shadow(color: NDS.accent.opacity(0.32), radius: 8, y: 4)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .contentShape(Rectangle())
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
@@ -361,12 +465,12 @@ struct UntitledPrimaryButtonStyle: ButtonStyle {
 struct UntitledSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaledFont(13, weight: .medium)
+            .scaledFont(13, weight: .bold)
             .foregroundStyle(NDS.textPrimary)
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(NDS.fieldBg.opacity(configuration.isPressed ? 1.4 : 1),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .padding(.horizontal, 15).padding(.vertical, 9)
+            .background(configuration.isPressed ? NDS.surface2 : NDS.fieldBg,
+                        in: RoundedRectangle(cornerRadius: NDS.radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: NDS.radius, style: .continuous)
                 .strokeBorder(NDS.hairline, lineWidth: 1))
             .contentShape(Rectangle())
     }
@@ -374,58 +478,64 @@ struct UntitledSecondaryButtonStyle: ButtonStyle {
 
 // MARK: - Full button system (replaces ad-hoc controlSize + bordered patterns)
 
-/// Primary filled action button (36pt tall, brand fill).
+/// Primary filled action button — Bloom coral gradient + coral drop-glow,
+/// near-black warm label, radius 14. Press: gentle spring scale + dim.
 struct MSPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaledFont(13, weight: .semibold)
-            .foregroundStyle(.white)
+            .scaledFont(13, weight: .bold)
+            .foregroundStyle(NDS.onAccent)
             .padding(.horizontal, NDS.buttonHPadLg)
             .frame(height: NDS.buttonPrimaryH)
-            .background(NDS.brand.opacity(configuration.isPressed ? 0.80 : 1),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(NDS.accentGradient,
+                        in: RoundedRectangle(cornerRadius: NDS.radius, style: .continuous))
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .shadow(color: NDS.accent.opacity(0.32), radius: 8, y: 4)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .contentShape(Rectangle())
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
-/// Secondary outlined button (32pt tall, border + field bg).
+/// Secondary outlined button — `--surface` fill, `--line-2` border, radius 14.
 struct MSSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaledFont(13, weight: .medium)
+            .scaledFont(13, weight: .bold)
             .foregroundStyle(NDS.textPrimary)
             .padding(.horizontal, NDS.buttonHPadMd)
             .frame(height: NDS.buttonSecondaryH)
-            .background(configuration.isPressed ? NDS.rowHover : NDS.fieldBg,
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .background(configuration.isPressed ? NDS.surface2 : NDS.fieldBg,
+                        in: RoundedRectangle(cornerRadius: NDS.radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: NDS.radius, style: .continuous)
                 .strokeBorder(NDS.hairline, lineWidth: 1))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .contentShape(Rectangle())
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
-/// Danger/destructive button (36pt tall, red fill).
+/// Danger/destructive button — `--danger` fill, dark warm text, radius 14.
 struct MSDangerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaledFont(13, weight: .semibold)
-            .foregroundStyle(.white)
+            .scaledFont(13, weight: .bold)
+            .foregroundStyle(Color(hex: "#2a0e12") ?? .black)
             .padding(.horizontal, NDS.buttonHPadLg)
             .frame(height: NDS.buttonPrimaryH)
-            .background(Color.red.opacity(configuration.isPressed ? 0.72 : 0.88),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(NDS.danger.opacity(configuration.isPressed ? 0.82 : 1),
+                        in: RoundedRectangle(cornerRadius: NDS.radius, style: .continuous))
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .contentShape(Rectangle())
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
-/// Ghost/tertiary button (no border, accent label, 28pt tall).
+/// Ghost/tertiary button (no border, muted label, 28pt tall).
 struct MSTertiaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaledFont(12, weight: .regular)
+            .scaledFont(12, weight: .medium)
             .foregroundStyle(configuration.isPressed ? NDS.textPrimary : NDS.textSecondary)
             .padding(.horizontal, NDS.buttonHPadSm)
             .frame(height: NDS.buttonTertiaryH)

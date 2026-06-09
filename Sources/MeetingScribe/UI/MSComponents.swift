@@ -8,14 +8,108 @@ import SwiftUI
 
 extension View {
     /// Standard card surface: `fieldBg` fill, hairline border, card-radius.
-    func msCard(padding: CGFloat = 14) -> some View {
+    /// `accentBorder` paints the border in a soft coral tint (Bloom hero cards
+    /// like "Up Next" use this in place of the neutral hairline).
+    func msCard(padding: CGFloat = 14, accentBorder: Bool = false) -> some View {
         self
             .padding(padding)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
-                    .strokeBorder(NDS.hairline, lineWidth: 1)
+                    .strokeBorder(accentBorder ? NDS.accent.opacity(0.45) : NDS.hairline, lineWidth: 1)
             )
+    }
+
+    /// Subtle ambient coral corner glow behind the main content area (Bloom
+    /// signature). A blurred low-opacity coral radial light offset off the
+    /// top-right corner; static, so it's safe under Reduce Motion. Clipped to
+    /// the view's bounds so it never bleeds past the pane.
+    func bloomAmbientGlow() -> some View {
+        background(alignment: .topTrailing) {
+            RadialGradient(
+                colors: [NDS.accent.opacity(0.10), .clear],
+                center: .center, startRadius: 0, endRadius: 210)
+                .frame(width: 420, height: 320)
+                .offset(x: 80, y: -120)
+                .blur(radius: 20)
+                .allowsHitTesting(false)
+        }
+        .clipped()
+    }
+}
+
+/// Bloom "tinted-header" card (new hero-card variant). A header strip carries a
+/// soft coral→lilac gradient tint with a colored dot + eyebrow label; the body
+/// sits below on the standard surface. Used for "Up Next" and other hero cards.
+@available(macOS 14.0, *)
+struct MSTintedHeaderCard<Content: View>: View {
+    let label: String
+    var dotColor: Color = NDS.accent
+    var accentBorder: Bool = true
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 7) {
+                Circle().fill(dotColor).frame(width: 8, height: 8)
+                Text(label.uppercased())
+                    .scaledFont(11, weight: .bold, relativeTo: .caption).tracking(0.8)
+                    .foregroundStyle(NDS.textSecondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(
+                    colors: [NDS.accent.opacity(0.22), NDS.lilac.opacity(0.18)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            content()
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(NDS.fieldBg)
+        .clipShape(RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
+                .strokeBorder(accentBorder ? NDS.accent.opacity(0.45) : NDS.hairline, lineWidth: 1)
+        )
+    }
+}
+
+/// Bloom pill tab bar (meeting detail, etc.). Active tab = coral gradient fill +
+/// dark text; inactive = muted, surface-on-hover. Motion gated for Reduce Motion.
+@available(macOS 14.0, *)
+struct MSPillTabs<Tab: Hashable>: View {
+    let tabs: [(tab: Tab, label: String)]
+    @Binding var selection: Tab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(tabs, id: \.tab) { item in
+                let active = item.tab == selection
+                Button {
+                    withAnimation(NDS.motion(NDS.springStandard, reduce: reduceMotion)) {
+                        selection = item.tab
+                    }
+                } label: {
+                    Text(item.label)
+                        .scaledFont(13, weight: active ? .bold : .semibold)
+                        .foregroundStyle(active ? NDS.onAccent : NDS.textSecondary)
+                        .padding(.horizontal, 15).padding(.vertical, 8)
+                        .background {
+                            if active {
+                                Capsule().fill(NDS.accentGradient)
+                            } else {
+                                Capsule().fill(.clear)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
 

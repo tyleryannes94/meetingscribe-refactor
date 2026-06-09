@@ -106,6 +106,13 @@ app: scribecore check-sparkle-key check-version
 		echo "  ! MeetingScribeSync not built"; \
 	fi
 	@cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
+	@# Bundle the Bloom fonts (Bricolage Grotesque + Plus Jakarta Sans). They're
+	@# auto-registered at launch via ATSApplicationFontsPath=Fonts in Info.plist.
+	@if [ -d Resources/Fonts ]; then \
+		mkdir -p $(APP_DIR)/Contents/Resources/Fonts; \
+		cp Resources/Fonts/*.ttf $(APP_DIR)/Contents/Resources/Fonts/ 2>/dev/null || true; \
+		echo "  + bundled $$(ls Resources/Fonts/*.ttf 2>/dev/null | wc -l | tr -d ' ') font file(s)"; \
+	fi
 	@SPARKLE_FW=$$(find .build -iname Sparkle.framework -type d 2>/dev/null | head -1); \
 	if [ -n "$$SPARKLE_FW" ]; then \
 		mkdir -p $(APP_DIR)/Contents/Frameworks; \

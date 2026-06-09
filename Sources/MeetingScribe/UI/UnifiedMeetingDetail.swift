@@ -145,11 +145,11 @@ struct UnifiedMeetingDetail: View {
     // MARK: - Tabs
 
     var tabPicker: some View {
-        Picker("", selection: $tab) {
-            ForEach(DetailTab.allCases) { t in Text(t.label).tag(t) }
+        HStack {
+            MSPillTabs(tabs: DetailTab.allCases.map { ($0, $0.label) }, selection: $tab)
+            Spacer(minLength: 0)
         }
-        .pickerStyle(.segmented)
-        .padding([.horizontal, .top], 8)
+        .padding([.horizontal, .top], 10)
         .padding(.bottom, 4)
     }
     func placeholder(systemImage: String, title: String, message: String) -> some View {

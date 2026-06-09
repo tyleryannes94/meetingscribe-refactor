@@ -62,10 +62,10 @@ struct MainWindow: View {
     // instead of a chat panel that crowds content (and confuses first-run users
     // with an empty assistant). Existing users keep their stored preference.
     @AppStorage("chatRailVisible") private var chatVisible = false
-    /// Follow the system appearance by default (nil = system). Stored as a
-    /// Bool for toggle simplicity; false = light, true = dark. We default to
-    /// false (light/system) rather than forcing dark on every first-launch user.
-    @AppStorage("appearanceDark") private var appearanceDark = false
+    /// Stored as a Bool for toggle simplicity; false = light, true = dark.
+    /// Bloom is dark-mode-first, so new installs default to dark (existing
+    /// users keep their stored preference). The Light/Dark toggle still works.
+    @AppStorage("appearanceDark") private var appearanceDark = true
     /// First-launch onboarding — pre-explains every macOS permission BEFORE
     /// the system dialog so a "Don't Allow" tap doesn't silently strand the
     /// user (audit 8.3). Shown once and then never again per `hasCompletedOnboarding`.
@@ -110,12 +110,18 @@ struct MainWindow: View {
 
     private var navRail: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // App wordmark
-            HStack(spacing: 8) {
+            // Brand: coral→lilac gradient mark tile + Bricolage wordmark
+            HStack(spacing: 10) {
                 Image(systemName: "waveform")
                     .scaledFont(14, weight: .bold)
-                    .foregroundStyle(NDS.brand)
-                Text("MeetingScribe").scaledFont(14, weight: .bold)
+                    .foregroundStyle(NDS.avatarText)
+                    .frame(width: 26, height: 26)
+                    .background(NDS.brandMarkGradient,
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .shadow(color: NDS.accent.opacity(0.30), radius: 7, y: 4)
+                Text("MeetingScribe")
+                    .scaledFont(15.5, weight: .bold, relativeTo: .headline, kind: .display)
+                    .tracking(-0.3)
                 Spacer()
             }
             .padding(.horizontal, 14).padding(.top, 16).padding(.bottom, 14)
@@ -254,7 +260,7 @@ struct MainWindow: View {
                 // the middle pane's minimum and push the nav rail off-screen.
                 tabContent
                     .frame(minWidth: 0, maxWidth: .infinity)
-                    .clipped()
+                    .bloomAmbientGlow()   // subtle coral corner light (Bloom)
                 if showChat {
                     Divider().overlay(NDS.divider)
                     ChatSidebar()
@@ -461,27 +467,25 @@ private struct NavRailItem: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 11) {
                 Image(systemName: section.systemImage)
-                    .scaledFont(14)
-                    .foregroundStyle(selected ? NDS.brand : NDS.textSecondary)
+                    .scaledFont(14, weight: selected ? .semibold : .regular)
+                    .foregroundStyle(selected ? NDS.lilac : NDS.textSecondary)
                     .frame(width: 18)
                 Text(section.label)
-                    .scaledFont(13.5, weight: selected ? .semibold : .regular)
+                    .scaledFont(13.5, weight: selected ? .bold : .medium)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
+            .padding(.horizontal, 12).padding(.vertical, 8)
             .background(
-                selected
-                    ? NDS.brand.opacity(0.14)
-                    : isHovered ? NDS.brand.opacity(0.07) : .clear,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                selected || isHovered ? NDS.lilacSoft : .clear,
+                in: Capsule()
             )
-            .contentShape(Rectangle())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 9)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .accessibilityLabel(section.label)
