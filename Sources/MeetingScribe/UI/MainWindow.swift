@@ -48,6 +48,7 @@ struct MainWindow: View {
     @EnvironmentObject var chatSession: ChatSession
 
     @EnvironmentObject var router: WorkspaceRouter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The selected top-level section now lives in `WorkspaceRouter` (D1-1) so
     /// search, deep links, and backlinks all drive one navigation surface. This
     /// computed accessor keeps the existing `section` / `section = …` call sites
@@ -93,7 +94,7 @@ struct MainWindow: View {
                 if visited.contains(s) {
                     tabView(for: s)
                         .opacity(section == s ? 1 : 0)
-                        .animation(NDS.springStandard, value: section)
+                        .animation(NDS.motion(NDS.springStandard, reduce: reduceMotion), value: section)
                         .allowsHitTesting(section == s)
                         .zIndex(section == s ? 1 : 0)
                 }
@@ -112,9 +113,9 @@ struct MainWindow: View {
             // App wordmark
             HStack(spacing: 8) {
                 Image(systemName: "waveform")
-                    .font(.system(size: 14, weight: .bold))
+                    .scaledFont(14, weight: .bold)
                     .foregroundStyle(NDS.brand)
-                Text("MeetingScribe").font(.system(size: 14, weight: .bold))
+                Text("MeetingScribe").scaledFont(14, weight: .bold)
                 Spacer()
             }
             .padding(.horizontal, 14).padding(.top, 16).padding(.bottom, 14)
@@ -143,7 +144,7 @@ struct MainWindow: View {
                 Spacer(minLength: 0)
                 Button { activeSheet = .search } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "magnifyingglass").font(.system(size: 11))
+                        Image(systemName: "magnifyingglass").scaledFont(11)
                         Text("⌘K").font(NDS.tiny)
                     }
                     .foregroundStyle(NDS.textSecondary)
@@ -169,7 +170,7 @@ struct MainWindow: View {
 
     private func navGroupLabel(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold))
+            .scaledFont(10, weight: .semibold)
             .tracking(0.8)
             .foregroundStyle(NDS.textTertiary)
             .padding(.horizontal, 16)
@@ -184,8 +185,8 @@ struct MainWindow: View {
     private func navActionRow(_ title: String, systemImage: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: systemImage).font(.system(size: 13)).foregroundStyle(NDS.textSecondary).frame(width: 18)
-                Text(title).font(.system(size: 13)).foregroundStyle(NDS.textSecondary)
+                Image(systemName: systemImage).scaledFont(13).foregroundStyle(NDS.textSecondary).frame(width: 18)
+                Text(title).scaledFont(13).foregroundStyle(NDS.textSecondary)
                 Spacer(minLength: 0)
                 Text("⌘K").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
             }
@@ -462,11 +463,11 @@ private struct NavRailItem: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: section.systemImage)
-                    .font(.system(size: 14))
+                    .scaledFont(14)
                     .foregroundStyle(selected ? NDS.brand : NDS.textSecondary)
                     .frame(width: 18)
                 Text(section.label)
-                    .font(.system(size: 13.5, weight: selected ? .semibold : .regular))
+                    .scaledFont(13.5, weight: selected ? .semibold : .regular)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                 Spacer(minLength: 0)
             }

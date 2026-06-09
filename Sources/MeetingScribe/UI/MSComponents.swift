@@ -133,7 +133,7 @@ struct MSEmptyState<Actions: View>: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: systemImage)
-                .font(.system(size: 36)).foregroundStyle(.secondary)
+                .scaledFont(36).foregroundStyle(.secondary)
             Text(title).font(.headline)
             if let message {
                 Text(message)

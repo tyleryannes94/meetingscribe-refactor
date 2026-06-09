@@ -38,7 +38,7 @@ struct IntegrationsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 9) {
-                    Text("🧩").font(.system(size: 26))
+                    Text("🧩").scaledFont(26)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Integrations").font(NDS.title)
                         Text("Connect your tools. Everything runs locally or against each service's free API.")
@@ -342,12 +342,12 @@ private struct IntegrationCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             Button { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: icon).font(.system(size: 18))
+                    Image(systemName: icon).scaledFont(18)
                         .foregroundStyle(tint).frame(width: 38, height: 38)
                         .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(NDS.textPrimary)
+                            Text(title).scaledFont(14, weight: .semibold).foregroundStyle(NDS.textPrimary)
                             statusPill
                             if testing { ProgressView().controlSize(.small) }
                         }
@@ -357,7 +357,7 @@ private struct IntegrationCard<Content: View>: View {
                     }
                     Spacer(minLength: 8)
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 11)).foregroundStyle(NDS.textTertiary)
+                        .scaledFont(11).foregroundStyle(NDS.textTertiary)
                 }
                 .padding(14)
                 .contentShape(Rectangle())
@@ -387,7 +387,7 @@ private struct IntegrationCard<Content: View>: View {
         HStack(spacing: 4) {
             Circle().fill(connected ? NDS.selectColor("green") : NDS.textTertiary).frame(width: 6, height: 6)
             Text(connected ? "Connected" : "Not connected")
-                .font(.system(size: 10, weight: .medium))
+                .scaledFont(10, weight: .medium)
                 .foregroundStyle(connected ? NDS.selectColor("green") : NDS.textTertiary)
         }
         .padding(.horizontal, 6).padding(.vertical, 1)

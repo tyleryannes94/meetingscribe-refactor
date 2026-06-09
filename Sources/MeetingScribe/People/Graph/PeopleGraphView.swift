@@ -103,7 +103,7 @@ struct PeopleGraphView: View {
                     ctx.fill(Path(roundedRect: rect, cornerRadius: 7),
                              with: .color(baseColor.opacity(0.85)))
                     let text = Text("\(edge.sharedMeetingCount)")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 9, weight: .bold)) // design-lint:allow — Canvas draw needs a Text font
                         .foregroundColor(.white)
                     ctx.draw(text, at: mid)
                 }
@@ -244,7 +244,7 @@ struct PeopleGraphView: View {
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            Image(systemName: "circle.hexagongrid").font(.system(size: 40)).foregroundStyle(.secondary)
+            Image(systemName: "circle.hexagongrid").scaledFont(40).foregroundStyle(.secondary)
             Text("No people to graph").font(.headline)
             Text("Add or import people, or clear the tag filter, to see the mindmap.")
                 .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)

@@ -27,8 +27,8 @@ struct MeetingHealthBadge: View {
     private func badge(for health: MeetingHealthDTO) -> some View {
         let (label, icon, color) = style(for: health.status)
         HStack(spacing: 4) {
-            Image(systemName: icon).font(.system(size: 9, weight: .semibold))
-            if !compact { Text(label).font(.system(size: 10, weight: .medium)) }
+            Image(systemName: icon).scaledFont(9, weight: .semibold)
+            if !compact { Text(label).scaledFont(10, weight: .medium) }
         }
         .foregroundStyle(color)
         .padding(.horizontal, compact ? 4 : 6)

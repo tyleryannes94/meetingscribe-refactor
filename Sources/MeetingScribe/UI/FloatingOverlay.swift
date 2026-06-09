@@ -305,7 +305,7 @@ private struct RecordingPill: View {
                           action: controller.stopRecording)
             Button(action: controller.cancelOverlay) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(11, weight: .semibold)
                     .foregroundStyle(.tertiary)
                     .frame(width: 26, height: 26)
                     .background(Color.secondary.opacity(0.08), in: Circle())
@@ -355,7 +355,7 @@ private struct MeetingRecordingPill: View {
                           action: controller.stopRecording)
             Button(action: controller.cancelOverlay) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(11, weight: .semibold)
                     .foregroundStyle(.tertiary)
                     .frame(width: 26, height: 26)
                     .background(Color.secondary.opacity(0.08), in: Circle())
@@ -387,7 +387,7 @@ private struct TranscribingPill: View {
             Spacer()
             Button(action: controller.cancelOverlay) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(11, weight: .semibold)
                     .foregroundStyle(.tertiary)
                     .frame(width: 26, height: 26)
                     .background(Color.secondary.opacity(0.08), in: Circle())
@@ -410,7 +410,7 @@ private struct DonePill: View {
                 Circle().fill(Color.green.opacity(0.15)).frame(width: 32, height: 32)
                 Image(systemName: "checkmark")
                     .foregroundStyle(.green)
-                    .font(.system(size: 14, weight: .bold))
+                    .scaledFont(14, weight: .bold)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Voice note ready").font(.callout.weight(.semibold))
@@ -433,7 +433,7 @@ private struct DonePill: View {
                           action: controller.goToRecording)
             Button(action: controller.cancelOverlay) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(11, weight: .semibold)
                     .foregroundStyle(.tertiary)
                     .frame(width: 26, height: 26)
                     .background(Color.secondary.opacity(0.08), in: Circle())
@@ -505,8 +505,8 @@ private struct OverlayButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: systemImage).font(.system(size: 11, weight: .semibold))
-                Text(label).font(.system(size: 12.5, weight: .semibold))
+                Image(systemName: systemImage).scaledFont(11, weight: .semibold)
+                Text(label).scaledFont(12.5, weight: .semibold)
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .foregroundStyle(prominent ? .white : tint)

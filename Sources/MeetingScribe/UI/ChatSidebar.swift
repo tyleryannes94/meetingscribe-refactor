@@ -125,7 +125,7 @@ struct ChatFoldersSheet: View {
             if folders.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 36)).foregroundStyle(.secondary)
+                        .scaledFont(36).foregroundStyle(.secondary)
                     Text("No folders added yet").font(.headline)
                     Text("Add at least one project folder so the AI can read/edit files there.")
                         .font(.caption).foregroundStyle(.secondary)

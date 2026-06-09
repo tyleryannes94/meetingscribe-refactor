@@ -68,7 +68,7 @@ var notesMainArea: some View {
 var previousCallsSidebar: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("CALLS IN THIS SERIES")
-                .font(.system(size: 10, weight: .semibold)).tracking(0.6)
+                .scaledFont(10, weight: .semibold).tracking(0.6)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 10).padding(.top, 12).padding(.bottom, 4)
             occurrenceRow(title: "This call",
@@ -96,7 +96,7 @@ func occurrenceRow(title: String, subtitle: String, selected: Bool,
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: isCurrent ? "pencil.circle.fill" : "clock.arrow.circlepath")
-                    .font(.system(size: 13))
+                    .scaledFont(13)
                     .foregroundStyle(isCurrent ? NDS.brand : .secondary)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.callout).lineLimit(1)

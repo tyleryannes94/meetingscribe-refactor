@@ -34,7 +34,7 @@ extension ActionItemsView {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(name)
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(13, weight: .semibold)
                     .foregroundStyle(.secondary).textCase(.uppercase).tracking(0.6)
                 Text("\(rows.count)").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
                 Spacer()
@@ -166,7 +166,7 @@ extension ActionItemsView {
             HStack(spacing: 8) {
                 Button { toggleTaskSelection(item.id) } label: {
                     Image(systemName: taskSelection.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 16))
+                        .scaledFont(16)
                         .foregroundStyle(taskSelection.contains(item.id) ? NDS.brand : NDS.textTertiary)
                 }
                 .buttonStyle(.borderless)
@@ -384,7 +384,7 @@ extension ActionItemsView {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(13, weight: .semibold)
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase).tracking(0.6)
                 Text("\(items.count)")

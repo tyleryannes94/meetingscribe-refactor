@@ -49,7 +49,7 @@ struct GraphDetailPanel: View {
         HStack(spacing: 10) {
             avatar
             VStack(alignment: .leading, spacing: 2) {
-                Text(person.displayName).font(.system(size: 15, weight: .bold)).lineLimit(1)
+                Text(person.displayName).scaledFont(15, weight: .bold).lineLimit(1)
                 let sub = [person.role, person.company].filter { !$0.isEmpty }.joined(separator: " · ")
                 if !sub.isEmpty {
                     Text(sub).font(NDS.tiny).foregroundStyle(NDS.textSecondary).lineLimit(2)
@@ -82,7 +82,7 @@ struct GraphDetailPanel: View {
     private var initials: some View {
         ZStack {
             Circle().fill(NDS.selectColor(person.id).gradient)
-            Text(initialsText).font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+            Text(initialsText).scaledFont(16, weight: .bold).foregroundStyle(.white)
         }
     }
 
@@ -183,7 +183,7 @@ struct GraphDetailPanel: View {
             viewModel.selectNode(other.id)
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                Text(other.displayName).font(.system(size: 12.5, weight: .medium))
+                Text(other.displayName).scaledFont(12.5, weight: .medium)
                     .foregroundStyle(NDS.textPrimary)
                 Text(contextText(edge))
                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
@@ -208,7 +208,7 @@ struct GraphDetailPanel: View {
     }
 
     private func sectionLabel(_ text: String) -> some View {
-        Text(text).font(.system(size: 10, weight: .semibold))
+        Text(text).scaledFont(10, weight: .semibold)
             .foregroundStyle(NDS.textTertiary)
     }
 }
@@ -224,7 +224,7 @@ private struct FlowTags: View {
                 HStack(spacing: 4) {
                     ForEach(row) { pill in
                         Text(pill.name)
-                            .font(.system(size: 10, weight: .medium))
+                            .scaledFont(10, weight: .medium)
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .foregroundStyle(pill.color)
                             .background(pill.color.opacity(0.16), in: Capsule())

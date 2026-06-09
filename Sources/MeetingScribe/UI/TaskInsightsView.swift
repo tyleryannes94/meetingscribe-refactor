@@ -59,7 +59,7 @@ struct TaskInsightsView: View {
 
     private func stat(_ label: String, _ value: Int, _ color: Color) -> some View {
         VStack(spacing: 4) {
-            Text("\(value)").font(.system(size: 26, weight: .semibold)).foregroundStyle(color)
+            Text("\(value)").scaledFont(26, weight: .semibold).foregroundStyle(color)
             Text(label).font(NDS.small).foregroundStyle(NDS.textSecondary)
         }
         .frame(maxWidth: .infinity)

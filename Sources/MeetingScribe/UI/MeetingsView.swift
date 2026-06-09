@@ -100,14 +100,14 @@ struct MeetingsView: View {
             // Search bar — always visible (not hidden behind ⌘K)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
+                    .scaledFont(12)
                     .foregroundStyle(NDS.textTertiary)
                 TextField("Search meetings…", text: $search)
-                    .font(.system(size: 13))
+                    .scaledFont(13)
                 if !search.isEmpty {
                     Button { search = "" } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
+                            .scaledFont(12)
                             .foregroundStyle(NDS.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -133,7 +133,7 @@ struct MeetingsView: View {
                 ForEach(Scope.allCases) { s in
                     Button { scope = s } label: {
                         Text(s.label)
-                            .font(.system(size: 11.5, weight: scope == s ? .semibold : .regular))
+                            .scaledFont(11.5, weight: scope == s ? .semibold : .regular)
                             .foregroundStyle(scope == s ? NDS.brand : NDS.textSecondary)
                             .padding(.horizontal, 10).padding(.vertical, 4)
                             .background(scope == s ? NDS.brand.opacity(0.12) : .clear,
@@ -203,7 +203,7 @@ struct MeetingsView: View {
     private var meetingEmptyDetail: some View {
         VStack(spacing: 12) {
             Image(systemName: "waveform.and.mic")
-                .font(.system(size: 48))
+                .scaledFont(48)
                 .foregroundStyle(NDS.textTertiary)
             Text("Select a meeting")
                 .font(.title2.weight(.semibold))
@@ -295,7 +295,7 @@ struct MeetingsView: View {
             Button { shiftMonth(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
                 .accessibilityLabel("Previous month")
             Spacer()
-            Text(monthTitle).font(.system(size: 14, weight: .semibold)).foregroundStyle(NDS.textPrimary)
+            Text(monthTitle).scaledFont(14, weight: .semibold).foregroundStyle(NDS.textPrimary)
             Spacer()
             Button { shiftMonth(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
                 .accessibilityLabel("Next month")
@@ -311,7 +311,7 @@ struct MeetingsView: View {
     private var weekdayRow: some View {
         HStack(spacing: 0) {
             ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, s in
-                Text(s).font(.system(size: 9, weight: .semibold))
+                Text(s).scaledFont(9, weight: .semibold)
                     .foregroundStyle(NDS.textTertiary)
                     .frame(maxWidth: .infinity)
             }
@@ -352,7 +352,7 @@ struct MeetingsView: View {
         } label: {
             VStack(spacing: 2) {
                 Text("\(cal.component(.day, from: day))")
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(.system(size: 11).monospacedDigit()) // design-lint:allow
                     .foregroundStyle(inMonth ? (isToday ? NDS.brand : NDS.textPrimary)
                                              : NDS.textTertiary.opacity(0.6))
                 Circle().fill(hasMeetings ? NDS.brand : .clear).frame(width: 4, height: 4)
@@ -371,7 +371,7 @@ struct MeetingsView: View {
             .filter { cal.isDate($0.startDate, inSameDayAs: selectedDay) }
             .sorted { $0.startDate < $1.startDate }
         return VStack(alignment: .leading, spacing: 2) {
-            Text(dayTitle).font(.system(size: 12, weight: .semibold))
+            Text(dayTitle).scaledFont(12, weight: .semibold)
                 .foregroundStyle(NDS.textSecondary)
                 .padding(.horizontal, 14).padding(.bottom, 4)
             if items.isEmpty {
@@ -440,10 +440,10 @@ private struct MeetingListRow: View {
                 // Time column
                 VStack(alignment: .leading, spacing: 2) {
                     Text(timeString)
-                        .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                        .font(.system(size: 11.5, weight: .medium).monospacedDigit()) // design-lint:allow
                         .foregroundStyle(isLive ? .red : NDS.textSecondary)
                     Text("\(durationMins)m")
-                        .font(.system(size: 10).monospacedDigit())
+                        .font(.system(size: 10).monospacedDigit()) // design-lint:allow
                         .foregroundStyle(NDS.textTertiary)
                 }
                 .frame(width: 52, alignment: .leading)
@@ -453,22 +453,22 @@ private struct MeetingListRow: View {
                     HStack(spacing: 5) {
                         if isLive {
                             Image(systemName: "record.circle.fill")
-                                .font(.system(size: 10))
+                                .scaledFont(10)
                                 .foregroundStyle(.red)
                                 .pulsingSymbol(active: !reduceMotion)
                         }
                         Text(meeting.displayTitle)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .scaledFont(13, weight: isSelected ? .semibold : .regular)
                             .foregroundStyle(NDS.textPrimary)
                             .lineLimit(1)
                         if meeting.seriesID?.isEmpty == false {
                             Image(systemName: "repeat")
-                                .font(.system(size: 9))
+                                .scaledFont(9)
                                 .foregroundStyle(NDS.textTertiary)
                         }
                         if meeting.health?.status == .noTranscript {
                             Image(systemName: "xmark.circle")
-                                .font(.system(size: 9))
+                                .scaledFont(9)
                                 .foregroundStyle(.orange)
                         }
                     }
@@ -476,7 +476,7 @@ private struct MeetingListRow: View {
                     HStack(spacing: 5) {
                         if !meeting.attendees.isEmpty {
                             Text("\(meeting.attendees.count) attendees")
-                                .font(.system(size: 11))
+                                .scaledFont(11)
                                 .foregroundStyle(NDS.textTertiary)
                         }
                         let tags = tagStore.tags(for: meeting).prefix(2)

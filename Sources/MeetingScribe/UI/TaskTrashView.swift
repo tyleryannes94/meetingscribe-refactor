@@ -47,7 +47,7 @@ struct TaskTrashView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "trash")
-                .font(.system(size: 30))
+                .scaledFont(30)
                 .foregroundStyle(NDS.textTertiary)
             Text("Trash is empty").foregroundStyle(NDS.textSecondary)
             Text("Deleted tasks are kept here for 30 days, then removed.")

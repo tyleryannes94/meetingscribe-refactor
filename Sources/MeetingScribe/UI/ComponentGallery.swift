@@ -77,7 +77,7 @@ struct ComponentGallery: View {
                 VStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: NDS.radius, style: .continuous)
                         .fill(color).frame(width: 36, height: 36)
-                    Text(name).font(.system(size: 9)).foregroundStyle(NDS.textTertiary)
+                    Text(name).scaledFont(9).foregroundStyle(NDS.textTertiary)
                 }
             }
         }

@@ -83,7 +83,7 @@ struct ContactsImportView: View {
         } else if filtered.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "person.crop.circle.badge.questionmark")
-                    .font(.system(size: 36)).foregroundStyle(.secondary)
+                    .scaledFont(36).foregroundStyle(.secondary)
                 Text(query.isEmpty ? "No contacts found." : "No matches.").foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -97,7 +97,7 @@ struct ContactsImportView: View {
 
     private var permissionPrompt: some View {
         VStack(spacing: 10) {
-            Image(systemName: "lock.shield").font(.system(size: 36)).foregroundStyle(.secondary)
+            Image(systemName: "lock.shield").scaledFont(36).foregroundStyle(.secondary)
             Text("Contacts access needed").font(.headline)
             Text("MeetingScribe reads Contacts read-only to import people.")
                 .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -116,7 +116,7 @@ struct ContactsImportView: View {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isOn ? NDS.brand : NDS.textTertiary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(candidate.import.displayName).font(.system(size: 13, weight: .semibold))
+                    Text(candidate.import.displayName).scaledFont(13, weight: .semibold)
                     let sub = [candidate.import.role, candidate.import.company]
                         .filter { !$0.isEmpty }.joined(separator: " · ")
                     let detail = sub.isEmpty ? (candidate.import.emails.first ?? "") : sub

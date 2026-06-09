@@ -429,32 +429,32 @@ struct PersonDetailView: View {
                     .frame(width: 52, height: 52)
                     .overlay(
                         Text(initials(for: current.displayName))
-                            .font(.system(size: 20, weight: .bold))
+                            .scaledFont(20, weight: .bold)
                             .foregroundStyle(.white)
                     )
                 if editingIdentity {
                     VStack(alignment: .leading, spacing: 6) {
                         TextField("Name", text: $draftName)
                             .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 15, weight: .semibold))
+                            .scaledFont(15, weight: .semibold)
                             .onSubmit { saveIdentityEdit() }
                         TextField("Role", text: $draftRole)
                             .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 12))
+                            .scaledFont(12)
                             .onSubmit { saveIdentityEdit() }
                         TextField("Company", text: $draftCompany)
                             .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 12))
+                            .scaledFont(12)
                             .onSubmit { saveIdentityEdit() }
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(current.displayName)
-                            .font(.system(size: 17, weight: .bold))
+                            .scaledFont(17, weight: .bold)
                             .foregroundStyle(NDS.textPrimary)
                         if !subtitle.isEmpty {
                             Text(subtitle)
-                                .font(.system(size: 12))
+                                .scaledFont(12)
                                 .foregroundStyle(NDS.textSecondary)
                         }
                     }
@@ -469,16 +469,16 @@ struct PersonDetailView: View {
             if editingIdentity {
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("Email", text: $draftEmail)
-                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .textFieldStyle(.roundedBorder).scaledFont(12)
                         .onSubmit { saveIdentityEdit() }
                     TextField("Phone", text: $draftPhone)
-                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .textFieldStyle(.roundedBorder).scaledFont(12)
                         .onSubmit { saveIdentityEdit() }
                     TextField("Address", text: $draftAddress)
-                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .textFieldStyle(.roundedBorder).scaledFont(12)
                         .onSubmit { saveIdentityEdit() }
                     TextField("About", text: $draftBio, axis: .vertical)
-                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .textFieldStyle(.roundedBorder).scaledFont(12)
                         .lineLimit(2...5)
                     if current.emails.count > 1 || current.phones.count > 1 || current.addresses.count > 1 {
                         Text("Editing the first value — use ⋯ for all.")
@@ -575,7 +575,7 @@ struct PersonDetailView: View {
                     Text(current.relationshipType.displayName)
                         .font(NDS.small)
                         .foregroundStyle(current.relationshipType == .unset ? NDS.textTertiary : NDS.textPrimary)
-                    Image(systemName: "chevron.down").font(.system(size: 9))
+                    Image(systemName: "chevron.down").scaledFont(9)
                         .foregroundStyle(NDS.textTertiary)
                 }
                 .padding(.horizontal, 8).padding(.vertical, 4)
@@ -659,7 +659,7 @@ struct PersonDetailView: View {
                         HStack(spacing: 4) {
                             Text(fav).font(NDS.small)
                             Button { removeFavorite(fav) } label: {
-                                Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                                Image(systemName: "xmark.circle.fill").scaledFont(11)
                             }
                             .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
                         }
@@ -785,7 +785,7 @@ struct PersonDetailView: View {
     private func suggestionChip(label: String, icon: String, accept: @escaping () -> Void) -> some View {
         Button(action: accept) {
             HStack(spacing: 4) {
-                Image(systemName: "plus.circle.fill").font(.system(size: 11))
+                Image(systemName: "plus.circle.fill").scaledFont(11)
                 Text(label).font(NDS.small)
             }
             .padding(.horizontal, 9).padding(.vertical, 4)
@@ -802,7 +802,7 @@ struct PersonDetailView: View {
                                disabledNote: String?, accept: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 13, weight: .medium))
+                Text(title).scaledFont(13, weight: .medium)
                 if !detail.isEmpty {
                     Text(detail).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(2)
                 }
@@ -900,7 +900,7 @@ struct PersonDetailView: View {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles").foregroundStyle(NDS.brand)
                 Text("Ask AI about \(current.displayName.split(separator: " ").first.map(String.init) ?? current.displayName)")
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(13, weight: .semibold)
                 Spacer()
                 if !chatSession.messages.isEmpty {
                     Button { chatSession.reset() } label: { Image(systemName: "arrow.counterclockwise") }
@@ -977,10 +977,10 @@ struct PersonDetailView: View {
                             userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: d.meetingID).absoluteString])
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: "checkmark.seal").font(.system(size: 13))
+                            Image(systemName: "checkmark.seal").scaledFont(13)
                                 .foregroundStyle(NDS.brand.opacity(0.7))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(d.text).font(.system(size: 13.5)).foregroundStyle(NDS.textPrimary)
+                                Text(d.text).scaledFont(13.5).foregroundStyle(NDS.textPrimary)
                                     .lineLimit(2)
                                 Text("\(d.meetingTitle) · \(Self.dateFormatter.string(from: d.date))")
                                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
@@ -1036,21 +1036,21 @@ struct PersonDetailView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(m.displayTitle)
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(13, weight: .medium)
                     .foregroundStyle(NDS.textPrimary)
                 Text(m.startDate, style: .date)
-                    .font(.system(size: 11))
+                    .scaledFont(11)
                     .foregroundStyle(NDS.textTertiary)
             }
             Spacer()
             Text(recorded ? "Recorded" : "Calendar")
-                .font(.system(size: 9, weight: .semibold))
+                .scaledFont(9, weight: .semibold)
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background((recorded ? Color.green : NDS.textTertiary).opacity(0.15), in: Capsule())
                 .foregroundStyle(recorded ? Color.green : NDS.textSecondary)
             if recorded {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .scaledFont(10, weight: .semibold)
                     .foregroundStyle(NDS.textTertiary)
             }
         }
@@ -1062,7 +1062,7 @@ struct PersonDetailView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: "person.circle.fill")
-                .font(.system(size: 48)).foregroundStyle(NDS.brand.opacity(0.7))
+                .scaledFont(48).foregroundStyle(NDS.brand.opacity(0.7))
             VStack(alignment: .leading, spacing: 3) {
                 Text(current.displayName).font(NDS.pageTitle)
                 if !subtitle.isEmpty {
@@ -1149,7 +1149,7 @@ struct PersonDetailView: View {
             }
         }()
         HStack(spacing: 8) {
-            Image(systemName: icon).font(.system(size: 12)).foregroundStyle(NDS.textTertiary).frame(width: 16)
+            Image(systemName: icon).scaledFont(12).foregroundStyle(NDS.textTertiary).frame(width: 16)
             if let url {
                 Button { NSWorkspace.shared.open(url) } label: {
                     Text(text).font(NDS.body).foregroundStyle(NDS.brand)
@@ -1315,7 +1315,7 @@ struct PersonDetailView: View {
                 actionItems.setStatus(item.id, status: done ? .open : .completed)
             } label: {
                 Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 15))
+                    .scaledFont(15)
                     .foregroundStyle(done ? NDS.brand : NDS.textTertiary)
             }
             .buttonStyle(.borderless)
@@ -1325,7 +1325,7 @@ struct PersonDetailView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.title)
-                        .font(.system(size: 13.5, weight: .medium))
+                        .scaledFont(13.5, weight: .medium)
                         .strikethrough(done, color: NDS.textTertiary)
                         .foregroundStyle(done ? NDS.textTertiary : NDS.textPrimary)
                         .lineLimit(2)
@@ -1345,7 +1345,7 @@ struct PersonDetailView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(NDS.textTertiary)
+            Image(systemName: "chevron.right").scaledFont(10).foregroundStyle(NDS.textTertiary)
         }
         .padding(10)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -1366,11 +1366,11 @@ struct PersonDetailView: View {
             } else {
                 ForEach(current.relationships) { rel in
                     HStack(spacing: 10) {
-                        Image(systemName: "person.2.fill").font(.system(size: 12))
+                        Image(systemName: "person.2.fill").scaledFont(12)
                             .foregroundStyle(NDS.brand.opacity(0.7))
                         Text(rel.label).font(NDS.small).foregroundStyle(NDS.textSecondary)
                         Text(people.person(by: rel.toPersonID)?.displayName ?? "Unknown")
-                            .font(.system(size: 13.5, weight: .semibold))
+                            .scaledFont(13.5, weight: .semibold)
                         Spacer(minLength: 0)
                         Button { people.removeRelationship(rel, from: current.id) } label: {
                             Image(systemName: "xmark.circle.fill")
@@ -1403,10 +1403,10 @@ struct PersonDetailView: View {
                                 userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: m.id).absoluteString])
                         } label: {
                             HStack(spacing: 10) {
-                                Image(systemName: "calendar").font(.system(size: 13))
+                                Image(systemName: "calendar").scaledFont(13)
                                     .foregroundStyle(NDS.brand.opacity(0.7))
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(m.displayTitle).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                                    Text(m.displayTitle).scaledFont(13.5, weight: .semibold).lineLimit(1)
                                     Text(Self.dateFormatter.string(from: m.startDate))
                                         .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                                 }
@@ -1451,7 +1451,7 @@ struct PersonDetailView: View {
             }
             ForEach(current.memories) { m in
                 HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "sparkles").font(.system(size: 12))
+                    Image(systemName: "sparkles").scaledFont(12)
                         .foregroundStyle(NDS.brand.opacity(0.7)).padding(.top, 2)
                     Text(m.text).font(NDS.body).frame(maxWidth: .infinity, alignment: .leading)
                     Button { people.deleteMemory(m, from: current.id) } label: {
@@ -1970,10 +1970,10 @@ private struct EncounterRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "mappin.and.ellipse").font(.system(size: 13))
+            Image(systemName: "mappin.and.ellipse").scaledFont(13)
                 .foregroundStyle(NDS.brand.opacity(0.7)).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
-                Text(encounter.eventName).font(.system(size: 13.5, weight: .semibold))
+                Text(encounter.eventName).scaledFont(13.5, weight: .semibold)
                 HStack(spacing: 6) {
                     Text(Self.dateFormatter.string(from: encounter.date))
                     if let loc = encounter.location, !loc.isEmpty { Text("· \(loc)") }

@@ -55,7 +55,7 @@ struct OnboardingSheet: View {
         VStack(spacing: 0) {
             VStack(spacing: 8) {
                 Image(systemName: "externaldrive.fill.badge.icloud")
-                    .font(.system(size: 38, weight: .regular))
+                    .scaledFont(38, weight: .regular)
                     .foregroundStyle(.tint)
                 Text("Where to store your vault?")
                     .font(.title2.weight(.semibold))
@@ -139,7 +139,7 @@ struct OnboardingSheet: View {
         VStack(spacing: 0) {
             VStack(spacing: 8) {
                 Image(systemName: currentPermission.kind.systemImage)
-                    .font(.system(size: 38, weight: .regular))
+                    .scaledFont(38, weight: .regular)
                     .foregroundStyle(.tint)
                 Text(currentPermission.kind.title)
                     .font(.title2.weight(.semibold))
@@ -157,7 +157,7 @@ struct OnboardingSheet: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.tint)
-                            .font(.system(size: 12))
+                            .scaledFont(12)
                         Text(bullet).font(.body)
                     }
                 }

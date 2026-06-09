@@ -62,7 +62,7 @@ extension ActionItemsView {
                 Text(label)
                 if tableSort == col {
                     Image(systemName: tableSortAscending ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 7, weight: .bold))
+                        .scaledFont(7, weight: .bold)
                 }
             }
         }

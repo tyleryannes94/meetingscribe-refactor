@@ -49,8 +49,10 @@ enum NDS {
     static let divider     = dyn(dark: (255, 245, 225, 0.09), light: (100, 80, 40, 0.10))
     static let hairline    = dyn(dark: (255, 245, 225, 0.13), light: (100, 80, 40, 0.14))
     static let textPrimary   = dyn(dark: (242, 239, 230, 1),  light: (26, 25, 23, 1))    // #f2efe6 / #1a1917
-    static let textSecondary = dyn(dark: (210, 204, 190, 0.72), light: (26, 25, 23, 0.58))
-    static let textTertiary  = dyn(dark: (210, 204, 190, 0.42), light: (26, 25, 23, 0.38))
+    // Contrast-retuned for WCAG AA legibility (AV-3) — tertiary was 0.42/0.38,
+    // too faint against bg; raised so secondary/tertiary text stays readable.
+    static let textSecondary = dyn(dark: (210, 204, 190, 0.78), light: (26, 25, 23, 0.64))
+    static let textTertiary  = dyn(dark: (210, 204, 190, 0.58), light: (26, 25, 23, 0.52))
     static let fieldBg       = dyn(dark: (255, 245, 225, 0.055), light: (100, 80, 40, 0.045))
     static let segmentActiveBg = dyn(dark: (255, 245, 225, 0.13), light: (255, 255, 255, 1))
     /// Subtle warm lane fill for kanban columns / grouped bands (DV-19). Replaces
@@ -185,6 +187,29 @@ enum NDS {
     static func iconWeight(forSize size: CGFloat) -> Font.Weight {
         size >= 16 ? .semibold : .medium
     }
+
+    // MARK: Contrast (AV-3) — pure WCAG helpers, used by the contrast test and
+    // available for audits. Inputs are sRGB components in 0–255.
+    private static func linearize(_ c: Double) -> Double {
+        let s = c / 255
+        return s <= 0.03928 ? s / 12.92 : pow((s + 0.055) / 1.055, 2.4)
+    }
+    static func relativeLuminance(_ rgb: (Double, Double, Double)) -> Double {
+        0.2126 * linearize(rgb.0) + 0.7152 * linearize(rgb.1) + 0.0722 * linearize(rgb.2)
+    }
+    /// WCAG contrast ratio (1…21) between two opaque sRGB colors.
+    static func contrastRatio(_ a: (Double, Double, Double), _ b: (Double, Double, Double)) -> Double {
+        let la = relativeLuminance(a), lb = relativeLuminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+    /// Composite a translucent foreground (r,g,b,a) over an opaque background.
+    static func composite(_ fg: (Double, Double, Double, Double),
+                          over bg: (Double, Double, Double)) -> (Double, Double, Double) {
+        let a = fg.3
+        return (fg.0 * a + bg.0 * (1 - a),
+                fg.1 * a + bg.1 * (1 - a),
+                fg.2 * a + bg.2 * (1 - a))
+    }
 }
 
 @available(macOS 14.0, *)
@@ -240,7 +265,7 @@ struct NotionChip: View {
     }
     var body: some View {
         HStack(spacing: 4) {
-            if let systemImage { Image(systemName: systemImage).font(.system(size: 9, weight: .bold)) }
+            if let systemImage { Image(systemName: systemImage).scaledFont(9, weight: .bold) }
             Text(text).scaledFont(11.5, weight: .medium, relativeTo: .caption)
         }
         .padding(.horizontal, 7).padding(.vertical, 2)
@@ -259,7 +284,7 @@ struct NotionPropertyRow<Content: View>: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             HStack(spacing: 7) {
-                Image(systemName: icon).font(.system(size: 12))
+                Image(systemName: icon).scaledFont(12)
                 Text(label).font(NDS.body)
             }
             .foregroundStyle(NDS.textSecondary)
@@ -296,7 +321,7 @@ struct NotionIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 13))
+                .scaledFont(13)
                 .foregroundStyle(NDS.textSecondary)
                 .frame(width: NDS.buttonIconSide, height: NDS.buttonIconSide)
                 .background(hovering ? NDS.rowHover : .clear, in: RoundedRectangle(cornerRadius: 6))
@@ -322,7 +347,7 @@ struct NotionIconButton: View {
 struct UntitledPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .scaledFont(13, weight: .semibold)
             .foregroundStyle(.white)
             .padding(.horizontal, 14).padding(.vertical, 8)
             .background(NDS.brand.opacity(configuration.isPressed ? 0.85 : 1),
@@ -336,7 +361,7 @@ struct UntitledPrimaryButtonStyle: ButtonStyle {
 struct UntitledSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .medium))
+            .scaledFont(13, weight: .medium)
             .foregroundStyle(NDS.textPrimary)
             .padding(.horizontal, 14).padding(.vertical, 8)
             .background(NDS.fieldBg.opacity(configuration.isPressed ? 1.4 : 1),
@@ -353,7 +378,7 @@ struct UntitledSecondaryButtonStyle: ButtonStyle {
 struct MSPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .scaledFont(13, weight: .semibold)
             .foregroundStyle(.white)
             .padding(.horizontal, NDS.buttonHPadLg)
             .frame(height: NDS.buttonPrimaryH)
@@ -368,7 +393,7 @@ struct MSPrimaryButtonStyle: ButtonStyle {
 struct MSSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .medium))
+            .scaledFont(13, weight: .medium)
             .foregroundStyle(NDS.textPrimary)
             .padding(.horizontal, NDS.buttonHPadMd)
             .frame(height: NDS.buttonSecondaryH)
@@ -385,7 +410,7 @@ struct MSSecondaryButtonStyle: ButtonStyle {
 struct MSDangerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .scaledFont(13, weight: .semibold)
             .foregroundStyle(.white)
             .padding(.horizontal, NDS.buttonHPadLg)
             .frame(height: NDS.buttonPrimaryH)
@@ -400,7 +425,7 @@ struct MSDangerButtonStyle: ButtonStyle {
 struct MSTertiaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .regular))
+            .scaledFont(12, weight: .regular)
             .foregroundStyle(configuration.isPressed ? NDS.textPrimary : NDS.textSecondary)
             .padding(.horizontal, NDS.buttonHPadSm)
             .frame(height: NDS.buttonTertiaryH)
@@ -438,12 +463,12 @@ struct QuickActionCard: View {
         Button(action: action) {
             HStack(spacing: 11) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(16, weight: .semibold)
                     .foregroundStyle(tint)
                     .frame(width: 36, height: 36)
                     .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.system(size: 13, weight: .semibold))
+                    Text(title).scaledFont(13, weight: .semibold)
                         .foregroundStyle(NDS.textPrimary).lineLimit(1)
                     if let subtitle {
                         Text(subtitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
@@ -496,10 +521,10 @@ struct QuickPill: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(13, weight: .semibold)
                     .foregroundStyle(tint)
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(13, weight: .medium)
                     .foregroundStyle(NDS.textPrimary)
             }
             .padding(.leading, 11).padding(.trailing, 14).padding(.vertical, 8)
@@ -578,7 +603,7 @@ struct AppearanceToggle: View {
             dark = isDark
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: icon).font(.system(size: 10))
+                Image(systemName: icon).scaledFont(10)
                 Text(label).scaledFont(11.5, weight: active ? .semibold : .medium, relativeTo: .caption)
             }
             .foregroundStyle(active ? NDS.textPrimary : NDS.textSecondary)

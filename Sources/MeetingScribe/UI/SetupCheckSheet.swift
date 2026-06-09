@@ -15,7 +15,7 @@ struct SetupCheckSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Getting things ready")
-                    .font(.system(size: 20, weight: .bold))
+                    .scaledFont(20, weight: .bold)
                 Text("MeetingScribe runs entirely on your Mac. Two local pieces power recording and summaries — let's make sure they're set up.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -113,10 +113,10 @@ struct SetupCheckSheet: View {
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: ready ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 18))
+                .scaledFont(18)
                 .foregroundStyle(ready ? Color.green : NDS.textTertiary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14, weight: .semibold))
+                Text(title).scaledFont(14, weight: .semibold)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

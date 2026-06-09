@@ -32,7 +32,7 @@ struct ProjectPageHeader: View {
                     }
                 } label: {
                     Image(systemName: project.icon ?? "doc.text")
-                        .font(.system(size: 26)).foregroundStyle(NDS.selectColor(project.name))
+                        .scaledFont(26).foregroundStyle(NDS.selectColor(project.name))
                 }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 TextField("Untitled", text: $nameDraft, onCommit: {
@@ -54,7 +54,7 @@ struct ProjectPageHeader: View {
                 if !bodyFills {
                     Button { withAnimation { expanded.toggle() } } label: {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 12)).foregroundStyle(NDS.textTertiary)
+                            .scaledFont(12).foregroundStyle(NDS.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -82,7 +82,7 @@ struct ProjectPageHeader: View {
             showTargetPicker = true
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: "target").font(.system(size: 11))
+                Image(systemName: "target").scaledFont(11)
                 Text(project.targetDate.map(targetLabel) ?? "Set target")
             }
             .font(NDS.small).foregroundStyle(targetColor)
@@ -140,7 +140,7 @@ struct ProjectPageHeader: View {
                         Text(c.name).font(NDS.small).foregroundStyle(NDS.textTertiary).lineLimit(1)
                     }
                     .buttonStyle(.plain)
-                    Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(NDS.textTertiary)
+                    Image(systemName: "chevron.right").scaledFont(8).foregroundStyle(NDS.textTertiary)
                 }
             }
         }
@@ -309,7 +309,7 @@ struct InitiativePage: View {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack(spacing: 11) {
                         Image(systemName: ini.icon ?? "flag.fill")
-                            .font(.system(size: 26)).foregroundStyle(NDS.brand)
+                            .scaledFont(26).foregroundStyle(NDS.brand)
                         TextField("Untitled initiative", text: $nameDraft, onCommit: {
                             store.renameInitiative(initiativeID, name: nameDraft)
                         })
@@ -347,7 +347,7 @@ struct InitiativePage: View {
                                         Spacer()
                                         let open = store.openCount(forProject: p.id)
                                         if open > 0 { Text("\(open) open").font(NDS.tiny).foregroundStyle(NDS.textTertiary) }
-                                        Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(NDS.textTertiary)
+                                        Image(systemName: "chevron.right").scaledFont(10).foregroundStyle(NDS.textTertiary)
                                     }
                                     .padding(.horizontal, 10).padding(.vertical, 8)
                                     .contentShape(Rectangle())
@@ -421,7 +421,7 @@ struct MeetingNotesPage: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(meeting.displayTitle).font(.system(size: 26, weight: .bold))
+            Text(meeting.displayTitle).scaledFont(26, weight: .bold)
             Text(Self.dateLine(meeting)).font(.callout).foregroundStyle(.secondary)
             if !meeting.attendees.isEmpty {
                 Text(meeting.attendees.joined(separator: ", "))

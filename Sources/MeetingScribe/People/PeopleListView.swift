@@ -462,7 +462,7 @@ struct PeopleListView: View {
                 // Manage tags — rename/delete (store methods existed but had no
                 // UI, so a typo'd tag was permanent). (FT3-1)
                 Button { showTagManager = true } label: {
-                    Image(systemName: "slider.horizontal.3").font(.system(size: 12))
+                    Image(systemName: "slider.horizontal.3").scaledFont(12)
                 }
                 .buttonStyle(.borderless).help("Manage tags").padding(.trailing)
             }
@@ -547,9 +547,9 @@ private struct SnapshotPersonRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "person.circle.fill")
-                .font(.system(size: 26)).foregroundStyle(NDS.brand.opacity(0.7))
+                .scaledFont(26).foregroundStyle(NDS.brand.opacity(0.7))
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.name).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                Text(row.name).scaledFont(13.5, weight: .semibold).lineLimit(1)
                 if !row.subtitle.isEmpty {
                     Text(row.subtitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
                 }
@@ -577,11 +577,11 @@ private struct PersonRow: View {
             MSAvatar(name: person.displayName, size: 28)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(person.displayName).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                    Text(person.displayName).scaledFont(13.5, weight: .semibold).lineLimit(1)
                     // Relationship type badge — only shown when type is set.
                     if person.relationshipType != .unset {
                         Text(person.relationshipType.emoji)
-                            .font(.system(size: 11))
+                            .scaledFont(11)
                             .help(person.relationshipType.displayName)
                     }
                 }
@@ -650,7 +650,7 @@ struct DuplicateReviewSheet: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if visible.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle").font(.system(size: 36)).foregroundStyle(.secondary)
+                    Image(systemName: "checkmark.circle").scaledFont(36).foregroundStyle(.secondary)
                     Text("No likely duplicates found.").foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -682,9 +682,9 @@ struct DuplicateReviewSheet: View {
         let loser = aScore >= bScore ? pair.b : pair.a
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(pair.a.displayName).font(.system(size: 13, weight: .semibold))
+                Text(pair.a.displayName).scaledFont(13, weight: .semibold)
                 Text("·").foregroundStyle(.secondary)
-                Text(pair.b.displayName).font(.system(size: 13, weight: .semibold))
+                Text(pair.b.displayName).scaledFont(13, weight: .semibold)
                 Spacer()
                 Text(pair.score >= 1 ? "shared email" : "\(Int(pair.score * 100))% name match")
                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary)

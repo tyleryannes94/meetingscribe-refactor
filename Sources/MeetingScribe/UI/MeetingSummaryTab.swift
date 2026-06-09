@@ -53,7 +53,7 @@ extension UnifiedMeetingDetail {
                     }
                     ForEach(decs.prefix(3)) { d in
                         HStack(spacing: 8) {
-                            Image(systemName: "checkmark.seal").font(.system(size: 12))
+                            Image(systemName: "checkmark.seal").scaledFont(12)
                                 .foregroundStyle(NDS.brand.opacity(0.7))
                             Text(d.text).font(NDS.small).foregroundStyle(NDS.textSecondary).lineLimit(1)
                             Spacer(minLength: 0)
@@ -77,7 +77,7 @@ extension UnifiedMeetingDetail {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: summaryExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10, weight: .semibold)).foregroundStyle(NDS.textTertiary)
+                            .scaledFont(10, weight: .semibold).foregroundStyle(NDS.textTertiary)
                         Label("Summary", systemImage: "sparkles")
                             .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                         Spacer()
@@ -168,7 +168,7 @@ extension UnifiedMeetingDetail {
     private var emptySummaryView: some View {
         VStack(spacing: 16) {
             Image(systemName: "sparkles")
-                .font(.system(size: 36))
+                .scaledFont(36)
                 .foregroundStyle(.secondary)
             Text("No summary")
                 .font(.headline)
@@ -319,7 +319,7 @@ private struct InlineActionItemRow: View {
             } label: {
                 Image(systemName: item.status == .completed
                     ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 16))
+                    .scaledFont(16)
                     .foregroundStyle(item.status == .completed ? .green : .secondary)
             }
             .buttonStyle(.plain)

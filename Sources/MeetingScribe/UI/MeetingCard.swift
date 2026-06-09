@@ -194,7 +194,7 @@ struct MeetingCard: View {
     private func meterRow(label: String, level: Float, tint: Color) -> some View {
         HStack(spacing: 6) {
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .scaledFont(10, weight: .medium)
                 .foregroundStyle(NDS.textTertiary)
                 .frame(width: 28, alignment: .leading)
             AudioLevelMeter(level: level, tint: tint, bars: 12, height: 16)
@@ -271,7 +271,7 @@ struct MeetingCard: View {
                 StatusPulseDot(color: NDS.selectColor("orange"), size: 8)
                 Text("Transcribing")
             }
-            .font(.system(size: 11, weight: .medium))
+            .scaledFont(11, weight: .medium)
             .foregroundStyle(NDS.selectColor("orange"))
             .padding(.horizontal, 8).padding(.vertical, 2)
             .background(NDS.selectColor("orange").opacity(0.12), in: Capsule())
@@ -280,13 +280,13 @@ struct MeetingCard: View {
                 Circle().fill(NDS.selectColor("green")).frame(width: 6, height: 6)
                 Text("Ready")
             }
-            .font(.system(size: 11, weight: .medium))
+            .scaledFont(11, weight: .medium)
             .foregroundStyle(NDS.selectColor("green"))
             .padding(.horizontal, 8).padding(.vertical, 2)
             .background(NDS.selectColor("green").opacity(0.16), in: Capsule())
         } else {
             Text("No transcript")
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(11, weight: .medium)
                 .foregroundStyle(NDS.textSecondary)
                 .padding(.horizontal, 8).padding(.vertical, 2)
                 .background(NDS.fieldBg, in: Capsule())
@@ -381,7 +381,7 @@ struct TagChipMini: View {
     var body: some View {
         let color = Color(hex: tag.colorHex ?? "") ?? NDS.brand
         HStack(spacing: 3) {
-            if let s = tag.symbol { Image(systemName: s).font(.system(size: 9)) }
+            if let s = tag.symbol { Image(systemName: s).scaledFont(9) }
             Text(tag.name).font(.caption2.weight(.medium))
         }
         .padding(.horizontal, 6).padding(.vertical, 2)

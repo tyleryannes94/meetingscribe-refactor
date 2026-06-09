@@ -80,7 +80,7 @@ struct PreMeetingBriefView: View {
             ForEach(openItems.prefix(10)) { item in
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "circle")
-                        .font(.system(size: 14))
+                        .scaledFont(14)
                         .foregroundStyle(.secondary)
                         .padding(.top, 1)
                     VStack(alignment: .leading, spacing: 2) {
@@ -142,7 +142,7 @@ struct PreMeetingBriefView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "person.2.slash")
-                .font(.system(size: 32))
+                .scaledFont(32)
                 .foregroundStyle(.secondary)
             Text("No prior meetings found")
                 .font(.callout.weight(.medium))

@@ -133,7 +133,7 @@ struct PeopleInsightsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: icon).foregroundStyle(NDS.brand)
-                Text(title).font(.system(size: 15, weight: .semibold))
+                Text(title).scaledFont(15, weight: .semibold)
                 Spacer()
                 Text(subtitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
             }
@@ -146,9 +146,9 @@ struct PeopleInsightsView: View {
         Button { onOpen(person.id) } label: {
             HStack(spacing: 10) {
                 Circle().fill(NDS.selectColor(person.displayName)).frame(width: 26, height: 26)
-                    .overlay(Text(initials(person.displayName)).font(.system(size: 11, weight: .bold)).foregroundStyle(.white))
+                    .overlay(Text(initials(person.displayName)).scaledFont(11, weight: .bold).foregroundStyle(.white))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(person.displayName).font(.system(size: 13.5, weight: .medium)).foregroundStyle(NDS.textPrimary)
+                    Text(person.displayName).scaledFont(13.5, weight: .medium).foregroundStyle(NDS.textPrimary)
                     let sub = [person.role, person.company].filter { !$0.isEmpty }.joined(separator: " · ")
                     if !sub.isEmpty { Text(sub).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1) }
                 }

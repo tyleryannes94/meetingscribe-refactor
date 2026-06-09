@@ -126,15 +126,15 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "paperplane").foregroundStyle(NDS.brand)
-                    Text("Follow-ups to send").font(.system(size: 15, weight: .semibold))
+                    Text("Follow-ups to send").scaledFont(15, weight: .semibold)
                 }
                 ForEach(items.prefix(4)) { m in
                     HStack(spacing: 8) {
                         Button { router.openMeeting(m) } label: {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(m.displayTitle).font(.system(size: 13, weight: .medium))
+                                Text(m.displayTitle).scaledFont(13, weight: .medium)
                                     .foregroundStyle(NDS.textPrimary).lineLimit(1)
-                                Text(m.startDate, style: .date).font(.system(size: 11))
+                                Text(m.startDate, style: .date).scaledFont(11)
                                     .foregroundStyle(NDS.textTertiary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -173,7 +173,7 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.left.arrow.right").foregroundStyle(NDS.brand)
-                    Text("Commitments").font(.system(size: 15, weight: .semibold))
+                    Text("Commitments").scaledFont(15, weight: .semibold)
                 }
                 commitmentColumn("You owe", items: iOwe)
                 commitmentColumn("Owed to you", items: owed)
@@ -193,7 +193,7 @@ struct TodayView: View {
                         else { router.section = .actions }
                     } label: {
                         HStack(spacing: 8) {
-                            Text(item.title).font(.system(size: 12))
+                            Text(item.title).scaledFont(12)
                                 .foregroundStyle(NDS.textPrimary).lineLimit(1)
                             Spacer()
                             if let owner = item.owner, !owner.isEmpty {
@@ -219,22 +219,22 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal").foregroundStyle(NDS.brand)
-                    Text("Recent decisions").font(.system(size: 15, weight: .semibold))
+                    Text("Recent decisions").scaledFont(15, weight: .semibold)
                 }
                 ForEach(items.prefix(5)) { d in
                     Button {
                         if let m = manager.meeting(forEntityID: d.meetingID) { router.openMeeting(m) }
                     } label: {
                         HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "circle.fill").font(.system(size: 5))
+                            Image(systemName: "circle.fill").scaledFont(5)
                                 .foregroundStyle(NDS.brand).padding(.top, 6)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(d.text)
-                                    .font(.system(size: 13))
+                                    .scaledFont(13)
                                     .foregroundStyle(NDS.textPrimary)
                                     .multilineTextAlignment(.leading)
                                 Text("\(d.meetingTitle) · \(d.date.formatted(date: .abbreviated, time: .omitted))")
-                                    .font(.system(size: 11))
+                                    .scaledFont(11)
                                     .foregroundStyle(NDS.textTertiary)
                             }
                             Spacer()
@@ -277,22 +277,22 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "clock.arrow.circlepath").foregroundStyle(NDS.brand)
-                    Text("On this day").font(.system(size: 15, weight: .semibold))
+                    Text("On this day").scaledFont(15, weight: .semibold)
                 }
                 ForEach(items.prefix(4)) { m in
                     Button { router.openMeeting(m) } label: {
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(m.displayTitle)
-                                    .font(.system(size: 13, weight: .medium))
+                                    .scaledFont(13, weight: .medium)
                                     .foregroundStyle(NDS.textPrimary)
                                 Text(agoString(m.startDate))
-                                    .font(.system(size: 11))
+                                    .scaledFont(11)
                                     .foregroundStyle(NDS.textTertiary)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 10, weight: .semibold))
+                                .scaledFont(10, weight: .semibold)
                                 .foregroundStyle(NDS.textTertiary)
                         }
                         .padding(.vertical, 6).padding(.horizontal, 10)
@@ -340,7 +340,7 @@ struct TodayView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "waveform").foregroundStyle(NDS.brand.opacity(0.7))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(n.title).font(.system(size: 13.5, weight: .medium)).lineLimit(1)
+                                Text(n.title).scaledFont(13.5, weight: .medium).lineLimit(1)
                                 if !n.snippet.isEmpty {
                                     Text(n.snippet).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
                                 }
@@ -363,7 +363,7 @@ struct TodayView: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(todayLong())
-                    .font(.system(size: 30, weight: .bold, design: .default))
+                    .scaledFont(30, weight: .bold)
                     .foregroundStyle(.primary)
                 Text(subtitleString())
                     .font(.callout)
@@ -394,9 +394,9 @@ struct TodayView: View {
                     Task { await manager.stopRecording() }
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "stop.circle.fill").font(.system(size: 16))
+                        Image(systemName: "stop.circle.fill").scaledFont(16)
                         Text("Stop recording")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(14, weight: .semibold)
                     }
                     .frame(maxWidth: .infinity).frame(height: 42)
                 }
@@ -406,9 +406,9 @@ struct TodayView: View {
                     Task { await manager.startRecording(for: nil) }
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "record.circle.fill").font(.system(size: 16))
+                        Image(systemName: "record.circle.fill").scaledFont(16)
                         Text("Record Meeting")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(14, weight: .semibold)
                     }
                     .frame(maxWidth: .infinity).frame(height: 42)
                 }
@@ -443,13 +443,13 @@ struct TodayView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("UP NEXT")
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(11, weight: .semibold)
                         .foregroundStyle(NDS.brand).tracking(0.6)
                     Text(m.displayTitle)
-                        .font(.system(size: 15, weight: .semibold))
+                        .scaledFont(15, weight: .semibold)
                         .foregroundStyle(NDS.textPrimary).lineLimit(1)
                     Text(relativeStart(m))
-                        .font(.system(size: 12)).foregroundStyle(NDS.textSecondary)
+                        .scaledFont(12).foregroundStyle(NDS.textSecondary)
                 }
                 Spacer()
                 if m.conferenceURL != nil {
@@ -549,7 +549,7 @@ struct TodayView: View {
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "calendar.badge.checkmark")
-                .font(.system(size: 36)).foregroundStyle(.secondary)
+                .scaledFont(36).foregroundStyle(.secondary)
             Text("Nothing on today's calendar").font(.headline)
             Text("Use a quick action above, or import an existing recording.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -577,7 +577,7 @@ struct TodayView: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 13, weight: .semibold))
+            .scaledFont(13, weight: .semibold)
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .tracking(0.6)

@@ -16,7 +16,7 @@ struct TagManagementSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Manage tags").font(.system(size: 18, weight: .bold))
+                Text("Manage tags").scaledFont(18, weight: .bold)
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }

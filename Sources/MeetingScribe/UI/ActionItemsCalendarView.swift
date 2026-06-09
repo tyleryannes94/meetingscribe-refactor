@@ -65,7 +65,7 @@ extension ActionItemsView {
                     .foregroundStyle(isToday ? NDS.brand : NDS.textSecondary)
                 ForEach(Array(tasks.prefix(3))) { t in
                     Text(t.title)
-                        .font(.system(size: 9)).lineLimit(1)
+                        .scaledFont(9).lineLimit(1)
                         .padding(.horizontal, 4).padding(.vertical, 1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(taskDueTint(t).opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
@@ -74,7 +74,7 @@ extension ActionItemsView {
                         .onTapGesture { selectedTaskID = t.id }
                 }
                 if tasks.count > 3 {
-                    Text("+\(tasks.count - 3) more").font(.system(size: 8)).foregroundStyle(NDS.textTertiary)
+                    Text("+\(tasks.count - 3) more").scaledFont(8).foregroundStyle(NDS.textTertiary)
                 }
                 Spacer(minLength: 0)
             }

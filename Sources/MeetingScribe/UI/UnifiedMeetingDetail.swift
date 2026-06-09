@@ -154,7 +154,7 @@ struct UnifiedMeetingDetail: View {
     }
     func placeholder(systemImage: String, title: String, message: String) -> some View {
         VStack(spacing: 8) {
-            Image(systemName: systemImage).font(.system(size: 36)).foregroundStyle(.secondary)
+            Image(systemName: systemImage).scaledFont(36).foregroundStyle(.secondary)
             Text(title).font(.headline)
             Text(message).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }

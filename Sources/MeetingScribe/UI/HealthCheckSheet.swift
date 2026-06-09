@@ -22,7 +22,7 @@ struct HealthCheckSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Health check").font(.system(size: 20, weight: .bold))
+            Text("Health check").scaledFont(20, weight: .bold)
             if running {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -33,9 +33,9 @@ struct HealthCheckSheet: View {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: r.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .foregroundStyle(r.ok ? .green : .orange)
-                        .font(.system(size: 15))
+                        .scaledFont(15)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(r.name).font(.system(size: 13, weight: .semibold))
+                        Text(r.name).scaledFont(13, weight: .semibold)
                         Text(r.detail).font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

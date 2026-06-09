@@ -20,9 +20,9 @@ struct ProjectRail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text("📁").font(.system(size: 15))
+                Text("📁").scaledFont(15)
                 Text("Workspace")
-                    .font(.system(size: 14, weight: .bold))
+                    .scaledFont(14, weight: .bold)
                 Spacer()
             }
             .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 8)
@@ -30,8 +30,8 @@ struct ProjectRail: View {
             // Prominent, obvious primary action.
             Button { creating = true } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "square.and.pencil").font(.system(size: 12, weight: .semibold))
-                    Text("New page").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "square.and.pencil").scaledFont(12, weight: .semibold)
+                    Text("New page").scaledFont(13, weight: .semibold)
                     Spacer()
                 }
                 .foregroundStyle(.white)
@@ -153,7 +153,7 @@ struct ProjectRail: View {
         } content: {
             HStack(spacing: 8) {
                 Image(systemName: "doc.text")
-                    .font(.system(size: 13))
+                    .scaledFont(13)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 0) {
@@ -183,7 +183,7 @@ struct ProjectRail: View {
         } content: {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 13))
+                    .scaledFont(13)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                     .frame(width: 16)
                 Text(title).lineLimit(1).font(NDS.body)
@@ -276,7 +276,7 @@ struct PageTreeNode: View {
                 if isOpen { expanded.remove(project.id) } else { expanded.insert(project.id) }
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+                    .scaledFont(9, weight: .bold)
                     .rotationEffect(.degrees(isOpen ? 90 : 0))
                     .foregroundStyle(NDS.textTertiary)
                     .frame(width: 14, height: 14)
@@ -286,7 +286,7 @@ struct PageTreeNode: View {
             .disabled(children.isEmpty)
 
             Image(systemName: project.icon ?? "doc.text")
-                .font(.system(size: 12))
+                .scaledFont(12)
                 .foregroundStyle(isSelected ? NDS.textPrimary : NDS.textSecondary)
                 .frame(width: 15)
             Text(project.name).font(NDS.body).lineLimit(1)
@@ -294,7 +294,7 @@ struct PageTreeNode: View {
             Spacer(minLength: 4)
             if hovering {
                 Button { addingChild = true; expanded.insert(project.id) } label: {
-                    Image(systemName: "plus").font(.system(size: 10, weight: .bold)).foregroundStyle(NDS.textTertiary)
+                    Image(systemName: "plus").scaledFont(10, weight: .bold).foregroundStyle(NDS.textTertiary)
                 }
                 .buttonStyle(.plain).help("Add sub-page")
             } else {
@@ -359,14 +359,14 @@ struct InitiativeNode: View {
                     if isOpen { expandedInitiatives.remove(initiative.id) } else { expandedInitiatives.insert(initiative.id) }
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
+                        .scaledFont(9, weight: .bold)
                         .rotationEffect(.degrees(isOpen ? 90 : 0))
                         .foregroundStyle(NDS.textTertiary).frame(width: 14, height: 14)
                 }
                 .buttonStyle(.plain).opacity(projects.isEmpty ? 0.3 : 1)
 
                 Image(systemName: initiative.icon ?? "flag.fill")
-                    .font(.system(size: 12)).foregroundStyle(NDS.brand).frame(width: 15)
+                    .scaledFont(12).foregroundStyle(NDS.brand).frame(width: 15)
                 Text(initiative.name).font(NDS.body.weight(.medium)).lineLimit(1)
                     .foregroundStyle(isSelected ? NDS.textPrimary : NDS.textSecondary)
                 Spacer(minLength: 4)
@@ -377,7 +377,7 @@ struct InitiativeNode: View {
                         expandedInitiatives.insert(initiative.id)
                         selectedInitiativeID = nil; selectedMeetingID = nil; selectedProjectID = p.id
                     } label: {
-                        Image(systemName: "plus").font(.system(size: 10, weight: .bold)).foregroundStyle(NDS.textTertiary)
+                        Image(systemName: "plus").scaledFont(10, weight: .bold).foregroundStyle(NDS.textTertiary)
                     }
                     .buttonStyle(.plain).help("Add project to initiative")
                 } else {

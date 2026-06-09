@@ -55,9 +55,9 @@ private struct SuggestionRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "person.circle").font(.system(size: 22)).foregroundStyle(NDS.textTertiary)
+            Image(systemName: "person.circle").scaledFont(22).foregroundStyle(NDS.textTertiary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(headline).font(.system(size: 13, weight: .semibold))
+                Text(headline).scaledFont(13, weight: .semibold)
                 if !suggestion.summary.isEmpty {
                     Text(suggestion.summary).font(NDS.small).foregroundStyle(NDS.textSecondary).lineLimit(2)
                 }
@@ -133,10 +133,10 @@ struct ReconnectView: View {
                         Button { onOpen(item.person) } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "person.circle")
-                                    .font(.system(size: 22)).foregroundStyle(NDS.textTertiary)
+                                    .scaledFont(22).foregroundStyle(NDS.textTertiary)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.person.displayName)
-                                        .font(.system(size: 13, weight: .semibold))
+                                        .scaledFont(13, weight: .semibold)
                                         .foregroundStyle(NDS.textPrimary)
                                     Text(Self.lastText(item.last))
                                         .font(NDS.tiny).foregroundStyle(NDS.textTertiary)

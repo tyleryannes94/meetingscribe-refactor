@@ -132,12 +132,12 @@ struct TranscriptSyncView: View {
         HStack(spacing: 10) {
             // Search
             HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(NDS.textTertiary)
+                Image(systemName: "magnifyingglass").scaledFont(11).foregroundStyle(NDS.textTertiary)
                 TextField("Search transcript…", text: $searchText)
-                    .font(.system(size: 12))
+                    .scaledFont(12)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                        Image(systemName: "xmark.circle.fill").scaledFont(11)
                             .foregroundStyle(NDS.textTertiary)
                     }.buttonStyle(.plain)
                     .accessibilityLabel("Clear search")
@@ -156,7 +156,7 @@ struct TranscriptSyncView: View {
                             selectedSpeaker = selectedSpeaker == spk ? nil : spk
                         } label: {
                             Text(spk)
-                                .font(.system(size: 11, weight: .medium))
+                                .scaledFont(11, weight: .medium)
                                 .foregroundStyle(selectedSpeaker == spk
                                     ? .white : (speakerColors[spk] ?? NDS.brand))
                                 .padding(.horizontal, 9).padding(.vertical, 4)
@@ -181,9 +181,9 @@ struct TranscriptSyncView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: syncActive ? "waveform.badge.checkmark" : "waveform")
-                            .font(.system(size: 11))
+                            .scaledFont(11)
                         Text(syncActive ? "Synced" : "Sync")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(11, weight: .medium)
                     }
                     .foregroundStyle(syncActive ? NDS.brand : NDS.textSecondary)
                     .padding(.horizontal, 8).padding(.vertical, 4)
@@ -235,7 +235,7 @@ struct TranscriptSyncView: View {
 
     private var emptyTranscriptView: some View {
         VStack(spacing: 10) {
-            Image(systemName: "waveform").font(.system(size: 36)).foregroundStyle(NDS.textTertiary)
+            Image(systemName: "waveform").scaledFont(36).foregroundStyle(NDS.textTertiary)
             Text("No transcript").font(.headline)
             Text("This meeting has no transcript yet. Start a Transcribe Now job to generate one.")
                 .font(NDS.small).foregroundStyle(NDS.textSecondary).multilineTextAlignment(.center)
@@ -307,12 +307,12 @@ private struct TranscriptRow: View {
                 HStack(spacing: 4) {
                     if hasAudio && isHovered {
                         Image(systemName: "play.fill")
-                            .font(.system(size: 8))
+                            .scaledFont(8)
                             .foregroundStyle(speakerColor)
                             .transition(.opacity)
                     }
                     Text(segment.timeLabel)
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .font(.system(size: 11, weight: .medium).monospacedDigit()) // design-lint:allow
                         .foregroundStyle(hasAudio ? speakerColor.opacity(0.8) : NDS.textTertiary)
                 }
                 .frame(width: 68, alignment: .trailing)
@@ -330,14 +330,14 @@ private struct TranscriptRow: View {
 
             // Speaker label
             Text(segment.speaker)
-                .font(.system(size: 12, weight: .semibold))
+                .scaledFont(12, weight: .semibold)
                 .foregroundStyle(speakerColor)
                 .frame(width: 64, alignment: .leading)
                 .padding(.top, 2)
 
             // Utterance text
             highlightedText
-                .font(.system(size: 13))
+                .scaledFont(13)
                 .foregroundStyle(NDS.textPrimary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)

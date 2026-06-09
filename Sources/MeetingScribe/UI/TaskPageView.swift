@@ -80,7 +80,7 @@ struct TaskPageView: View {
         HStack(spacing: 6) {
             Button(action: onClose) {
                 HStack(spacing: 4) {
-                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
+                    Image(systemName: "chevron.left").scaledFont(11, weight: .semibold)
                     Text(breadcrumb).font(NDS.small)
                 }
                 .foregroundStyle(NDS.textSecondary)
@@ -121,7 +121,7 @@ struct TaskPageView: View {
         HStack(alignment: .center, spacing: 12) {
             Button { store.setStatus(itemID, status: item.status == .completed ? .open : .completed) } label: {
                 Image(systemName: item.status.systemImage)
-                    .font(.system(size: 22))
+                    .scaledFont(22)
                     .foregroundStyle(statusColor(item.status))
             }
             .buttonStyle(.plain)
@@ -362,7 +362,7 @@ struct TaskPageView: View {
                 }
                 .disabled(newLabel.trimmingCharacters(in: .whitespaces).isEmpty)
             } label: {
-                Image(systemName: "plus.circle").font(.system(size: 12)).foregroundStyle(NDS.textTertiary)
+                Image(systemName: "plus.circle").scaledFont(12).foregroundStyle(NDS.textTertiary)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             TextField("New label", text: $newLabel, onCommit: {
@@ -420,7 +420,7 @@ struct TaskPageView: View {
                 }
             }
             HStack(spacing: 8) {
-                Image(systemName: "plus").font(.system(size: 11)).foregroundStyle(NDS.textTertiary)
+                Image(systemName: "plus").scaledFont(11).foregroundStyle(NDS.textTertiary)
                 TextField("Add subtask…", text: $newSubtask, onCommit: addSubtask)
                     .textFieldStyle(.plain).font(NDS.body).onSubmit(addSubtask)
             }

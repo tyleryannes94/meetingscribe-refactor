@@ -9,7 +9,7 @@ extension ActionItemsView {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 HStack(spacing: 9) {
-                    Text("✅").font(.system(size: 26))
+                    Text("✅").scaledFont(26)
                     Text("Tasks").font(NDS.title)
                     Spacer()
                 }
@@ -202,11 +202,11 @@ extension ActionItemsView {
                     selectedMeetingID = nil; selectedTaskID = nil; selectedProjectID = k.id
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: k.icon ?? "doc.text").font(.system(size: 13))
+                        Image(systemName: k.icon ?? "doc.text").scaledFont(13)
                             .foregroundStyle(NDS.selectColor(k.name))
                         Text(k.name).font(NDS.body).underline()
                         Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(NDS.textTertiary)
+                        Image(systemName: "chevron.right").scaledFont(10).foregroundStyle(NDS.textTertiary)
                     }
                     .padding(.vertical, 4)
                     .contentShape(Rectangle())
@@ -261,7 +261,7 @@ extension ActionItemsView {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 9) {
-                    Text("📋").font(.system(size: 26))
+                    Text("📋").scaledFont(26)
                     Text(headerTitle).font(NDS.title)
                 }
                 Text(subtitle)
@@ -285,7 +285,7 @@ extension ActionItemsView {
     func stat(label: String, value: Int, color: Color) -> some View {
         HStack(spacing: 6) {
             Circle().fill(color).frame(width: 7, height: 7)
-            Text("\(value)").font(.system(size: 14, weight: .semibold).monospacedDigit())
+            Text("\(value)").font(.system(size: 14, weight: .semibold).monospacedDigit()) // design-lint:allow
             Text(label).font(NDS.small).foregroundStyle(NDS.textSecondary)
         }
         .padding(.horizontal, 11).padding(.vertical, 6)
@@ -331,7 +331,7 @@ extension ActionItemsView {
                 Button { filter = .all; priorityFilter = .any } label: {
                     HStack(spacing: 4) {
                         Text(filterSummary).font(NDS.small)
-                        Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                        Image(systemName: "xmark").scaledFont(9, weight: .bold)
                     }
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(NDS.brand.opacity(0.14), in: Capsule())
@@ -414,8 +414,8 @@ extension ActionItemsView {
         let selected = viewMode == m
         return Button { viewMode = m } label: {
             HStack(spacing: 5) {
-                Image(systemName: m.systemImage).font(.system(size: 11))
-                Text(m.label).font(.system(size: 12.5, weight: selected ? .semibold : .regular))
+                Image(systemName: m.systemImage).scaledFont(11)
+                Text(m.label).scaledFont(12.5, weight: selected ? .semibold : .regular)
             }
             .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
             .padding(.horizontal, 9).padding(.vertical, 5)
@@ -428,7 +428,7 @@ extension ActionItemsView {
     func quickViewChip(_ label: String, active: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 12, weight: active ? .semibold : .regular))
+                .scaledFont(12, weight: active ? .semibold : .regular)
                 .padding(.horizontal, 9).padding(.vertical, 4)
                 .background(active ? NDS.brand.opacity(0.16) : Color.clear, in: Capsule())
                 .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
@@ -520,7 +520,7 @@ extension ActionItemsView {
     var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "checklist")
-                .font(.system(size: 40)).foregroundStyle(.secondary)
+                .scaledFont(40).foregroundStyle(.secondary)
             Text("No action items").font(.headline)
             Text(emptyMessage).font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

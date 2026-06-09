@@ -123,7 +123,7 @@ struct GlobalSearchView: View {
             if results.isEmpty && commands.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: query.isEmpty ? "sparkle.magnifyingglass" : "questionmark.folder")
-                        .font(.system(size: 30)).foregroundStyle(.secondary)
+                        .scaledFont(30).foregroundStyle(.secondary)
                     Text(query.isEmpty ? "Type to search, or run a command (e.g. \"record\", \"new task\")"
                                        : "No matches for “\(query)”")
                         .font(.callout).foregroundStyle(.secondary)
@@ -155,7 +155,7 @@ struct GlobalSearchView: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(.system(size: 10, weight: .semibold)).tracking(0.6)
+            .scaledFont(10, weight: .semibold).tracking(0.6)
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 2)

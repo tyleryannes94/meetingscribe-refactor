@@ -17,7 +17,7 @@ struct CustomPropertyRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: def.type.systemImage)
-                .font(.system(size: 12)).foregroundStyle(NDS.textTertiary).frame(width: 16)
+                .scaledFont(12).foregroundStyle(NDS.textTertiary).frame(width: 16)
             TextField("Property", text: $nameDraft)
                 .textFieldStyle(.plain).font(NDS.small).foregroundStyle(NDS.textSecondary)
                 .frame(width: 120, alignment: .leading)

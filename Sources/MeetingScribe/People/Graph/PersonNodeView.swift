@@ -47,7 +47,7 @@ struct PersonNodeView: View {
                 .overlay(alignment: .topTrailing) {
                     if node.isPinned {
                         Image(systemName: "pin.fill")
-                            .font(.system(size: 9, weight: .bold))
+                            .scaledFont(9, weight: .bold)
                             .foregroundStyle(.white)
                             .padding(3)
                             .background(NDS.brand, in: Circle())
@@ -56,7 +56,7 @@ struct PersonNodeView: View {
                 }
 
             Text(node.person.displayName)
-                .font(.system(size: 11, weight: .semibold))
+                .scaledFont(11, weight: .semibold)
                 .foregroundStyle(NDS.textPrimary)
                 .lineLimit(1)
                 .frame(maxWidth: 96)
@@ -65,7 +65,7 @@ struct PersonNodeView: View {
                 HStack(spacing: 3) {
                     ForEach(tags) { pill in
                         Text(pill.name)
-                            .font(.system(size: 8, weight: .medium))
+                            .scaledFont(8, weight: .medium)
                             .lineLimit(1)
                             .padding(.horizontal, 5).padding(.vertical, 1.5)
                             .foregroundStyle(pill.color)
@@ -73,7 +73,7 @@ struct PersonNodeView: View {
                     }
                     if overflowCount > 0 {
                         Text("+\(overflowCount)")
-                            .font(.system(size: 8, weight: .medium))
+                            .scaledFont(8, weight: .medium)
                             .foregroundStyle(NDS.textTertiary)
                     }
                 }

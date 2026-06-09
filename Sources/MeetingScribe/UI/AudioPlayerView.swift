@@ -36,7 +36,7 @@ struct AudioPlayerView: View {
 
                 Button { controller.togglePlay() } label: {
                     Image(systemName: controller.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 30))
+                        .scaledFont(30)
                 }
                 .buttonStyle(.borderless)
                 .disabled(!controller.ready)

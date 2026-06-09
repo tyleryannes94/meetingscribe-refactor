@@ -38,7 +38,7 @@ struct StayConnectedSection: View {
                     Image(systemName: "heart.circle")
                         .foregroundStyle(.pink)
                     Text("Stay connected")
-                        .font(.system(size: 15, weight: .semibold))
+                        .scaledFont(15, weight: .semibold)
                     Spacer()
                 }
 
@@ -51,17 +51,17 @@ struct StayConnectedSection: View {
                                 .frame(width: 36, height: 36)
                                 .overlay(
                                     Text(String(person.displayName.prefix(1)))
-                                        .font(.system(size: 14, weight: .bold))
+                                        .scaledFont(14, weight: .bold)
                                         .foregroundStyle(NDS.brand)
                                 )
                             Text(person.relationshipType.emoji)
-                                .font(.system(size: 10))
+                                .scaledFont(10)
                                 .offset(x: 4, y: 4)
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(person.displayName)
-                                .font(.system(size: 13, weight: .semibold))
+                                .scaledFont(13, weight: .semibold)
                             Text("\(overdueDays(person)) day\(overdueDays(person) == 1 ? "" : "s") overdue")
                                 .font(.caption)
                                 .foregroundStyle(.orange)

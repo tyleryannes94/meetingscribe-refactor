@@ -61,7 +61,7 @@ struct StandupDigestSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Daily standup").font(.system(size: 18, weight: .bold))
+                Text("Daily standup").scaledFont(18, weight: .bold)
                 Spacer()
                 Button(copied ? "Copied" : "Copy") {
                     NSPasteboard.general.clearContents()

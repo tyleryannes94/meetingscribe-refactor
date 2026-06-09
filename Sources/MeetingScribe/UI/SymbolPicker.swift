@@ -23,7 +23,7 @@ struct SymbolPicker: View {
                             dismiss()
                         } label: {
                             Image(systemName: name)
-                                .font(.system(size: 16, weight: .medium))
+                                .scaledFont(16, weight: .medium)
                                 .frame(width: 34, height: 34)
                                 .foregroundStyle(name == selection ? .white : tint)
                                 .background(

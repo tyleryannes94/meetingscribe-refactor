@@ -137,7 +137,7 @@ struct QuickNotesView: View {
         } else {
             VStack(spacing: 8) {
                 Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: 40)).foregroundStyle(.secondary)
+                    .scaledFont(40).foregroundStyle(.secondary)
                 Text("Pick a note from the sidebar.").foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

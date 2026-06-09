@@ -10,7 +10,7 @@ struct VaultMigrationSheet: View {
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "folder.badge.gear")
-                .font(.system(size: 48))
+                .scaledFont(48)
                 .foregroundStyle(.blue)
 
             Text("Vault Layout Update")

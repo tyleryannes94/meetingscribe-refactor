@@ -30,7 +30,7 @@ extension UnifiedMeetingDetail {
                         }
                         if m.attendees.count > 12 {
                             Text("+\(m.attendees.count - 12)")
-                                .font(.system(size: 11))
+                                .scaledFont(11)
                                 .foregroundStyle(NDS.textTertiary)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
                                 .background(NDS.fieldBg, in: Capsule())
@@ -40,7 +40,7 @@ extension UnifiedMeetingDetail {
                             Button { addAllAttendeesToPeople(m) } label: {
                                 Label("Add \(unaddedAttendeeCount(m)) to People",
                                       systemImage: "person.crop.circle.badge.plus")
-                                    .font(.system(size: 11))
+                                    .scaledFont(11)
                             }
                             .buttonStyle(.borderless)
                         }
@@ -54,10 +54,10 @@ extension UnifiedMeetingDetail {
             if let url = meeting?.conferenceURL, let u = URL(string: url) {
                 HStack(spacing: 6) {
                     Image(systemName: "video.fill")
-                        .font(.system(size: 11))
+                        .scaledFont(11)
                         .foregroundStyle(NDS.brand)
                     Link(url, destination: u)
-                        .font(.system(size: 12))
+                        .scaledFont(12)
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 20)
@@ -96,12 +96,12 @@ extension UnifiedMeetingDetail {
         if editingHeader {
             VStack(alignment: .leading, spacing: 6) {
                 TextField("Title", text: $titleDraft)
-                    .font(.system(size: 22, weight: .bold))
+                    .scaledFont(22, weight: .bold)
                     .textFieldStyle(.plain)
                     .padding(6)
                     .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 6))
                 TextField("Quick description (optional)", text: $descriptionDraft, axis: .vertical)
-                    .font(.system(size: 13))
+                    .scaledFont(13)
                     .foregroundStyle(NDS.textSecondary)
                     .textFieldStyle(.plain)
                     .padding(6)
@@ -118,12 +118,12 @@ extension UnifiedMeetingDetail {
         } else {
             // Title — large, prominent
             Text(meeting?.displayTitle ?? "Untitled")
-                .font(.system(size: 24, weight: .bold))
+                .scaledFont(24, weight: .bold)
                 .foregroundStyle(NDS.textPrimary)
                 .textSelection(.enabled)
             if let d = meeting?.userDescription, !d.isEmpty {
                 Text(d)
-                    .font(.system(size: 13))
+                    .scaledFont(13)
                     .foregroundStyle(NDS.textSecondary)
             }
         }
@@ -134,7 +134,7 @@ extension UnifiedMeetingDetail {
     private var metaLine: some View {
         HStack(spacing: 8) {
             Text(timeRange())
-                .font(.system(size: 12))
+                .scaledFont(12)
                 .foregroundStyle(NDS.textSecondary)
             if case .past = mode {
                 MeetingHealthBadge(health: meeting?.health)
@@ -143,7 +143,7 @@ extension UnifiedMeetingDetail {
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.mini)
                     Text("Processing…")
-                        .font(.system(size: 11))
+                        .scaledFont(11)
                         .foregroundStyle(NDS.textTertiary)
                 }
             }
@@ -200,7 +200,7 @@ extension UnifiedMeetingDetail {
             if manager.isTranscribingMeeting(m) {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("Processing…").font(.system(size: 12)).foregroundStyle(NDS.textSecondary)
+                    Text("Processing…").scaledFont(12).foregroundStyle(NDS.textSecondary)
                 }
             } else if manager.hasAudio(for: m) && transcript.isEmpty {
                 Button { manager.transcribeNow(meeting: m) } label: {
@@ -374,8 +374,8 @@ extension UnifiedMeetingDetail {
             // instead of a bare ⋯ icon people miss. (Edit, Re-transcribe,
             // Recover, Export, Reveal all live in here.)
             HStack(spacing: 5) {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 12, weight: .medium))
-                Text("Options").font(.system(size: 12, weight: .medium))
+                Image(systemName: "slider.horizontal.3").scaledFont(12, weight: .medium)
+                Text("Options").scaledFont(12, weight: .medium)
             }
             .padding(.horizontal, 11)
             .frame(height: NDS.buttonSecondaryH)
@@ -740,11 +740,11 @@ private struct AttendeeChip: View {
                     .frame(width: 20, height: 20)
                     .overlay(
                         Text(initials.uppercased())
-                            .font(.system(size: 8, weight: .bold))
+                            .scaledFont(8, weight: .bold)
                             .foregroundStyle(.white)
                     )
                 Text(displayName)
-                    .font(.system(size: 12))
+                    .scaledFont(12)
                     .foregroundStyle(NDS.textSecondary)
                     .lineLimit(1)
                 if existingPerson != nil {
