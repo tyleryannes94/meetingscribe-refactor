@@ -61,6 +61,41 @@ struct ActionItem: Identifiable, Codable, Hashable {
     var notionPageID: String?
     var notionURL: String?
 
+    /// Soft-delete tombstone (P0-3). nil ⇒ live; non-nil ⇒ in Trash and
+    /// recoverable until purged (default 30 days). Optional + defaulted so old
+    /// action_items.json decodes and the synthesized memberwise init still
+    /// accepts the existing call sites that omit it.
+    var deletedAt: Date? = nil
+
+    /// When the task was marked completed (P2-4). Distinct from `updatedAt`
+    /// (which any edit bumps), so "done today / this week" surfaces and
+    /// reporting are accurate. Set on the open→completed transition, cleared on
+    /// reopen. Optional + defaulted for back-compat.
+    var completedAt: Date? = nil
+
+    /// Repeat rule (P2-5). When set, completing the task spawns the next
+    /// instance with the dates rolled forward. nil = one-shot.
+    var recurrence: RecurrenceRule? = nil
+    /// Groups instances of a recurring task (the original's id). nil = not part
+    /// of a series.
+    var seriesID: String? = nil
+
+    /// Extracted from a meeting but owned by someone *else* — a "waiting-on /
+    /// delegated" item (PM-19). nil/false = my own task.
+    var delegated: Bool? = nil
+
+    /// Ids of tasks that must finish before this one can start (PM-2). nil/empty
+    /// = no dependencies.
+    var blockedByIDs: [String]? = nil
+
+    /// Effort estimate in points (PM-4). nil = unestimated. Powers capacity and
+    /// velocity reporting.
+    var estimate: Double? = nil
+
+    /// Values for the project's user-defined database properties (NP-1), keyed
+    /// by PropertyDefinition.id. nil/empty = none set.
+    var properties: [String: PropertyValue]? = nil
+
     var createdAt: Date
     var updatedAt: Date
 
@@ -68,6 +103,8 @@ struct ActionItem: Identifiable, Codable, Hashable {
 
     var subtaskList: [Subtask] { subtasks ?? [] }
     var labels: [String] { labelIDs ?? [] }
+    /// In Trash (soft-deleted) and excluded from all normal views.
+    var isTrashed: Bool { deletedAt != nil }
     /// A task with no originating meeting (created manually or imported).
     var isManual: Bool { meetingID.isEmpty }
     var subtaskProgress: (done: Int, total: Int) {

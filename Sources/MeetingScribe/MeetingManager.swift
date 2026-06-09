@@ -930,6 +930,7 @@ final class MeetingManager: ObservableObject {
     var quickNotes: [QuickNote] { quickNotesController.notes }
     var quickNotesTranscribing: Set<String> { quickNotesController.transcribing }
     var quickNotesPolishing: Set<String> { quickNotesController.polishing }
+    var quickNotesStructuringPrompt: Set<String> { quickNotesController.structuringPrompt }
     var quickNoteErrors: [String: String] { quickNotesController.errors }
 
     func refreshQuickNotes() { quickNotesController.refresh() }
@@ -946,16 +947,22 @@ final class MeetingManager: ObservableObject {
     }
     func reTranscribeQuickNote(_ note: QuickNote) { quickNotesController.reTranscribe(note) }
     func repolishQuickNote(_ note: QuickNote) { quickNotesController.rePolish(note) }
+    func regenerateQuickNotePrompt(_ note: QuickNote) { quickNotesController.generatePrompt(note) }
     func saveQuickNoteTranscript(_ text: String, for note: QuickNote) {
         quickNotesController.saveTranscript(text, for: note)
     }
     func saveQuickNotePolished(_ text: String, for note: QuickNote) {
         quickNotesController.savePolished(text, for: note)
     }
+    func saveQuickNotePrompt(_ text: String, for note: QuickNote) {
+        quickNotesController.savePrompt(text, for: note)
+    }
     func lastErrorForQuickNote(_ note: QuickNote) -> String? { quickNotesController.error(for: note) }
     func isPolishingQuickNote(_ note: QuickNote) -> Bool { quickNotesController.isPolishing(note) }
+    func isStructuringQuickNotePrompt(_ note: QuickNote) -> Bool { quickNotesController.isStructuringPrompt(note) }
     func isTranscribingQuickNote(_ note: QuickNote) -> Bool { quickNotesController.isTranscribing(note) }
     func readQuickNotePolished(_ note: QuickNote) -> String { quickNotesController.readPolished(note) }
+    func readQuickNotePrompt(_ note: QuickNote) -> String { quickNotesController.readPrompt(note) }
     func readQuickNoteTranscript(_ note: QuickNote) -> String { quickNotesController.readTranscript(note) }
     func deleteQuickNote(_ note: QuickNote) { quickNotesController.delete(note) }
     func quickNoteAudioURL(_ note: QuickNote) -> URL { quickNotesController.audioURL(note) }

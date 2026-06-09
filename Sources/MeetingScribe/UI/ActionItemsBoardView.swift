@@ -103,6 +103,10 @@ extension ActionItemsView {
         store.setSortIndex(id, sortIndex: newIndex)
     }
 
+    private static let dueFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "MMM d"; return f
+    }()
+
     func boardCard(_ item: ActionItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             let itemLabels = store.labels(for: item)
@@ -115,6 +119,7 @@ extension ActionItemsView {
                 }
             }
             Text(item.title).font(.caption).lineLimit(3)
+                .strikethrough(item.status == .completed)
             if item.subtaskProgress.total > 0 {
                 Label("\(item.subtaskProgress.done)/\(item.subtaskProgress.total)", systemImage: "checklist")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -125,8 +130,19 @@ extension ActionItemsView {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(priorityColor(item.priority).opacity(0.16), in: Capsule())
                     .foregroundStyle(priorityColor(item.priority))
+                if let due = item.dueDate {
+                    let overdue = due < Calendar.current.startOfDay(for: Date()) && item.status != .completed
+                    let isToday = Calendar.current.isDateInToday(due)
+                    Label(Self.dueFormatter.string(from: due), systemImage: "calendar")
+                        .labelStyle(.titleOnly)
+                        .font(.caption2)
+                        .foregroundStyle(overdue ? Color.red : (isToday ? Color.orange : Color.secondary))
+                }
                 if let name = store.project(for: item)?.name {
                     Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1)
+                }
+                if let owner = item.owner, !owner.isEmpty {
+                    TaskOwnerAvatar(name: owner, size: 16)
                 }
                 Spacer()
                 Menu {
@@ -136,7 +152,11 @@ extension ActionItemsView {
                     Divider()
                     projectMenuItems(for: item)
                     Divider()
-                    Button(role: .destructive) { store.delete(item.id) } label: { Text("Delete") }
+                    Button(role: .destructive) {
+                        let id = item.id, title = item.title
+                        store.delete(id)
+                        ToastCenter.shared.show("Deleted “\(title)”", undoTitle: "Undo") { store.restore(id) }
+                    } label: { Text("Delete") }
                 } label: {
                     Image(systemName: "ellipsis").foregroundStyle(.secondary)
                 }
@@ -149,5 +169,6 @@ extension ActionItemsView {
         .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8)
             .strokeBorder(Color(NSColor.separatorColor).opacity(0.45), lineWidth: 0.5))
+        .opacity(item.status == .completed ? 0.6 : 1)
     }
 }

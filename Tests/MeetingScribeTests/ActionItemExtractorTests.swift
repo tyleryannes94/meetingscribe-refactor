@@ -94,4 +94,30 @@ final class ActionItemExtractorTests: XCTestCase {
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(items.first?.status, .open)
     }
+
+    // MARK: Delegated / waiting-on capture (PM-19)
+
+    private static let delegatedSummary = """
+    ## Action Items
+    - [ ] Me — send the deck (due: unspecified)
+    - [ ] Alex — review the PR (due: unspecified)
+    """
+
+    func testDropsOthersTasksByDefault() {
+        UserDefaults.standard.removeObject(forKey: "captureDelegatedTasks")
+        let items = ActionItemExtractor.extract(from: Self.delegatedSummary, meeting: meeting())
+        XCTAssertEqual(items.map(\.title), ["send the deck"], "others' tasks dropped by default")
+    }
+
+    func testCapturesDelegatedTasksWhenEnabled() {
+        UserDefaults.standard.set(true, forKey: "captureDelegatedTasks")
+        defer { UserDefaults.standard.removeObject(forKey: "captureDelegatedTasks") }
+        let items = ActionItemExtractor.extract(from: Self.delegatedSummary, meeting: meeting())
+        XCTAssertEqual(items.count, 2)
+        let mine = items.first { $0.title == "send the deck" }
+        let delegated = items.first { $0.title == "review the PR" }
+        XCTAssertNil(mine?.delegated, "my own task is not delegated")
+        XCTAssertEqual(delegated?.delegated, true, "someone else's task is tagged delegated")
+        XCTAssertEqual(delegated?.owner, "Alex")
+    }
 }

@@ -47,7 +47,11 @@ extension ActionItemsView {
                 if let sectionID {
                     Menu {
                         Button("Rename…") { renameSectionID = sectionID; renameSectionDraft = name }
-                        Button(role: .destructive) { store.deleteSection(sectionID) } label: { Text("Delete section") }
+                        Button(role: .destructive) {
+                            if let undo = store.deleteSectionWithUndo(sectionID) {
+                                ToastCenter.shared.show("Deleted section “\(name)”", undoTitle: "Undo", undo: undo)
+                            }
+                        } label: { Text("Delete section") }
                     } label: { Image(systemName: "ellipsis") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                     .accessibilityLabel("Section options")
@@ -107,7 +111,15 @@ extension ActionItemsView {
                 LazyVStack(spacing: 8) {
                     switch groupBy {
                     case .none:
-                        ForEach(projectFiltered) { selectableRow($0) }
+                        ForEach(projectFiltered) { item in
+                            selectableRow(item)
+                                .background(focusedTaskID == item.id ? NDS.brand.opacity(0.07) : Color.clear)
+                                .overlay(alignment: .leading) {
+                                    if focusedTaskID == item.id {
+                                        RoundedRectangle(cornerRadius: 1).fill(NDS.brand).frame(width: 2.5)
+                                    }
+                                }
+                        }
                     default:
                         ForEach(groupedKeys, id: \.self) { key in
                             if let rows = grouped[key] {
@@ -119,6 +131,32 @@ extension ActionItemsView {
                 .padding(16)
             }
         }
+        .focusable()
+        .onKeyPress(.downArrow) { moveFocus(1); return .handled }
+        .onKeyPress(.upArrow) { moveFocus(-1); return .handled }
+        .onKeyPress(KeyEquivalent("j")) { moveFocus(1); return .handled }
+        .onKeyPress(KeyEquivalent("k")) { moveFocus(-1); return .handled }
+        .onKeyPress(.return) { openFocused(); return .handled }
+        .onKeyPress(.space) { toggleFocusedDone(); return .handled }
+    }
+
+    // MARK: - Keyboard navigation (UX-1)
+
+    func moveFocus(_ delta: Int) {
+        let order = projectFiltered.map(\.id)
+        guard !order.isEmpty else { return }
+        if let cur = focusedTaskID, let idx = order.firstIndex(of: cur) {
+            focusedTaskID = order[min(max(idx + delta, 0), order.count - 1)]
+        } else {
+            focusedTaskID = delta >= 0 ? order.first : order.last
+        }
+    }
+    func openFocused() {
+        if let id = focusedTaskID { selectedTaskID = id }
+    }
+    func toggleFocusedDone() {
+        guard let id = focusedTaskID, let item = store.items.first(where: { $0.id == id }) else { return }
+        store.setStatus(id, status: item.status == .completed ? .open : .completed)
     }
 
     /// Wraps a row with a selection checkbox in multi-select mode. (TK-3)
@@ -164,6 +202,20 @@ extension ActionItemsView {
                     }
                 } label: { Label("Priority", systemImage: "flag") }
                 .menuStyle(.borderlessButton).fixedSize()
+                Menu {
+                    Button("No project") { bulkMoveProject(nil) }
+                    Divider()
+                    ForEach(store.projects) { p in Button(p.name) { bulkMoveProject(p.id) } }
+                } label: { Label("Project", systemImage: "folder") }
+                .menuStyle(.borderlessButton).fixedSize()
+                Menu {
+                    Button("Today") { bulkSetDue(Self.startOfToday()) }
+                    Button("Tomorrow") { bulkSetDue(Self.daysFromToday(1)) }
+                    Button("Next week") { bulkSetDue(Self.daysFromToday(7)) }
+                    Divider()
+                    Button("Clear due date") { bulkSetDue(nil) }
+                } label: { Label("Due", systemImage: "calendar") }
+                .menuStyle(.borderlessButton).fixedSize()
                 Button(role: .destructive) { bulkDeleteTasks() } label: {
                     Label("Delete", systemImage: "trash")
                 }
@@ -184,11 +236,23 @@ extension ActionItemsView {
     func bulkSetPriority(_ p: ActionItem.Priority) {
         for id in taskSelection { store.setPriority(id, priority: p) }
     }
+    func bulkMoveProject(_ projectID: String?) {
+        for id in taskSelection { store.setProject(id, projectID: projectID) }
+    }
+    func bulkSetDue(_ date: Date?) {
+        for id in taskSelection { store.setDueDate(id, dueDate: date) }
+    }
     func bulkDeleteTasks() {
-        let ids = taskSelection
-        for id in ids { store.delete(id) }
+        let ids = Array(taskSelection)
+        guard !ids.isEmpty else { return }
+        let trashed = store.delete(ids: ids)
         taskSelection = []
         taskSelectMode = false
+        let n = trashed.count
+        guard n > 0 else { return }
+        ToastCenter.shared.show("Deleted \(n) \(n == 1 ? "task" : "tasks")", undoTitle: "Undo") {
+            store.restore(ids: trashed)
+        }
     }
 
     // MARK: - Filtered data
@@ -229,6 +293,13 @@ extension ActionItemsView {
                 }
             }
             .filter { item in
+                switch ownerScope {
+                case .anyone: return true
+                case .mine: return isMine(item)
+                case .delegated: return item.delegated == true
+                }
+            }
+            .filter { item in
                 guard !search.isEmpty else { return true }
                 let q = search.lowercased()
                 return item.title.lowercased().contains(q)
@@ -236,6 +307,14 @@ extension ActionItemsView {
                     || item.meetingTitle.lowercased().contains(q)
             }
             .sorted(by: sort)
+    }
+
+    /// A task counts as "mine" when its owner matches one of my name aliases, or
+    /// it's unassigned (my own captured task). Drives the "My open" quick view.
+    func isMine(_ item: ActionItem) -> Bool {
+        let owner = (item.owner ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if owner.isEmpty { return true }
+        return AppSettings.shared.myNameAliases.contains(owner.lowercased())
     }
 
     func sort(_ a: ActionItem, _ b: ActionItem) -> Bool {
@@ -355,7 +434,11 @@ extension ActionItemsView {
             onAddSubtask: { store.addSubtask(item.id, title: $0) },
             onToggleSubtask: { store.toggleSubtask(item.id, subtaskID: $0) },
             onDeleteSubtask: { store.deleteSubtask(item.id, subtaskID: $0) },
-            onDelete: { store.delete(item.id) },
+            onDelete: {
+                let id = item.id, title = item.title
+                store.delete(id)
+                ToastCenter.shared.show("Deleted “\(title)”", undoTitle: "Undo") { store.restore(id) }
+            },
             onPush: { pushToNotion(item) },
             onOpenNotion: { url in
                 if let u = URL(string: url) { NSWorkspace.shared.open(u) }

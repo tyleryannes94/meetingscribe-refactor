@@ -24,13 +24,16 @@ final class QuickDictation: ObservableObject {
         case error(String)
     }
 
-    enum Version { case raw, polished }
+    enum Version { case raw, polished, prompt }
 
-    /// Tracks the most recent dictation so the swap hotkey can replace the
-    /// inserted text in place.
+    /// Tracks the most recent dictation so the swap / prompt hotkeys can
+    /// replace the inserted text in place.
     private struct LastDictation {
         let raw: String
         var polished: String?
+        /// TCREI-structured AI prompt, generated lazily on first use of the
+        /// prompt hotkey (it's optional, so we don't compute it eagerly).
+        var promptStructured: String?
         var shown: Version
         /// The exact string currently sitting in the target field — used to
         /// compute how many backspaces the swap needs.
@@ -44,6 +47,7 @@ final class QuickDictation: ObservableObject {
     private let recorder = MicOnlyRecorder()
     private let transcriber = QuickTranscribe()
     private let polisher = TranscriptPolisher()
+    private let promptRewriter = PromptRewriter()
     private let store = QuickNoteStore()
     private var pendingNote: QuickNote?
 
@@ -51,6 +55,9 @@ final class QuickDictation: ObservableObject {
     /// In-flight polish for the most recent dictation. `await`-ed by both the
     /// polished-paste path and the swap hotkey.
     private var polishTask: Task<String?, Never>?
+    /// In-flight prompt rewrite for the most recent dictation. Started lazily
+    /// the first time the prompt hotkey fires for a given dictation.
+    private var promptTask: Task<String?, Never>?
 
     /// Owner sets this so the dictated note appears in the QuickNotes list.
     var onNoteCreated: ((QuickNote) -> Void)?
@@ -105,6 +112,63 @@ final class QuickDictation: ObservableObject {
             st.shown = target
             st.insertedText = newText
             last = st
+            lastInsertedText = newText
+            TextInserter.replaceLastInserted(deleteCount: deleteCount, with: newText)
+        }
+    }
+
+    /// Replace the just-dictated text with a TCREI-structured AI prompt,
+    /// generated from the RAW transcript. Optional, on-demand sibling of
+    /// `swapVersion()` driven by its own hotkey. The prompt is computed lazily
+    /// (and cached) so we don't pay an Ollama round-trip on every dictation.
+    /// A later `swapVersion()` flips back to raw/polished. No-op if there's
+    /// nothing to rewrite or auto-paste was off.
+    func rewriteAsPrompt() {
+        guard AppSettings.shared.dictationAutoPaste, let st = last else {
+            NSSound.beep(); return
+        }
+        // Already showing the prompt version — nothing to do.
+        if st.shown == .prompt { return }
+        Task { @MainActor in
+            let newText: String
+            if let p = st.promptStructured, !p.isEmpty {
+                newText = p
+            } else {
+                // Kick off (or reuse) the rewrite and await it. If it never
+                // resolves (Ollama down / empty), beep + bail without changing
+                // the inserted text.
+                if promptTask == nil {
+                    let raw = st.raw
+                    let note = st.note
+                    promptTask = Task { [promptRewriter, store] in
+                        do {
+                            let rewritten = try await promptRewriter.rewrite(raw)
+                            try? store.writePrompt(rewritten, for: note)
+                            return rewritten
+                        } catch {
+                            AppLog.error("Dictation", "Prompt rewrite failed", error: error,
+                                         ["note": note.id])
+                            return nil
+                        }
+                    }
+                }
+                if let p = await promptTask?.value, !p.isEmpty {
+                    newText = p
+                } else {
+                    log.error("Prompt rewrite failed — no structured prompt available")
+                    AppLog.warn("Dictation", "Prompt rewrite unavailable (Ollama down?)")
+                    NSSound.beep()
+                    return
+                }
+            }
+            // The dictation may have changed while we awaited; re-read `last`.
+            guard var cur = last, cur.note.id == st.note.id else { return }
+            cur.promptStructured = newText
+            guard newText != cur.insertedText else { last = cur; return }
+            let deleteCount = cur.insertedText.count
+            cur.shown = .prompt
+            cur.insertedText = newText
+            last = cur
             lastInsertedText = newText
             TextInserter.replaceLastInserted(deleteCount: deleteCount, with: newText)
         }
@@ -177,6 +241,9 @@ final class QuickDictation: ObservableObject {
             return
         }
 
+        // New dictation → drop any prompt rewrite cached for the previous one.
+        promptTask = nil
+
         // Always polish in the background so the swap hotkey is instant. Also
         // persists polished.md to the note for the QuickNotes UI.
         polishTask = Task { [polisher, store, weak self] in
@@ -202,8 +269,8 @@ final class QuickDictation: ObservableObject {
         guard autoPaste else {
             // No paste — still record raw so a later swap could work if the
             // user manually placed the cursor (rare). Mostly a no-op.
-            last = LastDictation(raw: rawText, polished: nil, shown: .raw,
-                                 insertedText: rawText, note: finalized)
+            last = LastDictation(raw: rawText, polished: nil, promptStructured: nil,
+                                 shown: .raw, insertedText: rawText, note: finalized)
             state = .idle
             return
         }
@@ -212,7 +279,7 @@ final class QuickDictation: ObservableObject {
             // Wait for polish, then paste it (fall back to raw if it fails).
             let polished = await polishTask?.value ?? nil
             let toPaste = (polished?.isEmpty == false) ? polished! : rawText
-            last = LastDictation(raw: rawText, polished: polished,
+            last = LastDictation(raw: rawText, polished: polished, promptStructured: nil,
                                  shown: (toPaste == polished) ? .polished : .raw,
                                  insertedText: toPaste, note: finalized)
             lastInsertedText = toPaste
@@ -220,8 +287,8 @@ final class QuickDictation: ObservableObject {
             TextInserter.insertAtCursor(toPaste)
         } else {
             // Paste raw immediately (instant). Swap can fetch polished later.
-            last = LastDictation(raw: rawText, polished: nil, shown: .raw,
-                                 insertedText: rawText, note: finalized)
+            last = LastDictation(raw: rawText, polished: nil, promptStructured: nil,
+                                 shown: .raw, insertedText: rawText, note: finalized)
             state = .idle
             TextInserter.insertAtCursor(rawText)
         }

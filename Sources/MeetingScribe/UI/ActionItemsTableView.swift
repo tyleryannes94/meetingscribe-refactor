@@ -85,13 +85,41 @@ extension ActionItemsView {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             projectCell(item).frame(width: 140, alignment: .leading)
-            Text(item.owner ?? "—").font(.caption).foregroundStyle(.secondary)
-                .frame(width: 90, alignment: .leading)
-            Text(item.priority.label).font(.caption)
-                .foregroundStyle(priorityColor(item.priority))
-                .frame(width: 80, alignment: .leading)
-            Text(dueShort(item)).font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+            Group {
+                if let owner = item.owner, !owner.isEmpty {
+                    HStack(spacing: 5) {
+                        TaskOwnerAvatar(name: owner, size: 16)
+                        Text(owner).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                } else {
+                    Text("—").font(.caption).foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: 90, alignment: .leading)
+            Menu {
+                ForEach(ActionItem.Priority.allCases) { p in
+                    Button(p.label) { store.setPriority(item.id, priority: p) }
+                }
+            } label: {
+                Text(item.priority.label).font(.caption)
+                    .foregroundStyle(priorityColor(item.priority))
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden)
+            .frame(width: 80, alignment: .leading)
+            Menu {
+                Button("Today") { store.setDueDate(item.id, dueDate: Self.startOfToday()) }
+                Button("Tomorrow") { store.setDueDate(item.id, dueDate: Self.daysFromToday(1)) }
+                Button("Next week") { store.setDueDate(item.id, dueDate: Self.daysFromToday(7)) }
+                if item.dueDate != nil {
+                    Divider()
+                    Button("Clear due date") { store.setDueDate(item.id, dueDate: nil) }
+                }
+            } label: {
+                Text(dueShort(item)).font(.caption.monospacedDigit())
+                    .foregroundStyle(dueColor(item))
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden)
+            .frame(width: 80, alignment: .leading)
             Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary)
                 .lineLimit(1).frame(width: 160, alignment: .leading)
         }
@@ -139,7 +167,23 @@ extension ActionItemsView {
     }
     func dueShort(_ item: ActionItem) -> String {
         guard let d = item.dueDate else { return "—" }
-        let f = DateFormatter(); f.dateFormat = "MMM d"
-        return f.string(from: d)
+        return Self.dueShortFormatter.string(from: d)
+    }
+    private static let dueShortFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "MMM d"; return f
+    }()
+
+    /// Overdue → red, due today → orange, otherwise neutral. (Completed never
+    /// reads as overdue.)
+    func dueColor(_ item: ActionItem) -> Color {
+        guard let due = item.dueDate, item.status != .completed else { return .secondary }
+        if due < Calendar.current.startOfDay(for: Date()) { return .red }
+        if Calendar.current.isDateInToday(due) { return .orange }
+        return .secondary
+    }
+
+    static func startOfToday() -> Date { Calendar.current.startOfDay(for: Date()) }
+    static func daysFromToday(_ n: Int) -> Date? {
+        Calendar.current.date(byAdding: .day, value: n, to: startOfToday())
     }
 }

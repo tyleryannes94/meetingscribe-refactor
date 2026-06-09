@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hub-side ingestion LaunchAgent (personal Mac mini).
+
+  Runs MeetingScribeSync --apply on a schedule to fold work-device backups from
+  <vault>/_remote/<device>/ into the live second brain. Install on the HUB only.
+
+  Replace @SCRIPT_PATH@ with the absolute path to hub-ingest.sh, @INTERVAL_SECONDS@
+  (e.g. 10800 = every 3h), and @LOG_DIR@ (e.g. /Users/<you>/Library/Logs/MeetingScribe).
+
+  Load:
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tyleryannes.meetingscribe.ingest.plist
+  Unload:
+    launchctl bootout gui/$(id -u)/com.tyleryannes.meetingscribe.ingest
+
+  TIP: run `bash hub-ingest.sh` (dry run) a few times and review the report BEFORE
+  installing this with --apply.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tyleryannes.meetingscribe.ingest</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@SCRIPT_PATH@</string>
+        <string>--apply</string>
+    </array>
+
+    <!-- Every 3 hours by default; run it a bit less often than the rsync push. -->
+    <key>StartInterval</key>
+    <integer>@INTERVAL_SECONDS@</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>300</integer>
+
+    <key>StandardOutPath</key>
+    <string>@LOG_DIR@/ingest.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>@LOG_DIR@/ingest.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+</dict>
+</plist>

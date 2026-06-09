@@ -12,12 +12,18 @@ struct ProjectPageHeader: View {
     /// content and fills available height — write sections (`#`) and to-dos
     /// (`- [ ]`) freely. When false, it's a compact description above a database.
     var bodyFills: Bool = false
+    /// Breadcrumb navigation callbacks (VD-12).
+    var onOpenInitiative: ((String) -> Void)? = nil
+    var onOpenProject: ((String) -> Void)? = nil
     @State private var nameDraft: String = ""
     @State private var bodyDraft: String = ""
     @State private var expanded = true
+    @State private var showTargetPicker = false
+    @State private var targetDraft = Date()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            breadcrumbBar
             HStack(spacing: 11) {
                 Menu {
                     ForEach(["doc.text", "folder.fill", "star.fill", "flag.fill", "bolt.fill",
@@ -35,10 +41,16 @@ struct ProjectPageHeader: View {
                 .textFieldStyle(.plain)
                 .font(NDS.pageTitle)
                 Spacer()
-                if store.items(forProject: project.id).count > 0 {
-                    Text("\(store.items(forProject: project.id).count) tasks")
-                        .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                let progress = store.completion(forProject: project.id)
+                if progress.total > 0 {
+                    HStack(spacing: 6) {
+                        ProgressView(value: Double(progress.done), total: Double(progress.total))
+                            .frame(width: 72).controlSize(.small).tint(NDS.brand)
+                        Text("\(progress.done)/\(progress.total)")
+                            .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                    }
                 }
+                targetDateControl
                 if !bodyFills {
                     Button { withAnimation { expanded.toggle() } } label: {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
@@ -62,6 +74,94 @@ struct ProjectPageHeader: View {
         .frame(maxHeight: bodyFills ? .infinity : nil, alignment: .top)
         .onAppear { nameDraft = project.name; bodyDraft = project.body }
         .onChange(of: project.id) { _, _ in nameDraft = project.name; bodyDraft = project.body }
+    }
+
+    private var targetDateControl: some View {
+        Button {
+            targetDraft = project.targetDate ?? Date()
+            showTargetPicker = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "target").font(.system(size: 11))
+                Text(project.targetDate.map(targetLabel) ?? "Set target")
+            }
+            .font(NDS.small).foregroundStyle(targetColor)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showTargetPicker) {
+            VStack(alignment: .leading, spacing: 10) {
+                DatePicker("Target date", selection: $targetDraft, displayedComponents: .date)
+                    .datePickerStyle(.graphical).labelsHidden()
+                HStack {
+                    if project.targetDate != nil {
+                        Button("Clear") {
+                            store.setProjectTargetDate(project.id, nil); showTargetPicker = false
+                        }
+                    }
+                    Spacer()
+                    Button("Done") {
+                        store.setProjectTargetDate(project.id, Calendar.current.startOfDay(for: targetDraft))
+                        showTargetPicker = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(14).frame(width: 280)
+        }
+    }
+
+    private func targetLabel(_ d: Date) -> String {
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: d)).day ?? 0
+        if days == 0 { return "Due today" }
+        if days < 0 { return "\(-days)d overdue" }
+        return "\(days)d left"
+    }
+
+    private var targetColor: Color {
+        guard let d = project.targetDate else { return NDS.textTertiary }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let due = cal.startOfDay(for: d)
+        if due < today { return .red }
+        if due == today { return .orange }
+        return NDS.textSecondary
+    }
+
+    @ViewBuilder
+    private var breadcrumbBar: some View {
+        let crumbs = breadcrumbItems
+        if !crumbs.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(Array(crumbs.enumerated()), id: \.offset) { _, c in
+                    Button {
+                        if c.isInitiative { onOpenInitiative?(c.id) } else { onOpenProject?(c.id) }
+                    } label: {
+                        Text(c.name).font(NDS.small).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(NDS.textTertiary)
+                }
+            }
+        }
+    }
+
+    /// Ancestor chain (Initiative › parent pages…) above the current project.
+    private var breadcrumbItems: [(id: String, name: String, isInitiative: Bool)] {
+        var result: [(String, String, Bool)] = []
+        if let iid = project.initiativeID, let initiative = store.initiative(id: iid) {
+            result.append((iid, initiative.name, true))
+        }
+        var chain: [Project] = []
+        var pid = project.parentID
+        var hops = 0
+        while let p = pid, hops < 50, let proj = store.project(id: p) {
+            chain.insert(proj, at: 0)
+            pid = proj.parentID
+            hops += 1
+        }
+        for p in chain { result.append((p.id, p.name, false)) }
+        return result
     }
 
     private var metaRow: some View {

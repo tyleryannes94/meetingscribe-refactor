@@ -11,6 +11,8 @@ struct ActionItemsView: View {
 
     @State var filter: Filter = .all
     @State var priorityFilter: PriorityFilter = .any
+    /// Whether to show everyone's tasks or just the current user's (P2-2).
+    @State var ownerScope: OwnerScope = .anyone
     @State var search: String = ""
     @State var pushingIDs: Set<String> = []
     @State var lastError: String?
@@ -42,9 +44,22 @@ struct ActionItemsView: View {
     // Resizable, persisted Tasks sidebar width (TK-8 — was a fixed 230).
     @AppStorage("tasks.railWidth") var railWidth: Double = 230
     @State var railDragStart: Double?
+    // Trash sheet (P0-3): restore or permanently remove soft-deleted tasks.
+    @State var showTrash = false
+    // Natural-language quick-add popover (P3-2).
+    @State var quickAdding = false
+    @State var quickAddText = ""
+    // Insights sheet (PM-12).
+    @State var showInsights = false
+    // Keyboard shortcuts cheat-sheet (UX-22).
+    @State var showShortcuts = false
+    // Calendar view: the month currently displayed (VD-1).
+    @State var calendarMonth = Date()
+    // Keyboard navigation cursor for the list (UX-1).
+    @State var focusedTaskID: String?
 
     enum ViewMode: String, CaseIterable, Identifiable {
-        case list, table, board
+        case list, table, board, calendar, gallery
         var id: String { rawValue }
         var label: String { rawValue.capitalized }
         var systemImage: String {
@@ -52,6 +67,8 @@ struct ActionItemsView: View {
             case .list: return "list.bullet"
             case .table: return "tablecells"
             case .board: return "rectangle.split.3x1"
+            case .calendar: return "calendar"
+            case .gallery: return "square.grid.2x2"
             }
         }
     }
@@ -91,6 +108,10 @@ struct ActionItemsView: View {
     }
     enum TableSort: String, CaseIterable, Identifiable {
         case task, project, owner, priority, due
+        var id: String { rawValue }
+    }
+    enum OwnerScope: String, CaseIterable, Identifiable {
+        case anyone, mine, delegated
         var id: String { rawValue }
     }
     enum GroupBy: String, CaseIterable, Identifiable {
@@ -156,10 +177,32 @@ struct ActionItemsView: View {
             manager.refreshPastMeetings()
             manager.backfillActionItemsIfNeeded()
         }
-        .onChange(of: selectedProjectID) { _, _ in selectedTaskID = nil }
+        .onChange(of: selectedProjectID) { _, _ in
+            selectedTaskID = nil
+            // Restore the project's last-used view (NP-3).
+            if let pid = realSelectedProjectID,
+               let saved = AppSettings.shared.savedTaskViewMode(forProject: pid),
+               let mode = ViewMode(rawValue: saved) {
+                viewMode = mode
+            }
+        }
+        .onChange(of: viewMode) { _, mode in
+            if let pid = realSelectedProjectID {
+                AppSettings.shared.setSavedTaskViewMode(mode.rawValue, forProject: pid)
+            }
+        }
         .onChange(of: selectedMeetingID) { _, _ in selectedTaskID = nil }
         .onChange(of: selectedInitiativeID) { _, v in
             if v != nil { selectedTaskID = nil; selectedMeetingID = nil }
+        }
+        .sheet(isPresented: $showTrash) {
+            TaskTrashView(store: store)
+        }
+        .sheet(isPresented: $showInsights) {
+            TaskInsightsView(store: store)
+        }
+        .sheet(isPresented: $showShortcuts) {
+            TaskShortcutsView()
         }
     }
 
@@ -190,6 +233,10 @@ struct ActionItemsView: View {
             if projectFiltered.isEmpty { emptyState } else { tableBody }
         case .board:
             boardBody
+        case .calendar:
+            calendarBody
+        case .gallery:
+            if projectFiltered.isEmpty { emptyState } else { galleryBody }
         }
     }
 }

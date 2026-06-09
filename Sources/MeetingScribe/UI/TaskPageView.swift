@@ -20,6 +20,15 @@ struct TaskPageView: View {
             .prefix(50).map { $0 }
     }
 
+    /// Other tasks (not self, not already a blocker) offered as dependencies.
+    private func blockerCandidates(_ item: ActionItem) -> [ActionItem] {
+        let existing = Set(item.blockedByIDs ?? [])
+        return store.items
+            .filter { $0.id != item.id && !existing.contains($0.id) }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(50).map { $0 }
+    }
+
     @State private var titleDraft = ""
     @State private var assigneeDraft = ""
     @State private var noteDraft = ""
@@ -91,7 +100,14 @@ struct TaskPageView: View {
                 .buttonStyle(.plain)
             }
             Menu {
-                Button(role: .destructive) { store.delete(itemID); onClose() } label: {
+                Button(role: .destructive) {
+                    let title = item.title
+                    store.delete(itemID)
+                    onClose()
+                    ToastCenter.shared.show("Deleted “\(title)”", undoTitle: "Undo") {
+                        store.restore(itemID)
+                    }
+                } label: {
                     Label("Delete task", systemImage: "trash")
                 }
             } label: {
@@ -139,6 +155,63 @@ struct TaskPageView: View {
                         Button(p.label) { store.setPriority(itemID, priority: p) }
                     }
                 } label: { NotionChip(item.priority.label, color: priorityColor(item.priority)) }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            }
+            NotionPropertyRow(icon: "repeat", label: "Repeat") {
+                Menu {
+                    Button("Don't repeat") { store.setRecurrence(itemID, nil) }
+                    Divider()
+                    ForEach(RecurrenceRule.Frequency.allCases) { f in
+                        Button(f.label) { store.setRecurrence(itemID, RecurrenceRule(frequency: f)) }
+                    }
+                } label: {
+                    NotionChip(item.recurrence?.label ?? "None",
+                               color: item.recurrence == nil ? NDS.textTertiary : NDS.brand,
+                               systemImage: "repeat")
+                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            }
+            NotionPropertyRow(icon: "exclamationmark.octagon", label: "Blocked by") {
+                HStack(spacing: 6) {
+                    let blockers = store.blockers(for: item)
+                    if store.isBlocked(item) {
+                        NotionChip("Blocked", color: .red, systemImage: "exclamationmark.octagon")
+                    } else if !blockers.isEmpty {
+                        NotionChip("\(blockers.count) linked", color: NDS.textTertiary)
+                    } else {
+                        Text("None").font(NDS.body).foregroundStyle(NDS.textTertiary)
+                    }
+                    Menu {
+                        if !blockers.isEmpty {
+                            ForEach(blockers) { b in
+                                Button { store.toggleBlocker(itemID, blockerID: b.id) } label: {
+                                    Label("Remove “\(b.title)”", systemImage: "minus.circle")
+                                }
+                            }
+                            Divider()
+                        }
+                        ForEach(blockerCandidates(item)) { t in
+                            Button(t.title) { store.toggleBlocker(itemID, blockerID: t.id) }
+                        }
+                    } label: {
+                        Image(systemName: "plus.circle").foregroundStyle(NDS.textTertiary)
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .help("Add or remove a blocking task")
+                }
+            }
+            NotionPropertyRow(icon: "gauge.medium", label: "Estimate") {
+                Menu {
+                    Button("None") { store.setEstimate(itemID, nil) }
+                    Divider()
+                    ForEach([1.0, 2, 3, 5, 8, 13], id: \.self) { v in
+                        Button("\(Int(v)) pt\(v == 1 ? "" : "s")") { store.setEstimate(itemID, v) }
+                    }
+                } label: {
+                    NotionChip(item.estimate.map { "\(Int($0)) pt\($0 == 1 ? "" : "s")" } ?? "None",
+                               color: item.estimate == nil ? NDS.textTertiary : NDS.brand,
+                               systemImage: "gauge.medium")
+                }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
             NotionPropertyRow(icon: "person", label: "Assignee") {
@@ -243,6 +316,30 @@ struct TaskPageView: View {
                     }
                 }
             }
+            customPropertiesSection(item)
+        }
+    }
+
+    /// User-defined database properties for the task's project (NP-1), plus an
+    /// "Add property" menu. Empty when the task isn't in a project.
+    @ViewBuilder
+    private func customPropertiesSection(_ item: ActionItem) -> some View {
+        if let pid = item.projectID {
+            ForEach(store.propertyDefs(forProject: pid)) { def in
+                CustomPropertyRow(store: store, projectID: pid, itemID: itemID,
+                                  def: def, value: item.properties?[def.id])
+            }
+            Menu {
+                ForEach(PropertyType.allCases) { t in
+                    Button { store.addProperty(toProject: pid, name: t.label, type: t) } label: {
+                        Label(t.label, systemImage: t.systemImage)
+                    }
+                }
+            } label: {
+                Label("Add property", systemImage: "plus")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         }
     }
 

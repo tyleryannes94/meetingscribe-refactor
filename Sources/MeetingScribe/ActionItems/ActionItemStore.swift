@@ -9,11 +9,24 @@ import OSLog
 final class ActionItemStore: ObservableObject {
     private let log = Logger(subsystem: "com.tyleryannes.MeetingScribe", category: "ActionItems")
 
+    /// Live tasks (deletedAt == nil). Every existing consumer binds to this and
+    /// continues to see only non-deleted items.
     @Published private(set) var items: [ActionItem] = []
+    /// Soft-deleted tasks awaiting restore or purge (P0-3). Persisted in the
+    /// same action_items.json so Trash survives relaunch; partitioned off
+    /// `items` by `deletedAt` on load.
+    @Published private(set) var trashedItems: [ActionItem] = []
     @Published private(set) var projects: [Project] = []
     @Published private(set) var labels: [TaskLabel] = []
     @Published private(set) var sections: [ProjectSection] = []
     @Published private(set) var initiatives: [Initiative] = []
+
+    /// How long a soft-deleted task lingers in Trash before automatic purge.
+    static let trashRetention: TimeInterval = 30 * 24 * 60 * 60
+
+    /// Handle to the off-main initial decode, so callers (and tests) can await
+    /// the first load before relying on the published arrays.
+    private var loadTask: Task<Void, Never>?
 
     private var fileURL: URL {
         AppSettings.shared.storageDir.appendingPathComponent("action_items.json")
@@ -38,30 +51,63 @@ final class ActionItemStore: ObservableObject {
         // task, then publish the arrays back on the main actor.
         let itemsURL = fileURL, projURL = projectsURL, lblURL = labelsURL
         let secURL = sectionsURL, initURL = initiativesURL
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let items: [ActionItem]        = Self.decodeArray(itemsURL, version: Self.actionItemSchemaVersion)
-            let projects: [Project]        = Self.decodeArray(projURL, version: Self.projectSchemaVersion)
-            let labels: [TaskLabel]        = Self.decodeArray(lblURL, version: Self.labelSchemaVersion)
-            let sections: [ProjectSection] = Self.decodeArray(secURL, version: Self.sectionSchemaVersion)
-            let initiatives: [Initiative]  = Self.decodeArray(initURL, version: Self.initiativeSchemaVersion)
+        loadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let allItems: [ActionItem]     = Self.decodeArray(itemsURL, version: Self.actionItemSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.actionItems)
+            let projects: [Project]        = Self.decodeArray(projURL, version: Self.projectSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.projects)
+            let labels: [TaskLabel]        = Self.decodeArray(lblURL, version: Self.labelSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.labels)
+            let sections: [ProjectSection] = Self.decodeArray(secURL, version: Self.sectionSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.sections)
+            let initiatives: [Initiative]  = Self.decodeArray(initURL, version: Self.initiativeSchemaVersion,
+                                                              migrate: TaskSchemaMigrations.initiatives)
+            // Partition tasks into live vs. trashed by the soft-delete tombstone.
+            let live    = allItems.filter { $0.deletedAt == nil }
+            let trashed = allItems.filter { $0.deletedAt != nil }
             await MainActor.run {
                 guard let self else { return }
-                self.items = items
+                self.items = live
+                self.trashedItems = trashed
                 self.projects = projects
                 self.labels = labels
                 self.sections = sections
                 self.initiatives = initiatives
+                // Bound the Trash on launch (drops items past the retention
+                // window; only writes if something was actually purged).
+                self.purgeExpiredTrash()
             }
         }
     }
 
+    /// Awaits the off-main initial decode. Useful for tests (mutate
+    /// deterministically after load) and for any caller that must not race the
+    /// first publish. No-op once the load has completed.
+    func awaitInitialLoad() async {
+        await loadTask?.value
+    }
+
     /// Off-main read + decode of one schema-enveloped JSON array. Returns [] on
-    /// any failure — matches the old per-loader behavior.
-    nonisolated private static func decodeArray<T: Codable>(_ url: URL, version: Int) -> [T] {
-        guard let data = try? Data(contentsOf: url),
-              let arr: [T] = try? SchemaEnvelope.decode([T].self, from: data,
-                                                        currentVersion: version,
-                                                        decoder: SharedCoders.decoder())
+    /// any failure — matches the old per-loader behavior. When the on-disk
+    /// version is older than `version`, the file is backed up and `migrate`
+    /// transforms the payload (P0-5 / BE-18); with no version skew `migrate` is
+    /// never invoked, so today's pinned-at-1 files decode exactly as before.
+    nonisolated private static func decodeArray<T: Codable>(
+        _ url: URL, version: Int,
+        migrate: ((_ payload: [T], _ from: Int, _ to: Int) -> [T])? = nil
+    ) -> [T] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        let wrapped: (([T], Int, Int) -> [T])? = migrate.map { m in
+            { payload, from, to in
+                TaskSchemaMigrations.backupBeforeMigration(url, from: from, to: to)
+                return m(payload, from, to)
+            }
+        }
+        guard let arr: [T] = try? SchemaEnvelope.decode(
+            [T].self, from: data,
+            currentVersion: version,
+            decoder: SharedCoders.decoder(),
+            migrate: wrapped)
         else { return [] }
         return arr
     }
@@ -94,6 +140,19 @@ final class ActionItemStore: ObservableObject {
         items.filter { $0.projectID == projectID && $0.status != .completed }.count
     }
 
+    /// (done, total) live tasks for a project — drives a % complete indicator (VD-7).
+    func completion(forProject projectID: String) -> (done: Int, total: Int) {
+        let scoped = items.filter { $0.projectID == projectID }
+        return (scoped.filter { $0.status == .completed }.count, scoped.count)
+    }
+
+    /// (done, total) across all of an initiative's projects (VD-7).
+    func completion(forInitiative initiativeID: String) -> (done: Int, total: Int) {
+        let pids = Set(projects.filter { $0.initiativeID == initiativeID }.map { $0.id })
+        let scoped = items.filter { $0.projectID.map { pids.contains($0) } ?? false }
+        return (scoped.filter { $0.status == .completed }.count, scoped.count)
+    }
+
     /// Items whose source meeting was today or yesterday (any status).
     func todayAndYesterday(now: Date = Date()) -> [ActionItem] {
         let cal = Calendar.current
@@ -105,6 +164,13 @@ final class ActionItemStore: ObservableObject {
 
     func openItems() -> [ActionItem] {
         items.filter { $0.status != .completed }.sorted(by: defaultSort)
+    }
+
+    /// Run a structured query over the live tasks (BE-7). The single composable
+    /// read path that views, badges, saved views (Phase 2), and the agent API
+    /// (Phase 6) converge on, replacing scattered bespoke filter/sort chains.
+    func tasks(matching query: TaskQuery, now: Date = Date()) -> [ActionItem] {
+        TaskQueryEngine.evaluate(query, over: items, now: now)
     }
 
     private func defaultSort(_ a: ActionItem, _ b: ActionItem) -> Bool {
@@ -176,7 +242,29 @@ final class ActionItemStore: ObservableObject {
             updatedAt: now)
         items.append(item)
         save()
+        TaskChangeLog.shared.record(.create, entity: .task, id: item.id,
+                                    summary: "Created “\(item.title)”")
         return item
+    }
+
+    /// Creates a task from a one-line natural-language capture (P3-2): parses
+    /// `!priority`, `#label`, and a date out of the string, applies them, and
+    /// creates/links labels by name. Returns the freshly stored task.
+    @discardableResult
+    func createTask(parsing raw: String, projectID: String? = nil,
+                    sectionID: String? = nil, now: Date = Date()) -> ActionItem {
+        let parsed = TaskQuickAddParser.parse(raw, now: now)
+        let fallback = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = parsed.title.isEmpty ? fallback : parsed.title
+        let created = createTask(title: title, projectID: projectID, sectionID: sectionID,
+                                 priority: parsed.priority ?? .medium)
+        if let due = parsed.dueDate { setDueDate(created.id, dueDate: due) }
+        for name in parsed.labelNames {
+            let label = labels.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+                ?? createLabel(name: name)
+            toggleLabel(created.id, labelID: label.id)
+        }
+        return items.first { $0.id == created.id } ?? created
     }
 
     /// Merges a batch of tasks imported from an external system (Linear /
@@ -227,6 +315,10 @@ final class ActionItemStore: ObservableObject {
             }
         }
         save(); saveProjects()
+        if !tasks.isEmpty {
+            TaskChangeLog.shared.record(.merge, entity: .task, id: source,
+                                        summary: "Imported \(created) new task(s) from \(source)")
+        }
         return created
     }
 
@@ -444,12 +536,16 @@ final class ActionItemStore: ObservableObject {
         for i in items where i.meetingID == meetingID {
             bySignature[i.signature] = i
         }
+        // Respect deletions: if the user trashed an extracted task, don't let a
+        // re-extract resurrect it as a fresh live duplicate.
+        let trashedSignatures = Set(trashedItems.filter { $0.meetingID == meetingID }.map { $0.signature })
 
         var nextItems: [ActionItem] = items.filter { $0.meetingID != meetingID }
         var seenSignatures = Set<String>()
 
         for ext in extracted {
             seenSignatures.insert(ext.signature)
+            if trashedSignatures.contains(ext.signature) { continue }
             if var existing = bySignature[ext.signature] {
                 // Preserve user-edited fields; refresh meeting metadata.
                 existing.meetingTitle = ext.meetingTitle
@@ -479,19 +575,156 @@ final class ActionItemStore: ObservableObject {
         save()
     }
 
+    /// Soft-delete a task: move it to Trash (recoverable) rather than destroying
+    /// it (P0-3). Replaces the old hard remove so a misclick — from a row menu,
+    /// the task page, a board card, or a bulk action — is never unrecoverable.
     func delete(_ id: String) {
-        items.removeAll { $0.id == id }
+        moveToTrash(ids: [id])
+    }
+
+    /// Soft-delete several tasks in one write (bulk delete). Returns the ids that
+    /// were actually trashed, so callers can offer a single "Undo".
+    @discardableResult
+    func delete(ids: [String]) -> [String] {
+        moveToTrash(ids: ids)
+    }
+
+    @discardableResult
+    private func moveToTrash(ids: [String]) -> [String] {
+        let idSet = Set(ids)
+        guard !idSet.isEmpty else { return [] }
+        let now = Date()
+        var moved: [String] = []
+        // Iterate back-to-front so removals don't shift unseen indices.
+        for idx in items.indices.reversed() where idSet.contains(items[idx].id) {
+            var it = items.remove(at: idx)
+            it.deletedAt = now
+            it.updatedAt = now
+            trashedItems.append(it)
+            moved.append(it.id)
+        }
+        guard !moved.isEmpty else { return [] }
+        save()
+        for mid in moved {
+            TaskChangeLog.shared.record(.delete, entity: .task, id: mid, summary: "Moved to Trash")
+        }
+        return moved
+    }
+
+    /// Restore a single trashed task back to the live list (the toast "Undo").
+    @discardableResult
+    func restore(_ id: String) -> Bool {
+        !restore(ids: [id]).isEmpty
+    }
+
+    /// Restore several trashed tasks at once (bulk undo). Returns restored ids.
+    @discardableResult
+    func restore(ids: [String]) -> [String] {
+        let idSet = Set(ids)
+        guard !idSet.isEmpty else { return [] }
+        let now = Date()
+        var restored: [String] = []
+        for idx in trashedItems.indices.reversed() where idSet.contains(trashedItems[idx].id) {
+            var it = trashedItems.remove(at: idx)
+            it.deletedAt = nil
+            it.updatedAt = now
+            items.append(it)
+            restored.append(it.id)
+        }
+        guard !restored.isEmpty else { return [] }
+        save()
+        for rid in restored {
+            TaskChangeLog.shared.record(.restore, entity: .task, id: rid, summary: "Restored from Trash")
+        }
+        return restored
+    }
+
+    /// Permanently remove one task from Trash (irreversible).
+    func purge(_ id: String) {
+        let before = trashedItems.count
+        trashedItems.removeAll { $0.id == id }
+        if trashedItems.count != before { save() }
+    }
+
+    /// Permanently empty the whole Trash (irreversible).
+    func emptyTrash() {
+        guard !trashedItems.isEmpty else { return }
+        trashedItems.removeAll()
         save()
     }
 
+    /// Drop trashed tasks whose tombstone is older than the retention window.
+    /// Called on launch; safe to call anytime. Only persists if it changed.
+    func purgeExpiredTrash(olderThan retention: TimeInterval = ActionItemStore.trashRetention,
+                           now: Date = Date()) {
+        let before = trashedItems.count
+        trashedItems.removeAll { t in
+            guard let deleted = t.deletedAt else { return false }
+            return now.timeIntervalSince(deleted) > retention
+        }
+        if trashedItems.count != before { save() }
+    }
+
     func setStatus(_ id: String, status: ActionItem.Status) {
-        update(id) { $0.status = status }
+        let wasCompleted = items.first(where: { $0.id == id })?.status == .completed
+        update(id) {
+            let was = $0.status == .completed
+            $0.status = status
+            // Stamp a real completion time (P2-4) — distinct from updatedAt,
+            // which any edit bumps. Set on the open→completed transition, cleared
+            // when reopened; re-completing keeps the original timestamp.
+            if status == .completed {
+                if !was { $0.completedAt = Date() }
+            } else {
+                $0.completedAt = nil
+            }
+        }
+        // Spawn the next occurrence of a recurring task on first completion (P2-5).
+        if status == .completed, !wasCompleted,
+           let done = items.first(where: { $0.id == id }), let rule = done.recurrence {
+            spawnNextOccurrence(of: done, rule: rule)
+        }
+    }
+
+    /// Set or clear a task's repeat rule (P2-5).
+    func setRecurrence(_ id: String, _ rule: RecurrenceRule?) {
+        update(id) { $0.recurrence = rule }
+    }
+
+    /// Creates the next instance of a recurring task when the current one is
+    /// completed: a fresh open copy with the due (and start) dates rolled
+    /// forward, subtasks reset, and external links cleared. The completed
+    /// instance stays as history; instances share a `seriesID`.
+    private func spawnNextOccurrence(of item: ActionItem, rule: RecurrenceRule) {
+        let base = item.dueDate ?? item.startDate ?? Date()
+        guard let nextDue = rule.next(after: base) else { return }
+        var copy = item
+        copy.id = UUID().uuidString
+        copy.status = .open
+        copy.completedAt = nil
+        copy.dueDate = nextDue
+        if let start = item.startDate, let due = item.dueDate {
+            // Preserve the start→due offset on the new instance.
+            copy.startDate = nextDue.addingTimeInterval(-due.timeIntervalSince(start))
+        }
+        copy.subtasks = item.subtasks?.map { var s = $0; s.done = false; return s }
+        copy.seriesID = item.seriesID ?? item.id
+        copy.notionPageID = nil; copy.notionURL = nil
+        copy.externalID = nil; copy.externalURL = nil
+        copy.createdAt = Date(); copy.updatedAt = Date()
+        items.append(copy)
+        save()
+        TaskChangeLog.shared.record(.create, entity: .task, id: copy.id,
+                                    summary: "Recurring: next “\(copy.title)”")
     }
     func setPriority(_ id: String, priority: ActionItem.Priority) {
         update(id) { $0.priority = priority }
     }
     func setDueDate(_ id: String, dueDate: Date?) {
         update(id) { $0.dueDate = dueDate }
+    }
+    func setEstimate(_ id: String, _ value: Double?) {
+        update(id) { $0.estimate = value }
     }
     func setTitle(_ id: String, title: String) {
         update(id) { $0.title = title }
@@ -533,6 +766,48 @@ final class ActionItemStore: ObservableObject {
         update(id) { $0.projectID = projectID }
     }
 
+    // MARK: - Dependencies (PM-2)
+
+    /// Add or remove `blockerID` as a blocker of `id`. Guards self-links and
+    /// cycles (won't add an edge that would make the blocked-by graph circular).
+    func toggleBlocker(_ id: String, blockerID: String) {
+        guard id != blockerID else { return }
+        let alreadyLinked = (items.first { $0.id == id }?.blockedByIDs ?? []).contains(blockerID)
+        // Only run the cycle guard when adding a new edge.
+        if !alreadyLinked && reachableViaBlockers(from: blockerID, target: id) { return }
+        update(id) {
+            var ids = $0.blockedByIDs ?? []
+            if let idx = ids.firstIndex(of: blockerID) { ids.remove(at: idx) } else { ids.append(blockerID) }
+            $0.blockedByIDs = ids.isEmpty ? nil : ids
+        }
+    }
+
+    /// A task is blocked when it has at least one blocker that still exists and
+    /// isn't completed.
+    func isBlocked(_ item: ActionItem) -> Bool {
+        guard let ids = item.blockedByIDs, !ids.isEmpty else { return false }
+        return ids.contains { bid in
+            items.first { $0.id == bid }.map { $0.status != .completed } ?? false
+        }
+    }
+
+    /// The live blocker tasks for an item, in declared order.
+    func blockers(for item: ActionItem) -> [ActionItem] {
+        (item.blockedByIDs ?? []).compactMap { bid in items.first { $0.id == bid } }
+    }
+
+    /// True if `target` is reachable by following `start`'s blockedBy chain.
+    private func reachableViaBlockers(from start: String, target: String) -> Bool {
+        var visited = Set<String>()
+        var stack = [start]
+        while let cur = stack.popLast() {
+            if cur == target { return true }
+            guard visited.insert(cur).inserted else { continue }
+            if let t = items.first(where: { $0.id == cur }) { stack.append(contentsOf: t.blockedByIDs ?? []) }
+        }
+        return false
+    }
+
     private func update(_ id: String, mutate: (inout ActionItem) -> Void) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
         var copy = items[idx]
@@ -540,6 +815,8 @@ final class ActionItemStore: ObservableObject {
         copy.updatedAt = Date()
         items[idx] = copy
         save()
+        TaskChangeLog.shared.record(.update, entity: .task, id: id,
+                                    summary: "Updated “\(copy.title)”")
     }
 
     // MARK: - Projects
@@ -614,6 +891,70 @@ final class ActionItemStore: ObservableObject {
         save()
     }
 
+    // MARK: - Undoable deletes for projects / sections / initiatives (P0-3)
+    //
+    // These secondary entities aren't soft-deleted into a Trash array (only
+    // tasks are); instead each delete returns a closure that reinstates the
+    // entity AND the links it severed, so callers can offer an "Undo" toast —
+    // the same safety net the People/Tags tabs use. Returns nil if the id is
+    // already gone (caller skips the toast).
+
+    /// Delete a project and return a closure that restores it and re-links the
+    /// tasks it detached.
+    func deleteProjectWithUndo(_ id: String) -> (() -> Void)? {
+        guard let snapshot = projects.first(where: { $0.id == id }) else { return nil }
+        let relinkItemIDs = items.filter { $0.projectID == id }.map(\.id)
+        deleteProject(id)
+        return { [weak self] in
+            guard let self else { return }
+            self.upsertProject(snapshot)
+            for iid in relinkItemIDs { self.setProject(iid, projectID: id) }
+        }
+    }
+
+    /// Delete a page (reparenting its children) and return a restore closure
+    /// that puts the page back and re-attaches both its children and its tasks.
+    func deleteProjectKeepingChildrenWithUndo(_ id: String) -> (() -> Void)? {
+        guard let snapshot = projects.first(where: { $0.id == id }) else { return nil }
+        let childIDs = projects.filter { $0.parentID == id }.map(\.id)
+        let relinkItemIDs = items.filter { $0.projectID == id }.map(\.id)
+        deleteProjectKeepingChildren(id)
+        return { [weak self] in
+            guard let self else { return }
+            self.upsertProject(snapshot)
+            for cid in childIDs { self.setProjectParent(cid, parentID: id) }
+            for iid in relinkItemIDs { self.setProject(iid, projectID: id) }
+        }
+    }
+
+    /// Delete an initiative and return a closure that restores it and re-links
+    /// the projects it detached.
+    func deleteInitiativeWithUndo(_ id: String) -> (() -> Void)? {
+        guard let snapshot = initiatives.first(where: { $0.id == id }) else { return nil }
+        let relinkProjectIDs = projects.filter { $0.initiativeID == id }.map(\.id)
+        deleteInitiative(id)
+        return { [weak self] in
+            guard let self else { return }
+            self.initiatives.append(snapshot)
+            self.saveInitiatives()
+            for pid in relinkProjectIDs { self.setProjectInitiative(pid, initiativeID: id) }
+        }
+    }
+
+    /// Delete a section and return a closure that restores it and re-files the
+    /// tasks it detached.
+    func deleteSectionWithUndo(_ id: String) -> (() -> Void)? {
+        guard let snapshot = sections.first(where: { $0.id == id }) else { return nil }
+        let refileItemIDs = items.filter { $0.sectionID == id }.map(\.id)
+        deleteSection(id)
+        return { [weak self] in
+            guard let self else { return }
+            self.sections.append(snapshot)
+            self.saveSections()
+            for iid in refileItemIDs { self.setSection(iid, sectionID: id) }
+        }
+    }
+
     /// True if this page should render a task database (explicit flag, or
     /// inferred from having tasks for back-compat).
     func pageHasDatabase(_ project: Project) -> Bool {
@@ -629,6 +970,51 @@ final class ActionItemStore: ObservableObject {
     func setProjectBody(_ id: String, body: String) { updateProject(id) { $0.body = body } }
     func setProjectIcon(_ id: String, icon: String?) { updateProject(id) { $0.icon = icon } }
     func setProjectStatus(_ id: String, status: Project.Status) { updateProject(id) { $0.status = status } }
+    func setProjectTargetDate(_ id: String, _ date: Date?) { updateProject(id) { $0.targetDate = date } }
+
+    // MARK: - Custom database properties (NP-1)
+
+    func propertyDefs(forProject id: String) -> [PropertyDefinition] {
+        projects.first { $0.id == id }?.propertyDefs ?? []
+    }
+    @discardableResult
+    func addProperty(toProject id: String, name: String, type: PropertyType) -> PropertyDefinition {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let def = PropertyDefinition(name: trimmed.isEmpty ? "Property" : trimmed, type: type)
+        updateProject(id) { $0.propertyDefs = ($0.propertyDefs ?? []) + [def] }
+        return def
+    }
+    func renameProperty(_ propID: String, inProject id: String, name: String) {
+        updateProject(id) {
+            guard var defs = $0.propertyDefs, let i = defs.firstIndex(where: { $0.id == propID }) else { return }
+            defs[i].name = name; $0.propertyDefs = defs
+        }
+    }
+    func setPropertyOptions(_ propID: String, inProject id: String, options: [String]) {
+        updateProject(id) {
+            guard var defs = $0.propertyDefs, let i = defs.firstIndex(where: { $0.id == propID }) else { return }
+            defs[i].options = options; $0.propertyDefs = defs
+        }
+    }
+    func deleteProperty(_ propID: String, fromProject id: String) {
+        updateProject(id) { $0.propertyDefs = ($0.propertyDefs ?? []).filter { $0.id != propID } }
+        var changed = false
+        for i in items.indices where items[i].projectID == id {
+            if items[i].properties?[propID] != nil {
+                items[i].properties?.removeValue(forKey: propID)
+                items[i].updatedAt = Date()
+                changed = true
+            }
+        }
+        if changed { save() }
+    }
+    func setPropertyValue(_ taskID: String, propID: String, _ value: PropertyValue?) {
+        update(taskID) {
+            var p = $0.properties ?? [:]
+            if let value { p[propID] = value } else { p.removeValue(forKey: propID) }
+            $0.properties = p.isEmpty ? nil : p
+        }
+    }
 
     private func updateProject(_ id: String, mutate: (inout Project) -> Void) {
         guard let idx = projects.firstIndex(where: { $0.id == id }) else { return }
@@ -659,14 +1045,19 @@ final class ActionItemStore: ObservableObject {
         if let arr: [ActionItem] = try? SchemaEnvelope.decode(
             [ActionItem].self, from: data,
             currentVersion: Self.actionItemSchemaVersion,
-            decoder: SharedCoders.decoder()
+            decoder: SharedCoders.decoder(),
+            migrate: TaskSchemaMigrations.actionItems
         ) {
-            items = arr
+            items = arr.filter { $0.deletedAt == nil }
+            trashedItems = arr.filter { $0.deletedAt != nil }
         }
     }
 
+    /// Persists live + trashed tasks together (one file, partitioned on load by
+    /// the soft-delete tombstone) so Trash survives relaunch and the on-disk
+    /// MCP file contract is unchanged apart from the optional `deletedAt` field.
     private func save() {
-        writeEnvelope(items, to: fileURL,
+        writeEnvelope(items + trashedItems, to: fileURL,
                       version: Self.actionItemSchemaVersion,
                       tag: "ActionItemStore.save")
     }
@@ -744,12 +1135,13 @@ final class ActionItemStore: ObservableObject {
     private func writeEnvelope<T: Codable>(_ payload: T, to url: URL,
                                            version: Int, tag: String) {
         do {
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true)
+            // Encode on the main actor (cheap for these small files), then hand
+            // the bytes to the coordinator, which writes off-main, coalesced and
+            // debounced (P0-1). Removes the synchronous full-file disk write that
+            // ran on the UI thread on every single mutation.
             let env = SchemaEnvelope(version: version, data: payload)
             let data = try SharedCoders.encoder(pretty: true, sorted: true).encode(env)
-            try data.write(to: url, options: [.atomic])
+            TaskPersistenceCoordinator.shared.write(data, to: url)
         } catch {
             log.error("\(tag, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             ErrorReporter.shared.report(error, category: .storage,

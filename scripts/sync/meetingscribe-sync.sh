@@ -1,0 +1,196 @@
+#!/bin/bash
+#
+# meetingscribe-sync.sh — one-way backup of the MeetingScribe vault
+# from this Mac (the WORK MacBook) to the personal Mac mini HUB.
+#
+# Pushes the local vault into a quarantined namespace on the hub over
+# rsync + SSH on the Tailscale tailnet. Strictly send-only: it never deletes
+# or touches the hub's own data. See docs/CROSS_DEVICE_SYNC.md.
+#
+# Config is read from an env file (default ~/.config/meetingscribe-sync/config.env)
+# so this script never needs editing. install-sync.sh writes that file for you.
+#
+set -u -o pipefail
+
+# --------------------------------------------------------------------------
+# Load config
+# --------------------------------------------------------------------------
+CONFIG_FILE="${MEETINGSCRIBE_SYNC_CONFIG:-$HOME/.config/meetingscribe-sync/config.env}"
+if [ -f "$CONFIG_FILE" ]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+else
+  echo "✗ Config not found: $CONFIG_FILE" >&2
+  echo "  Run scripts/sync/install-sync.sh first." >&2
+  exit 2
+fi
+
+# Required from config: HUB_USER, HUB_HOST. Everything else has a default.
+: "${HUB_USER:?HUB_USER not set in $CONFIG_FILE}"
+: "${HUB_HOST:?HUB_HOST not set in $CONFIG_FILE}"
+
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/meetingscribe_sync}"
+DEVICE_NAME="${DEVICE_NAME:-work-macbook}"
+
+# Local vault: explicit override, else the app's configured storageDir, else
+# the iCloud-Drive default that matches VaultPaths.swift / AppSettings.swift.
+if [ -z "${VAULT_LOCAL:-}" ]; then
+  VAULT_LOCAL="$(defaults read com.tyleryannes.MeetingScribe storageDir 2>/dev/null || true)"
+fi
+if [ -z "${VAULT_LOCAL:-}" ]; then
+  VAULT_LOCAL="$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault"
+fi
+
+# Hub vault root (on the remote). Defaults to the same iCloud path. The work
+# data lands under <HUB_VAULT>/_remote/<DEVICE_NAME>/ — a sibling of, never a
+# parent of, the hub's live data.
+HUB_VAULT="${HUB_VAULT:-\$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault}"
+REMOTE_BASE="$HUB_VAULT/_remote/$DEVICE_NAME"
+
+LOG_DIR="${LOG_DIR:-$HOME/Library/Logs/MeetingScribe}"
+LOG_FILE="$LOG_DIR/sync.log"
+LOCK_FILE="${LOCK_FILE:-$HOME/Library/Caches/meetingscribe-sync.lock}"
+MAX_TRIES="${MAX_TRIES:-3}"
+BACKOFF_BASE="${BACKOFF_BASE:-15}"   # seconds; doubles each retry
+
+mkdir -p "$LOG_DIR" "$(dirname "$LOCK_FILE")"
+
+log() { printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*" >> "$LOG_FILE"; }
+
+# --------------------------------------------------------------------------
+# Pick an rsync that supports the flags below. macOS 15 ships openrsync as
+# /usr/bin/rsync, which lacks some of them — prefer Homebrew's rsync 3.x.
+# --------------------------------------------------------------------------
+RSYNC=""
+for cand in /opt/homebrew/bin/rsync /usr/local/bin/rsync /usr/bin/rsync; do
+  [ -x "$cand" ] && { RSYNC="$cand"; break; }
+done
+[ -n "$RSYNC" ] || { log "✗ no rsync found"; echo "✗ no rsync found" >&2; exit 3; }
+
+# --------------------------------------------------------------------------
+# Cleanup — a single EXIT trap (a second `trap ... EXIT` would replace this one,
+# so everything that needs cleaning is funnelled through here). macOS has no
+# `flock`, so the mkdir-lock fallback below is the usual path and MUST be removed
+# on exit or the next run would think a sync is still running.
+# --------------------------------------------------------------------------
+MKLOCK=""
+EXCLUDE_FILE=""
+cleanup() {
+  [ -n "$MKLOCK" ] && rmdir "$MKLOCK" 2>/dev/null || true
+  [ -n "$EXCLUDE_FILE" ] && rm -f "$EXCLUDE_FILE" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# --------------------------------------------------------------------------
+# Single-instance lock (don't let two syncs overlap)
+# --------------------------------------------------------------------------
+exec 9>"$LOCK_FILE"
+if command -v flock >/dev/null 2>&1; then
+  # util-linux flock (e.g. `brew install flock`): fd 9 auto-releases on exit.
+  if ! flock -n 9; then log "another sync is running; exiting"; exit 0; fi
+else
+  # Default on macOS: atomic mkdir lock, cleaned up by cleanup() above.
+  MKLOCK="${LOCK_FILE}.d"
+  if ! mkdir "$MKLOCK" 2>/dev/null; then
+    MKLOCK=""   # not ours — don't remove it in cleanup
+    log "another sync is running (mkdir lock); exiting"; exit 0
+  fi
+fi
+
+[ -d "$VAULT_LOCAL" ] || { log "✗ vault not found: $VAULT_LOCAL"; echo "✗ vault not found: $VAULT_LOCAL" >&2; exit 1; }
+
+# --------------------------------------------------------------------------
+# Exclude list — derived/local-only artifacts the hub regenerates itself, plus
+# logs/models/cruft. Audio (*.m4a) IS included: it's the meeting source of truth.
+# --------------------------------------------------------------------------
+EXCLUDE_FILE="$(mktemp -t meetingscribe-sync-exclude)"
+cat > "$EXCLUDE_FILE" <<'EOF'
+# Derived index — the hub rebuilds its own; never ship a foreign one.
+.meeting-index.json
+# People combined cache — regenerated by PeopleStore on the hub.
+_people-cache.json
+# Recent-meetings stub — regenerated.
+_recent.json
+# Inbox processing state — machine-local; would confuse the hub watcher.
+_inbox/processed/
+_inbox/.processed_ids.json
+# SQLite derived index lives in Application Support (outside the vault) — guard anyway.
+*.db
+*.db-wal
+*.db-shm
+secondbrain.db
+# Logs / diagnostics are per-machine.
+logs/
+diagnostics/
+# Whisper model blobs (~148 MB+) — the hub has its own; don't waste transfer.
+models/
+# rsync's own resume scratch dir.
+.rsync-partial/
+# macOS cruft.
+.DS_Store
+.Trashes/
+.Spotlight-V100/
+.fseventsd/
+._*
+# Never recurse a hub's quarantine back onto itself if paths ever overlap.
+_remote/
+EOF
+
+# --------------------------------------------------------------------------
+# rsync flags (see docs/CROSS_DEVICE_SYNC.md for the flag-by-flag rationale).
+# NOTE: NO --delete — the sync can only ADD/UPDATE in the namespace, never
+# remove anything on the hub. This is the core non-clobber guarantee.
+# --------------------------------------------------------------------------
+RSYNC_OPTS=(
+  -a -z -h
+  --partial --partial-dir=.rsync-partial
+  --temp-dir="/tmp/.meetingscribe-rsync-tmp"
+  --no-perms --no-owner --no-group
+  --omit-dir-times
+  --exclude-from="$EXCLUDE_FILE"
+  --timeout=600
+)
+# --contimeout / --info are rsync-3.x niceties; add them only if supported so
+# the script still runs on an older rsync.
+if "$RSYNC" --help 2>&1 | grep -q -- '--contimeout'; then RSYNC_OPTS+=(--contimeout=30); fi
+if "$RSYNC" --help 2>&1 | grep -q -- '--info'; then RSYNC_OPTS+=(--info=stats2); fi
+
+SSH_CMD="ssh -i $SSH_KEY -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=accept-new"
+
+# Allow a dry run:  meetingscribe-sync.sh --dry-run
+DRY=()
+if [ "${1:-}" = "--dry-run" ] || [ "${1:-}" = "-n" ]; then DRY=(--dry-run -i); log "DRY RUN"; fi
+
+# Ensure the remote namespace exists (idempotent, scoped to _remote only).
+if ! $SSH_CMD "$HUB_USER@$HUB_HOST" "mkdir -p \"$REMOTE_BASE\""; then
+  log "✗ cannot reach hub / create namespace (ssh or tailnet down?)"
+  echo "✗ cannot reach hub $HUB_USER@$HUB_HOST (is Tailscale up on both Macs?)" >&2
+  exit 1
+fi
+
+SRC="$VAULT_LOCAL/"                              # trailing slash: copy CONTENTS
+DST="$HUB_USER@$HUB_HOST:$REMOTE_BASE/"
+
+attempt=1; delay=$BACKOFF_BASE; rc=1
+while [ "$attempt" -le "$MAX_TRIES" ]; do
+  log "rsync attempt $attempt/$MAX_TRIES via $RSYNC -> $DST"
+  "$RSYNC" "${RSYNC_OPTS[@]}" "${DRY[@]}" -e "$SSH_CMD" "$SRC" "$DST" >> "$LOG_FILE" 2>&1
+  rc=$?
+  if [ "$rc" -eq 0 ]; then log "rsync OK (attempt $attempt)"; break; fi
+  if [ "$rc" -eq 24 ]; then log "rsync rc=24 (vanished files, benign) — treating as success"; rc=0; break; fi
+  log "rsync FAILED rc=$rc; backing off ${delay}s"
+  sleep "$delay"; attempt=$((attempt + 1)); delay=$((delay * 2))
+done
+
+if [ "$rc" -ne 0 ]; then
+  log "✗ sync failed after $MAX_TRIES attempts (rc=$rc)"
+  exit "$rc"
+fi
+
+# Heartbeat the hub (and you) can check for freshness.
+if [ ${#DRY[@]} -eq 0 ]; then
+  $SSH_CMD "$HUB_USER@$HUB_HOST" "date '+%Y-%m-%dT%H:%M:%S%z' > \"$REMOTE_BASE/.last_sync\"" 2>/dev/null || true
+fi
+
+log "sync complete (rc=0)"
+exit 0

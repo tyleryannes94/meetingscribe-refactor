@@ -40,6 +40,8 @@ enum DiagnosticsExporter {
         "dictationUsePolished",
         "dictationSwapHotkeyKeyCode",
         "dictationSwapHotkeyModifiers",
+        "dictationPromptHotkeyKeyCode",
+        "dictationPromptHotkeyModifiers",
         "enabledCalendarIDs",
         "whisperUseGPU",
         "whisperFlashAttention",

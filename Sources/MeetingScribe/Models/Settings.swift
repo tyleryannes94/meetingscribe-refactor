@@ -31,6 +31,8 @@ final class AppSettings {
         static let dictationUsePolished = "dictationUsePolished"
         static let dictationSwapHotkeyKeyCode = "dictationSwapHotkeyKeyCode"
         static let dictationSwapHotkeyModifiers = "dictationSwapHotkeyModifiers"
+        static let dictationPromptHotkeyKeyCode = "dictationPromptHotkeyKeyCode"
+        static let dictationPromptHotkeyModifiers = "dictationPromptHotkeyModifiers"
         static let enabledCalendarIDs = "enabledCalendarIDs"
         /// Storage key — kept as "coworkFolders" so existing users don't
         /// lose their saved folder list. Surfaced in code as `chatFolders`.
@@ -335,6 +337,31 @@ final class AppSettings {
         set { defaults.set(newValue, forKey: Keys.notifyAtMeetingStart) }
     }
 
+    /// Whether to fire a local notification when a task's due date arrives (P2-1).
+    var notifyTaskDue: Bool {
+        get { defaults.object(forKey: "notifyTaskDue") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "notifyTaskDue") }
+    }
+
+    /// Whether meeting extraction keeps action items owned by *other* people as
+    /// "delegated / waiting-on" tasks instead of dropping them (PM-19). Off by
+    /// default so existing behavior is unchanged until the user opts in.
+    var captureDelegatedTasks: Bool {
+        get { defaults.object(forKey: "captureDelegatedTasks") as? Bool ?? false }
+        set { defaults.set(newValue, forKey: "captureDelegatedTasks") }
+    }
+
+    /// Per-project last-used task view mode (NP-3), so each project reopens in
+    /// the view the user left it in.
+    func savedTaskViewMode(forProject id: String) -> String? {
+        (defaults.dictionary(forKey: "tasks.projectViews") as? [String: String])?[id]
+    }
+    func setSavedTaskViewMode(_ mode: String, forProject id: String) {
+        var d = (defaults.dictionary(forKey: "tasks.projectViews") as? [String: String]) ?? [:]
+        d[id] = mode
+        defaults.set(d, forKey: "tasks.projectViews")
+    }
+
     var detectZoomImpromptu: Bool {
         get { defaults.object(forKey: Keys.detectZoomImpromptu) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.detectZoomImpromptu) }
@@ -408,6 +435,23 @@ final class AppSettings {
     var dictationSwapHotkeyModifiers: UInt32 {
         get { UInt32(defaults.object(forKey: Keys.dictationSwapHotkeyModifiers) as? Int ?? 0) }
         set { defaults.set(Int(newValue), forKey: Keys.dictationSwapHotkeyModifiers) }
+    }
+
+    /// Carbon virtual keycode for the "rewrite dictation as an AI prompt"
+    /// hotkey. Default: F7 (98). Replaces the last-inserted dictation with a
+    /// TCREI-structured prompt version. Optional — only fires on demand.
+    var dictationPromptHotkeyKeyCode: UInt32 {
+        get {
+            let v = defaults.integer(forKey: Keys.dictationPromptHotkeyKeyCode)
+            return v == 0 ? 98 : UInt32(v)
+        }
+        set { defaults.set(Int(newValue), forKey: Keys.dictationPromptHotkeyKeyCode) }
+    }
+
+    /// Carbon modifier mask for the prompt-rewrite hotkey. 0 = no modifiers.
+    var dictationPromptHotkeyModifiers: UInt32 {
+        get { UInt32(defaults.object(forKey: Keys.dictationPromptHotkeyModifiers) as? Int ?? 0) }
+        set { defaults.set(Int(newValue), forKey: Keys.dictationPromptHotkeyModifiers) }
     }
 
     /// EventKit calendar identifiers the user has opted in to. Empty set =

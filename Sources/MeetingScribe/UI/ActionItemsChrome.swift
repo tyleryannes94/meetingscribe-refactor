@@ -132,7 +132,9 @@ extension ActionItemsView {
     func projectPane(_ project: Project) -> some View {
         let kids = store.childProjects(of: project.id)
         if store.pageHasDatabase(project) {
-            ProjectPageHeader(store: store, project: project, bodyFills: false)
+            ProjectPageHeader(store: store, project: project, bodyFills: false,
+                              onOpenInitiative: { selectedInitiativeID = $0 },
+                              onOpenProject: { selectedProjectID = $0 })
             if !kids.isEmpty { subPagesSection(project, kids: kids) }
             Divider().overlay(NDS.divider)
             toolbar
@@ -142,7 +144,9 @@ extension ActionItemsView {
             // Free-form page: the markdown editor IS the page. Sections are
             // headings, to-dos are checkboxes — all authored inline. A
             // database is the one thing you add as a separate block.
-            ProjectPageHeader(store: store, project: project, bodyFills: true)
+            ProjectPageHeader(store: store, project: project, bodyFills: true,
+                              onOpenInitiative: { selectedInitiativeID = $0 },
+                              onOpenProject: { selectedProjectID = $0 })
             docFooter(project, kids: kids)
         }
     }
@@ -305,6 +309,22 @@ extension ActionItemsView {
             ForEach(ViewMode.allCases) { m in
                 viewTab(m)
             }
+            Divider().frame(height: 16).overlay(NDS.divider)
+            // One-click saved-slice chips (P2-2 / UX-10) — the daily views that
+            // were previously buried in the filter menu.
+            quickViewChip("All", active: filter == .all && priorityFilter == .any && ownerScope == .anyone) {
+                filter = .all; priorityFilter = .any; ownerScope = .anyone
+            }
+            quickViewChip("My open", active: ownerScope == .mine && filter == .open) {
+                ownerScope = .mine; filter = .open; priorityFilter = .any
+            }
+            quickViewChip("This week", active: filter == .thisWeek) { filter = .thisWeek }
+            quickViewChip("Overdue", active: filter == .overdue) { filter = .overdue }
+            if store.items.contains(where: { $0.delegated == true }) {
+                quickViewChip("Delegated", active: ownerScope == .delegated) {
+                    ownerScope = ownerScope == .delegated ? .anyone : .delegated
+                }
+            }
             Spacer()
             // Active-filter pill (only when filtering)
             if filter != .all || priorityFilter != .any {
@@ -348,10 +368,11 @@ extension ActionItemsView {
 
             if manager.isSyncingTasks { ProgressView().controlSize(.small) }
 
-            Button { addTask() } label: { Label("New", systemImage: "plus") }
+            Button { quickAdding = true } label: { Label("New", systemImage: "plus") }
                 .buttonStyle(UntitledPrimaryButtonStyle())
                 .keyboardShortcut("n", modifiers: [.command, .option])
                 .help("Create a new task (⌥⌘N)")
+                .popover(isPresented: $quickAdding, arrowEdge: .bottom) { quickAddPopover }
 
             // Overflow
             Menu {
@@ -362,6 +383,25 @@ extension ActionItemsView {
                 Button {
                     manager.backfillActionItemsIfNeeded(force: true)
                 } label: { Label("Re-extract from meetings", systemImage: "arrow.clockwise") }
+                Divider()
+                Button { showInsights = true } label: {
+                    Label("Insights", systemImage: "chart.bar.xaxis")
+                }
+                Button { exportTasksCSV() } label: {
+                    Label("Export tasks (CSV)…", systemImage: "square.and.arrow.up")
+                }
+                Button { importTasksCSV() } label: {
+                    Label("Import tasks (CSV)…", systemImage: "square.and.arrow.down")
+                }
+                Button { showShortcuts = true } label: {
+                    Label("Keyboard shortcuts", systemImage: "keyboard")
+                }
+                Button {
+                    showTrash = true
+                } label: {
+                    Label(store.trashedItems.isEmpty ? "Trash" : "Trash (\(store.trashedItems.count))",
+                          systemImage: "trash")
+                }
             } label: {
                 Image(systemName: "ellipsis")
             }
@@ -385,6 +425,18 @@ extension ActionItemsView {
         .buttonStyle(.plain)
     }
 
+    func quickViewChip(_ label: String, active: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 12, weight: active ? .semibold : .regular))
+                .padding(.horizontal, 9).padding(.vertical, 4)
+                .background(active ? NDS.brand.opacity(0.16) : Color.clear, in: Capsule())
+                .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     var filterSummary: String {
         var parts: [String] = []
         if filter != .all { parts.append(filter.label) }
@@ -394,6 +446,65 @@ extension ActionItemsView {
 
     /// Creates a manual task, scoped to the currently-selected project, and
     /// opens it for editing in the list view.
+    /// Natural-language quick-add (P3-2). One line → a fully-specified task.
+    var quickAddPopover: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Email Sarah friday !high #work", text: $quickAddText)
+                .textFieldStyle(.plain)
+                .font(NDS.body)
+                .frame(width: 320)
+                .onSubmit { commitQuickAdd() }
+            Text("Type a task — add !priority, #label, or a date like “tomorrow”.")
+                .font(NDS.small).foregroundStyle(NDS.textTertiary)
+        }
+        .padding(14)
+    }
+
+    func commitQuickAdd() {
+        let raw = quickAddText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { quickAdding = false; return }
+        let pid = realSelectedProjectID
+        // Adding a task to a doc-only page turns its database on.
+        if let pid, let p = store.project(id: pid), !store.pageHasDatabase(p) {
+            store.setProjectDatabaseEnabled(pid, true)
+        }
+        _ = store.createTask(parsing: raw, projectID: pid)
+        quickAddText = ""
+        if viewMode == .table || viewMode == .board { viewMode = .list }
+        if filter == .completed { filter = .all }
+        // Popover stays open + cleared for rapid multi-entry; Esc closes it.
+    }
+
+    func exportTasksCSV() {
+        let csv = TaskExporter.csv(store.items,
+                                   projectName: { store.project(id: $0)?.name },
+                                   labelName: { store.label(id: $0)?.name })
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "tasks.csv"
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            try? Data(csv.utf8).write(to: url)
+        }
+    }
+
+    func importTasksCSV() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url,
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let pid = realSelectedProjectID
+        if let pid, let p = store.project(id: pid), !store.pageHasDatabase(p) {
+            store.setProjectDatabaseEnabled(pid, true)
+        }
+        for row in TaskCSVImporter.parse(text) {
+            let t = store.createTask(title: row.title, projectID: pid,
+                                     status: row.status ?? .open, priority: row.priority ?? .medium)
+            if let due = row.dueDate { store.setDueDate(t.id, dueDate: due) }
+            if let owner = row.owner { store.setOwner(t.id, owner: owner) }
+        }
+    }
+
     func addTask() {
         let pid = (selectedProjectID == Self.noProjectSentinel) ? nil : selectedProjectID
         // Adding a task to a doc-only page turns its database on.

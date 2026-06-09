@@ -134,7 +134,7 @@ Local AI-generated images and videos. Has its own image generator backed by Core
 
 ### Notes
 
-Freestanding voice notes — anything you dictated outside of a meeting. Includes the raw Whisper transcript AND a "polished" version where Ollama cleans up punctuation and capitalization. Use the swap hotkey to flip between raw and polished when pasting.
+Freestanding voice notes — anything you dictated outside of a meeting. Includes the raw Whisper transcript, a "polished" version where Ollama cleans up punctuation and capitalization, and an optional "AI Prompt" version that rewrites your recording into a structured prompt using the TCREI framework (Task, Context, References, Evaluate, Iterate). Use the swap hotkey to flip between raw and polished when pasting; use the AI-prompt hotkey to rewrite a dictation into a prompt in place. Each version is also shown side-by-side in the note detail, with a Generate button for the AI Prompt.
 
 ### Integrations
 
@@ -217,6 +217,10 @@ People tab → click on him → Messages section → "Analyze" (if not already l
 
 Press your dictation hotkey (default: configurable in Settings → Dictation). Talk for as long as you want. Press the hotkey again to stop. The raw Whisper transcript appears in your clipboard immediately — paste it wherever you want. Ollama also runs a "polish" pass in the background to clean up punctuation; press the swap hotkey to flip to the polished version when you paste.
 
+### "Dictate a request to paste into an AI"
+
+Dictate your request, then press the **AI-prompt hotkey** (default F7). The just-inserted text is replaced in place with a structured prompt built using the TCREI framework — Task, Context, References, Evaluate, Iterate — so it reads like a proper engineering blueprint instead of a vague ask. Press the swap hotkey to flip back to the raw/polished version. This rewrite is optional and runs on demand, so it only touches Ollama when you ask for it.
+
 ### "Record a Zoom call I'm about to join"
 
 Two options:
@@ -249,6 +253,7 @@ A few non-obvious settings you can change in Settings → :
 | **Notify at meeting start** | Sends a banner notification when a calendar meeting is starting. |
 | **Dictation hotkey** | Pick the key combo you want for global dictation. F5 by default. |
 | **Dictation swap hotkey** | Flips the clipboard between raw and polished transcript versions. |
+| **AI-prompt hotkey** | Optional. Rewrites the last dictation into a TCREI-structured AI prompt in place. F7 by default. |
 
 ---
 
@@ -299,7 +304,8 @@ Everything is plain files in your Documents folder:
 │   ├── note.json
 │   ├── audio.m4a
 │   ├── transcript.md
-│   └── polished.md
+│   ├── polished.md
+│   └── prompt.md          (optional TCREI AI-prompt rewrite)
 ├── people/<slug>/
 │   ├── person.json        (contact + memories + attached notes + relationships)
 │   ├── person.md          (human-readable mirror, regenerated on every write)
@@ -334,7 +340,7 @@ A few facts worth knowing if you care about where data goes:
 - **No telemetry**. The app makes zero network calls for analytics, crash reports, feature flags, or any other "phone home" pattern.
 - **All AI runs locally**. Whisper and Ollama are both local. The chat, transcription, summarization, person extraction, and analysis features never call out to OpenAI / Anthropic / anyone.
 - **The only outbound traffic** comes from integrations YOU configured: Linear / Notion / Google Drive API calls when you sync. And only against their APIs — your data isn't relayed through a third-party MeetingScribe server.
-- **Apple notarization / updates**: Sparkle checks for app updates against the GitHub releases page. That's the only background network call. You can disable it in Settings.
+- **Apple notarization / updates**: Sparkle checks for app updates against the GitHub releases page. That's the only background network call. Settings → **Software Update** has a "Check for Updates" button (also in the app menu), an automatic-check toggle you can turn off, the last-checked time, and the feed URL. Updates are downloaded from the project's GitHub Releases and verified against the app's built-in EdDSA signing key before they're applied.
 
 ---
 

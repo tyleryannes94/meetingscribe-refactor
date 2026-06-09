@@ -4,6 +4,7 @@ import Carbon.HIToolbox
 @available(macOS 14.0, *)
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var updater: UpdaterController
 
     @State private var storageDir: String = AppSettings.shared.storageDir.path
     @State private var whisperBinary: String = AppSettings.shared.whisperBinary
@@ -25,12 +26,15 @@ struct SettingsView: View {
     @State private var meetingRecMods: UInt32 = AppSettings.shared.meetingRecordHotkeyModifiers
     @State private var swapKeyCode: UInt32 = AppSettings.shared.dictationSwapHotkeyKeyCode
     @State private var swapMods: UInt32 = AppSettings.shared.dictationSwapHotkeyModifiers
+    @State private var promptKeyCode: UInt32 = AppSettings.shared.dictationPromptHotkeyKeyCode
+    @State private var promptMods: UInt32 = AppSettings.shared.dictationPromptHotkeyModifiers
     @State private var dictationAutoPaste: Bool = AppSettings.shared.dictationAutoPaste
     @State private var dictationUsePolished: Bool = AppSettings.shared.dictationUsePolished
     @State private var whisperUseGPU: Bool = AppSettings.shared.whisperUseGPU
     @State private var whisperFlashAttn: Bool = AppSettings.shared.whisperFlashAttention
     @State private var whisperLanguage: String = AppSettings.shared.whisperLanguage
     @State private var autoExtractPeople: Bool = AppSettings.shared.autoExtractPeople
+    @State private var captureDelegated: Bool = AppSettings.shared.captureDelegatedTasks
     @State private var userName: String = AppSettings.shared.userName
     @State private var userNameAliases: String = AppSettings.shared.userNameAliases.joined(separator: ", ")
     @State private var allowRemoteOllama: Bool = AppSettings.shared.allowRemoteOllamaEndpoint
@@ -88,6 +92,39 @@ struct SettingsView: View {
                     }
                     Text("Checks the transcription model, Ollama, disk space, and macOS permissions.")
                         .font(.caption2).foregroundStyle(.secondary)
+                }
+                Section("Software Update") {
+                    HStack {
+                        Button {
+                            updater.checkForUpdates()
+                        } label: {
+                            Label("Check for Updates", systemImage: "arrow.down.circle")
+                        }
+                        .disabled(!updater.canCheckForUpdates)
+                        Spacer()
+                        if let last = updater.lastChecked {
+                            Text("Last checked \(last.formatted(.relative(presentation: .named)))")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    if updater.isUpdaterConfigured {
+                        Toggle("Check for updates automatically", isOn: $updater.automaticChecks)
+                        Text("Pulls the latest release from this repo and installs it. Each update is downloaded from the project's GitHub Releases and verified against the app's built-in signing key before it's applied — no reinstall by hand.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        HStack(alignment: .top, spacing: 4) {
+                            Text("Feed:").font(.caption2).foregroundStyle(.secondary)
+                            Text(updater.feedURLString)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    } else {
+                        Label("In-app updates aren't available in this build (no signing key).",
+                              systemImage: "exclamationmark.triangle")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        Text("Reinstall from source with install.sh to get the latest. Signed auto-updates require a release built through the GitHub Actions release workflow (see RELEASING.md).")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
                 Section("You") {
                     TextField("Your name", text: $userName)
@@ -178,7 +215,23 @@ struct SettingsView: View {
                         }
                         .frame(width: 90)
                     }
+                    HStack {
+                        Text("Rewrite as AI prompt")
+                        Spacer()
+                        HotkeyRecorder(keyCode: $promptKeyCode, modifiers: $promptMods)
+                        Menu("Presets") {
+                            ForEach(quickPresets, id: \.label) { preset in
+                                Button(preset.label) {
+                                    promptKeyCode = preset.key
+                                    promptMods = preset.mods
+                                }
+                            }
+                        }
+                        .frame(width: 90)
+                    }
                     Text("Click a shortcut box, then press ANY key combination to set it. After dictating, press the swap shortcut to replace the inserted text with the other version (raw ↔ polished) in place.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Text("The AI-prompt shortcut is optional. It rewrites your dictation into a structured prompt using the TCREI framework (Task, Context, References, Evaluate, Iterate) — ideal when you're dictating a request to paste into an AI. Default: F7. Press the swap shortcut to flip back to raw/polished.")
                         .font(.caption2).foregroundStyle(.secondary)
                     Toggle("Paste transcription at cursor after dictation", isOn: $dictationAutoPaste)
                     Toggle("Use the polished (cleaned-up) version by default", isOn: $dictationUsePolished)
@@ -517,6 +570,9 @@ struct SettingsView: View {
                     Toggle("Auto-extract people from meetings", isOn: $autoExtractPeople)
                     Text("After a meeting is summarized, a second on-device Ollama pass lists the people mentioned in the transcript. Strong matches link to existing people automatically; uncertain ones appear as suggestions on the Today tab. Nothing leaves your machine.")
                         .font(.caption).foregroundStyle(.secondary)
+                    Toggle("Capture others' action items as “delegated / waiting-on”", isOn: $captureDelegated)
+                    Text("By default, meeting extraction keeps only action items that are yours. Enable this to also capture items owned by other participants, tagged so a “Delegated” view can track what you're waiting on.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
 
                 Section("Export to Obsidian") {
@@ -656,12 +712,15 @@ struct SettingsView: View {
         s.meetingRecordHotkeyModifiers = meetingRecMods
         s.dictationSwapHotkeyKeyCode = swapKeyCode
         s.dictationSwapHotkeyModifiers = swapMods
+        s.dictationPromptHotkeyKeyCode = promptKeyCode
+        s.dictationPromptHotkeyModifiers = promptMods
         s.dictationAutoPaste = dictationAutoPaste
         s.dictationUsePolished = dictationUsePolished
         s.whisperUseGPU = whisperUseGPU
         s.whisperFlashAttention = whisperFlashAttn
         s.whisperLanguage = whisperLanguage
         s.autoExtractPeople = autoExtractPeople
+        s.captureDelegatedTasks = captureDelegated
         let trimmedName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedName.isEmpty { s.userName = trimmedName }
         s.userNameAliases = userNameAliases
