@@ -95,6 +95,7 @@ struct UnifiedMeetingDetail: View {
             Group {
                 switch tab {
                 case .notes:      combinedNotesBody
+                case .actions:    actionsBody
                 case .transcript: transcriptBody
                 case .chat:       chatBody
                 }
@@ -144,13 +145,70 @@ struct UnifiedMeetingDetail: View {
     }
     // MARK: - Tabs
 
+    /// Count of this meeting's action items still awaiting review (Triage) —
+    /// shown as a badge on the Actions tab (§3B).
+    var unconfirmedActionCount: Int {
+        guard let m = meeting else { return 0 }
+        return manager.actionItems.items(for: m.id).filter { $0.needsTriage }.count
+    }
+
     var tabPicker: some View {
         HStack {
-            MSPillTabs(tabs: DetailTab.allCases.map { ($0, $0.label) }, selection: $tab)
+            MSPillTabs(tabs: DetailTab.allCases.map { t in
+                (t, t == .actions && unconfirmedActionCount > 0
+                    ? "Actions \(unconfirmedActionCount)" : t.label)
+            }, selection: $tab)
             Spacer(minLength: 0)
         }
         .padding([.horizontal, .top], 10)
         .padding(.bottom, 4)
+    }
+
+    /// Dedicated Actions tab (§3D): this meeting's action items with confirm /
+    /// push-to-Tasks controls and inline add.
+    @ViewBuilder
+    var actionsBody: some View {
+        if let m = meeting {
+            let items = manager.actionItems.items(for: m.id)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        NotionEyebrow(text: "Actions from this meeting", count: items.count)
+                        Spacer()
+                        let unconfirmed = items.filter { $0.needsTriage }
+                        if !unconfirmed.isEmpty {
+                            Button {
+                                manager.actionItems.confirm(ids: unconfirmed.map(\.id))
+                            } label: {
+                                Label("Add all \(unconfirmed.count) → Tasks", systemImage: "checkmark.circle.fill")
+                            }
+                            .buttonStyle(MSPrimaryButtonStyle())
+                        }
+                    }
+                    if items.isEmpty {
+                        MSEmptyState(systemImage: "checklist",
+                                     title: "No action items",
+                                     message: "Items appear here after summarization, or add one below.")
+                            .frame(minHeight: 200)
+                    } else {
+                        ForEach(items) { item in
+                            MeetingActionRow(item: item, store: manager.actionItems)
+                        }
+                    }
+                    Button {
+                        var t = manager.actionItems.createTask(title: "New action item")
+                        t.meetingID = m.id; t.meetingTitle = m.displayTitle; t.meetingDate = m.startDate
+                        manager.actionItems.upsert(t)
+                    } label: {
+                        Label("Add action item", systemImage: "plus")
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
+                }
+                .padding(20)
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
     func placeholder(systemImage: String, title: String, message: String) -> some View {
         VStack(spacing: 8) {

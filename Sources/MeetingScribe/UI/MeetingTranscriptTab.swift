@@ -161,11 +161,12 @@ struct LiveTranscriptScroll: View {
 /// read the recap and write notes without tab-switching. Transcript stays its
 /// own tab (long + navigable), Ask AI stays interactive.
 enum DetailTab: String, CaseIterable, Identifiable {
-    case notes, transcript, chat
+    case notes, actions, transcript, chat
     var id: String { rawValue }
     var label: String {
         switch self {
         case .notes:      return "Notes"
+        case .actions:    return "Actions"
         case .transcript: return "Transcript"
         case .chat:       return "Ask AI"
         }
@@ -173,6 +174,7 @@ enum DetailTab: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .notes:      return "note.text"
+        case .actions:    return "checklist"
         case .transcript: return "text.alignleft"
         case .chat:       return "bubble.left.and.sparkles"
         }
