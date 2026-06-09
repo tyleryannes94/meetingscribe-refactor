@@ -90,7 +90,9 @@ final class QuickDictation: ObservableObject {
         Task { @MainActor in
             let newText: String
             switch target {
-            case .raw:
+            case .raw, .prompt:
+                // `target` is only ever .raw or .polished (computed above);
+                // .prompt is unreachable here but kept for exhaustiveness.
                 newText = st.raw
             case .polished:
                 // Prefer the cached polished text; otherwise await the in-flight
