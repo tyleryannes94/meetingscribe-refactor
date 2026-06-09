@@ -574,9 +574,7 @@ private struct PersonRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: 26))
-                .foregroundStyle(NDS.brand.opacity(0.7))
+            MSAvatar(name: person.displayName, size: 28)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(person.displayName).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)

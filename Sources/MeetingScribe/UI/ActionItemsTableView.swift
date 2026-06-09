@@ -101,11 +101,10 @@ extension ActionItemsView {
                     Button(p.label) { store.setPriority(item.id, priority: p) }
                 }
             } label: {
-                Text(item.priority.label).font(.caption)
-                    .foregroundStyle(priorityColor(item.priority))
+                MSPriorityBadge(priority: item.priority)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden)
-            .frame(width: 80, alignment: .leading)
+            .frame(width: 96, alignment: .leading)
             Menu {
                 Button("Today") { store.setDueDate(item.id, dueDate: Self.startOfToday()) }
                 Button("Tomorrow") { store.setDueDate(item.id, dueDate: Self.daysFromToday(1)) }
@@ -115,11 +114,10 @@ extension ActionItemsView {
                     Button("Clear due date") { store.setDueDate(item.id, dueDate: nil) }
                 }
             } label: {
-                Text(dueShort(item)).font(.caption.monospacedDigit())
-                    .foregroundStyle(dueColor(item))
+                DueChip(date: item.dueDate, status: item.status, style: .plain)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden)
-            .frame(width: 80, alignment: .leading)
+            .frame(width: 96, alignment: .leading)
             Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary)
                 .lineLimit(1).frame(width: 160, alignment: .leading)
         }

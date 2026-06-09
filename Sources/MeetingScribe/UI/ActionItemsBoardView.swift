@@ -108,61 +108,60 @@ extension ActionItemsView {
     }()
 
     func boardCard(_ item: ActionItem) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            let itemLabels = store.labels(for: item)
-            if !itemLabels.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(itemLabels) { l in
-                        Capsule().fill(Color(hex: l.colorHex) ?? .gray)
-                            .frame(width: 22, height: 4)
+        HStack(alignment: .top, spacing: NDS.spaceSM) {
+            // Left priority accent bar — redundant with the badge glyph below so
+            // priority reads without relying on color alone (AV-4).
+            RoundedRectangle(cornerRadius: 2)
+                .fill(NDS.priority(item.priority))
+                .frame(width: 3)
+                .opacity(item.priority == .low ? 0 : 1)
+            VStack(alignment: .leading, spacing: 6) {
+                let itemLabels = store.labels(for: item)
+                if !itemLabels.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(itemLabels) { l in
+                            Capsule().fill(Color(hex: l.colorHex) ?? .gray)
+                                .frame(width: 22, height: 4)
+                        }
                     }
                 }
-            }
-            Text(item.title).font(.caption).lineLimit(3)
-                .strikethrough(item.status == .completed)
-            if item.subtaskProgress.total > 0 {
-                Label("\(item.subtaskProgress.done)/\(item.subtaskProgress.total)", systemImage: "checklist")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-            HStack(spacing: 6) {
-                Text(item.priority.label)
-                    .font(.caption2)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(priorityColor(item.priority).opacity(0.16), in: Capsule())
-                    .foregroundStyle(priorityColor(item.priority))
-                if let due = item.dueDate {
-                    let overdue = due < Calendar.current.startOfDay(for: Date()) && item.status != .completed
-                    let isToday = Calendar.current.isDateInToday(due)
-                    Label(Self.dueFormatter.string(from: due), systemImage: "calendar")
-                        .labelStyle(.titleOnly)
-                        .font(.caption2)
-                        .foregroundStyle(overdue ? Color.red : (isToday ? Color.orange : Color.secondary))
+                Text(item.title).font(.caption).lineLimit(3)
+                    .strikethrough(item.status == .completed)
+                if item.subtaskProgress.total > 0 {
+                    Label("\(item.subtaskProgress.done)/\(item.subtaskProgress.total)", systemImage: "checklist")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
-                if let name = store.project(for: item)?.name {
-                    Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1)
-                }
-                if let owner = item.owner, !owner.isEmpty {
-                    TaskOwnerAvatar(name: owner, size: 16)
-                }
-                Spacer()
-                Menu {
-                    ForEach(ActionItem.Status.allCases) { s in
-                        Button(s.label) { store.setStatus(item.id, status: s) }
+                HStack(spacing: 6) {
+                    MSPriorityBadge(priority: item.priority, showLabel: false)
+                    if item.dueDate != nil {
+                        DueChip(date: item.dueDate, status: item.status, style: .plain)
                     }
-                    Divider()
-                    projectMenuItems(for: item)
-                    Divider()
-                    Button(role: .destructive) {
-                        let id = item.id, title = item.title
-                        store.delete(id)
-                        ToastCenter.shared.show("Deleted “\(title)”", undoTitle: "Undo") { store.restore(id) }
-                    } label: { Text("Delete") }
-                } label: {
-                    Image(systemName: "ellipsis").foregroundStyle(.secondary)
+                    if let name = store.project(for: item)?.name {
+                        Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    if let owner = item.owner, !owner.isEmpty {
+                        TaskOwnerAvatar(name: owner, size: 16)
+                    }
+                    Menu {
+                        ForEach(ActionItem.Status.allCases) { s in
+                            Button(s.label) { store.setStatus(item.id, status: s) }
+                        }
+                        Divider()
+                        projectMenuItems(for: item)
+                        Divider()
+                        Button(role: .destructive) {
+                            let id = item.id, title = item.title
+                            store.delete(id)
+                            ToastCenter.shared.show("Deleted “\(title)”", undoTitle: "Undo") { store.restore(id) }
+                        } label: { Text("Delete") }
+                    } label: {
+                        Image(systemName: "ellipsis").foregroundStyle(.secondary)
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 20)
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 20)
+                Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
             }
-            Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

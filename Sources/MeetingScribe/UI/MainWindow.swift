@@ -93,7 +93,7 @@ struct MainWindow: View {
                 if visited.contains(s) {
                     tabView(for: s)
                         .opacity(section == s ? 1 : 0)
-                        .animation(.easeOut(duration: 0.15), value: section)
+                        .animation(NDS.springStandard, value: section)
                         .allowsHitTesting(section == s)
                         .zIndex(section == s ? 1 : 0)
                 }
