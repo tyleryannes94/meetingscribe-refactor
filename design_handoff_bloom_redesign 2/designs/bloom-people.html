@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="bloom.css">
+<title>Bloom · People</title>
+<style>
+  .prow{ display:flex; align-items:center; gap:11px; padding:9px 11px; border-radius:10px; cursor:pointer; }
+  .prow:hover{ background:var(--surface); } .prow.on{ background:var(--accent-soft); }
+  .filt{ font-size:11.5px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--txt-2); }
+  .filt.on{ background:var(--accent-soft); border-color:rgba(165,147,255,.3); color:#c4b8ff; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="titlebar"><div class="lights"><i class="c"></i><i class="m"></i><i class="x"></i></div><div class="wt">MeetingScribe</div><div class="sp"></div></div>
+  <div class="body">
+    <nav class="rail">
+      <div class="brand"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h2M7 7v10M11 4v16M15 8v8M19 11v2"/></svg></span><b>MeetingScribe</b></div>
+      <div class="navgroup">WORKSPACE</div>
+      <div class="navitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg> Today</div>
+      <div class="navitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Meetings</div>
+      <div class="navitem active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> People</div>
+      <div class="navgroup">ORGANIZE</div>
+      <div class="navitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Tasks <span class="ct">7</span></div>
+      <div class="navitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/></svg> Voice Notes</div>
+      <div class="spacer"></div>
+      <div class="railfoot">
+        <div class="seg"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4"/></svg>Light</span><span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>Dark</span></div>
+        <div class="kbd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>⌘K</div>
+        <div class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/></svg></div>
+      </div>
+    </nav>
+
+    <!-- LIST -->
+    <div style="width:308px;flex:0 0 auto;border-right:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column">
+      <div style="padding:16px 14px 8px">
+        <div class="row" style="justify-content:space-between"><h1 style="font-size:19px;font-weight:700">People</h1><div class="btn primary sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg> Add</div></div>
+        <div class="field" style="margin-top:11px;padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="faint">Search name, tag, company</span></div>
+        <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap"><span class="filt on">All</span><span class="filt">Colleagues</span><span class="filt">Clients</span><span class="filt">Skio</span></div>
+      </div>
+      <div style="padding:4px 8px;overflow:hidden">
+        <div class="prow on"><div class="av" style="background:linear-gradient(150deg,#b79cff,#9a7af0)">MK</div><div style="flex:1"><div style="font-weight:600;font-size:13.5px">Maya Kerr</div><div class="faint" style="font-size:11.5px">VP Product · Skio</div></div><span class="faint" style="font-size:11px">2d</span></div>
+        <div class="prow"><div class="av" style="background:linear-gradient(150deg,#74e0bc,#46c79f)">DV</div><div style="flex:1"><div style="font-weight:600;font-size:13.5px">Devon Vale</div><div class="faint" style="font-size:11.5px">Counsel · Skio</div></div><span class="faint" style="font-size:11px">5h</span></div>
+        <div class="prow"><div class="av" style="background:linear-gradient(150deg,#8ab4ff,#6b96ec)">JL</div><div style="flex:1"><div style="font-weight:600;font-size:13.5px">Jules Lin</div><div class="faint" style="font-size:11.5px">Finance Lead</div></div><span class="faint" style="font-size:11px">1d</span></div>
+        <div class="prow"><div class="av" style="background:linear-gradient(150deg,#ffce6b,#f0b43f)">RA</div><div style="flex:1"><div style="font-weight:600;font-size:13.5px">Rae Adler</div><div class="faint" style="font-size:11.5px">Designer · Recharge</div></div><span class="faint" style="font-size:11px">3w</span></div>
+        <div class="prow"><div class="av" style="background:linear-gradient(150deg,#ff9173,#f06a4c)">TN</div><div style="flex:1"><div style="font-weight:600;font-size:13.5px">Theo Nash</div><div class="faint" style="font-size:11.5px">Founder · Northwind</div></div><span class="faint" style="font-size:11px">2mo</span></div>
+        <div class="prow"><div class="av" style="background:linear-gradient(150deg,#b79cff,#9a7af0)">SO</div><div style="flex:1"><div style="font-weight:600;font-size:13.5px">Sam Owens</div><div class="faint" style="font-size:11.5px">Eng · Skio</div></div><span class="faint" style="font-size:11px">6d</span></div>
+      </div>
+    </div>
+
+    <!-- DETAIL -->
+    <main class="main"><div class="scroll" style="padding:26px 30px">
+      <div class="row" style="gap:16px;align-items:flex-start">
+        <div class="av" style="width:64px;height:64px;font-size:23px;border-radius:18px;background:linear-gradient(150deg,#b79cff,#9a7af0)">MK</div>
+        <div style="flex:1">
+          <h1 style="font-size:25px;font-weight:800;letter-spacing:-.5px">Maya Kerr</h1>
+          <div class="muted" style="font-size:13.5px;margin-top:3px">VP Product · Skio</div>
+          <div class="row" style="gap:6px;margin-top:9px;flex-wrap:wrap"><span class="chip t-iris">Colleague</span><span class="chip t-gray">Skio</span><span class="chip t-gray">Purple Party 2026</span></div>
+        </div>
+        <div class="row" style="gap:8px"><div class="btn secondary sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h16v16H4z" fill="none"/><path d="M22 6l-10 7L2 6"/></svg> Email</div><div class="btn secondary sm">Log encounter</div></div>
+      </div>
+
+      <!-- stay connected nudge -->
+      <div class="card" style="padding:13px 15px;margin-top:18px;border-color:rgba(226,171,92,.28)">
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke="var(--warn)" style="width:16px;height:16px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg><span style="font-size:13px">You usually talk every <b>2 weeks</b> — last spoke 18 days ago.</span><div class="btn primary sm" style="margin-left:auto">Reconnect</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:20px">
+        <!-- left: properties + meetings -->
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div>
+            <div class="eyebrow" style="margin-bottom:10px">DETAILS</div>
+            <div style="display:flex;flex-direction:column;gap:9px;font-size:13px">
+              <div class="row"><span class="muted" style="width:96px">Email</span><span>maya@skio.com</span></div>
+              <div class="row"><span class="muted" style="width:96px">Company</span><span>Skio</span></div>
+              <div class="row"><span class="muted" style="width:96px">First met</span><span>Mar 2024 · Skio</span></div>
+              <div class="row"><span class="muted" style="width:96px">Cadence</span><span class="badge t-ok">Healthy</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="eyebrow" style="margin-bottom:10px">SHARED MEETINGS · 9</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="card hover" style="padding:10px 12px"><div class="row"><div style="flex:1"><div style="font-size:12.5px;font-weight:600">Product Sync — Skio</div><div class="faint" style="font-size:11px">Today · 11:00 AM</div></div><svg viewBox="0 0 24 24" fill="none" stroke="var(--txt-3)" style="width:14px;height:14px"><path d="M9 18l6-6-6-6"/></svg></div></div>
+              <div class="card hover" style="padding:10px 12px"><div class="row"><div style="flex:1"><div style="font-size:12.5px;font-weight:600">Contract review</div><div class="faint" style="font-size:11px">Jun 2 · 3:00 PM</div></div><svg viewBox="0 0 24 24" fill="none" stroke="var(--txt-3)" style="width:14px;height:14px"><path d="M9 18l6-6-6-6"/></svg></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- right: memories + messages -->
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div>
+            <div class="row" style="margin-bottom:10px"><div class="eyebrow">MEMORIES</div><div class="iconbtn" style="margin-left:auto;width:24px;height:24px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg></div></div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="field" style="padding:10px 12px;display:block;color:var(--txt);font-size:12.5px;line-height:1.5">Prefers async updates over standing meetings. Owns the Skio relationship end-to-end.</div>
+              <div class="field" style="padding:10px 12px;display:block;color:var(--txt);font-size:12.5px;line-height:1.5">Daughter just started college — mentioned in March.</div>
+            </div>
+          </div>
+          <div>
+            <div class="eyebrow" style="margin-bottom:10px">MESSAGE INSIGHTS</div>
+            <div class="card" style="padding:14px">
+              <div class="row" style="justify-content:space-between"><div><div style="font-size:22px;font-weight:800">312</div><div class="faint" style="font-size:11px">messages</div></div><div><div style="font-size:22px;font-weight:800;color:var(--accent)">~4h</div><div class="faint" style="font-size:11px">median reply</div></div><div><div style="font-size:22px;font-weight:800;color:var(--ok)">68%</div><div class="faint" style="font-size:11px">you initiate</div></div></div>
+              <div style="display:flex;gap:3px;margin-top:13px;height:30px;align-items:flex-end">
+                <div style="flex:1;height:40%;background:var(--accent-soft);border-radius:3px"></div><div style="flex:1;height:70%;background:var(--accent-soft);border-radius:3px"></div><div style="flex:1;height:55%;background:var(--accent-soft);border-radius:3px"></div><div style="flex:1;height:90%;background:var(--accent);border-radius:3px"></div><div style="flex:1;height:65%;background:var(--accent-soft);border-radius:3px"></div><div style="flex:1;height:45%;background:var(--accent-soft);border-radius:3px"></div><div style="flex:1;height:80%;background:var(--accent-soft);border-radius:3px"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></main>
+  </div>
+</div>
+</body>
+</html>

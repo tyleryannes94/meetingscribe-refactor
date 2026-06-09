@@ -1,0 +1,151 @@
+/* ============================================================
+   MeetingScribe Redesign — Direction B: "Bloom"
+   Playful / friendly. Plum-ink base, coral + mint + lilac,
+   chunky rounded cards, tinted headers, soft colored glows.
+   Display: Bricolage Grotesque · Body: Plus Jakarta Sans.
+   (Class names mirror Quiet so screens stay parallel.)
+   ============================================================ */
+
+:root{
+  --bg:        #15121a;
+  --sidebar:   #100d15;
+  --surface:   #1e1925;
+  --surface-2: #271f31;
+  --line:      rgba(245,238,250,.09);
+  --line-2:    rgba(245,238,250,.16);
+
+  --txt:   #f3eef6;
+  --txt-2: rgba(243,238,246,.68);
+  --txt-3: rgba(243,238,246,.44);
+
+  --accent:      #ff9173;   /* coral — primary */
+  --accent-2:    #f06a4c;
+  --accent-soft: rgba(255,145,115,.16);
+
+  --lilac:   #b79cff;       /* brand / nav */
+  --lilac-soft: rgba(183,156,255,.16);
+  --mint:    #74e0bc;
+  --sky:     #8ab4ff;
+  --gold:    #ffce6b;
+
+  --ok:     #74e0bc;
+  --info:   #8ab4ff;
+  --warn:   #ffce6b;
+  --danger: #ff7a8a;
+
+  --r-card: 20px;
+  --r-ctl:  14px;
+
+  --rail-w: 234px;
+  --title-h: 40px;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; }
+body{
+  font-family:"Plus Jakarta Sans", -apple-system, system-ui, sans-serif;
+  background:var(--bg);
+  color:var(--txt);
+  -webkit-font-smoothing:antialiased;
+  font-size:14px;
+  line-height:1.5;
+}
+h1,.display{ font-family:"Bricolage Grotesque", system-ui, sans-serif; }
+::selection{ background:var(--lilac-soft); }
+
+/* ---------- App window shell ---------- */
+.win{ width:1280px; height:800px; background:var(--bg); display:flex; flex-direction:column; overflow:hidden; position:relative; }
+.titlebar{ height:var(--title-h); flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:0 16px; background:var(--sidebar); border-bottom:1px solid var(--line); }
+.lights{ display:flex; gap:8px; }
+.lights i{ width:12px; height:12px; border-radius:50%; display:block; }
+.lights .c{ background:#ff5f57; } .lights .m{ background:#febc2e; } .lights .x{ background:#28c840; }
+.titlebar .wt{ flex:1; text-align:center; font-size:12.5px; color:var(--txt-3); font-weight:600; }
+.titlebar .sp{ width:52px; }
+.body{ flex:1; display:flex; min-height:0; }
+
+/* ---------- Nav rail ---------- */
+.rail{ width:var(--rail-w); flex:0 0 auto; background:var(--sidebar); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:6px 0; }
+.brand{ display:flex; align-items:center; gap:10px; padding:14px 16px 12px; }
+.brand .mark{ width:26px; height:26px; border-radius:9px; background:linear-gradient(145deg,var(--accent),var(--lilac)); display:grid; place-items:center; color:#221636; box-shadow:0 4px 14px rgba(255,145,115,.3); }
+.brand .mark svg{ width:15px; height:15px; }
+.brand b{ font-size:15.5px; font-weight:700; letter-spacing:-.3px; font-family:"Bricolage Grotesque",sans-serif; }
+
+.navgroup{ font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); padding:12px 18px 4px; }
+.navitem{ display:flex; align-items:center; gap:11px; margin:2px 9px; padding:8px 12px; border-radius:999px; color:var(--txt-2); font-size:13.5px; font-weight:500; cursor:pointer; }
+.navitem svg{ width:17px; height:17px; opacity:.85; flex:0 0 auto; }
+.navitem:hover{ background:var(--lilac-soft); }
+.navitem .ct{ margin-left:auto; font-size:11px; color:var(--txt-3); font-variant-numeric:tabular-nums; background:var(--surface); padding:1px 7px; border-radius:999px; }
+.navitem.active{ background:var(--lilac-soft); color:var(--txt); font-weight:700; }
+.navitem.active svg{ color:var(--lilac); opacity:1; }
+
+.rail .spacer{ flex:1; }
+.railfoot{ border-top:1px solid var(--line); margin:6px 12px 0; padding-top:10px; display:flex; align-items:center; gap:8px; }
+.seg{ display:flex; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:3px; }
+.seg span{ display:flex; align-items:center; gap:4px; font-size:11px; padding:4px 9px; border-radius:999px; color:var(--txt-2); }
+.seg span.on{ background:var(--surface-2); color:var(--txt); font-weight:700; }
+.seg span svg{ width:11px; height:11px; }
+.kbd{ margin-left:auto; display:flex; align-items:center; gap:4px; font-size:11px; color:var(--txt-2); border:1px solid var(--line); border-radius:999px; padding:4px 9px; }
+.kbd svg{ width:12px; height:12px; }
+.iconbtn{ width:30px; height:30px; border-radius:10px; display:grid; place-items:center; color:var(--txt-2); border:1px solid transparent; }
+.iconbtn:hover{ background:var(--surface); border-color:var(--line); }
+.iconbtn svg{ width:15px; height:15px; }
+
+/* ---------- Main content ---------- */
+.main{ flex:1; min-width:0; overflow:hidden; position:relative; }
+.main::before{ content:""; position:absolute; top:-120px; right:-80px; width:420px; height:320px;
+  background:radial-gradient(circle, rgba(255,145,115,.10), transparent 70%); pointer-events:none; }
+.scroll{ height:100%; overflow:hidden; position:relative; }
+.page{ padding:26px 30px; position:relative; }
+.pagehead{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
+.pagehead h1{ font-size:30px; font-weight:800; letter-spacing:-.8px; }
+.pagehead .sub{ color:var(--txt-2); font-size:13.5px; margin-top:3px; }
+.eyebrow{ font-size:11px; font-weight:700; letter-spacing:.8px; color:var(--txt-3); text-transform:uppercase; }
+
+/* ---------- Buttons ---------- */
+.btn{ display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:700; border-radius:var(--r-ctl); padding:9px 15px; cursor:pointer; border:1px solid transparent; white-space:nowrap; font-family:inherit; }
+.btn svg{ width:15px; height:15px; }
+.btn.primary{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#2a1208; box-shadow:0 4px 16px rgba(255,145,115,.32); }
+.btn.secondary{ background:var(--surface); color:var(--txt); border-color:var(--line-2); }
+.btn.ghost{ background:transparent; color:var(--txt-2); }
+.btn.ghost:hover{ background:var(--surface); }
+.btn.danger{ background:var(--danger); color:#2a0e12; }
+.btn.sm{ padding:7px 12px; font-size:12px; }
+.btn.block{ width:100%; justify-content:center; padding:12px; font-size:14.5px; }
+.pill{ display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700; border-radius:999px; padding:8px 14px; cursor:pointer; }
+.pill svg{ width:14px; height:14px; }
+
+/* ---------- Cards ---------- */
+.card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card); }
+.card.hover:hover{ border-color:var(--line-2); }
+
+/* ---------- Chips & badges ---------- */
+.chip{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; padding:4px 11px; border-radius:999px; white-space:nowrap; }
+.chip svg{ width:11px; height:11px; }
+.badge{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+.dot{ width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+
+/* semantic tints (names mirror Quiet) */
+.t-iris  { background:var(--lilac-soft); color:#cbb8ff; }
+.t-ok    { background:rgba(116,224,188,.16); color:#9aedd0; }
+.t-info  { background:rgba(138,180,255,.16); color:#aecaff; }
+.t-warn  { background:rgba(255,206,107,.16); color:#ffd98a; }
+.t-danger{ background:rgba(255,122,138,.16); color:#ffa0ac; }
+.t-gray  { background:var(--surface-2); color:var(--txt-2); }
+
+/* ---------- Avatars (squircle, playful) ---------- */
+.av{ width:32px; height:32px; border-radius:34%; display:grid; place-items:center; font-size:12px; font-weight:800; color:#241636; flex:0 0 auto; }
+.avstack{ display:flex; } .avstack .av{ margin-left:-8px; border:2.5px solid var(--surface); }
+.avstack .av:first-child{ margin-left:0; }
+
+/* ---------- Misc ---------- */
+.row{ display:flex; align-items:center; gap:10px; }
+.row>b{ white-space:nowrap; }
+.divline{ height:1px; background:var(--line); }
+.muted{ color:var(--txt-2); } .faint{ color:var(--txt-3); }
+.field{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r-ctl); padding:10px 13px; color:var(--txt-2); display:flex; align-items:center; gap:8px; font-size:13px; }
+.field svg{ width:15px; height:15px; color:var(--txt-3); }
+svg{ stroke-width:1.9; }
+.tabbar{ display:flex; gap:4px; }
+.tab{ padding:8px 15px; font-size:13px; color:var(--txt-2); border-radius:999px; cursor:pointer; font-weight:600; }
+.tab.active{ color:#2a1208; background:linear-gradient(135deg,var(--accent),var(--accent-2)); font-weight:700; }
+.live{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:800; color:var(--danger); }

@@ -1,0 +1,86 @@
+# Claude Code CLI — implement the "Bloom" overhaul, merge, reinstall
+
+This bundle (`design_handoff_bloom_redesign/`) is meant to live **inside the repo**. Copy it to the
+repo root, then run Claude Code from there.
+
+```bash
+# 1. put this folder at the repo root (if it isn't already)
+cp -R design_handoff_bloom_redesign ~/MeetingScribeRefactor/
+
+# 2. start Claude Code in the repo
+cd ~/MeetingScribeRefactor
+claude
+```
+
+Then paste the prompt below. (Or run it non-interactively in one shot:
+`claude -p "$(cat design_handoff_bloom_redesign/CLAUDE_CLI_PROMPT.txt)"` — see the bottom of this file.)
+
+---
+
+## Prompt to paste
+
+```
+You are implementing a whole-app VISUAL overhaul of MeetingScribe, codename "Bloom" (dark mode,
+playful/friendly). The complete spec, design tokens, component specs, per-screen breakdowns, and
+reference HTML/CSS are in ./design_handoff_bloom_redesign/ — read README.md there FIRST, then study
+designs/bloom.css (the single source of truth for tokens/components) and the bloom-*.html screens,
+and look at screenshots/ for the target look.
+
+Scope and rules:
+- This is presentation-layer ONLY. Do NOT change features, data models, recording/transcription,
+  MCP, routing (WorkspaceRouter), or any business logic. Keep the existing IA (Today, Meetings,
+  People, Tasks, Voice Notes) and all current behavior.
+- The app already has a design system: Sources/MeetingScribe/UI/NotionDesign.swift (the NDS enum)
+  plus MSComponents.swift, MSAvatar.swift, MSStatusBadge.swift, DueChip.swift. Implement Bloom by
+  RETUNING those tokens and components, not rewriting screens — most surfaces inherit from NDS, so
+  centralize the change.
+
+Do this, in order:
+1. Create a branch: `git checkout -b design/bloom-overhaul`.
+2. Add the two fonts — Bricolage Grotesque (display) and Plus Jakarta Sans (body). Bundle the .ttf
+   files under Resources/Fonts, register them via ATSApplicationFontsPath in Resources/Info.plist,
+   and wire them into the NDS font tokens (titles/headlines use Bricolage; everything else Plus
+   Jakarta Sans). Keep the existing scaledFont Dynamic-Type wrapper.
+3. Retune NDS color tokens to the Bloom values in README (bg #15121a, sidebar #100d15, surface
+   #1e1925, text #f3eef6, coral #ff9173 primary, lilac #b79cff brand/nav, mint #74e0bc, gold
+   #ffce6b, danger #ff7a8a). Update NDS.priority()/status()/due() to the new hexes. Bump radii:
+   cards 20, controls 14, chips/badges/nav/tabs fully rounded.
+4. Restyle the shared components to match designs/bloom.css: primary button = coral gradient +
+   coral glow shadow; squircle avatars (34% radius); pill-shaped nav rail items (active = lilac-soft
+   bg, lilac icon); pill tabs in meeting detail (active = coral gradient); tinted-header card variant
+   for hero cards (e.g. Up Next); add the subtle ambient coral corner glow on the main content area.
+   All motion stays gated behind NDS.motion(_:reduce:) for Reduce Motion.
+5. Apply per-screen polish where layout needs it (TodayView, MeetingDetailHeader + tab views,
+   ActionItemsBoardView, PeopleListView/PersonDetailView, MainWindow nav rail) to match the screen
+   comps. Match copy/spacing/badges/chips as shown.
+6. Build and validate locally:
+     swift build -c release
+     swift test
+     ./scripts/design-lint.sh fail      # must report 0 violations
+   Fix anything that fails. No raw .font(.system(size:)), no cold AppKit surface colors, no raw
+   priority/status colors — use NDS everywhere.
+7. Commit in logical chunks (tokens, fonts, components, per-screen), then merge to main:
+     git checkout main && git merge --no-ff design/bloom-overhaul
+8. Reinstall the updated app locally and relaunch:
+     make install
+     open -a MeetingScribe
+   (If permissions get weird after reinstall, fall back to: bash clean-reinstall.sh)
+
+Show me a short summary of what changed (files touched, before/after of the NDS tokens) and the
+results of build/test/design-lint when done.
+```
+
+---
+
+## One-shot (non-interactive) variant
+If you'd rather not paste interactively, the same prompt is saved as plain text at
+`design_handoff_bloom_redesign/CLAUDE_CLI_PROMPT.txt`. Run:
+
+```bash
+cd ~/MeetingScribeRefactor
+claude -p "$(cat design_handoff_bloom_redesign/CLAUDE_CLI_PROMPT.txt)"
+```
+
+> Tip: review the diff before merging — `git diff main...design/bloom-overhaul`. And because
+> `make install` re-signs with the local identity, the first launch may show a one-time Gatekeeper
+> prompt (right-click → Open) as noted in the repo README.

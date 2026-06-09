@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="bloom.css">
+<title>Bloom · Language</title>
+</head>
+<body>
+<div class="win" style="height:800px">
+  <div class="titlebar">
+    <div class="lights"><i class="c"></i><i class="m"></i><i class="x"></i></div>
+    <div class="wt">Design Language — Bloom</div><div class="sp"></div>
+  </div>
+  <div style="flex:1;overflow:hidden;padding:30px 36px;background:var(--bg);position:relative">
+    <div class="main::before" style="position:absolute;top:-100px;right:-60px;width:380px;height:300px;background:radial-gradient(circle,rgba(255,145,115,.12),transparent 70%);pointer-events:none"></div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;position:relative">
+      <div>
+        <div class="eyebrow" style="color:var(--accent)">DIRECTION B</div>
+        <h1 style="font-size:38px;font-weight:800;letter-spacing:-1.2px;margin-top:4px">Bloom</h1>
+        <div class="muted" style="font-size:14px;max-width:540px;margin-top:4px">Playful and friendly. A plum-ink base lit by coral, mint and lilac, chunky rounded cards, tinted headers and soft colored glows. Warm and human without losing focus.</div>
+      </div>
+      <div style="text-align:right" class="muted">
+        <div style="font-size:13px;font-family:'Bricolage Grotesque'">Bricolage&nbsp;Grotesque</div>
+        <div class="faint" style="font-size:12px">Plus Jakarta Sans · body</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:26px;margin-top:24px;position:relative">
+      <!-- LEFT -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">PALETTE</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="text-align:center"><div style="width:56px;height:56px;border-radius:16px;background:#15121a;border:1px solid var(--line-2)"></div><div class="faint" style="font-size:10px;margin-top:5px">bg</div></div>
+            <div style="text-align:center"><div style="width:56px;height:56px;border-radius:16px;background:#1e1925;border:1px solid var(--line)"></div><div class="faint" style="font-size:10px;margin-top:5px">surface</div></div>
+            <div style="text-align:center"><div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#ff9173,#f06a4c)"></div><div class="faint" style="font-size:10px;margin-top:5px">coral</div></div>
+            <div style="text-align:center"><div style="width:56px;height:56px;border-radius:16px;background:#b79cff"></div><div class="faint" style="font-size:10px;margin-top:5px">lilac</div></div>
+            <div style="text-align:center"><div style="width:56px;height:56px;border-radius:16px;background:#74e0bc"></div><div class="faint" style="font-size:10px;margin-top:5px">mint</div></div>
+            <div style="text-align:center"><div style="width:56px;height:56px;border-radius:16px;background:#ffce6b"></div><div class="faint" style="font-size:10px;margin-top:5px">gold</div></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">TYPE SCALE</div>
+          <div style="font-family:'Bricolage Grotesque';font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.1">Monday, Jun 9</div>
+          <div style="font-family:'Bricolage Grotesque';font-size:19px;font-weight:700;letter-spacing:-.3px;margin-top:8px">Product Sync — Skio</div>
+          <div style="font-size:13.5px;color:var(--txt-2);margin-top:6px">Body uses Plus Jakarta Sans — round, friendly, highly legible for transcripts and notes.</div>
+          <div class="eyebrow" style="margin-top:8px">EYEBROW · 11PX TRACKED</div>
+        </div>
+
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">CARD &amp; AVATARS</div>
+          <div class="card" style="padding:14px 16px">
+            <div class="row">
+              <div class="avstack">
+                <div class="av" style="background:linear-gradient(150deg,#ff9173,#f06a4c)">MK</div>
+                <div class="av" style="background:linear-gradient(150deg,#74e0bc,#46c79f)">DV</div>
+                <div class="av" style="background:linear-gradient(150deg,#b79cff,#9a7af0)">+4</div>
+              </div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:13.5px">Quarterly review</div>
+                <div class="faint" style="font-size:11.5px">Squircle avatars · 20px radius · soft colored glow</div>
+              </div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--txt-3)" style="width:15px;height:15px"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">BUTTONS</div>
+          <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+            <div class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg> Record</div>
+            <div class="btn secondary">Open</div>
+            <div class="btn ghost">Cancel</div>
+            <div class="btn danger">Stop</div>
+          </div>
+          <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:10px">
+            <div class="pill" style="background:var(--lilac-soft);color:#cbb8ff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg> New page</div>
+            <div class="pill" style="background:rgba(255,206,107,.16);color:#ffd98a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/></svg> Voice note</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">TABS (PILL)</div>
+          <div class="tabbar"><div class="tab active">Summary</div><div class="tab">Transcript</div><div class="tab">Notes</div><div class="tab">Chat</div></div>
+        </div>
+
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">CHIPS &amp; BADGES</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+            <span class="chip t-iris">Skio</span>
+            <span class="chip t-ok">Recharge</span>
+            <span class="chip t-info">Planning Calls</span>
+            <span class="chip t-gray">Untagged</span>
+          </div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-top:9px">
+            <span class="badge t-danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 9v4M12 17h0"/></svg> Overdue</span>
+            <span class="badge t-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg> Today</span>
+            <span class="badge t-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg> Done</span>
+            <span class="badge t-info">In progress</span>
+          </div>
+        </div>
+
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">TINTED HEADER CARD</div>
+          <div class="card" style="overflow:hidden;padding:0">
+            <div style="background:linear-gradient(135deg,rgba(255,145,115,.22),rgba(183,156,255,.18));padding:11px 15px;display:flex;align-items:center;gap:8px"><span class="dot" style="background:var(--accent)"></span><b style="font-size:13px">Up next</b></div>
+            <div style="padding:13px 15px"><div style="font-weight:700;font-size:13.5px">Product Sync — Skio</div><div class="faint" style="font-size:12px;margin-top:2px">Headers can carry a soft tint for warmth.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divline" style="margin-top:22px"></div>
+    <div class="row faint" style="font-size:12px;margin-top:13px;gap:22px;position:relative">
+      <span><b style="color:var(--txt-2)">Motion</b> &nbsp;bouncy springs · scale-on-press · confetti on task-complete</span>
+      <span><b style="color:var(--txt-2)">Radii</b> &nbsp;cards 20 · controls 14 · pills full</span>
+      <span><b style="color:var(--txt-2)">Glow</b> &nbsp;coral primary · ambient corner light</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

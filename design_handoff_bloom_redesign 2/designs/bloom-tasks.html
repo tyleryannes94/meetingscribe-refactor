@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="bloom.css">
+<title>Bloom · Tasks</title>
+<style>
+  .col{ width:266px; flex:0 0 auto; background:rgba(244,240,232,.035); border-radius:14px; padding:9px; display:flex; flex-direction:column; gap:8px; }
+  .tcard{ background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:11px 12px 11px 13px; position:relative; overflow:hidden; }
+  .tcard .bar{ position:absolute; left:0; top:0; bottom:0; width:3px; }
+  .subnav{ width:208px; flex:0 0 auto; border-right:1px solid var(--line); background:var(--bg); padding:14px 10px; }
+  .subnav .it{ display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:8px; font-size:13px; color:var(--txt-2); }
+  .subnav .it.on{ background:var(--accent-soft); color:var(--txt); font-weight:600; }
+  .subnav .it svg{ width:14px; height:14px; }
+  .vtab{ padding:6px 11px; font-size:12.5px; border-radius:8px; color:var(--txt-2); display:flex; align-items:center; gap:6px; }
+  .vtab svg{ width:14px;height:14px; } .vtab.on{ background:var(--surface); color:var(--txt); font-weight:600; border:1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="titlebar"><div class="lights"><i class="c"></i><i class="m"></i><i class="x"></i></div><div class="wt">MeetingScribe</div><div class="sp"></div></div>
+  <div class="body">
+    <nav class="rail">
+      <div class="brand"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h2M7 7v10M11 4v16M15 8v8M19 11v2"/></svg></span><b>MeetingScribe</b></div>
+      <div class="navgroup">WORKSPACE</div>
+      <div class="navitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg> Today</div>
+      <div class="navitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Meetings</div>
+      <div class="navitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> People</div>
+      <div class="navgroup">ORGANIZE</div>
+      <div class="navitem active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Tasks <span class="ct">7</span></div>
+      <div class="navitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/></svg> Voice Notes</div>
+      <div class="spacer"></div>
+      <div class="railfoot">
+        <div class="seg"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4"/></svg>Light</span><span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>Dark</span></div>
+        <div class="kbd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>⌘K</div>
+        <div class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/></svg></div>
+      </div>
+    </nav>
+
+    <!-- projects sub-nav -->
+    <div class="subnav">
+      <div class="it on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg> All tasks <span class="ct" style="margin-left:auto">7</span></div>
+      <div class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg> Today</div>
+      <div class="it"><svg viewBox="0 0 24 24" fill="none" stroke="var(--danger)"><path d="M12 9v4M12 17h0"/><circle cx="12" cy="12" r="9"/></svg> Overdue <span class="badge t-danger" style="margin-left:auto">1</span></div>
+      <div class="faint" style="font-size:10px;font-weight:600;letter-spacing:.6px;padding:14px 10px 6px">PROJECTS</div>
+      <div class="it"><span class="dot" style="background:var(--accent)"></span> Skio Integration</div>
+      <div class="it"><span class="dot" style="background:var(--ok)"></span> Q3 Roadmap</div>
+      <div class="it"><span class="dot" style="background:var(--warn)"></span> Onboarding revamp</div>
+      <div class="faint" style="font-size:10px;font-weight:600;letter-spacing:.6px;padding:14px 10px 6px">INITIATIVES</div>
+      <div class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12l10 5 10-5M2 7l10 5 10-5L12 2 2 7z"/></svg> Growth FY26</div>
+    </div>
+
+    <main class="main" style="display:flex;flex-direction:column">
+      <!-- chrome -->
+      <div class="row" style="padding:16px 22px 12px;justify-content:space-between;border-bottom:1px solid var(--line)">
+        <div class="row" style="gap:12px"><h1 style="font-size:20px;font-weight:700">Tasks</h1>
+          <div class="row" style="gap:4px;margin-left:6px">
+            <div class="vtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 6h13M8 12h13M8 18h13M3 6h0M3 12h0M3 18h0"/></svg> List</div>
+            <div class="vtab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="10" y="3" width="6" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></svg> Board</div>
+            <div class="vtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg> Table</div>
+            <div class="vtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> Calendar</div>
+          </div>
+        </div>
+        <div class="row" style="gap:8px">
+          <div class="field" style="padding:6px 10px;width:170px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="faint" style="font-size:12px">Filter…</span></div>
+          <div class="btn primary sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg> New task</div>
+        </div>
+      </div>
+
+      <!-- board -->
+      <div style="flex:1;overflow:hidden;padding:16px 22px;display:flex;gap:14px">
+        <!-- OPEN -->
+        <div class="col">
+          <div class="row" style="padding:3px 5px"><span class="dot" style="background:var(--info)"></span><b style="font-size:13px">Open</b><span class="faint" style="font-size:11px">3</span><div class="iconbtn" style="margin-left:auto;width:22px;height:22px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg></div></div>
+          <div class="tcard"><div class="bar" style="background:var(--danger)"></div>
+            <div class="row" style="gap:5px;margin-bottom:7px"><span class="chip t-iris" style="font-size:10px;padding:2px 7px">Skio</span></div>
+            <div style="font-size:13px;font-weight:600;line-height:1.4">Circulate revised contract terms to legal</div>
+            <div class="row" style="margin-top:10px;gap:7px"><span class="badge t-danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 15l-6-6-6 6"/></svg> High</span><span class="badge t-warn">Wed</span><div class="av" style="width:21px;height:21px;font-size:9px;margin-left:auto;background:linear-gradient(150deg,#74e0bc,#46c79f)">DV</div></div>
+          </div>
+          <div class="tcard"><div class="bar" style="background:var(--warn)"></div>
+            <div style="font-size:13px;font-weight:600;line-height:1.4">Draft the integration spec doc</div>
+            <div class="row" style="margin-top:10px;gap:7px"><span class="badge t-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14"/></svg> Med</span><span class="badge t-info">Fri</span><div class="av" style="width:21px;height:21px;font-size:9px;margin-left:auto;background:linear-gradient(150deg,#b79cff,#9a7af0)">ME</div></div>
+          </div>
+          <div class="tcard">
+            <div style="font-size:13px;font-weight:600;line-height:1.4">Schedule design review</div>
+            <div class="row" style="margin-top:10px;gap:7px"><span class="badge t-gray">Low</span></div>
+          </div>
+        </div>
+        <!-- IN PROGRESS -->
+        <div class="col">
+          <div class="row" style="padding:3px 5px"><span class="dot" style="background:var(--warn)"></span><b style="font-size:13px">In progress</b><span class="faint" style="font-size:11px">2</span><div class="iconbtn" style="margin-left:auto;width:22px;height:22px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg></div></div>
+          <div class="tcard"><div class="bar" style="background:var(--danger)"></div>
+            <div class="row" style="gap:5px;margin-bottom:7px"><span class="chip t-info" style="font-size:10px;padding:2px 7px">Q3 Roadmap</span></div>
+            <div style="font-size:13px;font-weight:600;line-height:1.4">Build usage-based pricing model</div>
+            <div class="row" style="margin-top:10px;gap:7px"><span class="badge t-danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 15l-6-6-6 6"/></svg> High</span><span class="badge t-info">Fri</span><div class="av" style="width:21px;height:21px;font-size:9px;margin-left:auto;background:linear-gradient(150deg,#8ab4ff,#6b96ec)">JL</div></div>
+          </div>
+          <div class="tcard">
+            <div style="font-size:13px;font-weight:600;line-height:1.4">Wire up MCP write-back tools</div>
+            <div class="row" style="margin-top:10px;gap:7px"><span class="badge t-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14"/></svg> Med</span><div class="av" style="width:21px;height:21px;font-size:9px;margin-left:auto;background:linear-gradient(150deg,#b79cff,#9a7af0)">ME</div></div>
+          </div>
+        </div>
+        <!-- COMPLETED -->
+        <div class="col">
+          <div class="row" style="padding:3px 5px"><span class="dot" style="background:var(--ok)"></span><b style="font-size:13px">Completed</b><span class="faint" style="font-size:11px">2</span></div>
+          <div class="tcard" style="opacity:.62">
+            <div style="font-size:13px;font-weight:600;line-height:1.4;text-decoration:line-through;color:var(--txt-2)">Share recording link with Devon</div>
+            <div class="row" style="margin-top:10px;gap:7px"><span class="badge t-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg> Done</span></div>
+          </div>
+          <div class="tcard" style="opacity:.62">
+            <div style="font-size:13px;font-weight:600;line-height:1.4;text-decoration:line-through;color:var(--txt-2)">Set up sample meeting seed</div>
+            <div class="row" style="margin-top:10px;gap:7px"><span class="badge t-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg> Done</span></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>
