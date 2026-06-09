@@ -57,7 +57,7 @@ struct GlobalSearchView: View {
             content
         }
         .frame(width: 620, height: 480)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(NDS.bg)
         .onAppear {
             recompute()
             DispatchQueue.main.async { fieldFocused = true }

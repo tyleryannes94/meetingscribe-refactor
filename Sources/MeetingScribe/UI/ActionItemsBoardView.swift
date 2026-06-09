@@ -53,8 +53,8 @@ extension ActionItemsView {
                         Text(item.title).font(.caption).lineLimit(2)
                             .padding(8)
                             .frame(width: 220, alignment: .leading)
-                            .background(Color(NSColor.controlBackgroundColor),
-                                        in: RoundedRectangle(cornerRadius: 8))
+                            .background(NDS.fieldBg,
+                                        in: RoundedRectangle(cornerRadius: NDS.rowRadius))
                     }
                     .dropDestination(for: String.self) { ids, _ in
                         for id in ids { dropCard(id, toStatus: status, beforeID: item.id) }
@@ -75,8 +75,8 @@ extension ActionItemsView {
         .frame(width: 280, alignment: .top)
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(8)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.25),
-                    in: RoundedRectangle(cornerRadius: 10))
+        .background(NDS.columnBg,
+                    in: RoundedRectangle(cornerRadius: NDS.cardRadius))
     }
 
     /// Moves `id` into `status` and reorders it just before `beforeID` (or to
@@ -166,9 +166,9 @@ extension ActionItemsView {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8)
-            .strokeBorder(Color(NSColor.separatorColor).opacity(0.45), lineWidth: 0.5))
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+        .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius)
+            .strokeBorder(NDS.hairline, lineWidth: 0.5))
         .opacity(item.status == .completed ? 0.6 : 1)
     }
 }

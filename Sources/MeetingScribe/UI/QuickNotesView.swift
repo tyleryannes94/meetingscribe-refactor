@@ -452,7 +452,7 @@ struct QuickNoteDetail: View {
             }
         }
         .frame(minWidth: 280)
-        .background(Color(NSColor.textBackgroundColor))
+        .background(NDS.bg)
     }
 
     private func paneHeader(

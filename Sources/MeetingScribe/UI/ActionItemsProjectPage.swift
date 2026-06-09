@@ -474,8 +474,8 @@ struct MeetingNotesPage: View {
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.5),
-                    in: RoundedRectangle(cornerRadius: 8))
+        .background(NDS.fieldBg,
+                    in: RoundedRectangle(cornerRadius: NDS.rowRadius))
     }
 
     private func load() {

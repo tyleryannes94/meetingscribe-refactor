@@ -53,6 +53,9 @@ enum NDS {
     static let textTertiary  = dyn(dark: (210, 204, 190, 0.42), light: (26, 25, 23, 0.38))
     static let fieldBg       = dyn(dark: (255, 245, 225, 0.055), light: (100, 80, 40, 0.045))
     static let segmentActiveBg = dyn(dark: (255, 245, 225, 0.13), light: (255, 255, 255, 1))
+    /// Subtle warm lane fill for kanban columns / grouped bands (DV-19). Replaces
+    /// the cold AppKit control-background board fills.
+    static let columnBg = dyn(dark: (255, 245, 225, 0.035), light: (100, 80, 40, 0.03))
 
     /// Builds a single SwiftUI `Color` backed by a dynamic `NSColor` that
     /// resolves to the `dark` or `light` sRGB tuple (r, g, b in 0–255, a in

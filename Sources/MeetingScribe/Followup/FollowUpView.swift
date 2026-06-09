@@ -84,7 +84,7 @@ struct FollowUpView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
-                .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
             HStack(spacing: 8) {
                 Button {
                     copy(s.plainText)

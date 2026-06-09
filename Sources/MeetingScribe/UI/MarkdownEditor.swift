@@ -687,7 +687,7 @@ struct RichMarkdownEditor: View {
             Spacer()
         }
         .padding(.horizontal, 8).padding(.vertical, 5)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        .background(NDS.fieldBg)
     }
 
     private var templatesMenu: some View {

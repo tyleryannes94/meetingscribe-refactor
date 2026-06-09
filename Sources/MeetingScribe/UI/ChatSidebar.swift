@@ -30,8 +30,8 @@ struct ChatSidebar: View {
         .background(
             LinearGradient(
                 colors: [
-                    Color(NSColor.controlBackgroundColor).opacity(0.55),
-                    Color(NSColor.controlBackgroundColor).opacity(0.25)
+                    NDS.sidebarBg,
+                    NDS.rightRailBg
                 ],
                 startPoint: .top, endPoint: .bottom)
         )
@@ -169,10 +169,10 @@ struct ChatFoldersSheet: View {
                                 .buttonStyle(.borderless)
                             }
                             .padding(10)
-                            .background(Color(NSColor.controlBackgroundColor),
-                                        in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5))
+                            .background(NDS.fieldBg,
+                                        in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+                            .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius)
+                                .strokeBorder(NDS.hairline, lineWidth: 0.5))
                         }
                     }
                 }
