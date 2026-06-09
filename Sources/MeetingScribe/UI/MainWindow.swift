@@ -181,6 +181,37 @@ struct MainWindow: View {
         return nil
     }
 
+    /// The page-tailored primary toolbar action for the current section (§1).
+    private var primaryToolbarButton: ToolbarModel.Button? {
+        ToolbarModel.items(for: section).compactMap {
+            if case .button(let b) = $0, b.style == .primary { return b } else { return nil }
+        }.first
+    }
+
+    /// Wire a toolbar action to existing behavior (safe subset — the primary
+    /// CTA per page).
+    private func runToolbarAction(_ action: ToolbarModel.Action) {
+        switch action {
+        case .search:       activeSheet = .search
+        case .addPerson:    activeSheet = .addPerson
+        case .voiceNote, .newVoiceNote:
+            Task { await manager.startQuickNote() }
+        case .record, .newMeeting:
+            Task { await manager.startRecording(for: nil) }
+        case .stopRecording:
+            Task { await manager.stopRecording() }
+        case .newTask:
+            section = .actions
+            _ = manager.actionItems.createTask(title: "New task")
+        case .importCalendar:
+            calendar.refreshUpcoming(force: true)
+        case .importPeople:
+            activeSheet = .addPerson
+        case .filter:
+            break   // in-tab filter owns this; no-op from the window toolbar
+        }
+    }
+
     private func navGroupLabel(_ text: String) -> some View {
         Text(text)
             .scaledFont(10, weight: .semibold)
@@ -325,6 +356,17 @@ struct MainWindow: View {
             }
             ToolbarItemGroup(placement: .primaryAction) {
                 PersistentToolbarButtons()
+            }
+            // Named, page-tailored primary action (§1): New meeting / Add person
+            // / New task / New voice note — the coral CTA for the current page.
+            if let primary = primaryToolbarButton {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { runToolbarAction(primary.action) } label: {
+                        Label(primary.label, systemImage: primary.systemImage)
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .help(primary.label)
+                }
             }
         }
         .sheet(item: $activeSheet) { sheet in
