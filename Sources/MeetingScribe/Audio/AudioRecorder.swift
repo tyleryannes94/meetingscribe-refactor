@@ -346,12 +346,22 @@ final class AudioRecorder {
     static func mergeSegments(in directory: URL, totalSegments: Int) async throws -> (mic: URL?, system: URL?) {
         guard totalSegments > 0 else { throw MergeError.noSegments }
         let audioDir = directory.appendingPathComponent("audio", isDirectory: true)
-        let micSegments = (1...totalSegments).map {
-            audioDir.appendingPathComponent(String(format: "mic-%03d.m4a", $0))
-        }.filter { FileManager.default.fileExists(atPath: $0.path) }
-        let sysSegments = (1...totalSegments).map {
-            audioDir.appendingPathComponent(String(format: "system-%03d.m4a", $0))
-        }.filter { FileManager.default.fileExists(atPath: $0.path) }
+        // Merge the segments ACTUALLY on disk, not reconstructed mic-001..N
+        // names. A crash mid-recording (or a partial finalize) can leave a
+        // non-contiguous run that doesn't start at 001 — e.g. mic-002.m4a +
+        // mic-003.m4a. The old `(1...totalSegments)` reconstruction silently
+        // dropped any segment outside that range (e.g. mic-003 — often the bulk
+        // of the meeting), so recovery transcribed only the first chunk. Glob
+        // the real files and sort by name (zero-padded → chronological).
+        func discover(_ prefix: String) -> [URL] {
+            let entries = (try? FileManager.default.contentsOfDirectory(atPath: audioDir.path)) ?? []
+            return entries
+                .filter { $0.hasPrefix(prefix) && ($0 as NSString).pathExtension.lowercased() == "m4a" }
+                .sorted()
+                .map { audioDir.appendingPathComponent($0) }
+        }
+        let micSegments = discover("mic-")
+        let sysSegments = discover("system-")
 
         let micOut = directory.appendingPathComponent("mic.m4a")
         let sysOut = directory.appendingPathComponent("system.m4a")
