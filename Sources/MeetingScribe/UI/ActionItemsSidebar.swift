@@ -16,6 +16,9 @@ struct ProjectRail: View {
     @State private var newInitiativeName = ""
     @State private var expandedPages: Set<String> = []
     @State private var expandedInitiatives: Set<String> = []
+    /// Meeting notes are collapsed by default so the rail leads with the user's
+    /// initiatives / projects / tasks rather than a long dump of every meeting.
+    @State private var meetingNotesExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -104,13 +107,22 @@ struct ProjectRail: View {
                             .padding(.horizontal, 8).padding(.top, 6)
                     }
 
-                    sectionLabel("Meeting notes")
-                    if meetings.isEmpty {
-                        Text("No meetings yet").font(.caption2).foregroundStyle(.tertiary)
-                            .padding(.horizontal, 10).padding(.vertical, 2)
-                    }
-                    ForEach(meetings.prefix(40)) { m in
-                        meetingItem(m)
+                    // Collapsible "Meeting notes" — collapsed by default so the
+                    // rail isn't dominated by every past meeting. Expand to browse.
+                    meetingNotesHeader
+                    if meetingNotesExpanded {
+                        if meetings.isEmpty {
+                            Text("No meetings yet").font(.caption2).foregroundStyle(.tertiary)
+                                .padding(.horizontal, 10).padding(.vertical, 2)
+                        }
+                        ForEach(meetings.prefix(25)) { m in
+                            meetingItem(m)
+                        }
+                        if meetings.count > 25 {
+                            Text("+\(meetings.count - 25) more — open from the Meetings tab")
+                                .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                                .padding(.horizontal, 12).padding(.vertical, 4)
+                        }
                     }
                 }
                 .padding(.horizontal, 6).padding(.bottom, 12)
@@ -123,6 +135,30 @@ struct ProjectRail: View {
         NotionEyebrow(text: s)
             .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 3)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Tappable header for the collapsible Meeting notes section.
+    private var meetingNotesHeader: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { meetingNotesExpanded.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.right")
+                    .scaledFont(8, weight: .bold)
+                    .rotationEffect(.degrees(meetingNotesExpanded ? 90 : 0))
+                    .foregroundStyle(NDS.textTertiary)
+                NotionEyebrow(text: "Meeting notes")
+                Spacer(minLength: 4)
+                if !meetings.isEmpty {
+                    Text("\(meetings.count)").font(NDS.tiny.monospacedDigit())
+                        .foregroundStyle(NDS.textTertiary)
+                }
+            }
+            .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func commitNew() {

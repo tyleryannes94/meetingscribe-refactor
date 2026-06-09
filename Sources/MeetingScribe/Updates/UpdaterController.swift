@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 #if canImport(Sparkle)
 import Sparkle
 
@@ -64,7 +65,51 @@ final class UpdaterController: ObservableObject {
 
     func checkForUpdates() {
         guard Self.isConfigured else { return }
-        controller.checkForUpdates(nil)
+        // Pre-flight the appcast feed for the user-initiated check. When no
+        // release has been published yet (or the feed is otherwise
+        // unreachable) the URL 404s and Sparkle pops a raw, alarming
+        // network-error dialog — which is the "error" users hit clicking this.
+        // Detect that first and show a clear, friendly explanation instead.
+        // Background/scheduled checks are untouched — only this path pre-flights.
+        let feed = feedURLString
+        Task { @MainActor in
+            if await Self.feedIsReachable(feed) {
+                controller.checkForUpdates(nil)
+            } else {
+                Self.presentNoFeedAlert()
+            }
+        }
+    }
+
+    /// True when the appcast feed responds with a success status. Used to avoid
+    /// firing Sparkle's check (and its raw error UI) against a 404 feed.
+    nonisolated static func feedIsReachable(_ urlString: String) async -> Bool {
+        guard let url = URL(string: urlString) else { return false }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 8
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        do {
+            let (_, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse else { return false }
+            return (200...299).contains(http.statusCode)
+        } catch {
+            return false
+        }
+    }
+
+    @MainActor
+    static func presentNoFeedAlert() {
+        let alert = NSAlert()
+        alert.messageText = "You're on the latest available build"
+        alert.informativeText = """
+        MeetingScribe couldn't find a published release to update from yet. \
+        In-app updates start working once a signed release is published to the \
+        project's GitHub Releases (push a version tag to run the release \
+        workflow — see RELEASING.md). Until then there's nothing to install.
+        """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 }
 
