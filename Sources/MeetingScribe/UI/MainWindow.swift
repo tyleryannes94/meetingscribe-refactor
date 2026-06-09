@@ -58,6 +58,9 @@ struct MainWindow: View {
         nonmutating set { router.section = newValue }
     }
     @State private var activeSheet: ActiveSheet?
+    /// "New meeting" quick sheet (§1) + in-flight audio import flag.
+    @State private var showNewMeeting = false
+    @State private var importingMeeting = false
     // Default the assistant rail CLOSED — new users land on a full-width app
     // instead of a chat panel that crowds content (and confuses first-run users
     // with an empty assistant). Existing users keep their stored preference.
@@ -188,28 +191,111 @@ struct MainWindow: View {
         }.first
     }
 
-    /// Wire a toolbar action to existing behavior (safe subset — the primary
-    /// CTA per page).
+    /// Wire each toolbar action to app behavior.
     private func runToolbarAction(_ action: ToolbarModel.Action) {
         switch action {
         case .search:       activeSheet = .search
         case .addPerson:    activeSheet = .addPerson
         case .voiceNote, .newVoiceNote:
-            Task { await manager.startQuickNote() }
-        case .record, .newMeeting:
+            // Toggle: start, or stop if a voice note is already recording.
+            if case .recording = manager.quickRecordState {
+                Task { await manager.stopQuickNote() }
+            } else {
+                Task { await manager.startQuickNote() }
+            }
+        case .record:
             Task { await manager.startRecording(for: nil) }
+        case .newMeeting:
+            showNewMeeting = true
         case .stopRecording:
             Task { await manager.stopRecording() }
         case .newTask:
             section = .actions
             _ = manager.actionItems.createTask(title: "New task")
         case .importCalendar:
+            Task { await calendar.requestAccess() }
             calendar.refreshUpcoming(force: true)
         case .importPeople:
-            activeSheet = .addPerson
+            importPeopleFromFile()
         case .filter:
-            break   // in-tab filter owns this; no-op from the window toolbar
+            section = .actions   // the Tasks tab owns the filter UI
         }
+    }
+
+    @ViewBuilder
+    private func toolbarItemView(_ item: ToolbarModel.Item) -> some View {
+        switch item {
+        case .divider:
+            Divider()
+        case .button(let b):
+            Button { runToolbarAction(b.action) } label: {
+                Label(b.label, systemImage: b.systemImage).labelStyle(.titleAndIcon)
+            }
+            .tint(b.style == .primary ? NDS.accent : (b.style == .recording ? NDS.danger : nil))
+            .help(b.label)
+        }
+    }
+
+    /// Overflow ⋯ menu: the less-common controls that left the main bar.
+    private var overflowMenu: some View {
+        Menu {
+            if importingMeeting {
+                Label("Importing…", systemImage: "clock")
+            } else {
+                Button { importMeeting() } label: {
+                    Label("Import meeting…", systemImage: "square.and.arrow.down")
+                }
+            }
+            if let live = calendar.upcoming.first(where: { $0.isLive && $0.conferenceURL != nil }) {
+                Button { Task { await manager.switchToRecording(live) } } label: {
+                    Label("Join & record “\(live.displayTitle)”", systemImage: "video.fill")
+                }
+            }
+            Button { refreshAll() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+            if !manager.transcribingMeetingIDs.isEmpty {
+                Divider()
+                Label("\(manager.transcribingMeetingIDs.count) finalizing", systemImage: "clock")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .help("More actions")
+    }
+
+    private func importMeeting() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.audio]
+        panel.message = "Choose a meeting audio file to import, transcribe, and summarize"
+        panel.prompt = "Import"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importingMeeting = true
+        Task { await manager.importMeeting(from: url); importingMeeting = false }
+    }
+
+    private func refreshAll() {
+        calendar.refreshUpcoming(force: true)
+        manager.refreshPastMeetings(force: true)
+        manager.refreshQuickNotes()
+    }
+
+    private func importPeopleFromFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Import contacts from a .vcf (vCard) or .csv file"
+        panel.prompt = "Import"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let candidates = FileContactImporter.candidates(fromFileAt: url)
+        guard !candidates.isEmpty else {
+            ToastCenter.shared.show("No contacts found in that file")
+            return
+        }
+        let r = PeopleStore.shared.importPeople(candidates)
+        ToastCenter.shared.show("Imported \(r.created) new · \(r.merged) merged")
     }
 
     private func navGroupLabel(_ text: String) -> some View {
@@ -340,34 +426,27 @@ struct MainWindow: View {
             chatSession.setContext(contextLabel(s))
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            // Page-tailored, named toolbar (§1). Per-page button sets come from
+            // ToolbarModel; the less-common controls (import audio, join & record,
+            // refresh, finalizing status) live in the overflow ⋯ menu so the bar
+            // stays clean. The chat toggle stays unlabelled at the far right.
+            ToolbarItemGroup(placement: .primaryAction) {
+                ForEach(ToolbarModel.items(for: section,
+                                           isRecordingMeeting: meetingRecordingStartedAt != nil)) { item in
+                    toolbarItemView(item)
+                }
+                overflowMenu
                 Button { withAnimation(.easeOut(duration: 0.15)) { chatVisible.toggle() } } label: {
                     Label("Assistant", systemImage: chatVisible ? "sidebar.right" : "bubble.left.and.bubble.right")
                 }
                 .help(chatVisible ? "Hide assistant" : "Show assistant")
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    activeSheet = .search
-                } label: {
-                    Label("Search", systemImage: "magnifyingglass")
-                }
-                .help("Search everything (⌘K)")
+        }
+        .sheet(isPresented: $showNewMeeting) {
+            NewMeetingSheet { meeting in
+                Task { await manager.startRecording(for: meeting) }
             }
-            ToolbarItemGroup(placement: .primaryAction) {
-                PersistentToolbarButtons()
-            }
-            // Named, page-tailored primary action (§1): New meeting / Add person
-            // / New task / New voice note — the coral CTA for the current page.
-            if let primary = primaryToolbarButton {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { runToolbarAction(primary.action) } label: {
-                        Label(primary.label, systemImage: primary.systemImage)
-                            .labelStyle(.titleAndIcon)
-                    }
-                    .help(primary.label)
-                }
-            }
+            .environmentObject(calendar)
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
