@@ -174,6 +174,13 @@ struct MainWindow: View {
         .background(NDS.sidebarBg)
     }
 
+    /// When a meeting is actively recording, the time it started (drives the
+    /// in-app recording dock). nil = not recording a meeting.
+    private var meetingRecordingStartedAt: Date? {
+        if case .recording(_, let startedAt) = manager.state { return startedAt }
+        return nil
+    }
+
     private func navGroupLabel(_ text: String) -> some View {
         Text(text)
             .scaledFont(10, weight: .semibold)
@@ -261,6 +268,19 @@ struct MainWindow: View {
                 tabContent
                     .frame(minWidth: 0, maxWidth: .infinity)
                     .bloomAmbientGlow()   // subtle coral corner light (Bloom)
+                    // In-app meeting recording dock (§2A) — never a hover overlay.
+                    .overlay(alignment: .bottomTrailing) {
+                        if let startedAt = meetingRecordingStartedAt,
+                           RecordingPresentation.showsMeetingDock(isRecordingMeeting: true, section: section) {
+                            MeetingRecordDock(startedAt: startedAt) {
+                                section = .meetings
+                                if let m = manager.activeMeeting { router.openMeeting(m) }
+                            }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                    .animation(NDS.motion(NDS.springStandard, reduce: reduceMotion),
+                               value: meetingRecordingStartedAt != nil)
                 if showChat {
                     Divider().overlay(NDS.divider)
                     ChatSidebar()
