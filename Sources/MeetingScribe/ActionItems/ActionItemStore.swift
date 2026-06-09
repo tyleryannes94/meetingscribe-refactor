@@ -247,6 +247,100 @@ final class ActionItemStore: ObservableObject {
         return item
     }
 
+    // MARK: - Push from a meeting (cross-tab integration)
+
+    /// A lightweight task spec so a caller (a meeting's notes / action items,
+    /// the chat rail, etc.) can push work into Tasks without building a full
+    /// `ActionItem`.
+    struct TaskDraft {
+        var title: String
+        var owner: String? = nil
+        var dueDate: Date? = nil
+        var notes: String? = nil
+        var priority: ActionItem.Priority = .medium
+    }
+
+    /// `source` tag for tasks the user explicitly pushed from a meeting. Kept
+    /// distinct from extracted (`nil`) and manual (`"local"`) so
+    /// `reconcileExtracted` never deletes a pushed task when its meeting is
+    /// re-transcribed.
+    static let pushedSource = "push"
+
+    /// Create meeting-linked tasks from a batch of drafts — the engine behind
+    /// "Push to Tasks" on a call's notes / action items. Deduped by signature
+    /// (meeting + normalized title) against both live and trashed items, so
+    /// re-pushing the same line is a no-op. Returns only the newly-created
+    /// tasks (empty when everything was already present).
+    @discardableResult
+    func addTasks(_ drafts: [TaskDraft],
+                  fromMeetingID meetingID: String,
+                  meetingTitle: String,
+                  meetingDate: Date,
+                  projectID: String? = nil) -> [ActionItem] {
+        let live = Set(items.filter { $0.meetingID == meetingID }.map { $0.signature })
+        let trashed = Set(trashedItems.filter { $0.meetingID == meetingID }.map { $0.signature })
+        var seen = Set<String>()
+        var created: [ActionItem] = []
+        let now = Date()
+        for draft in drafts {
+            let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { continue }
+            let signature = "\(meetingID)::\(title.lowercased())"
+            guard !live.contains(signature), !trashed.contains(signature),
+                  seen.insert(signature).inserted else { continue }
+            let item = ActionItem(
+                id: UUID().uuidString,
+                meetingID: meetingID,
+                meetingTitle: meetingTitle,
+                meetingDate: meetingDate,
+                title: title,
+                owner: draft.owner,
+                notes: draft.notes,
+                status: .open,
+                priority: draft.priority,
+                dueDate: draft.dueDate,
+                projectID: projectID,
+                startDate: nil,
+                labelIDs: nil,
+                subtasks: nil,
+                sectionID: nil,
+                sortIndex: nextSortIndex(forStatus: .open, projectID: projectID),
+                source: Self.pushedSource,
+                externalID: nil,
+                externalURL: nil,
+                notionPageID: nil,
+                notionURL: nil,
+                createdAt: now,
+                updatedAt: now)
+            items.append(item)
+            created.append(item)
+        }
+        if let first = created.first {
+            save()
+            TaskChangeLog.shared.record(.create, entity: .task, id: first.id,
+                summary: created.count == 1
+                    ? "Pushed “\(first.title)” to Tasks"
+                    : "Pushed \(created.count) tasks from “\(meetingTitle)”")
+        }
+        return created
+    }
+
+    /// Split freeform note text into one task draft per non-empty line,
+    /// stripping common markdown bullet / checkbox / numbering prefixes so
+    /// "Push notes to Tasks" yields clean task titles.
+    static func draftsFromNotes(_ text: String) -> [TaskDraft] {
+        text.components(separatedBy: .newlines).compactMap { raw in
+            var s = raw.trimmingCharacters(in: .whitespaces)
+            guard !s.isEmpty else { return nil }
+            if let r = s.range(of: #"^([-*•]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|#{1,6}\s+)"#,
+                               options: .regularExpression) {
+                s.removeSubrange(r)
+            }
+            s = s.trimmingCharacters(in: .whitespaces)
+            return s.isEmpty ? nil : TaskDraft(title: s)
+        }
+    }
+
     /// Creates a task from a one-line natural-language capture (P3-2): parses
     /// `!priority`, `#label`, and a date out of the string, applies them, and
     /// creates/links labels by name. Returns the freshly stored task.
@@ -533,14 +627,20 @@ final class ActionItemStore: ObservableObject {
     /// empty and they're still in the .open state.
     func reconcileExtracted(_ extracted: [ActionItem], for meetingID: String) {
         var bySignature: [String: ActionItem] = [:]
-        for i in items where i.meetingID == meetingID {
+        // Only reconcile EXTRACTED items. Tasks the user pushed from this
+        // meeting (source == pushedSource) are user-authored, not extractor
+        // output, so they must survive a re-extract untouched.
+        for i in items where i.meetingID == meetingID && i.source != Self.pushedSource {
             bySignature[i.signature] = i
         }
         // Respect deletions: if the user trashed an extracted task, don't let a
         // re-extract resurrect it as a fresh live duplicate.
         let trashedSignatures = Set(trashedItems.filter { $0.meetingID == meetingID }.map { $0.signature })
 
-        var nextItems: [ActionItem] = items.filter { $0.meetingID != meetingID }
+        // Preserve everything from other meetings AND pushed tasks from this one.
+        var nextItems: [ActionItem] = items.filter {
+            $0.meetingID != meetingID || $0.source == Self.pushedSource
+        }
         var seenSignatures = Set<String>()
 
         for ext in extracted {

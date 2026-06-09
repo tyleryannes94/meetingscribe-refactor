@@ -588,6 +588,32 @@ final class MeetingManager: ObservableObject {
         }
     }
 
+    /// Push selected notes / action items from a meeting into the Tasks tab
+    /// (cross-tab integration). Returns the newly-created tasks. `lines` are
+    /// freeform note lines (markdown prefixes are stripped); `drafts` are
+    /// pre-built specs (e.g. from a call's action items). Both are deduped
+    /// against existing tasks for the meeting.
+    @discardableResult
+    func pushToTasks(meeting: Meeting,
+                     lines: [String] = [],
+                     drafts: [ActionItemStore.TaskDraft] = [],
+                     projectID: String? = nil) -> [ActionItem] {
+        let lineDrafts = lines.flatMap { ActionItemStore.draftsFromNotes($0) }
+        let all = drafts + lineDrafts
+        guard !all.isEmpty else { return [] }
+        let created = actionItems.addTasks(all,
+                                           fromMeetingID: meeting.id,
+                                           meetingTitle: meeting.displayTitle,
+                                           meetingDate: meeting.startDate,
+                                           projectID: projectID)
+        if !created.isEmpty {
+            ToastCenter.shared.show(created.count == 1
+                                    ? "Added 1 task to Tasks"
+                                    : "Added \(created.count) tasks to Tasks")
+        }
+        return created
+    }
+
     /// Manually add an audio file to a meeting (not a whole-meeting import). The
     /// file is copied into the meeting's `audio/` folder as the next segment and
     /// transcription is kicked off.
