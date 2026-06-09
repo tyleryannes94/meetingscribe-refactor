@@ -165,10 +165,13 @@ struct MainWindow: View {
                 .buttonStyle(.plain)
                 .help("Search everything (⌘K)")
 
-                // Settings gear (replaces the old Integrations nav item)
-                NotionIconButton(systemName: "gearshape", help: "Settings") {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                }
+                // Settings gear (replaces the old Integrations nav item).
+                // Uses SwiftUI's SettingsLink — the supported way to open the
+                // Settings scene. The previous `NSApp.sendAction(Selector(
+                // ("showSettingsWindow:")))` hack silently no-ops on some macOS
+                // versions / when the app isn't frontmost, which is why this
+                // button "didn't trigger".
+                SettingsGearButton()
             }
             .padding(.horizontal, 12).padding(.bottom, 12)
         }
@@ -607,6 +610,33 @@ struct MainWindow: View {
         guard !setup.isReady else { return }
         setupCheckOffered = true
         activeSheet = .setup
+    }
+}
+
+// MARK: - Settings gear (SettingsLink-backed)
+
+/// Opens the Settings scene reliably via SwiftUI's `SettingsLink` (macOS 14+),
+/// styled to match `NotionIconButton`. Replaces the unreliable private-selector
+/// `showSettingsWindow:` send-action the gear used before.
+@available(macOS 14.0, *)
+private struct SettingsGearButton: View {
+    @State private var hovering = false
+    var body: some View {
+        SettingsLink {
+            Image(systemName: "gearshape")
+                .scaledFont(13)
+                .foregroundStyle(NDS.textSecondary)
+                .frame(width: NDS.buttonIconSide, height: NDS.buttonIconSide)
+                .background(hovering ? NDS.rowHover : .clear, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(hovering ? NDS.hairline : .clear, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Settings")
+        .accessibilityLabel("Settings")
     }
 }
 
