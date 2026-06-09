@@ -40,6 +40,13 @@ jobs:
       - name: Guard — no new cross-tree duplication
         run: ./scripts/check-cross-tree-dupes.sh
 
+      # Design-system guard: fail on re-introduced raw fonts / priority-status
+      # colors / cold AppKit surface colors under UI/ + People/. The whole-app
+      # refresh drove these to zero; this keeps them there. Intentional
+      # exceptions carry a trailing `// design-lint:allow`.
+      - name: Guard — design-system drift
+        run: ./scripts/design-lint.sh fail
+
       - name: Build (release — matches local `make dev`)
         run: swift build -c release
         env:
