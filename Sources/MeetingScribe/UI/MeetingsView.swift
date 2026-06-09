@@ -237,22 +237,30 @@ struct MeetingsView: View {
         manager.pastMeetings.filter(matches).sorted { $0.startDate > $1.startDate }
     }
 
+    /// The currently-recording meeting's id (so NOW is shown regardless of the
+    /// scope filter).
+    private var liveMeetingID: String? {
+        if case .recording = manager.state { return manager.activeMeeting?.id }
+        return nil
+    }
+
+    /// Smart-grouped sections via the shared, tested `MeetingGrouping` (§3A):
+    /// NOW / TODAY / UPCOMING TODAY / UPCOMING / PAST · RECORDED. The scope pills
+    /// (All / Upcoming / Past) choose which meetings feed the grouping; a live
+    /// recording is always pinned to NOW.
     private var groups: [(String, [Meeting])] {
-        let cal = Calendar.current
-        let todayUpcoming = upcoming.filter { cal.isDateInToday($0.startDate) }
-        let laterUpcoming = upcoming.filter { !cal.isDateInToday($0.startDate) }
-        let todayPast = past.filter { cal.isDateInToday($0.startDate) }
-        let earlierPast = past.filter { !cal.isDateInToday($0.startDate) }
+        var source: [Meeting]
         switch scope {
-        case .upcoming:
-            return [("Today", todayUpcoming), ("Upcoming", laterUpcoming)]
-        case .past:
-            return [("Today", todayPast), ("Earlier", earlierPast)]
-        case .all:
-            return [("Upcoming", laterUpcoming),
-                    ("Today", todayUpcoming + todayPast),
-                    ("Earlier", earlierPast)]
+        case .upcoming: source = upcoming
+        case .past:     source = past
+        case .all:      source = calendarMeetings
         }
+        if let live = liveMeetingID, let m = manager.activeMeeting,
+           !source.contains(where: { $0.id == m.id }) {
+            source.insert(m, at: 0)
+        }
+        return MeetingGrouping.group(source, liveMeetingID: liveMeetingID)
+            .map { ($0.section.title, $0.meetings) }
     }
 
     private func variant(for m: Meeting) -> MeetingCard.Variant {
