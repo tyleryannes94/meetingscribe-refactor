@@ -284,6 +284,10 @@ struct PersonDetailView: View {
             }
         }
     }
+    // Inline add-email (§4A) and add-to-meeting (§4D).
+    @State private var showAddEmail = false
+    @State private var newEmailDraft = ""
+    @State private var showAddToMeeting = false
     // Analyze popover (§4C): pick WHAT to analyze × the TIME RANGE.
     @State private var showAnalyzePopover = false
     @State private var analyzePreset: ConversationAnalysisPreset = .relationshipSummary
@@ -342,6 +346,7 @@ struct PersonDetailView: View {
         .sheet(isPresented: $showAddRelationship) {
             AddRelationshipSheet(personID: current.id).environmentObject(people)
         }
+        .sheet(isPresented: $showAddToMeeting) { addToMeetingSheet }
         .confirmationDialog("Delete \(current.displayName)?",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
@@ -357,6 +362,68 @@ struct PersonDetailView: View {
         } message: {
             Text("Removes the person and their encounters. You can undo right after.")
         }
+    }
+
+    private var firstName: String {
+        current.displayName.components(separatedBy: " ").first ?? current.displayName
+    }
+
+    /// Sheet to add this person as an attendee on an upcoming meeting (§4D).
+    private var addToMeetingSheet: some View {
+        let upcoming = calendar.upcoming
+            .filter { $0.startDate > Date().addingTimeInterval(-3600) }
+            .sorted { $0.startDate < $1.startDate }
+        return VStack(spacing: 0) {
+            HStack {
+                Text("Add \(current.displayName) to a meeting").font(.headline)
+                Spacer()
+                Button("Done") { showAddToMeeting = false }
+            }
+            .padding()
+            Divider().overlay(NDS.divider)
+            if upcoming.isEmpty {
+                MSEmptyState(systemImage: "calendar",
+                             title: "No upcoming meetings",
+                             message: "Meetings from your calendar will appear here.")
+                    .frame(maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(upcoming) { m in
+                            Button { addToMeeting(m) } label: {
+                                HStack(spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(m.displayTitle).scaledFont(13, weight: .semibold)
+                                            .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                                        Text(m.startDate.formatted(date: .abbreviated, time: .shortened))
+                                            .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "plus.circle.fill").foregroundStyle(NDS.accent)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 10)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(width: 420, height: 460)
+        .background(NDS.bg)
+    }
+
+    private func addToMeeting(_ m: Meeting) {
+        let attendee = current.primaryEmail.isEmpty
+            ? current.displayName
+            : "\(current.displayName) <\(current.primaryEmail)>"
+        if manager.addAttendee(attendee, to: m) != nil {
+            ToastCenter.shared.show("Added \(firstName) to \(m.displayTitle)")
+        } else {
+            ToastCenter.shared.show("\(firstName) is already on that meeting")
+        }
+        showAddToMeeting = false
     }
 
     // MARK: - Two-pane detail (§4)
@@ -424,6 +491,10 @@ struct PersonDetailView: View {
             aiSuggestionsSection
             provenanceFooter
         case .meetings:
+            Button { showAddToMeeting = true } label: {
+                Label("Add \(firstName) to a meeting", systemImage: "calendar.badge.plus")
+            }
+            .buttonStyle(MSSecondaryButtonStyle())
             meetingHistorySection
             if !current.meetingMentions.isEmpty { mentionedInSection }
             decisionsSection
@@ -1174,17 +1245,50 @@ struct PersonDetailView: View {
         let emails = current.emails.filter { !$0.isEmpty }
         let phones = current.phones.filter { !$0.isEmpty }
         let addresses = current.addresses.filter { !$0.isEmpty }
-        let hasAny = !emails.isEmpty || !phones.isEmpty || !addresses.isEmpty || current.birthday != nil
-        if hasAny {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(emails, id: \.self) { contactRow(icon: "envelope", text: $0) }
-                ForEach(phones, id: \.self) { contactRow(icon: "phone", text: $0) }
-                ForEach(addresses, id: \.self) { contactRow(icon: "mappin.and.ellipse", text: $0) }
-                if let bday = current.birthday {
-                    contactRow(icon: "gift", text: Self.birthdayFormatter.string(from: bday))
+        return VStack(alignment: .leading, spacing: 6) {
+            NotionEyebrow(text: "Contact")
+            ForEach(emails, id: \.self) { contactRow(icon: "envelope", text: $0) }
+            ForEach(phones, id: \.self) { contactRow(icon: "phone", text: $0) }
+            ForEach(addresses, id: \.self) { contactRow(icon: "mappin.and.ellipse", text: $0) }
+            if let bday = current.birthday {
+                contactRow(icon: "gift", text: Self.birthdayFormatter.string(from: bday))
+            }
+            addEmailControl
+        }
+    }
+
+    /// Inline "+ Add email" (§4A) — appends a deduped email via the store service.
+    private var addEmailControl: some View {
+        Button { showAddEmail = true } label: {
+            Label("Add email", systemImage: "plus").font(NDS.tiny)
+        }
+        .buttonStyle(.borderless).foregroundStyle(NDS.accent)
+        .popover(isPresented: $showAddEmail, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Add email").scaledFont(13, weight: .bold, relativeTo: .headline)
+                TextField("name@company.com", text: $newEmailDraft)
+                    .textFieldStyle(.roundedBorder).frame(width: 230)
+                    .onSubmit(commitAddEmail)
+                HStack {
+                    Spacer()
+                    Button("Cancel") { showAddEmail = false; newEmailDraft = "" }
+                    Button("Add") { commitAddEmail() }
+                        .buttonStyle(MSPrimaryButtonStyle())
+                        .disabled(newEmailDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .padding(14)
         }
+    }
+
+    private func commitAddEmail() {
+        let e = newEmailDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !e.isEmpty else { return }
+        if people.addEmail(e, to: current.id) == nil {
+            ToastCenter.shared.show("That email is already on \(current.displayName)")
+        }
+        newEmailDraft = ""
+        showAddEmail = false
     }
 
     // MARK: - Photos
