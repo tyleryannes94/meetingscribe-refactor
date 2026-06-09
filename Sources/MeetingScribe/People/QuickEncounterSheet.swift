@@ -241,11 +241,11 @@ private struct KindChip: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(selected ? Color.accentColor : Color.secondary.opacity(0.12))
+                    .fill(selected ? NDS.brand : Color.secondary.opacity(0.12))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(selected ? Color.accentColor : Color.clear, lineWidth: 1.5)
+                    .stroke(selected ? NDS.brand : Color.clear, lineWidth: 1.5)
             )
         }
         .buttonStyle(.plain)
@@ -270,7 +270,7 @@ private struct MoodChip: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(selected ? Color.accentColor.opacity(0.85) : Color.secondary.opacity(0.1))
+                    .fill(selected ? NDS.brand.opacity(0.85) : Color.secondary.opacity(0.1))
             )
         }
         .buttonStyle(.plain)

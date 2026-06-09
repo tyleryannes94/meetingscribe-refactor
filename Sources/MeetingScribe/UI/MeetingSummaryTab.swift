@@ -393,14 +393,7 @@ private struct InlineActionItemRow: View {
         return f.string(from: d)
     }
 
-    private var priorityColor: Color {
-        switch item.priority {
-        case .urgent: return .red
-        case .high:   return .orange
-        case .medium: return .yellow
-        case .low:    return .secondary.opacity(0.4)
-        }
-    }
+    private var priorityColor: Color { NDS.priority(item.priority) }
 }
 
 /// 👍/👎 + "why" feedback on a summary; a thumbs-down reason steers the next

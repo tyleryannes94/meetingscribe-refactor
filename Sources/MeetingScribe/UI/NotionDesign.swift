@@ -116,6 +116,72 @@ enum NDS {
     static func motion(_ animation: Animation?, reduce: Bool) -> Animation? {
         reduce ? nil : animation
     }
+
+    // MARK: Spacing scale (DV-1)
+    // Use these instead of ad-hoc `.padding(<literal>)` so the app has one
+    // vertical rhythm. xs 4 · sm 8 · md 12 · lg 16 · xl 24 · xxl 32.
+    static let spaceXS:  CGFloat = 4
+    static let spaceSM:  CGFloat = 8
+    static let spaceMD:  CGFloat = 12
+    static let spaceLG:  CGFloat = 16
+    static let spaceXL:  CGFloat = 24
+    static let spaceXXL: CGFloat = 32
+
+    // MARK: Motion constants (DV-9 / MX-1)
+    // Durations + a canonical spring. Always wrap call-site animations in
+    // `motion(_:reduce:)` so Reduce Motion still disables them.
+    static let motionFast:     Double = 0.15
+    static let motionStandard: Double = 0.22
+    static let motionSlow:     Double = 0.35
+    /// Canonical spring for view/page transitions and hover affordances.
+    static let springStandard: Animation = .spring(response: 0.34, dampingFraction: 0.86)
+
+    // MARK: Semantic status / priority / due colors (DV-5 / VD-5 / DV-8)
+    //
+    // One source of truth, drawn from the muted Notion `palette` so they sit in
+    // the warm theme instead of raw system `.red/.orange/.blue`. These replace
+    // the duplicate local `priorityColor`/`statusColor`/`dueColor` switches that
+    // had drifted across 7 files. Always pair the color with a glyph (status has
+    // `systemImage`; priority has `priorityGlyph`) so meaning never rests on
+    // color alone — colorblind-safe.
+    static func priority(_ p: ActionItem.Priority) -> Color {
+        switch p {
+        case .low:    return palette[0].color   // gray
+        case .medium: return palette[5].color   // blue
+        case .high:   return palette[2].color   // orange
+        case .urgent: return palette[8].color   // red
+        }
+    }
+    /// Non-color redundancy for priority, shown alongside the color.
+    static func priorityGlyph(_ p: ActionItem.Priority) -> String {
+        switch p {
+        case .low:    return "minus"
+        case .medium: return "equal"
+        case .high:   return "chevron.up"
+        case .urgent: return "exclamationmark"
+        }
+    }
+    static func status(_ s: ActionItem.Status) -> Color {
+        switch s {
+        case .open:       return palette[5].color  // blue
+        case .inProgress: return palette[2].color  // orange
+        case .completed:  return palette[4].color  // green
+        }
+    }
+    /// Overdue → red, due today → amber, otherwise neutral. Completed never reads
+    /// as overdue. Centralizes the duplicated `dueColor` helpers.
+    static func due(_ date: Date?, status: ActionItem.Status) -> Color {
+        guard let date, status != .completed else { return textSecondary }
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        if date < startOfToday { return palette[8].color }                  // overdue → red
+        if Calendar.current.isDateInToday(date) { return palette[2].color } // today  → orange
+        return textSecondary
+    }
+
+    // MARK: Icon weight (DV-7) — consistent SF Symbol weight per render size.
+    static func iconWeight(forSize size: CGFloat) -> Font.Weight {
+        size >= 16 ? .semibold : .medium
+    }
 }
 
 @available(macOS 14.0, *)

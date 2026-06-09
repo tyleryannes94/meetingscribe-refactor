@@ -465,19 +465,6 @@ struct TaskPageView: View {
         lastSavedNote = noteDraft
     }
 
-    private func statusColor(_ s: ActionItem.Status) -> Color {
-        switch s {
-        case .open: return NDS.selectColor("blue")
-        case .inProgress: return NDS.selectColor("orange")
-        case .completed: return NDS.selectColor("green")
-        }
-    }
-    private func priorityColor(_ p: ActionItem.Priority) -> Color {
-        switch p {
-        case .low: return NDS.palette[0].color
-        case .medium: return NDS.selectColor("blue")
-        case .high: return NDS.selectColor("orange")
-        case .urgent: return NDS.selectColor("red")
-        }
-    }
+    private func statusColor(_ s: ActionItem.Status) -> Color { NDS.status(s) }
+    private func priorityColor(_ p: ActionItem.Priority) -> Color { NDS.priority(p) }
 }

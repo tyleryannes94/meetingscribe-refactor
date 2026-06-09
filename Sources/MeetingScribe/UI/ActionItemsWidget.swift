@@ -142,21 +142,8 @@ struct ActionItemsWidget: View {
             .frame(width: 6, height: 6)
             .help("Priority: \(p.label)")
     }
-    private func color(for p: ActionItem.Priority) -> Color {
-        switch p {
-        case .low: return .gray
-        case .medium: return .blue
-        case .high: return .orange
-        case .urgent: return .red
-        }
-    }
-    private func statusColor(_ s: ActionItem.Status) -> Color {
-        switch s {
-        case .open: return .blue
-        case .inProgress: return .orange
-        case .completed: return .green
-        }
-    }
+    private func color(for p: ActionItem.Priority) -> Color { NDS.priority(p) }
+    private func statusColor(_ s: ActionItem.Status) -> Color { NDS.status(s) }
     private func dueText(_ d: Date) -> String {
         let cal = Calendar.current
         if cal.isDateInToday(d) { return "today" }
@@ -165,8 +152,5 @@ struct ActionItemsWidget: View {
         let f = DateFormatter(); f.dateFormat = "MMM d"
         return f.string(from: d)
     }
-    private func dueColor(_ d: Date, status: ActionItem.Status) -> Color {
-        guard status != .completed else { return .secondary }
-        return d < Calendar.current.startOfDay(for: Date()) ? .red : .secondary
-    }
+    private func dueColor(_ d: Date, status: ActionItem.Status) -> Color { NDS.due(d, status: status) }
 }

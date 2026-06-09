@@ -47,12 +47,12 @@ struct StayConnectedSection: View {
                         // Avatar + emoji type badge
                         ZStack(alignment: .bottomTrailing) {
                             Circle()
-                                .fill(Color.accentColor.opacity(0.15))
+                                .fill(NDS.brand.opacity(0.15))
                                 .frame(width: 36, height: 36)
                                 .overlay(
                                     Text(String(person.displayName.prefix(1)))
                                         .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(Color.accentColor)
+                                        .foregroundStyle(NDS.brand)
                                 )
                             Text(person.relationshipType.emoji)
                                 .font(.system(size: 10))

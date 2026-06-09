@@ -157,14 +157,7 @@ extension ActionItemsView {
         }
     }
 
-    func priorityColor(_ p: ActionItem.Priority) -> Color {
-        switch p {
-        case .low: return .gray
-        case .medium: return .blue
-        case .high: return .orange
-        case .urgent: return .red
-        }
-    }
+    func priorityColor(_ p: ActionItem.Priority) -> Color { NDS.priority(p) }
     func dueShort(_ item: ActionItem) -> String {
         guard let d = item.dueDate else { return "—" }
         return Self.dueShortFormatter.string(from: d)
@@ -175,12 +168,7 @@ extension ActionItemsView {
 
     /// Overdue → red, due today → orange, otherwise neutral. (Completed never
     /// reads as overdue.)
-    func dueColor(_ item: ActionItem) -> Color {
-        guard let due = item.dueDate, item.status != .completed else { return .secondary }
-        if due < Calendar.current.startOfDay(for: Date()) { return .red }
-        if Calendar.current.isDateInToday(due) { return .orange }
-        return .secondary
-    }
+    func dueColor(_ item: ActionItem) -> Color { NDS.due(item.dueDate, status: item.status) }
 
     static func startOfToday() -> Date { Calendar.current.startOfDay(for: Date()) }
     static func daysFromToday(_ n: Int) -> Date? {

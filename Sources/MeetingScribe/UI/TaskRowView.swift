@@ -199,13 +199,7 @@ struct ActionItemRow: View {
         .frame(width: 22)
     }
 
-    private var statusColor: Color {
-        switch item.status {
-        case .open: return .blue
-        case .inProgress: return .orange
-        case .completed: return .green
-        }
-    }
+    private var statusColor: Color { NDS.status(item.status) }
 
     private var priorityPicker: some View {
         Menu {
@@ -226,14 +220,7 @@ struct ActionItemRow: View {
         .fixedSize()
     }
 
-    private var priorityColor: Color {
-        switch item.priority {
-        case .low: return .gray
-        case .medium: return .blue
-        case .high: return .orange
-        case .urgent: return .red
-        }
-    }
+    private var priorityColor: Color { NDS.priority(item.priority) }
     private var priorityIcon: String {
         switch item.priority {
         case .low: return "arrow.down"
