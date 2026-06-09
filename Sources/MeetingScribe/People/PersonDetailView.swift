@@ -12,6 +12,41 @@ enum AnalysisScope: Hashable {
     case allTime
 }
 
+/// Time range for the Analyze popover (§4C) — combines date windows with the
+/// two count-based modes. Maps to a `MessagesAnalyzer.MessageWindow` (date
+/// filtering) plus a message-count cap. `.allTime` keeps the cache-and-save
+/// behavior; everything else produces an inline result.
+enum AnalyzeRange: String, CaseIterable, Identifiable, Hashable {
+    case last30, last90, last6mo, thisYear, recent1000, allTime
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .last30:     return "Last 30d"
+        case .last90:     return "Last 90d"
+        case .last6mo:    return "Last 6mo"
+        case .thisYear:   return "This year"
+        case .recent1000: return "Recent 1000"
+        case .allTime:    return "All time"
+        }
+    }
+    var window: MessagesAnalyzer.MessageWindow {
+        switch self {
+        case .last30:   return .lastDays(30)
+        case .last90:   return .lastDays(90)
+        case .last6mo:  return .lastDays(180)
+        case .thisYear: return .lastDays(365)
+        case .recent1000, .allTime: return .allTime
+        }
+    }
+    var recentLimit: Int {
+        switch self {
+        case .recent1000: return 1000
+        case .allTime:    return 100_000
+        default:          return 5000     // date window does the limiting
+        }
+    }
+}
+
 /// Conversation analysis preset — choices the user can pick from on the
 /// Person detail view to run different kinds of analysis over the recent
 /// iMessage snippets. Each preset bundles a label, a SF Symbol, a `kind`
@@ -235,6 +270,10 @@ struct PersonDetailView: View {
     @State private var analysisRunning: ConversationAnalysisPreset?
     @State private var customPromptDraft = ""
     @State private var showCustomPrompt = false
+    // Analyze popover (§4C): pick WHAT to analyze × the TIME RANGE.
+    @State private var showAnalyzePopover = false
+    @State private var analyzePreset: ConversationAnalysisPreset = .relationshipSummary
+    @State private var analyzeRange: AnalyzeRange = .recent1000
     @State private var noteExpansion: [String: Bool] = [:]
 
     /// Display container for a finished analysis. Holds the preset (so we
@@ -1505,30 +1544,11 @@ struct PersonDetailView: View {
     /// can rerun deliberately.
     private var analysisPresetMenu: some View {
         HStack(spacing: 6) {
-            Menu {
-                ForEach(ConversationAnalysisPreset.allCases) { preset in
-                    Menu {
-                        Button {
-                            runAnalysis(preset, scope: .recent1000)
-                        } label: {
-                            Label("Recent 1000 messages", systemImage: "clock")
-                        }
-                        Button {
-                            runAnalysis(preset, scope: .allTime)
-                        } label: {
-                            let exists = cachedAllTimeNote(for: preset) != nil
-                            Label(exists ? "Refresh all-time analysis" : "All time (cache + save)",
-                                  systemImage: exists ? "arrow.clockwise" : "archivebox")
-                        }
-                    } label: {
-                        Label(preset.label, systemImage: preset.systemImage)
-                    }
-                }
-            } label: {
-                Label("Analyze conversation", systemImage: "sparkles")
+            Button { showAnalyzePopover = true } label: {
+                Label("Analyze…", systemImage: "sparkles")
             }
-            .menuStyle(.borderlessButton)
-            .font(NDS.small)
+            .buttonStyle(.borderless).font(NDS.small)
+            .popover(isPresented: $showAnalyzePopover, arrowEdge: .bottom) { analyzePopover }
             if let running = analysisRunning {
                 ProgressView().controlSize(.small)
                 Text("Running: \(running.label)…")
@@ -1536,6 +1556,73 @@ struct PersonDetailView: View {
             }
         }
         .padding(.top, 2)
+    }
+
+    /// Structured Analyze popover (§4C): choose the analysis kind and the time
+    /// range, then run. Replaces the old nested preset→scope menu.
+    private var analyzePopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Analyze messages").scaledFont(15, weight: .bold, relativeTo: .headline)
+
+            NotionEyebrow(text: "What to analyze")
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(ConversationAnalysisPreset.allCases) { preset in
+                    Button { analyzePreset = preset } label: {
+                        HStack(spacing: 9) {
+                            Image(systemName: analyzePreset == preset ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(analyzePreset == preset ? NDS.accent : NDS.textTertiary)
+                            Image(systemName: preset.systemImage).frame(width: 16)
+                                .foregroundStyle(NDS.textSecondary)
+                            Text(preset.label).foregroundStyle(NDS.textPrimary)
+                            Spacer(minLength: 0)
+                        }
+                        .scaledFont(13)
+                        .padding(.vertical, 5).padding(.horizontal, 6)
+                        .background(analyzePreset == preset ? NDS.accentSoft : .clear,
+                                    in: RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if analyzePreset == .custom {
+                TextField("Custom instruction…", text: $customPromptDraft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder).lineLimit(2...4).font(NDS.small)
+            }
+
+            Divider().overlay(NDS.divider)
+
+            NotionEyebrow(text: "Time range")
+            FlowLayout(spacing: 6) {
+                ForEach(AnalyzeRange.allCases) { range in
+                    let active = analyzeRange == range
+                    Button { analyzeRange = range } label: {
+                        Text(range.label)
+                            .scaledFont(11.5, weight: .bold, relativeTo: .caption)
+                            .foregroundStyle(active ? NDS.onAccent : NDS.textSecondary)
+                            .padding(.horizontal, 11).padding(.vertical, 5)
+                            .background(active ? AnyShapeStyle(NDS.accentGradient)
+                                              : AnyShapeStyle(NDS.surface2), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Button {
+                showAnalyzePopover = false
+                if analyzePreset == .custom,
+                   customPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    showCustomPrompt = true
+                } else {
+                    runAnalysis(analyzePreset, range: analyzeRange)
+                }
+            } label: {
+                Label("Run analysis", systemImage: "sparkles").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(MSPrimaryButtonStyle())
+        }
+        .padding(16)
+        .frame(width: 320)
     }
 
     /// The most recent analysis output (if any), with a save-to-notes
@@ -1759,7 +1846,7 @@ struct PersonDetailView: View {
     /// AttachedNote (kind "summary-all" etc.) so the user doesn't pay
     /// the LLM cost again unless they explicitly refresh.
     private func runAnalysis(_ preset: ConversationAnalysisPreset,
-                             scope: AnalysisScope = .recent1000) {
+                             range: AnalyzeRange = .recent1000) {
         if preset == .custom,
            customPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             showCustomPrompt = true
@@ -1769,24 +1856,20 @@ struct PersonDetailView: View {
         analysisOutput = nil
         let target = current
         let customDraft = customPromptDraft
+        let isAllTime = (range == .allTime)
         Task.detached(priority: .utility) {
-            // Pull either the last N messages or every message ever,
-            // depending on scope. Recent-by-count beats date-based for
-            // sporadic contacts (don't penalize a friend you haven't
-            // texted in 3 months by giving the model 0 context).
-            let limit: Int
-            switch scope {
-            case .recent1000: limit = 1000
-            case .allTime:    limit = 100_000   // effectively uncapped
-            }
-            guard let (_, recent) = try? MessagesAnalyzer.analyze(person: target, recentLimit: limit) else {
+            // Pull messages within the chosen window, capped by count. Date
+            // windows scope by time; recent-1000 / all-time are count-based so a
+            // sporadic contact still gives the model context.
+            guard let (_, recent) = try? MessagesAnalyzer.analyze(
+                    person: target, recentLimit: range.recentLimit, scope: range.window) else {
                 await MainActor.run { self.analysisRunning = nil }
                 return
             }
             // Truncate the rendered transcript to a model-friendly size.
-            // All-time scope uses a bigger budget because the user opted
-            // into the slower run.
-            let transcriptBudget = scope == .allTime ? 32_000 : 8_000
+            // All-time uses a bigger budget because the user opted into the
+            // slower run.
+            let transcriptBudget = isAllTime ? 32_000 : 8_000
             let transcript = recent.map { "\($0.fromMe ? "Me" : target.displayName): \($0.text)" }
                 .joined(separator: "\n")
                 .prefix(transcriptBudget)
@@ -1810,7 +1893,7 @@ struct PersonDetailView: View {
                 .replacingOccurrences(of: "PROMPT_BODY", with: String(transcript))
             // Larger num_ctx for the all-time run so qwen2.5:7b can
             // actually read everything we hand it; smaller for recent.
-            let numCtx = scope == .allTime ? 16_384 : 8_192
+            let numCtx = isAllTime ? 16_384 : 8_192
             let result = (try? await OllamaService().generate(prompt: prompt,
                                                               temperature: 0.2,
                                                               numCtx: numCtx)) ?? ""
@@ -1818,7 +1901,7 @@ struct PersonDetailView: View {
             await MainActor.run {
                 self.analysisRunning = nil
                 guard !cleaned.isEmpty else { return }
-                if scope == .allTime {
+                if isAllTime {
                     // All-time analyses persist directly — that's the whole
                     // point: pay the cost once, cache the result.
                     let title = preset.noteTitle(for: target.displayName) + " (all-time)"
