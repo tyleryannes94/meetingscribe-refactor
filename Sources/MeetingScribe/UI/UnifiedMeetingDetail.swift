@@ -59,6 +59,11 @@ struct UnifiedMeetingDetail: View {
     @State var showAudioImporter = false
     @State var showTranscriptImporter = false
     @State var showFollowUp = false
+    /// When set, the inline "connect attendee → person" panel is shown as a
+    /// trailing inspector. Holds the raw attendee string ("Name <email>") so the
+    /// panel can parse name/email and offer link-to-existing or add-as-new —
+    /// without leaving the meeting (replaces the old jump-to-People behavior).
+    @State var connectingAttendee: String?
 
     var meeting: Meeting? {
         switch mode {
@@ -81,6 +86,7 @@ struct UnifiedMeetingDetail: View {
     }
 
     var body: some View {
+        HStack(spacing: 0) {
         VStack(spacing: 0) {
             // Clear the translucent window toolbar (Tahoe) in the Meetings-tab
             // split view — without this the title + action buttons (Transcribe,
@@ -142,6 +148,24 @@ struct UnifiedMeetingDetail: View {
             defer { if scoped { src.stopAccessingSecurityScopedResource() } }
             manager.importTranscriptFile(src, into: m)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Inline attendee → person connect panel (trailing inspector).
+            if let attendee = connectingAttendee, let m = meeting {
+                Divider().overlay(NDS.divider)
+                MeetingPersonConnectPanel(
+                    attendee: attendee,
+                    meeting: m,
+                    onClose: { connectingAttendee = nil }
+                )
+                .frame(width: 320)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(NDS.motion(NDS.springStandard, reduce: reduceMotion),
+                   value: connectingAttendee)
+        // Switching meetings closes any open connect panel.
+        .onChange(of: meeting?.id) { _, _ in connectingAttendee = nil }
     }
     // MARK: - Tabs
 

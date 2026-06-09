@@ -19,21 +19,101 @@ final class WorkspaceRouter: ObservableObject {
         didSet {
             guard section != oldValue else { return }
             UserDefaults.standard.set(section.rawValue, forKey: Self.sectionKey)
+            scheduleHistoryRecord()
         }
     }
 
     /// The meeting shown in the canonical Meetings-tab detail pane. Set from
     /// anywhere via `openMeeting`; `MeetingsView` renders whatever is selected.
-    @Published var selectedMeetingID: String?
+    @Published var selectedMeetingID: String? {
+        didSet {
+            guard selectedMeetingID != oldValue else { return }
+            scheduleHistoryRecord()
+        }
+    }
 
     /// Invoked for a `.chatQuery` entity so the host (MainWindow) can reveal the
     /// chat rail before the query is dispatched. The router doesn't own the
     /// rail's visibility, so it delegates that one concern back out.
     var openChat: ((String) -> Void)?
 
+    // MARK: - Back / forward navigation history (global, browser-style)
+
+    /// A point in the navigation history: which top-level section was showing
+    /// and, for the Meetings tab, which meeting was open.
+    private struct NavState: Equatable {
+        var section: TopLevelSection
+        var meetingID: String?
+    }
+
+    private var backStack: [NavState] = []
+    private var forwardStack: [NavState] = []
+    private var currentState: NavState
+    /// While restoring a history entry we don't want the resulting `section` /
+    /// `selectedMeetingID` mutations to push *new* history.
+    private var suppressHistory = false
+    private var recordScheduled = false
+
+    /// Drives the enabled state of the toolbar back/forward buttons.
+    @Published private(set) var canGoBack = false
+    @Published private(set) var canGoForward = false
+
     init() {
         let raw = UserDefaults.standard.string(forKey: Self.sectionKey) ?? ""
-        self.section = TopLevelSection(rawValue: raw) ?? .today
+        let initial = TopLevelSection(rawValue: raw) ?? .today
+        self.section = initial
+        self.currentState = NavState(section: initial, meetingID: nil)
+    }
+
+    /// Coalesce the back-to-back `section` + `selectedMeetingID` mutations of a
+    /// single navigation (e.g. `openMeeting` sets both) into one history entry
+    /// by recording once the runloop settles.
+    private func scheduleHistoryRecord() {
+        guard !recordScheduled else { return }
+        recordScheduled = true
+        DispatchQueue.main.async { [weak self] in self?.recordHistory() }
+    }
+
+    private func recordHistory() {
+        recordScheduled = false
+        defer { suppressHistory = false }
+        let new = NavState(section: section, meetingID: selectedMeetingID)
+        guard new != currentState else { return }
+        if !suppressHistory {
+            backStack.append(currentState)
+            if backStack.count > 50 { backStack.removeFirst() }
+            forwardStack.removeAll()
+        }
+        currentState = new
+        updateHistoryFlags()
+    }
+
+    private func updateHistoryFlags() {
+        canGoBack = !backStack.isEmpty
+        canGoForward = !forwardStack.isEmpty
+    }
+
+    private func apply(_ state: NavState) {
+        // Set current first so the coalesced record sees no change and no-ops.
+        currentState = state
+        suppressHistory = true
+        selectedMeetingID = state.meetingID
+        section = state.section
+        updateHistoryFlags()
+    }
+
+    /// Step back to the previous section/meeting.
+    func goBack() {
+        guard let prev = backStack.popLast() else { return }
+        forwardStack.append(currentState)
+        apply(prev)
+    }
+
+    /// Step forward (only available right after a `goBack`).
+    func goForward() {
+        guard let next = forwardStack.popLast() else { return }
+        backStack.append(currentState)
+        apply(next)
     }
 
     /// Switch the active top-level section.

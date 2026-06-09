@@ -26,7 +26,7 @@ extension UnifiedMeetingDetail {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(m.attendees.prefix(12), id: \.self) { a in
-                            AttendeeChip(attendee: a)
+                            AttendeeChip(attendee: a) { connectingAttendee = $0 }
                         }
                         if m.attendees.count > 12 {
                             Text("+\(m.attendees.count - 12)")
@@ -685,6 +685,10 @@ extension UnifiedMeetingDetail {
 
 private struct AttendeeChip: View {
     let attendee: String
+    /// Called on tap to open the inline connect panel inside the meeting detail
+    /// (instead of jumping to the People tab). The host passes the attendee
+    /// string back so the panel can parse name/email and offer connect/create.
+    var onConnect: ((String) -> Void)? = nil
     @EnvironmentObject var router: WorkspaceRouter
     // Observe the store so the "already in People" dot updates live after you
     // create/tag a person — it read PeopleStore.shared statically before. (SP-3)
@@ -730,10 +734,11 @@ private struct AttendeeChip: View {
     }
 
     var body: some View {
-        // Left-click opens the linked Person (creating one if needed) instead
-        // of only offering a right-click menu. A filled dot marks attendees who
-        // are already in People. (D1-5)
-        Button(action: openOrCreate) {
+        // Left-click opens an inline connect panel inside the meeting (D1-5,
+        // refined): instead of jumping to the People tab, the user can link this
+        // attendee to a saved person or add them as a new one without losing the
+        // meeting context. A filled dot marks attendees already in People.
+        Button(action: openConnectPanel) {
             HStack(spacing: 5) {
                 Circle()
                     .fill(NDS.selectColor(displayName))
@@ -756,24 +761,26 @@ private struct AttendeeChip: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(existingPerson == nil ? "Add \(fullName) to People" : "Open \(fullName)")
+        .help(existingPerson == nil ? "Connect \(fullName) to a person" : "Manage \(fullName)")
         .contextMenu {
-            if existingPerson == nil {
-                Button(action: openOrCreate) {
-                    Label("Add to People", systemImage: "person.crop.circle.badge.plus")
-                }
-            } else {
-                Button(action: openOrCreate) {
-                    Label("Open in People", systemImage: "person.crop.circle")
+            Button(action: openConnectPanel) {
+                Label(existingPerson == nil ? "Connect to a person…" : "Manage link…",
+                      systemImage: "person.crop.circle.badge.plus")
+            }
+            if let p = existingPerson {
+                Button { router.openPerson(p.id) } label: {
+                    Label("Open in People", systemImage: "arrow.up.forward.app")
                 }
             }
         }
     }
 
-    /// Open the matching Person, or create one from the attendee string and
-    /// open it. Routes through the canonical router.
-    private func openOrCreate() {
-        if let p = existingPerson {
+    /// Open the inline connect panel within the meeting detail. Falls back to
+    /// the canonical People-tab route only if no host handler is wired.
+    private func openConnectPanel() {
+        if let onConnect {
+            onConnect(attendee)
+        } else if let p = existingPerson {
             router.openPerson(p.id)
         } else {
             let p = people.createPerson(displayName: fullName, email: email)

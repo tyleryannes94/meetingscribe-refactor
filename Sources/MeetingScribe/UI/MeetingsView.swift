@@ -53,6 +53,10 @@ struct MeetingsView: View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
             // MARK: Left pane — meeting list
             VStack(spacing: 0) {
+                // Clear the translucent window toolbar (Tahoe) so the "Meetings"
+                // title + counts aren't slid under it and clipped. Matches the
+                // detail pane's top inset.
+                Color.clear.frame(height: NDS.splitPaneTopInset)
                 listHeader
                 Divider().overlay(NDS.divider)
                 if listMode == .list { meetingList } else { monthView }

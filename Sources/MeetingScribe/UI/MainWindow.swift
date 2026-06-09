@@ -426,6 +426,20 @@ struct MainWindow: View {
             chatSession.setContext(contextLabel(s))
         }
         .toolbar {
+            // Global back / forward — browser-style history across sections and
+            // meeting selections, driven by WorkspaceRouter.
+            ToolbarItemGroup(placement: .navigation) {
+                Button { router.goBack() } label: {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .disabled(!router.canGoBack)
+                .help("Back")
+                Button { router.goForward() } label: {
+                    Label("Forward", systemImage: "chevron.right")
+                }
+                .disabled(!router.canGoForward)
+                .help("Forward")
+            }
             // Page-tailored, named toolbar (§1). Per-page button sets come from
             // ToolbarModel; the less-common controls (import audio, join & record,
             // refresh, finalizing status) live in the overflow ⋯ menu so the bar
