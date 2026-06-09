@@ -125,6 +125,12 @@ struct MarkdownEditor: NSViewRepresentable {
             text.wrappedValue = tv.string
             MarkdownStyle.applyStyling(to: tv)
             detectTrigger(in: tv)
+            controller?.removeSelectionBar()
+        }
+
+        /// Show/hide the floating selection toolbar as the selection changes (§3C).
+        func textViewDidChangeSelection(_ notification: Notification) {
+            controller?.updateSelectionBar()
         }
 
         /// Notion-style triggers: "/" at the start of a line (or after
@@ -463,12 +469,69 @@ final class MarkdownEditorController: ObservableObject {
         tv.window?.makeFirstResponder(tv)
     }
 
+    /// Wrap the selection as a markdown link `[text](url)`, parking the caret in
+    /// the `url` slot when nothing was selected.
+    func wrapLink() {
+        guard let tv = textView else { return }
+        let sel = tv.selectedRange()
+        let ns = tv.string as NSString
+        let selected = ns.substring(with: sel)
+        let label = selected.isEmpty ? "text" : selected
+        let replacement = "[\(label)](url)"
+        guard tv.shouldChangeText(in: sel, replacementString: replacement) else { return }
+        tv.textStorage?.replaceCharacters(in: sel, with: replacement)
+        tv.didChangeText()
+        // Select the "url" placeholder so the user can type the address.
+        let urlStart = sel.location + (("[\(label)](") as NSString).length
+        tv.setSelectedRange(NSRange(location: urlStart, length: 3))
+        MarkdownStyle.applyStyling(to: tv)
+        tv.window?.makeFirstResponder(tv)
+    }
+
     private func apply(_ replacement: String, over range: NSRange, in tv: NSTextView) {
         guard tv.shouldChangeText(in: range, replacementString: replacement) else { return }
         tv.textStorage?.replaceCharacters(in: range, with: replacement)
         tv.didChangeText()
         MarkdownStyle.applyStyling(to: tv)
         tv.window?.makeFirstResponder(tv)
+    }
+
+    // MARK: - Floating selection toolbar (§3C)
+
+    private var selectionBar: NSHostingView<SelectionFormatBar>?
+
+    /// Show/hide the floating B/I/Link bar above the current selection. Added as
+    /// a subview of the text view so it tracks scrolling in text-view coords.
+    func updateSelectionBar() {
+        guard let tv = textView, tv.isEditable,
+              let lm = tv.layoutManager, let tc = tv.textContainer else {
+            removeSelectionBar(); return
+        }
+        let sel = tv.selectedRange()
+        guard sel.length > 0 else { removeSelectionBar(); return }
+
+        let glyphRange = lm.glyphRange(forCharacterRange: sel, actualCharacterRange: nil)
+        var rect = lm.boundingRect(forGlyphRange: glyphRange, in: tc)
+        let origin = tv.textContainerOrigin
+        rect.origin.x += origin.x
+        rect.origin.y += origin.y
+
+        let bar = selectionBar ?? {
+            let host = NSHostingView(rootView: SelectionFormatBar(controller: self))
+            host.translatesAutoresizingMaskIntoConstraints = true
+            selectionBar = host
+            return host
+        }()
+        let size = bar.fittingSize
+        let x = max(2, rect.midX - size.width / 2)
+        let y = max(0, rect.minY - size.height - 6)   // above the selection (flipped coords)
+        bar.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
+        if bar.superview == nil { tv.addSubview(bar) }
+    }
+
+    func removeSelectionBar() {
+        selectionBar?.removeFromSuperview()
+        selectionBar = nil
     }
 
     // MARK: - Slash & @-mention menus (Phase 4)
@@ -737,6 +800,36 @@ struct RichMarkdownEditor: View {
                 .padding(.vertical, 3).padding(.horizontal, 4)
         }
         .buttonStyle(.borderless)
+        .help(help)
+    }
+}
+
+// MARK: - Floating selection toolbar (§3C)
+
+/// Compact B / I / Link bar that floats above the current text selection.
+@available(macOS 14.0, *)
+private struct SelectionFormatBar: View {
+    let controller: MarkdownEditorController
+
+    var body: some View {
+        HStack(spacing: 1) {
+            btn("bold", help: "Bold") { controller.wrapSelection("**") }
+            btn("italic", help: "Italic") { controller.wrapSelection("*") }
+            btn("link", help: "Link") { controller.wrapLink() }
+        }
+        .padding(.horizontal, 5).padding(.vertical, 3)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
+    }
+
+    private func btn(_ system: String, help: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system).scaledFont(11, weight: .semibold)
+                .foregroundStyle(NDS.textPrimary)
+                .frame(width: 26, height: 22)
+        }
+        .buttonStyle(.plain)
         .help(help)
     }
 }
