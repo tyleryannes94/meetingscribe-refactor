@@ -17,7 +17,8 @@ The phone web app (QR/Tailscale) is now a full, editable mirror of the desktop a
 - **Today home tab** (new landing): drifting relationships by health, tasks due/overdue, recent meetings.
 - **Relationship health everywhere** (people list, person detail, Today) — same shared formula as desktop + MCP.
 - **Fully editable**: meeting title/**summary**/notes; person fields **+ relationship type + check-in cadence**; one-tap **Log encounter**; tasks/subtasks/projects/voice-note transcripts (already were).
-- All over the existing token-gated, local-only server — no new exposure.
+- **Ask AI tab**: local, vault-grounded chat answered by Ollama on the Mac (graceful when Ollama is off).
+- All over the existing token-gated, local-only server — no new exposure. **8 tabs:** Today · Meetings · Tasks · Projects · People · Notes · Search · Ask AI.
 - I ran **`make install`** — `/Applications/MeetingScribe.app` is updated with all of it.
 - I tagged **`v1.4`**. ⚠️ The Release workflow fails fast (pre-existing pipeline issue),
   so your **work MacBook won't auto-update until that's fixed** — details below.

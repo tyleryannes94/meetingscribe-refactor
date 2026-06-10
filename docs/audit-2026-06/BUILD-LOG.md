@@ -14,3 +14,5 @@ Autonomous overnight build of the unified master plan. One line per merged incre
 | 2026-06-10 | 2 · App Intents | #95 ✅merged | v1.6 | Capture Quick Note + Add Action Item Siri/Shortcuts intents (drop to `_inbox/`, work app-closed). |
 | 2026-06-10 | 2 · Today drift | #96 ✅merged | v1.6 | Today "Stay connected" ordered by health, band-colored. design-lint clean. |
 | 2026-06-10 | web · mobile app | #97 ✅merged | v1.6 | Phone web app: Today home dashboard, relationship health everywhere, quick-log encounters, `/api/today`. **`make install` + relaunch done — live over Tailscale.** |
+| 2026-06-10 | web · editable | #98 ✅merged | v1.7 | Mobile: edit relationship type + cadence on person; editable meeting summary. **Installed + relaunched.** |
+| 2026-06-10 | web · Ask AI | #99 ✅merged | v1.8 | Mobile Ask-AI tab: local vault-grounded chat via Ollama (`/api/chat`), graceful offline. **Installed + relaunched — full mobile mirror live.** |
