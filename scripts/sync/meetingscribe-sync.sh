@@ -174,7 +174,10 @@ DST="$HUB_USER@$HUB_HOST:$REMOTE_BASE/"
 attempt=1; delay=$BACKOFF_BASE; rc=1
 while [ "$attempt" -le "$MAX_TRIES" ]; do
   log "rsync attempt $attempt/$MAX_TRIES via $RSYNC -> $DST"
-  "$RSYNC" "${RSYNC_OPTS[@]}" "${DRY[@]}" -e "$SSH_CMD" "$SRC" "$DST" >> "$LOG_FILE" 2>&1
+  # ${DRY[@]+...} guards the empty-array case: macOS bash 3.2 + `set -u` throws
+  # "unbound variable" on a bare "${DRY[@]}" when DRY is empty (a real, non-dry
+  # sync). This idiom expands to nothing when DRY is unset/empty.
+  "$RSYNC" "${RSYNC_OPTS[@]}" ${DRY[@]+"${DRY[@]}"} -e "$SSH_CMD" "$SRC" "$DST" >> "$LOG_FILE" 2>&1
   rc=$?
   if [ "$rc" -eq 0 ]; then log "rsync OK (attempt $attempt)"; break; fi
   if [ "$rc" -eq 24 ]; then log "rsync rc=24 (vanished files, benign) — treating as success"; rc=0; break; fi
