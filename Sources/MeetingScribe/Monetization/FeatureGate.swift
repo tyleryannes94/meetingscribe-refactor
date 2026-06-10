@@ -5,7 +5,9 @@ import Observation
 
 /// Every feature that can be gated behind a Pro tier.
 /// Add new cases freely — old builds ignore unknown cases via `isEnabled`.
-enum ManagedFeature: String, CaseIterable {
+enum ManagedFeature: String, CaseIterable, Identifiable {
+    var id: String { rawValue }
+
     // Relationship intelligence (Phase 1–3)
     case relationshipTypes        // RelationshipType enum, type-specific UI
     case checkInNotifications     // Per-person push notification scheduler
@@ -50,9 +52,14 @@ final class FeatureGate {
         didSet { UserDefaults.standard.set(isPro, forKey: "featureGate.isPro") }
     }
 
-    /// Dev override — set to `true` in DEBUG builds to bypass all gates.
+    /// Dev override — bypasses all gates. In DEBUG it defaults to `false` so the
+    /// paywall is actually exercised during development; pass `--dev-unlock` (or
+    /// flip the Settings toggle) to unlock everything. Release builds never unlock.
     #if DEBUG
-    var overrideAllEnabled: Bool = true
+    var overrideAllEnabled: Bool = ProcessInfo.processInfo.arguments.contains("--dev-unlock")
+    /// QA aid: when `true`, gates behave as if the user is on the free tier even
+    /// if `isPro`/override would otherwise unlock them. DEBUG-only.
+    var simulateFreeTier: Bool = false
     #else
     let overrideAllEnabled: Bool = false
     #endif
@@ -67,8 +74,16 @@ final class FeatureGate {
 
     /// Returns true when the feature should be accessible.
     func isEnabled(_ feature: ManagedFeature) -> Bool {
+        #if DEBUG
+        if simulateFreeTier { return freeTierAllows(feature) }
+        #endif
         if overrideAllEnabled { return true }
         if isPro { return true }
+        return freeTierAllows(feature)
+    }
+
+    /// Free-tier allowances, independent of Pro/override state.
+    private func freeTierAllows(_ feature: ManagedFeature) -> Bool {
         // Free-tier allowances:
         switch feature {
         case .relationshipTypes:    return true   // free — classification only

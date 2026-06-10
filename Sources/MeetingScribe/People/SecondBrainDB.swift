@@ -197,6 +197,13 @@ final class SecondBrainDB {
 
     private func migrateToV2() {
         log.info("Migrating SecondBrainDB to schema version 2")
+        // Phase 1 (1A): wrap the migration in a transaction so a mid-migration
+        // failure (disk-full, corruption) can't leave a half-applied schema that
+        // the version stamp then marks as "done".
+        guard execChecked("BEGIN;") else {
+            log.error("migrateToV2 could not BEGIN — skipping")
+            return
+        }
 
         exec("""
         CREATE TABLE IF NOT EXISTS vault_content (
@@ -240,6 +247,11 @@ final class SecondBrainDB {
 
         exec("CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
         exec("INSERT OR REPLACE INTO schema_meta VALUES ('schema_version', '2');")
+
+        if !execChecked("COMMIT;") {
+            exec("ROLLBACK;")
+            log.error("migrateToV2 COMMIT failed — rolled back")
+        }
     }
 
     // MARK: - Schema v3 migration (Phase D — relationship type + check-in cadence)
@@ -249,9 +261,17 @@ final class SecondBrainDB {
         // Additive ALTER TABLE — safe on all existing v1/v2 databases.
         // SQLite ignores "duplicate column" errors, so these are wrapped in
         // try? at the exec level; we use the "column not found" check pattern.
+        guard execChecked("BEGIN;") else {
+            log.error("migrateToV3 could not BEGIN — skipping")
+            return
+        }
         exec("ALTER TABLE people ADD COLUMN relationship_type TEXT DEFAULT 'unset';")
         exec("ALTER TABLE people ADD COLUMN check_in_cadence_days INTEGER;")
         exec("INSERT OR REPLACE INTO schema_meta VALUES ('schema_version', '3');")
+        if !execChecked("COMMIT;") {
+            exec("ROLLBACK;")
+            log.error("migrateToV3 COMMIT failed — rolled back")
+        }
         log.info("SecondBrainDB v3 migration complete")
     }
 
@@ -299,10 +319,16 @@ final class SecondBrainDB {
         let tagNames = p.tagIDs.compactMap(tagName).joined(separator: " ")
         let relevance = p.relevanceScore(encounterCount: encounterCount)
         let ghost = p.isGhost(encounterCount: encounterCount) ? 1 : 0
-        bindExec("INSERT INTO people (id, display_name, company, role, last_interaction, relevance, ghost, tag_ids) VALUES (?,?,?,?,?,?,?,?);",
+        // Phase 1 (1A): persist the v3 relationship columns. Previously this
+        // INSERT omitted them, so `relationship_type` / `check_in_cadence_days`
+        // stayed at their migration defaults ('unset'/NULL) even when the Person
+        // carried a type — silently dropping coach data on every rebuild. The
+        // bind helper has no NULL case, so a 0 cadence means "use the type default".
+        bindExec("INSERT INTO people (id, display_name, company, role, last_interaction, relevance, ghost, tag_ids, relationship_type, check_in_cadence_days) VALUES (?,?,?,?,?,?,?,?,?,?);",
                  [.text(p.id), .text(p.displayName), .text(p.company), .text(p.role),
                   .real(p.lastInteractionAt?.timeIntervalSince1970 ?? 0),
-                  .real(relevance), .int(Int64(ghost)), .text(p.tagIDs.joined(separator: " "))])
+                  .real(relevance), .int(Int64(ghost)), .text(p.tagIDs.joined(separator: " ")),
+                  .text(p.relationshipType.rawValue), .int(Int64(p.checkInCadenceDays ?? 0))])
         let secondary = (p.emails + p.phones + [p.company, p.role]).joined(separator: " ")
         bindExec("INSERT INTO search_index (entity_kind, entity_id, primary_text, secondary_text, body, tags, date_iso) VALUES ('person',?,?,?,?,?,?);",
                  [.text(p.id), .text(p.displayName), .text(secondary),
