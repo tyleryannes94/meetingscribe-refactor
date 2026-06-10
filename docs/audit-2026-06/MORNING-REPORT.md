@@ -6,9 +6,18 @@ Good morning. Here's exactly what happened while you slept.
 
 - The **25-agent audit** ran (25 agents, 321 raw recs → 125 deduped), and I wrote the
   5 group digests + the unified phased **`MASTER-PLAN.md`** into `docs/audit-2026-06/`.
-- I built and merged **5 PRs** — 3 in Phase 1 (#89, #90, #91) and 2 in Phase 2
-  (#92, #93) — all verified with `swift build -c release` (green), tests passing,
-  design-lint clean, squash-merged to `main`.
+- I built and merged **10 PRs** (#89–#98) across Phase 1, Phase 2, and a full
+  **mobile web-app overhaul** — every one verified with `swift build -c release`
+  (green), tests passing (169/169), design-lint clean, squash-merged to `main`.
+- The app was **reinstalled + relaunched** after web changes, so the new mobile
+  UI is **live over your Tailscale QR link** right now. Releases tagged through **v1.7**.
+
+### Mobile web app (your overnight request) — done
+The phone web app (QR/Tailscale) is now a full, editable mirror of the desktop app:
+- **Today home tab** (new landing): drifting relationships by health, tasks due/overdue, recent meetings.
+- **Relationship health everywhere** (people list, person detail, Today) — same shared formula as desktop + MCP.
+- **Fully editable**: meeting title/**summary**/notes; person fields **+ relationship type + check-in cadence**; one-tap **Log encounter**; tasks/subtasks/projects/voice-note transcripts (already were).
+- All over the existing token-gated, local-only server — no new exposure.
 - I ran **`make install`** — `/Applications/MeetingScribe.app` is updated with all of it.
 - I tagged **`v1.4`**. ⚠️ The Release workflow fails fast (pre-existing pipeline issue),
   so your **work MacBook won't auto-update until that's fixed** — details below.
@@ -25,6 +34,11 @@ Good morning. Here's exactly what happened while you slept.
 | **#91** | **Observability**: local-only `ActivityLog` funnel — the audit's #1 cross-group finding ("the app can't see itself"). Privacy-safe append-only JSONL in App Support (never the vault), `captureRate` north-star proxy, emits at launch / record-start / record-stop / summary-ready / summary-failed. | 1C |
 | **#92** | **Phase 2 — relationship health score**: `VaultKit.RelationshipHealth`, one shared pure 0–100 score + band (thriving/steady/drifting/overdue). Zero migration. `get_relationship_health` MCP tool. 5 unit tests, green. | 2B/2F |
 | **#93** | **Phase 2 — health badge**: surfaces that score on the person detail identity panel (band-colored capsule + a11y), same formula as the MCP coach. design-lint clean. | 2B |
+| **#94** | **Phase 2 — MCP `search_everything`**: vault-wide keyword recall across meetings + people for the Claude coach. | 2F |
+| **#95** | **Phase 2 — App Intents**: Capture Quick Note + Add Action Item (Siri/Shortcuts/Spotlight) that drop to `_inbox/` and work even when the app is closed. | 1G/2D |
+| **#96** | **Phase 2 — Today drift**: "Stay connected" ordered by health, band-colored. | 2B/D5 |
+| **#97** | **Web — mobile app**: Today home dashboard, health everywhere, quick-log encounters, `/api/today`. | web |
+| **#98** | **Web — fully editable**: relationship type + cadence on person; editable meeting summary. | web |
 
 ## Important finding: Phase 1 was already ~half-done
 
