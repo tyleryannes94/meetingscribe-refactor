@@ -43,5 +43,17 @@ struct MeetingScribeAppShortcuts: AppShortcutsProvider {
             shortTitle: "Quick Add Meeting",
             systemImageName: "calendar.badge.plus"
         )
+        AppShortcut(
+            intent: CaptureQuickNoteIntent(),
+            phrases: ["Capture a note in \(.applicationName)"],
+            shortTitle: "Capture Quick Note",
+            systemImageName: "note.text.badge.plus"
+        )
+        AppShortcut(
+            intent: AddActionItemIntent(),
+            phrases: ["Add a task in \(.applicationName)"],
+            shortTitle: "Add Action Item",
+            systemImageName: "checklist"
+        )
     }
 }
