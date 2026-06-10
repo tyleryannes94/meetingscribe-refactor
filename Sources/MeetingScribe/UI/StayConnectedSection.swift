@@ -1,8 +1,10 @@
 import SwiftUI
+import VaultKit
 
 /// Today-tab "Stay connected" section: shows up to 3 people with typed
-/// relationships who are overdue for a check-in, with a one-tap quick-log
-/// button. Only appears when there are overdue people. (Phase 2)
+/// relationships who are overdue for a check-in, ordered by lowest connection
+/// health first, with a one-tap quick-log button. Only appears when there are
+/// overdue people. (Phase 2)
 @available(macOS 14.0, *)
 struct StayConnectedSection: View {
     @EnvironmentObject var people: PeopleStore
@@ -14,7 +16,9 @@ struct StayConnectedSection: View {
         people.people
             .filter { $0.relationshipType != .unset }
             .filter { isOverdue($0) }
-            .sorted { overdueDays($0) > overdueDays($1) }
+            // Worst health first — health blends recency, frequency, and
+            // consistency, so it's a better triage order than raw overdue days.
+            .sorted { health(for: $0).score < health(for: $1).score }
             .prefix(3)
             .map { $0 }
     }
@@ -30,6 +34,31 @@ struct StayConnectedSection: View {
         return max(0, daysSince - cadence)
     }
 
+    /// Shared 0–100 health (same formula as the person detail badge + MCP tool).
+    private func health(for p: Person) -> RelationshipHealth {
+        let encs = people.encounters(for: p.id)
+        let dates = encs.map(\.date).sorted(by: >)
+        let medianGap: Int = {
+            guard dates.count >= 2 else { return 0 }
+            var gaps = (0..<(dates.count - 1)).map { Int(dates[$0].timeIntervalSince(dates[$0 + 1]) / 86400) }
+            gaps.sort()
+            return gaps[gaps.count / 2]
+        }()
+        let last = dates.first ?? p.lastInteractionAt
+        let daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 9_999
+        return RelationshipHealth(daysSinceLast: daysSince, cadenceDays: p.effectiveCheckInDays,
+                                  encounterCount: encs.count, medianGapDays: medianGap)
+    }
+
+    private func healthColor(_ band: RelationshipHealth.Band) -> Color {
+        switch band {
+        case .thriving: return NDS.mint
+        case .steady:   return NDS.sky
+        case .drifting: return NDS.gold
+        case .overdue:  return NDS.danger
+        }
+    }
+
     var body: some View {
         let items = overdueRelationships
         if !items.isEmpty {
@@ -43,6 +72,8 @@ struct StayConnectedSection: View {
                 }
 
                 ForEach(items) { person in
+                    let h = health(for: person)
+                    let color = healthColor(h.band)
                     HStack(spacing: 12) {
                         // Squircle avatar + emoji type badge
                         ZStack(alignment: .bottomTrailing) {
@@ -55,9 +86,9 @@ struct StayConnectedSection: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(person.displayName)
                                 .scaledFont(13, weight: .bold)
-                            Text("\(overdueDays(person)) day\(overdueDays(person) == 1 ? "" : "s") overdue")
+                            Text("\(h.band.rawValue.capitalized) · \(overdueDays(person)) day\(overdueDays(person) == 1 ? "" : "s") overdue")
                                 .font(.caption)
-                                .foregroundStyle(NDS.gold)
+                                .foregroundStyle(color)
                         }
 
                         Spacer()
@@ -79,11 +110,12 @@ struct StayConnectedSection: View {
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Open \(person.displayName)")
                     }
                     .padding(10)
-                    .background(NDS.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+                    .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: NDS.cardRadius))
                     .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius)
-                        .strokeBorder(NDS.gold.opacity(0.35), lineWidth: 1))
+                        .strokeBorder(color.opacity(0.35), lineWidth: 1))
                 }
             }
             .sheet(item: $quickLogTarget) { person in
