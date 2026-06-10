@@ -41,9 +41,16 @@ if [ -z "${VAULT_LOCAL:-}" ]; then
   VAULT_LOCAL="$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault"
 fi
 
-# Hub vault root (on the remote). Defaults to the same iCloud path. The work
-# data lands under <HUB_VAULT>/_remote/<DEVICE_NAME>/ — a sibling of, never a
-# parent of, the hub's live data.
+# Hub vault root (on the remote). Normally written into config.env by the
+# installer, which auto-detects the hub app's storageDir. If it's missing (e.g.
+# a hand-edited config), self-heal by asking the hub directly over SSH, then
+# fall back to the iCloud default — so work data always lands in the folder the
+# hub app actually reads. It lands under <HUB_VAULT>/_remote/<DEVICE_NAME>/ —
+# a sibling of, never a parent of, the hub's live data.
+if [ -z "${HUB_VAULT:-}" ]; then
+  HUB_VAULT="$(ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=20 "$HUB_USER@$HUB_HOST" \
+    "defaults read com.tyleryannes.MeetingScribe storageDir 2>/dev/null" 2>/dev/null | tr -d '\r' | head -1)"
+fi
 HUB_VAULT="${HUB_VAULT:-\$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault}"
 REMOTE_BASE="$HUB_VAULT/_remote/$DEVICE_NAME"
 

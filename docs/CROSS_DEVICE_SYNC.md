@@ -84,12 +84,21 @@ tail -f ~/Library/Logs/MeetingScribe/sync.log     # watch a run
 launchctl list | grep meetingscribe               # confirm the job is loaded
 bash ~/.local/bin/meetingscribe-sync.sh           # run a sync right now
 ```
-On the **hub**, your work data shows up under the quarantine (it does **not** mix
-into your own meetings):
+On the **hub**, your work data shows up under the quarantine *inside the same vault
+the hub app reads* — the installer auto-detects that folder from the hub app's
+`storageDir`, so it may be `~/Documents/MeetingNotes` rather than the iCloud
+default. It does **not** mix into your own meetings:
 ```bash
-ls "$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault/_remote/work-macbook"
-cat "$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault/_remote/work-macbook/.last_sync"
+# The hub's vault (what the app actually reads):
+HUB_VAULT="$(defaults read com.tyleryannes.MeetingScribe storageDir)"
+ls  "$HUB_VAULT/_remote/work-macbook"
+cat "$HUB_VAULT/_remote/work-macbook/.last_sync"
 ```
+> ⚠️ If `_remote/work-macbook/` is landing in a *different* folder than the one
+> the hub app reads, work files will sync but never appear. The installer now
+> queries the hub's `storageDir` over SSH to prevent this; if you set things up
+> before that fix, re-run `install-sync.sh` (or edit `HUB_VAULT` in
+> `~/.config/meetingscribe-sync/config.env`) so it matches the command above.
 
 ---
 

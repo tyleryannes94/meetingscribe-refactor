@@ -103,8 +103,9 @@ say "${DIM}On the Mac mini, find these with:  tailscale ip -4   (the 100.x addre
 HUB_HOST="$(ask "Hub Tailscale name or 100.x IP" "${HUB_HOST:-}")"
 HUB_USER="$(ask "Hub login user (whoami on the mini)" "${HUB_USER:-$USER}")"
 DEVICE_NAME="$(ask "A short name for THIS Mac (folder on the hub)" "${DEVICE_NAME:-work-macbook}")"
-HUB_VAULT_DEFAULT='$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault'
-HUB_VAULT="$(ask "Hub vault path (leave default unless you changed it)" "${HUB_VAULT:-$HUB_VAULT_DEFAULT}")"
+# HUB_VAULT is resolved AFTER the SSH key works (section 3b) by reading the hub
+# app's real storageDir — not hardcoded here, which is what silently broke sync
+# when the hub stored its vault outside the iCloud default.
 INTERVAL_HOURS="$(ask "Sync every how many hours?" "${INTERVAL_HOURS:-2}")"
 
 if [ -z "$HUB_HOST" ]; then err "Hub host is required."; exit 1; fi
@@ -140,6 +141,26 @@ else
   say "  Checklist: Tailscale connected on BOTH Macs? Remote Login ON on the mini? Key authorized (step above)?"
   say "  Fix that, then re-run this installer. (Config will be saved so prompts pre-fill.)"
 fi
+
+# --------------------------------------------------------------------------
+# 3b. Resolve the hub vault — auto-detect the app's configured storageDir on
+#     the hub so work files land in the SAME folder the hub app reads. The hub
+#     can store its vault anywhere (e.g. ~/Documents/MeetingNotes); hardcoding
+#     the iCloud default here is exactly what made files sync but never show up.
+# --------------------------------------------------------------------------
+hdr "3b. Hub vault location"
+HUB_VAULT_FALLBACK='$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingScribeVault'
+HUB_VAULT_DETECTED="$(ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=20 "$HUB_USER@$HUB_HOST" \
+  "defaults read $BUNDLE_ID storageDir 2>/dev/null" 2>/dev/null | tr -d '\r' | head -1)"
+if [ -n "$HUB_VAULT_DETECTED" ]; then
+  ok "Hub app stores its vault at: $HUB_VAULT_DETECTED"
+  HUB_VAULT_DEFAULT="$HUB_VAULT_DETECTED"
+else
+  warn "Couldn't read the hub app's storageDir over SSH — using the iCloud default."
+  say  "  (If the hub keeps its vault elsewhere, override the value below.)"
+  HUB_VAULT_DEFAULT="${HUB_VAULT:-$HUB_VAULT_FALLBACK}"
+fi
+HUB_VAULT="$(ask "Hub vault path (auto-detected — change only if you're sure)" "$HUB_VAULT_DEFAULT")"
 
 # --------------------------------------------------------------------------
 # 4. Write config
