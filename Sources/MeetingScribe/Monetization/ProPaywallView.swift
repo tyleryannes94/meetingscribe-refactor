@@ -16,10 +16,7 @@ struct ProPaywallView: View {
             VStack(spacing: 8) {
                 Image(systemName: "heart.circle.fill")
                     .font(.system(size: 52))
-                    .foregroundStyle(
-                        LinearGradient(colors: [.pink, .purple],
-                                       startPoint: .topLeading,
-                                       endPoint: .bottomTrailing))
+                    .foregroundStyle(NDS.brandMarkGradient)
                 Text("MeetingScribe Pro")
                     .font(.title.bold())
                 if let feature {
@@ -34,22 +31,22 @@ struct ProPaywallView: View {
             VStack(alignment: .leading, spacing: 12) {
                 ProBullet(icon: "bell.badge.fill",
                           text: "Per-person check-in reminders — never let a relationship drift",
-                          color: .orange)
+                          color: NDS.gold)
                 ProBullet(icon: "heart.text.square.fill",
                           text: "Relationship coaching frameworks (Gottman, NVC, love languages)",
-                          color: .pink)
+                          color: NDS.accent)
                 ProBullet(icon: "chart.xyaxis.line",
                           text: "Connection strength score + encounter heat map",
-                          color: .purple)
+                          color: NDS.lilac)
                 ProBullet(icon: "sparkles",
                           text: "Full MCP relationship tools for Claude (log encounters, get coaching context)",
-                          color: .blue)
+                          color: NDS.sky)
                 ProBullet(icon: "doc.text.fill",
                           text: "Monthly Relationship Intelligence Report",
-                          color: .green)
+                          color: NDS.mint)
                 ProBullet(icon: "person.3.fill",
                           text: "Unlimited people with relationship types (free: 5)",
-                          color: .teal)
+                          color: NDS.mint)
             }
             .padding(.horizontal)
 
@@ -73,7 +70,7 @@ struct ProPaywallView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .tint(.purple)
+                .tint(NDS.accent)
 
                 Button("Restore Purchases") {
                     Task { await StoreKitManager.shared.restorePurchases() }

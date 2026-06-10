@@ -491,6 +491,16 @@ struct MainWindow: View {
         .sheet(isPresented: $showOnboarding) {
             OnboardingSheet(isPresented: $showOnboarding)
         }
+        // Phase 1 (1D) — one binding activates every `FeatureGate.showPaywall(for:)`
+        // call site across the app. Reading `paywallFeature` here registers the
+        // @Observable dependency so the sheet presents the moment a gated action
+        // calls `showPaywall`.
+        .sheet(item: Binding(
+            get: { FeatureGate.shared.paywallFeature },
+            set: { FeatureGate.shared.paywallFeature = $0 }
+        )) { feature in
+            ProPaywallView(feature: feature)
+        }
         // Initial data population — non-blocking. Calendar permission is
         // requested in parallel; the window paints with whatever cached
         // data is already in memory (warm-cache index, .upcoming-cache.json)
