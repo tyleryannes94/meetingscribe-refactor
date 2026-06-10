@@ -215,6 +215,7 @@ final class MeetingManager: ObservableObject {
     func startRecording(for meeting: Meeting?) async {
         guard case .idle = state else { return }
         state = .starting
+        Task { await ActivityLog.shared.log(.recordStart) }  // 1C funnel
         do {
             try store.ensureRoot()
             var m = meeting ?? Self.adhocMeeting()
@@ -368,6 +369,7 @@ final class MeetingManager: ObservableObject {
     func stopRecording() async {
         guard case let .recording(_, startedAt) = state else { return }
         state = .stopping
+        Task { await ActivityLog.shared.log(.recordStop) }  // 1C funnel
 
         if usingScribeCore {
             // Delegate stop to ScribeCore; finalization is triggered when we
@@ -690,7 +692,11 @@ final class MeetingManager: ObservableObject {
         let storeRef = store
         let actionItemsRef = actionItems
         Task.detached(priority: .userInitiated) {
-            guard let summary = try? await summarizerRef.summarize(meeting: meeting, transcript: body) else { return }
+            guard let summary = try? await summarizerRef.summarize(meeting: meeting, transcript: body) else {
+                await ActivityLog.shared.log(.summaryFailed)  // 1C funnel
+                return
+            }
+            await ActivityLog.shared.log(.summaryReady)  // 1C funnel
             await MainActor.run {
                 try? storeRef.writeSummary(summary, for: meeting, primaryTag: primary)
                 let extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
