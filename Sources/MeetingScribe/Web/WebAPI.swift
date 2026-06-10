@@ -1,4 +1,5 @@
 import Foundation
+import VaultKit
 
 /// Routes HTTP requests to the in-memory stores. Runs on `@MainActor` because
 /// every store it touches (`MeetingManager`, `ActionItemStore`, `PeopleStore`,
@@ -47,6 +48,7 @@ final class WebAPI {
         let rest = Array(comps.dropFirst())
         switch rest.first {
         case "health":     return health()
+        case "today":      return today()
         case "meetings":   return await meetings(request, rest)
         case "people":     return people(request, rest)
         case "projects":   return projects(request, rest)
@@ -258,6 +260,19 @@ final class WebAPI {
         let id = rest[1]
         guard let person = people.person(by: id) else { return .error(404, "Person not found") }
 
+        // POST /api/people/:id/encounters — quick-log an encounter from the phone.
+        if rest.count == 3, rest[2] == "encounters", request.method == "POST" {
+            let body = jsonBody(request)
+            let title = (body["title"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+            let notes = (body["notes"] as? String) ?? ""
+            guard !title.isEmpty else { return .error(400, "title is required") }
+            _ = people.addEncounter(to: id, eventName: title,
+                                    location: (body["location"] as? String),
+                                    notes: notes)
+            let fresh = people.person(by: id) ?? person
+            return .jsonObject(personDetail(fresh), status: 201)
+        }
+
         switch request.method {
         case "GET":
             return .jsonObject(personDetail(person))
@@ -284,10 +299,72 @@ final class WebAPI {
             "company": p.company,
             "role": p.role,
             "email": p.primaryEmail,
-            "tags": tagNames(p.tagIDs)
+            "tags": tagNames(p.tagIDs),
+            "relationshipType": p.relationshipType.rawValue,
+            "relationshipLabel": p.relationshipType.displayName
         ]
         if let last = p.lastInteractionAt { dict["lastInteractionAt"] = isoString(last) }
+        if let h = personHealth(p) { dict["health"] = h }
         return dict
+    }
+
+    /// Server-computed connection health for typed relationships — same shared
+    /// `VaultKit.RelationshipHealth` the desktop badge + MCP tool use, so the
+    /// phone shows the identical score.
+    private func personHealth(_ p: Person) -> [String: Any]? {
+        guard p.relationshipType != .unset else { return nil }
+        let encs = people.encounters(for: p.id)
+        let dates = encs.map(\.date).sorted(by: >)
+        let medianGap: Int = {
+            guard dates.count >= 2 else { return 0 }
+            var gaps = (0..<(dates.count - 1)).map { Int(dates[$0].timeIntervalSince(dates[$0 + 1]) / 86400) }
+            gaps.sort()
+            return gaps[gaps.count / 2]
+        }()
+        let last = dates.first ?? p.lastInteractionAt
+        let daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 9_999
+        let h = RelationshipHealth(daysSinceLast: daysSince, cadenceDays: p.effectiveCheckInDays,
+                                   encounterCount: encs.count, medianGapDays: medianGap)
+        return ["score": h.score, "band": h.band.rawValue,
+                "daysSinceLast": daysSince, "overdue": daysSince > p.effectiveCheckInDays]
+    }
+
+    // MARK: - Today (home dashboard)
+
+    /// Aggregated home payload mirroring the desktop Today tab: drifting
+    /// relationships (worst health first), tasks due/overdue, and recent meetings.
+    private func today() -> HTTPResponse {
+        let now = Date()
+
+        // Drifting typed relationships — overdue, ordered by lowest health.
+        let drift = people.people
+            .filter { $0.relationshipType != .unset }
+            .compactMap { p -> (Person, [String: Any])? in
+                guard let h = personHealth(p), (h["overdue"] as? Bool) == true else { return nil }
+                return (p, h)
+            }
+            .sorted { (($0.1["score"] as? Int) ?? 0) < (($1.1["score"] as? Int) ?? 0) }
+            .prefix(8)
+            .map { personSummary($0.0) }
+
+        // Tasks due within 7 days or already overdue (open only).
+        let soon = now.addingTimeInterval(7 * 86400)
+        let dueTasks = actionItems.openItems()
+            .filter { item in
+                guard let due = item.dueDate else { return false }
+                return due <= soon
+            }
+            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+            .prefix(12)
+            .map(taskSummary)
+
+        let recentMeetings = meetingStore.listPastMeetings(limit: 6).map(meetingSummary)
+
+        return .jsonObject([
+            "drift": Array(drift),
+            "dueTasks": Array(dueTasks),
+            "recentMeetings": recentMeetings
+        ])
     }
 
     private func personDetail(_ p: Person) -> [String: Any] {
