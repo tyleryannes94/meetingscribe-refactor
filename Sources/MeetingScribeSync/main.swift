@@ -242,6 +242,7 @@ func normName(_ s: String) -> String { s.lowercased().trimmingCharacters(in: .wh
 
 final class Report {
     var meetingsImported = 0, meetingsSkipped = 0
+    var quickNotesImported = 0, quickNotesSkipped = 0
     var peopleCreated = 0, peopleMerged = 0, peopleSkipped = 0
     var actionItemsAdded = 0, tagsAdded = 0, tagAssignmentsAdded = 0
     var conflicts: [String] = []
@@ -252,10 +253,11 @@ final class Report {
         Swift.print("""
 
         ── MeetingScribeSync — \(mode) ──
-        Meetings : \(meetingsImported) imported, \(meetingsSkipped) already present
-        People   : \(peopleCreated) created, \(peopleMerged) merged, \(peopleSkipped) unchanged
-        Tasks    : \(actionItemsAdded) added
-        Tags     : \(tagsAdded) new tag(s), \(tagAssignmentsAdded) assignment(s)
+        Meetings   : \(meetingsImported) imported, \(meetingsSkipped) already present
+        Voice notes: \(quickNotesImported) imported, \(quickNotesSkipped) already present
+        People     : \(peopleCreated) created, \(peopleMerged) merged, \(peopleSkipped) unchanged
+        Tasks      : \(actionItemsAdded) added
+        Tags       : \(tagsAdded) new tag(s), \(tagAssignmentsAdded) assignment(s)
         """)
         if !conflicts.isEmpty {
             Swift.print("Conflicts (left for review, not applied):")
@@ -364,6 +366,90 @@ func ingestMeetings(deviceRoot: URL, device: String, storage: URL,
         liveIDs.insert(id)
         ledger.records[key] = hash
         report.meetingsImported += 1
+        report.changed = true
+    }
+}
+
+// MARK: - Quick-note (voice note / dictation) ingest
+
+/// Ids of quick notes already in the LIVE vault, so re-runs and cross-device
+/// duplicates don't re-import. Reads `QuickNotes/<slug>/note.json` (enveloped
+/// or legacy-raw).
+func liveQuickNoteIDs(storage: URL) -> Set<String> {
+    var ids = Set<String>()
+    let root = storage.appendingPathComponent("QuickNotes", isDirectory: true)
+    let fm = FileManager.default
+    guard let dirs = try? fm.contentsOfDirectory(at: root,
+        includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return ids }
+    for dir in dirs {
+        guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+        if let obj = readObject(dir.appendingPathComponent("note.json")),
+           let id = objectPayload(obj)["id"] as? String {
+            ids.insert(id)
+        }
+    }
+    return ids
+}
+
+/// Promote a device's voice notes / dictation (the `QuickNotes/` tree the rsync
+/// transport delivered into `_remote/<device>/`) into the hub's live QuickNotes.
+/// The whole note folder is copied verbatim — audio.<ext>, transcript.md,
+/// polished.md, prompt.md, note.json — so every file makes it across, not just
+/// metadata. New ids only; never overwrites an existing note. Mirrors the
+/// additive, ledger-idempotent contract of the meeting/people importers.
+func ingestQuickNotes(deviceRoot: URL, device: String, storage: URL,
+                      liveQuickIDs: inout Set<String>, ledger: inout Ledger,
+                      opts: Options, report: Report) {
+    let fm = FileManager.default
+    let stagedRoot = deviceRoot.appendingPathComponent("QuickNotes", isDirectory: true)
+    guard let dirs = try? fm.contentsOfDirectory(at: stagedRoot,
+        includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return }
+
+    let quickRoot = storage.appendingPathComponent("QuickNotes", isDirectory: true)
+    for dir in dirs {
+        guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+        let njson = dir.appendingPathComponent("note.json")
+        guard let obj = readObject(njson) else { continue }
+        let payload = objectPayload(obj)
+        guard let id = payload["id"] as? String else { continue }
+
+        let key = "\(device)/quicknote:\(id)"
+        let hash = fileHash(njson)
+        if ledger.records[key] == hash { report.quickNotesSkipped += 1; continue }
+
+        if liveQuickIDs.contains(id) {
+            report.quickNotesSkipped += 1
+            if opts.verbose { print("  voice note \(id): already present — skip") }
+            ledger.records[key] = hash
+            continue
+        }
+
+        let slug = dir.lastPathComponent
+        let dest = uniqueDestination(quickRoot.appendingPathComponent(slug, isDirectory: true))
+        if opts.verbose { print("  voice note \(id): import -> QuickNotes/\(dest.lastPathComponent)") }
+
+        if opts.apply {
+            guard insideVault(dest, root: storage) else { report.conflicts.append("voice note \(id) path escape"); continue }
+            do {
+                try fm.createDirectory(at: quickRoot, withIntermediateDirectories: true)
+                try fm.copyItem(at: dir, to: dest)
+                // If a slug collision forced a renamed folder, keep note.json's
+                // `slug` field in sync so the app resolves the note's directory.
+                let finalName = dest.lastPathComponent
+                if finalName != slug {
+                    var patched = payload
+                    patched["slug"] = finalName
+                    try writeEnvelopeObject(patched, schemaVersion: 1,
+                                            to: dest.appendingPathComponent("note.json"))
+                }
+            } catch {
+                report.conflicts.append("voice note \(id) copy failed: \(error.localizedDescription)")
+                continue
+            }
+        }
+        liveQuickIDs.insert(id)
+        ledger.records[key] = hash
+        report.quickNotesImported += 1
         report.changed = true
     }
 }
@@ -645,6 +731,7 @@ func run(_ opts: Options) -> Int32 {
 
     var ledger = Ledger.load(in: storage)
     var liveIDs = liveMeetingIDs(storage: storage)
+    var liveQuickIDs = liveQuickNoteIDs(storage: storage)
     let report = Report()
 
     for deviceDir in devices {
@@ -652,6 +739,8 @@ func run(_ opts: Options) -> Int32 {
         print("Ingesting device: \(device)")
         ingestMeetings(deviceRoot: deviceDir, device: device, storage: storage,
                        liveIDs: &liveIDs, ledger: &ledger, opts: opts, report: report)
+        ingestQuickNotes(deviceRoot: deviceDir, device: device, storage: storage,
+                         liveQuickIDs: &liveQuickIDs, ledger: &ledger, opts: opts, report: report)
         ingestPeople(deviceRoot: deviceDir, device: device, storage: storage,
                      ledger: &ledger, opts: opts, report: report)
         ingestActionItems(deviceRoot: deviceDir, device: device, storage: storage,

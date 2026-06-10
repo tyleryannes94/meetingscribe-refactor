@@ -138,6 +138,7 @@ struct SettingsView: View {
                         Button("Choose…") { pickFolder() }
                     }
                 }
+                CrossDeviceSyncSection()
                 PhoneAccessSection()
                 Section("Capture") {
                     Toggle("Record microphone", isOn: $captureMic)
