@@ -1,5 +1,6 @@
 import Foundation
 import VaultKit
+import ScribeCore
 
 /// Routes HTTP requests to the in-memory stores. Runs on `@MainActor` because
 /// every store it touches (`MeetingManager`, `ActionItemStore`, `PeopleStore`,
@@ -25,6 +26,7 @@ final class WebAPI {
     private var tagStore: TagStore { manager.tagStore }
     private var decisionStore: DecisionStore { manager.decisions }
     private var quickNotes: QuickNotesController { manager.quickNotesController }
+    private let ollama = OllamaService()
 
     // MARK: - Entry point
 
@@ -49,6 +51,7 @@ final class WebAPI {
         switch rest.first {
         case "health":     return health()
         case "today":      return today()
+        case "chat":       return await chat(request)
         case "meetings":   return await meetings(request, rest)
         case "people":     return people(request, rest)
         case "projects":   return projects(request, rest)
@@ -377,6 +380,66 @@ final class WebAPI {
             "dueTasks": Array(dueTasks),
             "recentMeetings": recentMeetings
         ])
+    }
+
+    // MARK: - Ask AI (local, vault-grounded)
+
+    /// POST /api/chat — answers a question over the user's vault using the local
+    /// Ollama model running on the Mac. Context is built from the meetings and
+    /// people that best match the question (titles + summaries + bios), so it
+    /// stays 100% local. Degrades gracefully when Ollama isn't reachable.
+    private func chat(_ request: HTTPRequest) async -> HTTPResponse {
+        guard request.method == "POST" else { return .error(405, "Method not allowed") }
+        let body = jsonBody(request)
+        let q = ((body["question"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return .error(400, "question is required") }
+
+        let terms = q.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init).filter { $0.count > 1 }
+        func hits(_ text: String) -> Int {
+            let l = text.lowercased(); return terms.reduce(0) { $0 + (l.contains($1) ? 1 : 0) }
+        }
+
+        // Top matching meetings → include their summaries for grounding.
+        let scoredMeetings = meetingStore.listPastMeetings(limit: 2000).map { m -> (Int, Meeting) in
+            (hits(m.displayTitle) * 3 + hits(m.attendees.joined(separator: " ")) + hits(m.userDescription ?? ""), m)
+        }.filter { $0.0 > 0 }.sorted { $0.0 > $1.0 }.prefix(4)
+
+        var contextParts: [String] = []
+        for (_, m) in scoredMeetings {
+            let summary = meetingStore.readSummary(for: m, primaryTag: nil)
+            let body = summary.isEmpty ? (m.userDescription ?? "") : summary
+            contextParts.append("MEETING: \(m.displayTitle) (\(isoString(m.startDate)))\n\(body.prefix(1200))")
+        }
+
+        // Top matching people → include bio + memories.
+        let scoredPeople = people.people.map { p -> (Int, Person) in
+            (hits(p.displayName) * 3 + hits(p.role) + hits(p.company) + hits(p.bio)
+             + hits(p.memories.map(\.text).joined(separator: " ")), p)
+        }.filter { $0.0 > 0 }.sorted { $0.0 > $1.0 }.prefix(4)
+        for (_, p) in scoredPeople {
+            let mem = p.memories.prefix(5).map(\.text).joined(separator: "; ")
+            contextParts.append("PERSON: \(p.displayName) — \([p.role, p.company].filter { !$0.isEmpty }.joined(separator: ", "))\n\(p.bio)\nNotes: \(mem)".trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        let context = contextParts.isEmpty ? "(no closely matching meetings or people found)" : contextParts.joined(separator: "\n\n---\n\n")
+        let prompt = """
+        You are MeetingScribe's private local assistant. Answer the question using ONLY the vault context below. If the answer isn't in the context, say you don't have that in the vault yet — don't invent details. Be concise and specific.
+
+        VAULT CONTEXT:
+        \(context)
+
+        QUESTION: \(q)
+        """
+
+        do {
+            let answer = try await ollama.generate(prompt: prompt)
+            return .jsonObject(["answer": answer, "sources": contextParts.count])
+        } catch {
+            return .jsonObject([
+                "answer": "Local AI (Ollama) isn't reachable on your Mac right now. Start Ollama there and try again — nothing leaves your machine.",
+                "offline": true
+            ])
+        }
     }
 
     private func personDetail(_ p: Person) -> [String: Any] {
