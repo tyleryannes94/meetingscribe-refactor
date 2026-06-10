@@ -136,6 +136,7 @@ enum WebAssets {
         <button data-tab="people"><span class="ic">&#128100;</span>People</button>
         <button data-tab="notes"><span class="ic">&#127908;</span>Notes</button>
         <button data-tab="search"><span class="ic">&#128269;</span>Search</button>
+        <button data-tab="chat"><span class="ic">&#129302;</span>Ask AI</button>
       </nav>
       <div class="toast" id="toast"></div>
     <script>
@@ -179,8 +180,10 @@ enum WebAssets {
       projects:['Projects', renderProjects],
       people:['People', renderPeople],
       notes:['Voice notes', renderNotes],
-      search:['Search', renderSearch]
+      search:['Search', renderSearch],
+      chat:['Ask AI', renderChat]
     };
+    let chatLog=[];
     const HEALTH_COLORS = { thriving:'#74e0bc', steady:'#8ab4ff', drifting:'#ffce6b', overdue:'#ff7a8a' };
     const RELTYPES = [['unset','—'],['romantic_partner','Partner'],['family_member','Family'],['close_friend','Close Friend'],['friend','Friend'],['colleague','Colleague'],['acquaintance','Acquaintance']];
     function healthPill(h){
@@ -573,6 +576,34 @@ enum WebAssets {
           }));
         });
       }
+    }
+
+    // ---- Ask AI (local, vault-grounded) ----
+    async function renderChat(){
+      view.innerHTML='';
+      const log=document.createElement('div'); log.className='list'; view.appendChild(log);
+      function addMsg(role,text){
+        const d=document.createElement('div'); d.className='card2';
+        d.innerHTML='<div style="text-transform:uppercase;font-size:.68rem;color:var(--muted)">'+(role==='you'?'You':'Assistant')+'</div><div class="s" style="white-space:pre-wrap">'+esc(text)+'</div>';
+        log.appendChild(d); d.scrollIntoView({block:'end'}); return d;
+      }
+      if(!chatLog.length){ const e=document.createElement('div'); e.className='empty'; e.textContent='Ask anything about your meetings, people, and tasks. Answered locally by the AI on your Mac — nothing leaves your machine.'; log.appendChild(e); }
+      chatLog.forEach(m=>addMsg(m.role,m.text));
+      const c=document.createElement('div'); c.className='detail';
+      c.innerHTML='<textarea id="chat-q" rows="2" placeholder="e.g. What did I commit to in my last 1:1 with Priya?"></textarea><button class="primary" id="chat-send">Ask</button>';
+      view.appendChild(c);
+      const send=document.getElementById('chat-send'), q=document.getElementById('chat-q');
+      async function run(){
+        const text=q.value.trim(); if(!text) return;
+        if(!chatLog.length) log.innerHTML='';
+        chatLog.push({role:'you',text}); addMsg('you',text); q.value='';
+        send.disabled=true; send.textContent='Thinking…';
+        const bubble=addMsg('ai','…');
+        try{ const r=await api('POST','/chat',{question:text}); bubble.querySelector('.s').textContent=r.answer; chatLog.push({role:'ai',text:r.answer}); }
+        catch(e){ bubble.querySelector('.s').textContent='Error: '+e.message; }
+        send.disabled=false; send.textContent='Ask';
+      }
+      send.onclick=run;
     }
 
     openTab('today');
