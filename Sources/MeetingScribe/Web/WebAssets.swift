@@ -129,6 +129,7 @@ enum WebAssets {
       <header><button id="back" hidden>&lsaquo;</button><h1 id="title">MeetingScribe</h1></header>
       <main id="view"></main>
       <nav id="tabs">
+        <button data-tab="today"><span class="ic">&#127968;</span>Today</button>
         <button data-tab="meetings"><span class="ic">&#128197;</span>Meetings</button>
         <button data-tab="tasks"><span class="ic">&#9989;</span>Tasks</button>
         <button data-tab="projects"><span class="ic">&#128193;</span>Projects</button>
@@ -172,6 +173,7 @@ enum WebAssets {
     }
 
     const TABS = {
+      today:['Today', renderToday],
       meetings:['Meetings', renderMeetings],
       tasks:['Tasks', renderTasks],
       projects:['Projects', renderProjects],
@@ -179,6 +181,13 @@ enum WebAssets {
       notes:['Voice notes', renderNotes],
       search:['Search', renderSearch]
     };
+    const HEALTH_COLORS = { thriving:'#74e0bc', steady:'#8ab4ff', drifting:'#ffce6b', overdue:'#ff7a8a' };
+    function healthPill(h){
+      if(!h) return '';
+      const c = HEALTH_COLORS[h.band] || '#9aa3b2';
+      const label = (h.band||'').charAt(0).toUpperCase()+(h.band||'').slice(1);
+      return '<span class="pill" style="color:'+c+';border-color:'+c+'66">'+esc(label)+' '+h.score+'</span>';
+    }
     function openTab(tab){
       document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
       const t = TABS[tab];
@@ -196,6 +205,42 @@ enum WebAssets {
     function pills(arr){ return (arr||[]).map(x=>'<span class="pill">'+esc(x)+'</span>').join(''); }
     function sectionH(t){ return '<div class="section-h">'+esc(t)+'</div>'; }
     function labelDots(labels){ return (labels||[]).map(l=>'<span class="pill dot" style="color:'+esc(l.colorHex||'#ccc')+'">'+esc(l.name)+'</span>').join(''); }
+
+    // ---- Today (home) ----
+    async function renderToday(){
+      const data = await api('GET','/today');
+      view.innerHTML='';
+      let any=false;
+      if(data.drift && data.drift.length){
+        any=true;
+        const sh=document.createElement('div'); sh.innerHTML=sectionH('Stay connected'); view.appendChild(sh);
+        const list=document.createElement('div'); list.className='list';
+        data.drift.forEach(p=>{
+          const h=p.health||{};
+          const sub=[p.relationshipLabel, (h.daysSinceLast!=null? h.daysSinceLast+'d since contact':'')].filter(Boolean).join(' · ');
+          list.appendChild(listRow(p.name, sub, ()=>go(()=>renderPersonDetail(p.id), p.name), healthPill(h)+'<span class="chev">&rsaquo;</span>'));
+        });
+        view.appendChild(list);
+      }
+      if(data.dueTasks && data.dueTasks.length){
+        any=true;
+        const sh=document.createElement('div'); sh.innerHTML=sectionH('Due soon'); view.appendChild(sh);
+        const list=document.createElement('div'); list.className='list';
+        data.dueTasks.forEach(t=> list.appendChild(taskRow(t, ()=>go(()=>renderTaskDetail(t.id),'Task'))));
+        view.appendChild(list);
+      }
+      if(data.recentMeetings && data.recentMeetings.length){
+        any=true;
+        const sh=document.createElement('div'); sh.innerHTML=sectionH('Recent meetings'); view.appendChild(sh);
+        const list=document.createElement('div'); list.className='list';
+        data.recentMeetings.forEach(m=>{
+          const sub=fmtDate(m.start)+(m.hasSummary?' · ✓':'');
+          list.appendChild(listRow(m.title, sub, ()=>go(()=>renderMeetingDetail(m.id), m.title)));
+        });
+        view.appendChild(list);
+      }
+      if(!any) view.innerHTML='<div class="empty">All clear — nothing needs your attention.</div>';
+    }
 
     // ---- Meetings ----
     async function renderMeetings(){
@@ -406,8 +451,8 @@ enum WebAssets {
       const data = await api('GET','/people');
       const list=document.createElement('div'); list.className='list';
       data.people.forEach(p=>{
-        const sub=[p.role,p.company].filter(Boolean).join(' · ')||(p.email||'');
-        list.appendChild(listRow(p.name, sub, ()=>go(()=>renderPersonDetail(p.id), p.name)));
+        const sub=[p.relationshipLabel&&p.relationshipLabel!=='Unset'?p.relationshipLabel:null,p.role,p.company].filter(Boolean).join(' · ')||(p.email||'');
+        list.appendChild(listRow(p.name, sub, ()=>go(()=>renderPersonDetail(p.id), p.name), healthPill(p.health)+'<span class="chev">&rsaquo;</span>'));
       });
       if(!data.people.length) list.innerHTML='<div class="empty">No people yet.</div>';
       view.appendChild(list);
@@ -427,6 +472,7 @@ enum WebAssets {
 
       const info=document.createElement('div');
       let ih='';
+      if(p.health || (p.relationshipLabel && p.relationshipLabel!=='Unset')) ih+='<div style="margin:.4rem 0">'+healthPill(p.health)+(p.relationshipLabel&&p.relationshipLabel!=='Unset'?' <span class="pill">'+esc(p.relationshipLabel)+'</span>':'')+'</div>';
       if(p.emails && p.emails.length>1) ih+=kv('Emails', p.emails.join(', '));
       if(p.phones && p.phones.length) ih+=kv('Phone', p.phones.join(', '));
       if(p.addresses && p.addresses.length) ih+=kv('Address', p.addresses.join(' · '));
@@ -434,6 +480,11 @@ enum WebAssets {
       if(p.tags && p.tags.length) ih+='<div class="section-h">Tags</div><div>'+pills(p.tags)+'</div>';
       if(p.favorites && p.favorites.length) ih+='<div class="section-h">Favorites</div><div>'+pills(p.favorites)+'</div>';
       info.innerHTML=ih; view.appendChild(info);
+
+      // Quick-log an encounter — bumps recency + health.
+      const logBtn=document.createElement('button'); logBtn.className='chip add'; logBtn.textContent='+ Log encounter'; logBtn.style.marginTop='.5rem';
+      logBtn.onclick=async()=>{ const t=prompt('What happened? (e.g. Coffee, Call, Dinner)'); if(t&&t.trim()){ const n=prompt('Notes (optional)')||''; await api('POST','/people/'+id+'/encounters',{title:t.trim(),notes:n}); toast('Logged'); paint(); } };
+      view.appendChild(logBtn);
 
       function cards(title, arr, render){ if(!arr||!arr.length) return; const sh=document.createElement('div'); sh.innerHTML=sectionH(title); view.appendChild(sh); const w=document.createElement('div'); arr.forEach(x=>{ const d=document.createElement('div'); d.className='card2'; d.innerHTML=render(x); w.appendChild(d); }); view.appendChild(w); }
       cards('Memories', p.memories, m=>'<div class="t">'+esc(m.text)+'</div>'+(m.occurredOn?'<div class="s">'+esc(fmtDay(m.occurredOn))+'</div>':''));
@@ -511,7 +562,7 @@ enum WebAssets {
       }
     }
 
-    openTab('meetings');
+    openTab('today');
     </script>
     </body>
     </html>
