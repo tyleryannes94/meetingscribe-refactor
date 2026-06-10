@@ -6,8 +6,9 @@ Good morning. Here's exactly what happened while you slept.
 
 - The **25-agent audit** ran (25 agents, 321 raw recs → 125 deduped), and I wrote the
   5 group digests + the unified phased **`MASTER-PLAN.md`** into `docs/audit-2026-06/`.
-- I built and merged **3 Phase-1 PRs** (#89, #90, #91) — all verified with
-  `swift build -c release` (green) and squash-merged to `main`.
+- I built and merged **5 PRs** — 3 in Phase 1 (#89, #90, #91) and 2 in Phase 2
+  (#92, #93) — all verified with `swift build -c release` (green), tests passing,
+  design-lint clean, squash-merged to `main`.
 - I ran **`make install`** — `/Applications/MeetingScribe.app` is updated with all of it.
 - I tagged **`v1.4`**. ⚠️ The Release workflow fails fast (pre-existing pipeline issue),
   so your **work MacBook won't auto-update until that's fixed** — details below.
@@ -22,6 +23,8 @@ Good morning. Here's exactly what happened while you slept.
 | **#89** | Wired `ProPaywallView` into `MainWindow` (one `.sheet(item:)` binding → every `showPaywall()` works); `ManagedFeature: Identifiable`; flipped DEBUG `overrideAllEnabled` to **false** behind `--dev-unlock` + added `simulateFreeTier` QA flag; `RelationshipType.color` (real NDS-backed accent, replaces dead stub); ProPaywallView off raw `.pink/.purple`; `SecondBrainDB.insertPerson` now persists the v3 `relationship_type`/`check_in_cadence_days` columns (were silently dropped on every rebuild); v2/v3 migrations wrapped in transactions. | 1D, 1F, 1A |
 | **#90** | MeetingScribeMCP → **2025-06-18** protocol + `tools.listChanged`; `get_coaching_context` now returns a real framework for friend/colleague/acquaintance (was generic default — the type differentiator was *worse than baseline* for 3 of 7 types). | 1G |
 | **#91** | **Observability**: local-only `ActivityLog` funnel — the audit's #1 cross-group finding ("the app can't see itself"). Privacy-safe append-only JSONL in App Support (never the vault), `captureRate` north-star proxy, emits at launch / record-start / record-stop / summary-ready / summary-failed. | 1C |
+| **#92** | **Phase 2 — relationship health score**: `VaultKit.RelationshipHealth`, one shared pure 0–100 score + band (thriving/steady/drifting/overdue). Zero migration. `get_relationship_health` MCP tool. 5 unit tests, green. | 2B/2F |
+| **#93** | **Phase 2 — health badge**: surfaces that score on the person detail identity panel (band-colored capsule + a11y), same formula as the MCP coach. design-lint clean. | 2B |
 
 ## Important finding: Phase 1 was already ~half-done
 
