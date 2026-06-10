@@ -950,6 +950,17 @@ let toolList: [JSONValue] = [
                 "kind": .object(["type": "string", "description": "Category: summary, sentiment, coaching, custom. Default: custom."])
             ])
         ])
+    ]),
+    .object([
+        "name": "get_relationship_health",
+        "description": "Get a normalized 0–100 relationship health score and band (thriving/steady/drifting/overdue) for a person, blending recency-vs-cadence, encounter frequency, and consistency. Use to rank who needs attention.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["id"]),
+            "properties": .object([
+                "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."])
+            ])
+        ])
     ])
 ]
 
@@ -1717,6 +1728,44 @@ func tool_getCoachingContext(args: [String: Any]) -> JSONValue {
     return .object(result)
 }
 
+func tool_getRelationshipHealth(args: [String: Any]) -> JSONValue {
+    guard let id = args["id"] as? String, let p = resolvePerson(id) else {
+        let raw = (args["id"] as? String) ?? "(missing)"
+        return .object(["error": .string("no person matched `\(raw)`. Call list_people first.")])
+    }
+    let encs = loadEncounters(forPersonID: p.id)
+    let encCount = encs.count
+    let dates: [Date] = encs.compactMap { ($0["date"] as? String).flatMap(isoDate) }.sorted(by: >)
+    let medianGapDays: Int
+    if dates.count >= 2 {
+        var gaps = (0..<(dates.count - 1)).map { Int(dates[$0].timeIntervalSince(dates[$0+1]) / 86400) }
+        gaps.sort()
+        medianGapDays = gaps[gaps.count / 2]
+    } else {
+        medianGapDays = 0
+    }
+    let lastDate = dates.first ?? p.lastInteractionAt ?? p.createdAt
+    let daysSinceLast = Int(Date().timeIntervalSince(lastDate) / 86400)
+    let cadence = p.checkInCadenceDays ?? defaultCadence(for: p.relationshipType)
+    // Shared 0–100 formula (VaultKit) so the app and MCP agree exactly.
+    let health = RelationshipHealth(daysSinceLast: daysSinceLast,
+                                    cadenceDays: cadence,
+                                    encounterCount: encCount,
+                                    medianGapDays: medianGapDays)
+    return .object([
+        "personID":       .string(p.id),
+        "personName":     .string(p.displayName),
+        "relationshipType": .string(p.relationshipType ?? "unset"),
+        "healthScore":    .int(health.score),
+        "band":           .string(health.band.rawValue),
+        "daysSinceLast":  .int(daysSinceLast),
+        "cadenceDays":    .int(cadence),
+        "isOverdue":      .bool(daysSinceLast > cadence),
+        "encounterCount": .int(encCount),
+        "medianGapDays":  .int(medianGapDays)
+    ])
+}
+
 func tool_attachNoteToPerson(args: [String: Any]) -> JSONValue {
     guard let id = args["id"] as? String, let p = resolvePerson(id) else {
         let raw = (args["id"] as? String) ?? "(missing)"
@@ -1806,6 +1855,7 @@ func runTool(name: String, args: [String: Any]) -> JSONValue {
     case "list_overdue_check_ins": return tool_listOverdueCheckIns(args: args)
     case "get_coaching_context":  return tool_getCoachingContext(args: args)
     case "attach_note_to_person": return tool_attachNoteToPerson(args: args)
+    case "get_relationship_health": return tool_getRelationshipHealth(args: args)
     default: return .object(["error": .string("unknown tool: \(name)")])
     }
 }
