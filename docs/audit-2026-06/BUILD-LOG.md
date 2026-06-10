@@ -10,3 +10,7 @@ Autonomous overnight build of the unified master plan. One line per merged incre
 | 2026-06-10 | — | — | v1.4 ⚠️ | `make install` ✅ updated `/Applications/MeetingScribe.app`. `v1.4` tag pushed but Release workflow **fails fast** (same as v1.2/v1.3 — CI billing block / missing `SPARKLE_PRIVATE_KEY` / `SUFeedURL` points at old repo). Local app current; work-MacBook auto-update blocked until pipeline fixed — see HELD-ITEMS #3. |
 | 2026-06-10 | 2 · health score | #92 ✅merged | v1.5 | `VaultKit.RelationshipHealth` — shared, pure 0–100 score + band (thriving/steady/drifting/overdue), zero migration; `get_relationship_health` MCP tool; 5 unit tests (all green). |
 | 2026-06-10 | 2 · health badge | #93 ✅merged | v1.5 | Connection-health capsule on PersonDetailView identity panel (band color + score + a11y), same formula as the MCP coach tool. design-lint clean. |
+| 2026-06-10 | 2 · MCP search | #94 ✅merged | v1.6 | `search_everything` MCP tool — vault-wide keyword recall across meetings + people. |
+| 2026-06-10 | 2 · App Intents | #95 ✅merged | v1.6 | Capture Quick Note + Add Action Item Siri/Shortcuts intents (drop to `_inbox/`, work app-closed). |
+| 2026-06-10 | 2 · Today drift | #96 ✅merged | v1.6 | Today "Stay connected" ordered by health, band-colored. design-lint clean. |
+| 2026-06-10 | web · mobile app | #97 ✅merged | v1.6 | Phone web app: Today home dashboard, relationship health everywhere, quick-log encounters, `/api/today`. **`make install` + relaunch done — live over Tailscale.** |
