@@ -83,6 +83,3 @@ struct ComponentGallery: View {
         }
     }
 }
-
-@available(macOS 14.0, *)
-#Preview { ComponentGallery().frame(width: 720, height: 900) }
