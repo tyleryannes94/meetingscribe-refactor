@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import VaultKit
 
 /// How wide to throw the net when running a conversation analysis.
 /// Recent-by-count beats date-based for sporadic contacts (a friend
@@ -706,8 +707,59 @@ struct PersonDetailView: View {
         // keep the form focused.
         if !editingIdentity {
             relationshipTypePicker
+            if let health = relationshipHealth {
+                healthBadge(health)
+            }
         }
         }
+    }
+
+    /// Phase 2 (2B) — normalized 0–100 connection health for typed
+    /// relationships, computed from existing encounter/cadence data via the
+    /// shared `VaultKit.RelationshipHealth` (same formula the MCP coach uses).
+    private var relationshipHealth: RelationshipHealth? {
+        guard current.relationshipType != .unset else { return nil }
+        let encs = people.encounters(for: current.id)
+        let dates = encs.map(\.date).sorted(by: >)
+        let medianGap: Int = {
+            guard dates.count >= 2 else { return 0 }
+            var gaps = (0..<(dates.count - 1)).map { Int(dates[$0].timeIntervalSince(dates[$0 + 1]) / 86400) }
+            gaps.sort()
+            return gaps[gaps.count / 2]
+        }()
+        let last = dates.first ?? current.lastInteractionAt
+        let daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 9_999
+        let cadence = current.checkInCadenceDays ?? current.relationshipType.defaultCheckInDays
+        return RelationshipHealth(daysSinceLast: daysSince, cadenceDays: cadence,
+                                  encounterCount: encs.count, medianGapDays: medianGap)
+    }
+
+    private func healthColor(_ band: RelationshipHealth.Band) -> Color {
+        switch band {
+        case .thriving: return NDS.mint
+        case .steady:   return NDS.sky
+        case .drifting: return NDS.gold
+        case .overdue:  return NDS.danger
+        }
+    }
+
+    @ViewBuilder
+    private func healthBadge(_ health: RelationshipHealth) -> some View {
+        let color = healthColor(health.band)
+        HStack(spacing: 6) {
+            Image(systemName: "heart.fill")
+                .font(NDS.small)
+                .imageScale(.small)
+                .foregroundStyle(color)
+            Text("Health \(health.score) · \(health.band.rawValue.capitalized)")
+                .font(NDS.small)
+                .foregroundStyle(NDS.textSecondary)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(Capsule().fill(color.opacity(0.14)))
+        .help("Connection health blends recency vs. cadence, how often you log encounters, and consistency.")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Connection health \(health.score) out of 100, \(health.band.rawValue)")
     }
 
     /// Compact relationship-type selector displayed in the identity panel.
