@@ -4,4 +4,7 @@ Autonomous overnight build of the unified master plan. One line per merged incre
 
 | When | Phase | PR | Release | What shipped |
 |------|-------|----|---------|--------------|
-| 2026-06-10 | 1 · monetization+integrity | (pending) | v1.3 | Paywall sheet wired in MainWindow; `ManagedFeature: Identifiable`; DEBUG override flipped to false + `--dev-unlock` + `simulateFreeTier` QA toggle; `RelationshipType.color` (NDS-backed); ProPaywallView migrated to NDS tokens; `insertPerson` now persists v3 columns; v2/v3 SQLite migrations wrapped in transactions. |
+| 2026-06-10 | 1 · monetization+integrity | #89 ✅merged | v1.4 | Paywall sheet wired in MainWindow; `ManagedFeature: Identifiable`; DEBUG override flipped to false + `--dev-unlock` + `simulateFreeTier` QA toggle; `RelationshipType.color` (NDS-backed); ProPaywallView migrated to NDS tokens; `insertPerson` now persists v3 columns; v2/v3 SQLite migrations wrapped in transactions. |
+| 2026-06-10 | 1 · MCP | #90 ✅merged | v1.4 | MeetingScribeMCP bumped to 2025-06-18 spec + `tools.listChanged` capability; `get_coaching_context` now covers friend/colleague/acquaintance (was generic default). |
+| 2026-06-10 | 1 · observability | #91 ✅merged | v1.4 | Local-only `ActivityLog` funnel (appLaunch/recordStart/recordStop/summaryReady/failed); `captureRate` north-star proxy; privacy-safe append-only JSONL in App Support. |
+| 2026-06-10 | — | — | v1.4 ⚠️ | `make install` ✅ updated `/Applications/MeetingScribe.app`. `v1.4` tag pushed but Release workflow **fails fast** (same as v1.2/v1.3 — CI billing block / missing `SPARKLE_PRIVATE_KEY` / `SUFeedURL` points at old repo). Local app current; work-MacBook auto-update blocked until pipeline fixed — see HELD-ITEMS #3. |
