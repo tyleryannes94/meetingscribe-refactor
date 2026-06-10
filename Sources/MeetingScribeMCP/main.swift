@@ -1695,6 +1695,9 @@ func tool_getCoachingContext(args: [String: Any]) -> JSONValue {
     case "romantic_partner": framework = "Gottman Method — focus on bids for connection, love languages, and repair"
     case "family_member":    framework = "NVC (Non-Violent Communication) — needs, feelings, and empathic listening"
     case "close_friend":     framework = "Love Languages + intentional time — quality time and acts of appreciation"
+    case "friend":           framework = "Reciprocity + shared interests — small consistent gestures and remembering what matters to them"
+    case "colleague":        framework = "Professional rapport — reliability, clear follow-through, and occasional non-work connection"
+    case "acquaintance":     framework = "Light-touch warmth — remember names and context, keep reconnection low-pressure"
     default:                 framework = "Active listening and consistent follow-through"
     }
     var result: [String: JSONValue] = [
@@ -1841,8 +1844,8 @@ func jsonContentResult(_ value: JSONValue) -> JSONValue {
 }
 
 let serverInfo: JSONValue = .object([
-    "protocolVersion": .string("2024-11-05"),
-    "capabilities": .object(["tools": .object([:])]),
+    "protocolVersion": .string("2025-06-18"),
+    "capabilities": .object(["tools": .object(["listChanged": .bool(false)])]),
     "serverInfo": .object([
         "name": .string("meetingscribe"),
         "version": .string("0.1.0")
