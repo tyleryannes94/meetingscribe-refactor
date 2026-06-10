@@ -961,6 +961,18 @@ let toolList: [JSONValue] = [
                 "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."])
             ])
         ])
+    ]),
+    .object([
+        "name": "search_everything",
+        "description": "Keyword-search across the whole vault — meetings (title, notes, attendees, location) and people (name, company, role, bio, memories) — ranked by relevance. Returns mixed results with kind, id, title, and a snippet so you can then fetch the full record (get_meeting / get_person).",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["query"]),
+            "properties": .object([
+                "query": .object(["type": "string", "description": "Free-text search terms."]),
+                "limit": .object(["type": "integer", "description": "Max results (default 20).", "default": 20])
+            ])
+        ])
     ])
 ]
 
@@ -1728,6 +1740,82 @@ func tool_getCoachingContext(args: [String: Any]) -> JSONValue {
     return .object(result)
 }
 
+func tool_searchEverything(args: [String: Any]) -> JSONValue {
+    guard let raw = args["query"] as? String else {
+        return .object(["error": .string("missing `query`.")])
+    }
+    let terms = raw.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init).filter { !$0.isEmpty }
+    guard !terms.isEmpty else { return .object(["results": .array([])]) }
+    let limit = (args["limit"] as? Int).map { max(1, min(100, $0)) } ?? 20
+
+    // Weighted hit-count over a set of (text, weight) fields. A field scores its
+    // weight per term it contains (presence, not frequency) so a name match
+    // outranks an incidental body mention.
+    func score(_ fields: [(String, Int)]) -> Int {
+        var s = 0
+        for (text, weight) in fields {
+            let lower = text.lowercased()
+            for t in terms where lower.contains(t) { s += weight }
+        }
+        return s
+    }
+    func snippet(_ s: String, _ n: Int = 140) -> String {
+        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count <= n ? trimmed : String(trimmed.prefix(n)) + "…"
+    }
+
+    var scored: [(score: Int, value: JSONValue)] = []
+
+    for m in allMeetings() {
+        let title = m.userTitle ?? m.title
+        let s = score([
+            (title, 5),
+            (m.userDescription ?? "", 1),
+            (m.notes ?? "", 1),
+            (m.attendees.joined(separator: " "), 2),
+            (m.location ?? "", 1),
+            (m.calendarName ?? "", 1),
+        ])
+        if s > 0 {
+            scored.append((s, .object([
+                "kind": .string("meeting"),
+                "id": .string(m.id),
+                "title": .string(title),
+                "snippet": .string(snippet(m.userDescription ?? m.notes ?? m.attendees.joined(separator: ", "))),
+            ])))
+        }
+    }
+
+    for p in loadAllPeople() {
+        let memoryText = p.memories.map(\.text).joined(separator: " ")
+        let s = score([
+            (p.displayName, 5),
+            (p.company, 2),
+            (p.role, 2),
+            (p.emails.joined(separator: " "), 2),
+            (p.bio, 1),
+            (p.favorites.joined(separator: " "), 1),
+            (memoryText, 1),
+        ])
+        if s > 0 {
+            let sub = [p.role, p.company].filter { !$0.isEmpty }.joined(separator: " · ")
+            scored.append((s, .object([
+                "kind": .string("person"),
+                "id": .string(p.id),
+                "title": .string(p.displayName),
+                "snippet": .string(snippet(p.bio.isEmpty ? (sub.isEmpty ? memoryText : sub) : p.bio)),
+            ])))
+        }
+    }
+
+    let top = scored.sorted { $0.score > $1.score }.prefix(limit).map(\.value)
+    return .object([
+        "query": .string(raw),
+        "count": .int(top.count),
+        "results": .array(Array(top)),
+    ])
+}
+
 func tool_getRelationshipHealth(args: [String: Any]) -> JSONValue {
     guard let id = args["id"] as? String, let p = resolvePerson(id) else {
         let raw = (args["id"] as? String) ?? "(missing)"
@@ -1856,6 +1944,7 @@ func runTool(name: String, args: [String: Any]) -> JSONValue {
     case "get_coaching_context":  return tool_getCoachingContext(args: args)
     case "attach_note_to_person": return tool_attachNoteToPerson(args: args)
     case "get_relationship_health": return tool_getRelationshipHealth(args: args)
+    case "search_everything":     return tool_searchEverything(args: args)
     default: return .object(["error": .string("unknown tool: \(name)")])
     }
 }
