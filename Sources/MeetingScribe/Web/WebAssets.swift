@@ -182,6 +182,7 @@ enum WebAssets {
       search:['Search', renderSearch]
     };
     const HEALTH_COLORS = { thriving:'#74e0bc', steady:'#8ab4ff', drifting:'#ffce6b', overdue:'#ff7a8a' };
+    const RELTYPES = [['unset','—'],['romantic_partner','Partner'],['family_member','Family'],['close_friend','Close Friend'],['friend','Friend'],['colleague','Colleague'],['acquaintance','Acquaintance']];
     function healthPill(h){
       if(!h) return '';
       const c = HEALTH_COLORS[h.band] || '#9aa3b2';
@@ -265,11 +266,12 @@ enum WebAssets {
       if(m.conferenceURL) h+='<div class="kv"><div class="k">Conference</div><div class="v"><a href="'+esc(m.conferenceURL)+'" target="_blank" rel="noopener">'+esc(m.conferenceURL)+'</a></div></div>';
       if(m.attendees && m.attendees.length) h+='<div class="kv"><div class="k">Attendees</div><div class="v">'+pills(m.attendees)+'</div></div>';
       if(m.audio && m.audio.length){ h+=sectionH('Audio'); m.audio.forEach(tr=>{ h+='<div class="row-sub" style="margin-top:.3rem">'+(tr==='mic'?'Microphone':'System')+'</div><audio controls preload="none" src="/api/meetings/'+id+'/audio?track='+tr+'"></audio>'; }); }
-      if(m.summary){ h+=sectionH('Summary'); h+='<div class="prose">'+esc(m.summary)+'</div>'; }
+      h+=sectionH('Summary');
+      h+='<textarea id="m-summary" rows="6">'+esc(m.summary||'')+'</textarea>';
       if(m.decisions && m.decisions.length){ h+=sectionH('Decisions'); m.decisions.forEach(d=>{ h+='<div class="card2"><div class="t">'+esc(d.text)+'</div></div>'; }); }
       h+=sectionH('My notes');
       h+='<textarea id="m-notes" rows="5">'+esc(m.notes)+'</textarea>';
-      h+='<button class="primary" id="m-save">Save title & notes</button>';
+      h+='<button class="primary" id="m-save">Save</button>';
       c.innerHTML=h; view.appendChild(c);
 
       if(m.actionItems && m.actionItems.length){
@@ -287,7 +289,11 @@ enum WebAssets {
       if(m.transcript){ const d=document.createElement('details'); d.innerHTML='<summary>Transcript</summary><div class="prose">'+esc(m.transcript)+'</div>'; view.appendChild(d); }
 
       document.getElementById('m-save').onclick=async()=>{
-        await api('PUT','/meetings/'+id,{ userTitle:document.getElementById('m-title').value, notes:document.getElementById('m-notes').value });
+        await api('PUT','/meetings/'+id,{
+          userTitle:document.getElementById('m-title').value,
+          notes:document.getElementById('m-notes').value,
+          summary:document.getElementById('m-summary').value
+        });
         toast('Saved');
       };
     }
@@ -461,11 +467,15 @@ enum WebAssets {
       const p = await api('GET','/people/'+id);
       view.innerHTML='';
       const c=document.createElement('div'); c.className='detail';
+      const ropt=(v,l,sel)=>'<option value="'+esc(v)+'"'+(sel?' selected':'')+'>'+esc(l)+'</option>';
+      const relOptions=RELTYPES.map(rt=>ropt(rt[0],rt[1],p.relationshipType===rt[0])).join('');
       let h=
         '<label>Name</label><input id="p-name" value="'+esc(p.name)+'">'+
         '<label>Company</label><input id="p-co" value="'+esc(p.company)+'">'+
         '<label>Role</label><input id="p-role" value="'+esc(p.role)+'">'+
         '<label>Email</label><input id="p-email" value="'+esc(p.email)+'">'+
+        '<label>Relationship</label><select id="p-rel">'+relOptions+'</select>'+
+        '<label>Check in every (days · blank = default)</label><input id="p-cadence" type="number" min="1" value="'+(p.checkInCadenceDays||'')+'">'+
         '<label>Notes / bio</label><textarea id="p-bio" rows="4">'+esc(p.bio)+'</textarea>'+
         '<button class="primary" id="p-save">Save</button>';
       c.innerHTML=h; view.appendChild(c);
@@ -495,14 +505,17 @@ enum WebAssets {
       if(p.encounters && p.encounters.length){ const sh=document.createElement('div'); sh.innerHTML=sectionH('Encounters'); view.appendChild(sh); const w=document.createElement('div'); p.encounters.slice(0,20).forEach(e=>{ const d=document.createElement('div'); d.className='card2'; d.innerHTML='<div class="t">'+esc(e.title)+'</div><div class="s">'+esc(e.kind+' · '+fmtDay(e.date)+(e.location?' · '+e.location:''))+(e.summary?'\\n'+esc(e.summary):'')+'</div>'; w.appendChild(d); }); view.appendChild(w); }
 
       document.getElementById('p-save').onclick=async()=>{
+        const cad=document.getElementById('p-cadence').value;
         await api('PUT','/people/'+id,{
           name:document.getElementById('p-name').value,
           company:document.getElementById('p-co').value,
           role:document.getElementById('p-role').value,
           email:document.getElementById('p-email').value,
+          relationshipType:document.getElementById('p-rel').value,
+          checkInCadenceDays: cad? parseInt(cad,10) : 0,
           bio:document.getElementById('p-bio').value
         });
-        toast('Saved');
+        toast('Saved'); paint();
       };
     }
 

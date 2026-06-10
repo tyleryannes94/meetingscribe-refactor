@@ -194,6 +194,9 @@ final class WebAPI {
             if let notes = body["notes"] as? String {
                 try? meetingStore.writeUserNotes(notes, for: updated, primaryTag: nil)
             }
+            if let summary = body["summary"] as? String {
+                try? meetingStore.writeSummary(summary, for: updated, primaryTag: nil)
+            }
             return .jsonObject(["ok": true])
 
         default:
@@ -285,6 +288,14 @@ final class WebAPI {
             if let v = (body["bio"] as? String) ?? (body["notes"] as? String) { updated.bio = v }
             if let v = body["email"] as? String { updated.emails = v.isEmpty ? [] : [v] }
             if let v = body["phone"] as? String { updated.phones = v.isEmpty ? [] : [v] }
+            if let v = body["relationshipType"] as? String, let rt = RelationshipType(rawValue: v) {
+                updated.relationshipType = rt
+            }
+            if body.keys.contains("checkInCadenceDays") {
+                // Explicit null / 0 clears the override (fall back to type default).
+                if let n = body["checkInCadenceDays"] as? Int, n > 0 { updated.checkInCadenceDays = n }
+                else { updated.checkInCadenceDays = nil }
+            }
             people.updatePerson(updated)
             return .jsonObject(personDetail(updated))
         default:
@@ -304,6 +315,7 @@ final class WebAPI {
             "relationshipLabel": p.relationshipType.displayName
         ]
         if let last = p.lastInteractionAt { dict["lastInteractionAt"] = isoString(last) }
+        if let c = p.checkInCadenceDays { dict["checkInCadenceDays"] = c }
         if let h = personHealth(p) { dict["health"] = h }
         return dict
     }
