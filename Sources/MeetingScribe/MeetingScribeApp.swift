@@ -58,6 +58,7 @@ struct MeetingScribeApp: App {
                 }
                 .task {
                     startServices()
+                    await ActivityLog.shared.log(.appLaunch)  // 1C funnel
                 }
                 // Vault layout migration — shown once when the vault is still
                 // in the old tag-grouped layout. VaultMigrationManager sets
