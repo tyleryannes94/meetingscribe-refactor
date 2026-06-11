@@ -725,13 +725,25 @@ final class MeetingManager: ObservableObject {
 
     func updateMeeting(_ meeting: Meeting,
                        title: String? = nil,
-                       description: String? = nil) {
+                       description: String? = nil,
+                       source: MeetingSource?? = nil) {
         var updated = meeting
         if let title { updated.userTitle = title }
         if let description { updated.userDescription = description }
+        // Double-optional: nil = don't touch, .some(nil) = clear back to auto-detect.
+        if let source { updated.userSource = source }
         let primary = tagStore.primaryTag(for: updated)
         do {
             try store.writeMeeting(updated, primaryTag: primary)
+            // Mirror the change onto the live in-memory meeting if it's the
+            // one currently being recorded, so the UI reflects the picker
+            // change immediately without waiting for a list refresh.
+            if let active = activeMeeting, active.id == updated.id {
+                activeMeeting = updated
+                if case .recording(_, let startedAt) = state {
+                    state = .recording(meeting: updated, startedAt: startedAt)
+                }
+            }
             refreshPastMeetings(force: true)
         } catch {
             log.error("updateMeeting failed: \(error.localizedDescription, privacy: .public)")

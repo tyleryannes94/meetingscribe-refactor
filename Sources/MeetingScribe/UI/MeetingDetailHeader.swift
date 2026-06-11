@@ -64,6 +64,15 @@ extension UnifiedMeetingDetail {
                 .padding(.bottom, 8)
             }
 
+            // Source picker — user-editable. Lets the user correctly tag an
+            // impromptu recording, or override the URL guess on a calendar
+            // event whose link is hidden in the body.
+            if let m = meeting {
+                sourcePickerRow(for: m)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+            }
+
             // Tags
             if let m = meeting {
                 TagPicker(meeting: m, propagateToSeries: m.seriesID != nil)
@@ -385,6 +394,55 @@ extension UnifiedMeetingDetail {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Meeting options — edit, re-transcribe, recover, export")
+    }
+
+    // MARK: - Source picker
+
+    @ViewBuilder
+    func sourcePickerRow(for m: Meeting) -> some View {
+        let current = m.effectiveSource
+        let isAutoDetected = m.userSource == nil && current != nil
+        HStack(spacing: 6) {
+            Image(systemName: current?.systemImage ?? "questionmark.circle")
+                .scaledFont(11)
+                .foregroundStyle(NDS.textSecondary)
+            Menu {
+                ForEach(MeetingSource.allCases, id: \.self) { src in
+                    Button {
+                        manager.updateMeeting(m, source: .some(src))
+                    } label: {
+                        if src == current {
+                            Label(src.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(src.displayName)
+                        }
+                    }
+                }
+                if m.userSource != nil {
+                    Divider()
+                    Button("Clear (auto-detect)") {
+                        manager.updateMeeting(m, source: .some(nil))
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(current?.displayName ?? "Set source")
+                        .scaledFont(12)
+                        .foregroundStyle(current == nil ? NDS.textTertiary : NDS.textSecondary)
+                    if isAutoDetected {
+                        Text("· auto")
+                            .scaledFont(11)
+                            .foregroundStyle(NDS.textTertiary)
+                    }
+                    Image(systemName: "chevron.down")
+                        .scaledFont(9)
+                        .foregroundStyle(NDS.textTertiary)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Where this meeting is happening — used to match auto-record against the call you've actually joined.")
+        }
     }
 
     // MARK: - Upcoming action row

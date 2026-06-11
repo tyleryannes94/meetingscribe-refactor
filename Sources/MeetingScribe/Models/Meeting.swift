@@ -1,6 +1,62 @@
 import Foundation
 import VaultKit
 
+/// Where a meeting is taking place. Used both to match the actively-detected
+/// call (so auto-record only fires for the right meeting) and as a user-
+/// editable field in the detail header.
+enum MeetingSource: String, Codable, CaseIterable, Hashable {
+    case googleMeet
+    case zoom
+    case slackHuddle
+    case teams
+    case other
+
+    var displayName: String {
+        switch self {
+        case .googleMeet:  return "Google Meet"
+        case .zoom:        return "Zoom"
+        case .slackHuddle: return "Slack Huddle"
+        case .teams:       return "Microsoft Teams"
+        case .other:       return "Other"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .googleMeet, .zoom, .teams: return "video.fill"
+        case .slackHuddle:               return "waveform.circle.fill"
+        case .other:                     return "person.2.fill"
+        }
+    }
+
+    /// Best-guess source from a conference URL.
+    static func from(conferenceURL: String?) -> MeetingSource? {
+        guard let raw = conferenceURL?.lowercased(), !raw.isEmpty else { return nil }
+        if raw.contains("meet.google.com") || raw.contains("hangouts.google.com") {
+            return .googleMeet
+        }
+        if raw.contains("zoom.us") || raw.contains("zoom.com") { return .zoom }
+        if raw.contains("teams.microsoft.com") || raw.contains("teams.live.com") {
+            return .teams
+        }
+        if raw.contains("slack.com") || raw.contains("app.slack") { return .slackHuddle }
+        return .other
+    }
+
+    /// Map AppDetector's currentCallSource string ("Zoom" / "Meet" / etc.) to
+    /// a MeetingSource. Returns nil when the detector saw nothing.
+    static func from(detectedCallSource: String?) -> MeetingSource? {
+        guard let s = detectedCallSource?.lowercased() else { return nil }
+        switch s {
+        case "zoom":  return .zoom
+        case "meet":  return .googleMeet
+        case "teams": return .teams
+        case "slack", "slack huddle": return .slackHuddle
+        default:      return .other
+        }
+    }
+}
+
 struct Meeting: Identifiable, Codable, Hashable {
     var id: String
     var title: String
@@ -44,6 +100,10 @@ struct Meeting: Identifiable, Codable, Hashable {
     /// badge ("no transcript", "fallback used", etc.). Nil for meetings
     /// finalized before health tracking existed.
     var health: MeetingHealthDTO?
+    /// User-selected source (Google Meet / Zoom / Slack huddle / Other). When
+    /// set, overrides the URL-derived guess. Lets the user correctly classify
+    /// impromptu recordings or invites whose link isn't in `conferenceURL`.
+    var userSource: MeetingSource?
 
     var displayTitle: String {
         if let t = userTitle?.trimmingCharacters(in: .whitespaces), !t.isEmpty {
@@ -55,6 +115,12 @@ struct Meeting: Identifiable, Codable, Hashable {
     var isLive: Bool {
         let now = Date()
         return now >= startDate.addingTimeInterval(-60) && now <= endDate
+    }
+
+    /// Effective source — user override wins, otherwise derived from the
+    /// conference URL. Returns nil when we can't tell.
+    var effectiveSource: MeetingSource? {
+        userSource ?? MeetingSource.from(conferenceURL: conferenceURL)
     }
 
     /// Folder slug — file-system safe, includes date + truncated title.
@@ -75,7 +141,8 @@ extension Meeting {
     private enum CodingKeys: String, CodingKey {
         case id, title, startDate, endDate, attendees, notes, location,
              conferenceURL, calendarName, seriesID, userDescription, userTitle,
-             isImpromptu, isImported, segmentCount, relativeFolderPath, health
+             isImpromptu, isImported, segmentCount, relativeFolderPath, health,
+             userSource
     }
 
     /// Tolerant decoder. Swift's *synthesized* Codable requires every
@@ -105,6 +172,7 @@ extension Meeting {
         segmentCount = (try? c.decode(Int.self, forKey: .segmentCount)) ?? 0
         relativeFolderPath = (try? c.decodeIfPresent(String.self, forKey: .relativeFolderPath)) ?? nil
         health = (try? c.decodeIfPresent(MeetingHealthDTO.self, forKey: .health)) ?? nil
+        userSource = (try? c.decodeIfPresent(MeetingSource.self, forKey: .userSource)) ?? nil
     }
 }
 

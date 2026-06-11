@@ -255,13 +255,36 @@ struct MeetingScribeApp: App {
     }
 
     private func autoStartIfNeeded() {
-        guard case .idle = manager.state else { return }
-        guard let live = calendar.upcoming.first(where: { $0.isLive }) else { return }
+        // Belt + suspenders: never auto-start while any recording is being
+        // set up, running, or being torn down. The .idle check covered the
+        // common case, but a running impromptu must never be silently
+        // replaced — see "wrong-meeting transcript" bug 2026-06.
+        switch manager.state {
+        case .idle:
+            break
+        case .starting, .recording, .stopping, .error:
+            return
+        }
+        if manager.activeMeeting != nil { return }
+
         // Only auto-start if the user has actually joined a call — i.e.
         // AppDetector sees them in a Zoom meeting window or a browser tab
         // on meet.google.com. This avoids surprise recordings of calendar
         // events that turned out to be just time blocks.
-        guard appDetector.currentCallSource != nil else { return }
+        guard let detected = MeetingSource.from(detectedCallSource: appDetector.currentCallSource) else { return }
+
+        // Match the live calendar event to the call the user is actually in.
+        // Previously we just picked `upcoming.first(where: isLive)`, which
+        // would happily attach an impromptu recording's transcript to a
+        // completely unrelated scheduled meeting at the same time.
+        let liveCandidates = calendar.upcoming.filter { $0.isLive }
+        let matching = liveCandidates.filter { m in
+            guard let source = m.effectiveSource else { return false }
+            return source == detected
+        }
+        // Be conservative when the match is ambiguous (e.g. two Meet calls
+        // overlap). Skipping is better than recording the wrong one.
+        guard matching.count == 1, let live = matching.first else { return }
         Task { await manager.startRecording(for: live) }
     }
 
