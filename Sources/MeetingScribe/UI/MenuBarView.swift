@@ -113,7 +113,7 @@ struct MenuBarView: View {
         case .recording(let meeting, let startedAt):
             VStack(alignment: .leading, spacing: 2) {
                 Label("Recording", systemImage: "record.circle.fill")
-                    .foregroundStyle(.red).font(.headline)
+                    .foregroundStyle(NDS.recording).font(.headline)
                 Text(meeting?.displayTitle ?? "Ad-hoc").font(.subheadline)
                 Text("Started \(startedAt.formatted(date: .omitted, time: .shortened))")
                     .font(.caption).foregroundStyle(.secondary)
@@ -127,7 +127,7 @@ struct MenuBarView: View {
             // Teardown in progress — show recording UI until idle.
             VStack(alignment: .leading, spacing: 2) {
                 Label("Stopping…", systemImage: "stop.circle")
-                    .foregroundStyle(.red).font(.headline)
+                    .foregroundStyle(NDS.recording).font(.headline)
             }
         case .error(let msg):
             VStack(alignment: .leading, spacing: 2) {

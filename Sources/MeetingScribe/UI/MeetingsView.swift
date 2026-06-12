@@ -445,7 +445,7 @@ private struct MeetingListRow: View {
         HStack(spacing: 0) {
             // Live indicator bar
             Rectangle()
-                .fill(isLive ? Color.red : .clear)
+                .fill(isLive ? NDS.recording : .clear)
                 .frame(width: 3)
 
             HStack(spacing: 10) {
@@ -453,7 +453,7 @@ private struct MeetingListRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(timeString)
                         .font(.system(size: 11.5, weight: .medium).monospacedDigit()) // design-lint:allow
-                        .foregroundStyle(isLive ? .red : NDS.textSecondary)
+                        .foregroundStyle(isLive ? NDS.recording : NDS.textSecondary)
                     Text("\(durationMins)m")
                         .font(.system(size: 10).monospacedDigit()) // design-lint:allow
                         .foregroundStyle(NDS.textTertiary)
