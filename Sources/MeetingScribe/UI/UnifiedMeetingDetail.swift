@@ -265,7 +265,7 @@ struct UnifiedMeetingDetail: View {
                             .frame(minHeight: 200)
                     } else {
                         ForEach(items) { item in
-                            MeetingActionRow(item: item, store: manager.actionItems)
+                            MeetingActionRow(item: item, store: manager.actionItems, meeting: m)
                         }
                     }
                     Button {

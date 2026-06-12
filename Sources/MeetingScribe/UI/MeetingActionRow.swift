@@ -7,6 +7,17 @@ import SwiftUI
 struct MeetingActionRow: View {
     let item: ActionItem
     @ObservedObject var store: ActionItemStore
+    /// The meeting this row belongs to — its attendees are the likely owners (P2-9).
+    var meeting: Meeting? = nil
+
+    /// Resolved attendees of the meeting, offered first when assigning an owner.
+    private var attendeePeople: [Person] {
+        guard let m = meeting else { return [] }
+        let people = PeopleStore.shared.people
+        return m.attendees.compactMap { raw in
+            PersonResolver.resolve(raw, in: people).flatMap { id in people.first { $0.id == id } }
+        }
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -28,12 +39,7 @@ struct MeetingActionRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     if item.dueDate != nil { DueChip(date: item.dueDate, status: item.status) }
-                    if let owner = item.owner, !owner.isEmpty {
-                        HStack(spacing: 5) {
-                            MSAvatar(name: owner, size: 16)
-                            Text(owner).font(NDS.tiny).foregroundStyle(NDS.textSecondary)
-                        }
-                    }
+                    ownerMenu
                 }
             }
 
@@ -55,5 +61,34 @@ struct MeetingActionRow: View {
         .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
             .strokeBorder(NDS.hairline, lineWidth: 1))
         .opacity(item.status == .completed ? 0.7 : 1)
+    }
+
+    /// Attendee-first owner assignment (P2-9): the people in the room lead the menu.
+    private var ownerMenu: some View {
+        Menu {
+            if !attendeePeople.isEmpty {
+                Section("In this meeting") {
+                    ForEach(attendeePeople) { p in
+                        Button { store.setOwnerPerson(item.id, personID: p.id, ownerName: p.displayName) } label: {
+                            Label(p.displayName, systemImage: "person.fill")
+                        }
+                    }
+                }
+            }
+            if item.owner?.isEmpty == false {
+                Button("Unassign") { store.setOwnerPerson(item.id, personID: nil, ownerName: nil) }
+            }
+        } label: {
+            if let owner = item.owner, !owner.isEmpty {
+                HStack(spacing: 5) {
+                    MSAvatar(name: owner, size: 16)
+                    Text(owner).font(NDS.tiny).foregroundStyle(NDS.textSecondary)
+                }
+            } else {
+                Label("Assign", systemImage: "person.crop.circle.badge.plus")
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
     }
 }
