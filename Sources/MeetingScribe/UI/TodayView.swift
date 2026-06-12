@@ -53,6 +53,7 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
+                dayShapeStrip   // U3-3: the 7am coffee scan, answered in 10s
                 quickActions
                 upNextCard
 
@@ -472,6 +473,40 @@ struct TodayView: View {
             .filter { $0.startDate > Date().addingTimeInterval(-5 * 60) }
             .sorted { $0.startDate < $1.startDate }
         return future.first { $0.conferenceURL != nil } ?? future.first
+    }
+
+    /// "Day shape" strip (U3-3): the whole day in one glanceable line —
+    /// meetings remaining, overdue tasks, and when the next call is.
+    @ViewBuilder
+    private var dayShapeStrip: some View {
+        let meetingsLeft = todayUpcoming.count
+        let overdue = manager.actionItems.overdueTasks.count
+        HStack(spacing: 14) {
+            dayShapeItem(icon: "calendar",
+                         value: "\(meetingsLeft)",
+                         label: meetingsLeft == 1 ? "meeting left" : "meetings left",
+                         color: NDS.brand)
+            if overdue > 0 {
+                dayShapeItem(icon: "exclamationmark.circle.fill",
+                             value: "\(overdue)", label: "overdue", color: NDS.danger)
+            }
+            if let m = nextMeeting {
+                let f = DateFormatter(); let _ = (f.dateFormat = "h:mm a")
+                dayShapeItem(icon: "clock", value: f.string(from: m.startDate),
+                             label: "next", color: NDS.gold)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+    }
+
+    private func dayShapeItem(icon: String, value: String, label: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).scaledFont(13).foregroundStyle(color)
+            Text(value).scaledFont(15, weight: .bold).foregroundStyle(NDS.textPrimary)
+            Text(label).scaledFont(12).foregroundStyle(NDS.textSecondary)
+        }
     }
 
     private var liveSection: some View {
