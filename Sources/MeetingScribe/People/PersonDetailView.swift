@@ -254,6 +254,11 @@ struct PersonDetailView: View {
     @State private var newMemory = ""
     @State private var newTalkingPoint = ""
     @State private var showEvidence = false
+    // C2-4: reconnect-with-context + local AI-drafted opener.
+    @State private var showReconnectDraft = false
+    @State private var reconnectDraft = ""
+    @State private var reconnectDrafting = false
+    @State private var reconnectError: String?
     @State private var newTaskTitle = ""
     @State private var newFavorite = ""
     @State private var showNewTag = false
@@ -492,6 +497,7 @@ struct PersonDetailView: View {
     private var workContent: some View {
         switch personTab {
         case .overview:
+            reconnectSection
             if !current.bio.isEmpty || editingIdentity { notes }
             favoritesEditSection
             aiSuggestionsSection
@@ -1742,6 +1748,186 @@ struct PersonDetailView: View {
     }
 
     // MARK: - Evidence compiler (U1-4)
+
+    // MARK: - Reconnect with context (C2-4)
+
+    /// The newest encounter's topic — its freeform note, falling back to the
+    /// denormalized event name. Nil when there's no usable text.
+    private var lastEncounterTopic: String? {
+        guard let enc = people.encounters(for: current.id).max(by: { $0.date < $1.date })
+        else { return nil }
+        let note = enc.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !note.isEmpty { return note }
+        let name = enc.eventName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
+    }
+
+    /// The title of the most recent recorded meeting this person attended.
+    private var lastMeetingTitle: String? {
+        guard let mtg = manager.pastMeetings.filter(attendeeMatches).max(by: { $0.startDate < $1.startDate })
+        else { return nil }
+        let t = mtg.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+
+    /// Days since the last contact (newest encounter, else `lastInteractionAt`).
+    private var daysSinceLastContact: Int? {
+        let last = people.encounters(for: current.id).map(\.date).max() ?? current.lastInteractionAt
+        return last.map { max(0, Int(Date().timeIntervalSince($0) / 86400)) }
+    }
+
+    /// C2-4 — Reconnect with context. For an overdue/drifting relationship, show
+    /// what you last talked about and offer a one-tap, locally-drafted opener so
+    /// the real blocker ("what do I even say?") disappears. 100% on-device.
+    @ViewBuilder
+    private var reconnectSection: some View {
+        if let health = relationshipHealth, health.band == .overdue || health.band == .drifting {
+            let color = healthColor(health.band)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "hand.wave.fill").imageScale(.small).foregroundStyle(color)
+                    Text("Reconnect").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                    Spacer()
+                    if let days = daysSinceLastContact {
+                        Text("\(days)d since last contact")
+                            .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                    }
+                    Text(health.band.rawValue.capitalized)
+                        .font(NDS.tiny).foregroundStyle(color)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(color.opacity(0.14)))
+                }
+                // Last-topic context.
+                if lastEncounterTopic != nil || lastMeetingTitle != nil {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let topic = lastEncounterTopic {
+                            reconnectContextRow("text.bubble", "Last note", topic)
+                        }
+                        if let mtg = lastMeetingTitle {
+                            reconnectContextRow("calendar", "Last meeting", mtg)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+                } else {
+                    Text("No recent topic on record — a simple \"thinking of you\" still lands.")
+                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                }
+                // One-tap, on-device draft.
+                HStack(spacing: 8) {
+                    Button { draftReconnectOpener() } label: {
+                        Label(reconnectDrafting ? "Drafting…" : "Draft an opener", systemImage: "sparkles")
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
+                    .disabled(reconnectDrafting || !manager.ollamaReachable)
+                    if reconnectDrafting { ProgressView().controlSize(.small) }
+                    Spacer()
+                }
+                if !manager.ollamaReachable {
+                    Text("Local AI is offline — start it to draft a warm opener on-device.")
+                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                }
+                if let err = reconnectError {
+                    Text(err).font(NDS.tiny).foregroundStyle(NDS.danger)
+                }
+            }
+            .msCard()
+            .overlay(
+                RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
+                    .strokeBorder(color.opacity(0.28), lineWidth: 1)
+            )
+            .sheet(isPresented: $showReconnectDraft) { reconnectDraftSheet }
+        }
+    }
+
+    @ViewBuilder
+    private func reconnectContextRow(_ symbol: String, _ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: symbol).scaledFont(11).foregroundStyle(NDS.textTertiary).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                Text(value).font(NDS.body).foregroundStyle(NDS.textPrimary).lineLimit(3)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// The sheet that shows the drafted opener with a Copy button.
+    private var reconnectDraftSheet: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Opener for \(firstName)").font(.headline)
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(reconnectDraft, forType: .string)
+                    ToastCenter.shared.show("Copied")
+                } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    .disabled(reconnectDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Done") { showReconnectDraft = false }
+            }
+            .padding(12)
+            Divider().overlay(NDS.divider)
+            ScrollView {
+                Text(reconnectDraft.isEmpty ? "…" : reconnectDraft)
+                    .font(NDS.body).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(14)
+            }
+            Text("Drafted on-device · grounded in your last topic. Edit before sending.")
+                .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                .padding(.horizontal, 14).padding(.bottom, 12)
+        }
+        .frame(width: 460, height: 360)
+        .background(NDS.bg)
+    }
+
+    /// Build a context-grounded prompt and ask the local model for a short, warm
+    /// reconnect opener. Gracefully surfaces an error line if the model is down.
+    private func draftReconnectOpener() {
+        guard !reconnectDrafting else { return }
+        reconnectError = nil
+        reconnectDrafting = true
+        let name = firstName
+        let relation = current.relationshipType.displayName.lowercased()
+        let days = daysSinceLastContact
+        let topicEnc = lastEncounterTopic
+        let topicMtg = lastMeetingTitle
+        Task {
+            var ctx = ""
+            if let days { ctx += "It's been about \(days) days since we last connected.\n" }
+            if let topicEnc { ctx += "Last note from our last encounter: \(topicEnc)\n" }
+            if let topicMtg { ctx += "Most recent meeting we shared: \(topicMtg)\n" }
+            if ctx.isEmpty { ctx = "We haven't talked in a while and I don't have notes on our last topic.\n" }
+            let prompt = """
+            Write a short, warm message to reconnect with \(name), who is my \(relation). \
+            Use ONLY the context below — do not invent specifics. Reference what we last \
+            talked about if it's given. Keep it to 2–3 friendly sentences, casual and \
+            genuine, no subject line, no sign-off, no preamble — just the message text.
+
+            CONTEXT:
+            \(ctx)
+            """
+            do {
+                let result = try await OllamaService().generate(prompt: prompt, temperature: 0.6)
+                let cleaned = result.trimmingCharacters(in: .whitespacesAndNewlines)
+                await MainActor.run {
+                    reconnectDrafting = false
+                    guard !cleaned.isEmpty else {
+                        reconnectError = "The local model returned an empty draft — try again."
+                        return
+                    }
+                    reconnectDraft = cleaned
+                    showReconnectDraft = true
+                }
+            } catch {
+                await MainActor.run {
+                    reconnectDrafting = false
+                    reconnectError = "Couldn't reach the local model. Make sure it's running and try again."
+                }
+            }
+        }
+    }
 
     private var evidenceSection: some View {
         VStack(alignment: .leading, spacing: 8) {
