@@ -222,6 +222,7 @@ final class MeetingPipelineController: ObservableObject {
         }
         actionItems.reconcileExtracted(extracted, for: workingMeeting.id)
         PeopleStore.shared.linkAttendees(of: workingMeeting)
+        PeopleStore.shared.emitMeetingEncounters(for: workingMeeting)   // P1-9
 
         lastCompletedDir = store.directory(for: workingMeeting, primaryTag: primary)
 

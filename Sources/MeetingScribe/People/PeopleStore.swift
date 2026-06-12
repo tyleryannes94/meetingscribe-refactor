@@ -1181,6 +1181,23 @@ final class PeopleStore: ObservableObject {
         PersonResolver.resolveOwner(owner, in: people)
     }
 
+    /// Emit a meeting encounter for each linked attendee (P1-9) so health scores
+    /// and heat maps reflect the meetings you have — not just manual quick-logs.
+    /// Dedups by meetingID and skips when a manual encounter already sits within
+    /// ±2h of the meeting (avoids double-counting the same interaction).
+    func emitMeetingEncounters(for meeting: Meeting) {
+        let matches = PersonResolver.resolvedAttendees(meeting.attendees, in: people)
+        for (pid, _) in matches {
+            let existing = encounters(for: pid)
+            if existing.contains(where: { $0.meetingID == meeting.id }) { continue }
+            if existing.contains(where: { abs($0.date.timeIntervalSince(meeting.startDate)) < 7200 }) { continue }
+            addEncounter(to: pid,
+                         eventName: "📅 \(meeting.displayTitle)",
+                         date: meeting.startDate,
+                         meetingID: meeting.id)
+        }
+    }
+
     /// How many typed relationships are overdue for a check-in (last interaction
     /// + cadence is in the past). Mirrors the Today drift strip's triage; drives
     /// the People nav-rail badge (D1-1). Untyped one-off imports don't count.
