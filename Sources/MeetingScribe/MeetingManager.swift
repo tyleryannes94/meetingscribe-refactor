@@ -186,6 +186,8 @@ final class MeetingManager: ObservableObject {
                             if self?.activeMeeting == nil { self?.liveTranscriber.reset() }
                             self?.bodyCache.invalidate(meeting.id)
                             self?.refreshPastMeetings(force: true)
+                            // U2-9: auto-name ad-hoc recordings once the summary exists.
+                            Task { await self?.generateAutoTitleIfNeeded(for: meeting) }
                         }
                     }
                     await MainActor.run { self.personExtraction.extract(for: meeting) }
@@ -442,6 +444,9 @@ final class MeetingManager: ObservableObject {
                     // drop the cache entry so the detail view re-reads.
                     self?.bodyCache.invalidate(meeting.id)
                     self?.refreshPastMeetings(force: true)
+                    // U2-9: now that the summary exists, name ad-hoc recordings
+                    // from their content (no-op for titled / calendar meetings).
+                    Task { await self?.generateAutoTitleIfNeeded(for: meeting) }
                 }
             }
             // Pipeline finished writing transcript.md — now extract any people
@@ -829,6 +834,91 @@ final class MeetingManager: ObservableObject {
         guard !cleaned.isEmpty else { throw OllamaService.SummaryError.unreachable("empty rewrite") }
         applyEditedSummary(cleaned, for: meeting)
         return cleaned
+    }
+
+    /// U2-9: give an ad-hoc recording a short, searchable name derived from its
+    /// own transcript/summary with the local model, stored as an *auto*-title
+    /// that NEVER overrides a user-chosen name. No-op unless the meeting is
+    /// impromptu and has neither a user title nor an existing auto-title — so a
+    /// Meetings list stops filling up with identical "Ad-hoc Recording" rows.
+    func generateAutoTitleIfNeeded(for meeting: Meeting) async {
+        // Re-read the freshest copy from disk: finalize just rewrote
+        // meeting.json, and the user may have typed a name in the meantime.
+        let primary = tagStore.primaryTag(for: meeting)
+        let dir = store.directory(for: meeting, primaryTag: primary)
+        let current = store.readMeeting(at: dir) ?? meeting
+
+        guard current.isImpromptu, Self.isUnnamed(current) else { return }
+
+        // Prefer the summary; fall back to the head of the raw transcript.
+        var source = store.readSummary(for: current, primaryTag: primary)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if source.isEmpty {
+            source = store.readTranscript(for: current, primaryTag: primary)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !source.isEmpty else { return }
+        let snippet = String(source.prefix(2000))
+
+        let prompt = """
+        Read the meeting notes below and write a short title naming what the \
+        meeting was about. Use 4 to 6 words, in plain language. Output only the \
+        title — no quotes, no surrounding punctuation, no trailing period.
+
+        ----- MEETING NOTES -----
+        \(snippet)
+        """
+
+        guard let raw = try? await summarizer.generate(prompt: prompt, temperature: 0.3) else { return }
+        let title = Self.sanitizedAutoTitle(raw)
+        guard !title.isEmpty else { return }
+
+        // Re-check on-disk state so we never clobber a title the user typed
+        // while the model was running.
+        let latest = store.readMeeting(at: dir) ?? current
+        guard latest.isImpromptu, Self.isUnnamed(latest) else { return }
+
+        var updated = latest
+        updated.autoTitle = title
+        do {
+            try store.writeMeeting(updated, primaryTag: tagStore.primaryTag(for: updated))
+        } catch {
+            log.error("auto-title write failed: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        // Reflect the new name in the live UI immediately.
+        if activeMeeting?.id == updated.id { activeMeeting?.autoTitle = title }
+        if let idx = pastMeetings.firstIndex(where: { $0.id == updated.id }) {
+            pastMeetings[idx].autoTitle = title
+        }
+        refreshPastMeetings(force: true)
+    }
+
+    /// True when the user hasn't named the meeting and it has no auto-title yet.
+    private static func isUnnamed(_ m: Meeting) -> Bool {
+        let user = m.userTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let auto = m.autoTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return user.isEmpty && auto.isEmpty
+    }
+
+    /// Trim a model-emitted title down to a clean 4–6-word phrase: first line
+    /// only, strip a "Title:" preamble, surrounding quotes, and trailing
+    /// punctuation, then cap length defensively.
+    private static func sanitizedAutoTitle(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let firstLine = s.split(whereSeparator: \.isNewline).first {
+            s = String(firstLine)
+        }
+        if let colon = s.range(of: "Title:", options: [.caseInsensitive]) {
+            s = String(s[colon.upperBound...])
+        }
+        s = s.trimmingCharacters(in: CharacterSet(charactersIn: " \t\"'“”"))
+        while let last = s.last, ".,;:!".contains(last) { s.removeLast() }
+        s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.count > 80 {
+            s = String(s.prefix(80)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return s
     }
 
     /// After a Transcribe Now / summary / notes-save operation, callers

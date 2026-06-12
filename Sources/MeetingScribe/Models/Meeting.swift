@@ -77,6 +77,10 @@ struct Meeting: Identifiable, Codable, Hashable {
     var userDescription: String?
     /// User-edited title — if set, prefer this over `title` for display.
     var userTitle: String?
+    /// Title generated automatically from the recording's transcript/summary
+    /// for ad-hoc meetings (U2-9). Never overrides a `userTitle`; only used
+    /// when the user hasn't named the meeting themselves.
+    var autoTitle: String?
     /// Whether this meeting was created manually via "ad-hoc recording" /
     /// hotkey / Zoom auto-detect (vs. pulled from calendar).
     var isImpromptu: Bool = false
@@ -108,6 +112,9 @@ struct Meeting: Identifiable, Codable, Hashable {
     var displayTitle: String {
         if let t = userTitle?.trimmingCharacters(in: .whitespaces), !t.isEmpty {
             return t
+        }
+        if let a = autoTitle?.trimmingCharacters(in: .whitespaces), !a.isEmpty {
+            return a
         }
         return title
     }
@@ -141,8 +148,8 @@ extension Meeting {
     private enum CodingKeys: String, CodingKey {
         case id, title, startDate, endDate, attendees, notes, location,
              conferenceURL, calendarName, seriesID, userDescription, userTitle,
-             isImpromptu, isImported, segmentCount, relativeFolderPath, health,
-             userSource
+             autoTitle, isImpromptu, isImported, segmentCount, relativeFolderPath,
+             health, userSource
     }
 
     /// Tolerant decoder. Swift's *synthesized* Codable requires every
@@ -167,6 +174,7 @@ extension Meeting {
         seriesID = (try? c.decodeIfPresent(String.self, forKey: .seriesID)) ?? nil
         userDescription = (try? c.decodeIfPresent(String.self, forKey: .userDescription)) ?? nil
         userTitle = (try? c.decodeIfPresent(String.self, forKey: .userTitle)) ?? nil
+        autoTitle = (try? c.decodeIfPresent(String.self, forKey: .autoTitle)) ?? nil
         isImpromptu = (try? c.decode(Bool.self, forKey: .isImpromptu)) ?? false
         isImported = (try? c.decode(Bool.self, forKey: .isImported)) ?? false
         segmentCount = (try? c.decode(Int.self, forKey: .segmentCount)) ?? 0
