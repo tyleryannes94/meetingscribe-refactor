@@ -150,11 +150,22 @@ struct MeetingCard: View {
         }
     }
 
+    /// Attendee display names for the face pile — parsed once through the
+    /// identity layer so "Jane Smith <jane@acme.com>" shows as "Jane Smith".
+    private var attendeeNames: [String] {
+        meeting.attendees.map { raw in
+            let id = PersonResolver.parse(raw)
+            return id.hasName ? id.name : PersonResolver.localPart(of: id.email)
+        }
+    }
+
     @ViewBuilder
     private var metaRow: some View {
         HStack(spacing: 6) {
             if !meeting.attendees.isEmpty {
-                Text("\(meeting.attendees.count) attendee\(meeting.attendees.count == 1 ? "" : "s")")
+                // P1-7: face pile instead of "3 attendees" text — scan who your
+                // day is with at a glance (Notion Calendar / Granola pattern).
+                MSAvatarStack(names: attendeeNames, size: 18, max: 4)
             }
             if let cal = meeting.calendarName {
                 if !meeting.attendees.isEmpty { Text("·").foregroundStyle(.tertiary) }
