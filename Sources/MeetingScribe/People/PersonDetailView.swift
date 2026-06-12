@@ -303,6 +303,17 @@ struct PersonDetailView: View {
     @State private var analyzePreset: ConversationAnalysisPreset = .relationshipSummary
     @State private var analyzeRange: AnalyzeRange = .recent1000
     @State private var noteExpansion: [String: Bool] = [:]
+    // C2-8: co-attendees from the people graph's edge data. Computed once per
+    // profile open (the graph + force layout is too costly to rebuild in body)
+    // and cached here; empty for isolated contacts (the section then hides).
+    @State private var inCommon: [InCommonPerson] = []
+
+    /// One "In common" row: a co-attendee plus how many meetings they shared.
+    private struct InCommonPerson: Identifiable {
+        let person: Person
+        let count: Int
+        var id: String { person.id }
+    }
 
     /// Display container for a finished analysis. Holds the preset (so we
     /// know what kind chip to show) and the rendered text the user can
@@ -340,6 +351,7 @@ struct PersonDetailView: View {
         .onAppear { updateChatContext() }
         .onChange(of: current.id) { _, _ in updateChatContext() }
         .task(id: current.id) { await loadCalendarMeetings() }
+        .task(id: current.id) { computeInCommon() }
         .onDisappear {
             chatSession.setContext("The People tab — the user's second-brain contacts.")
         }
@@ -498,6 +510,7 @@ struct PersonDetailView: View {
         switch personTab {
         case .overview:
             reconnectSection
+            inCommonSection
             if !current.bio.isEmpty || editingIdentity { notes }
             favoritesEditSection
             aiSuggestionsSection
@@ -1692,6 +1705,64 @@ struct PersonDetailView: View {
                 }
             }
         }
+    }
+
+    // MARK: - In common (C2-8)
+
+    /// Co-attendees pulled from the people graph's edge data: who else sat in
+    /// meetings with this person, ranked by how many they shared. Answers "who
+    /// else knows them?" / "who should join this meeting?" on the profile. Hidden
+    /// entirely for isolated contacts (no rows → no empty box).
+    @ViewBuilder
+    private var inCommonSection: some View {
+        if !inCommon.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2.fill").scaledFont(11)
+                        .foregroundStyle(NDS.brand.opacity(0.7))
+                    Text("In common").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                }
+                ForEach(inCommon) { entry in
+                    Button { router.openPerson(entry.person.id) } label: {
+                        HStack(spacing: 10) {
+                            MSAvatar(name: entry.person.displayName, size: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(entry.person.displayName)
+                                    .scaledFont(13.5, weight: .semibold)
+                                    .foregroundStyle(NDS.textPrimary)
+                                Text("\(entry.count) meeting\(entry.count == 1 ? "" : "s") together")
+                                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right").scaledFont(10)
+                                .foregroundStyle(NDS.textTertiary)
+                        }
+                        .padding(10)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .ndsHover()
+                }
+            }
+        }
+    }
+
+    /// Builds the people graph once and resolves this person's meeting-sharing
+    /// edges into ranked rows. Runs in a `.task` (off the render path) because
+    /// the graph build + force layout is too heavy to repeat in `body`.
+    @MainActor
+    private func computeInCommon() {
+        let vm = PeopleGraphViewModel()
+        vm.buildGraph(from: people.people)
+        let rows: [InCommonPerson] = vm.edges(for: current.id).compactMap { edge in
+            guard edge.sharedMeetingCount > 0,
+                  let otherID = edge.other(than: current.id),
+                  let p = people.person(by: otherID) else { return nil }
+            return InCommonPerson(person: p, count: edge.sharedMeetingCount)
+        }
+        .sorted { $0.count > $1.count }
+        inCommon = Array(rows.prefix(8))
     }
 
     /// Backlinks (Phase B): meetings whose transcript mentions this person.
