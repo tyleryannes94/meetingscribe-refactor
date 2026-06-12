@@ -2368,6 +2368,19 @@ private struct EncounterRow: View {
         let f = DateFormatter(); f.dateStyle = .medium; return f
     }()
 
+    /// Mood parsed out of the legacy "[mood:x]" note serialization (C2-6).
+    private var parsedMood: Encounter.Mood? {
+        guard let r = encounter.notes.range(of: #"\[mood:([a-z]+)\]"#, options: .regularExpression) else { return nil }
+        let token = encounter.notes[r].dropFirst(6).dropLast(1)
+        return Encounter.Mood(rawValue: String(token))
+    }
+    /// The note with the "[mood:x]" marker stripped, so it never shows raw.
+    private var cleanNotes: String {
+        encounter.notes
+            .replacingOccurrences(of: #"\s*\[mood:[a-z]+\]"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "mappin.and.ellipse").scaledFont(13)
@@ -2377,10 +2390,18 @@ private struct EncounterRow: View {
                 HStack(spacing: 6) {
                     Text(Self.dateFormatter.string(from: encounter.date))
                     if let loc = encounter.location, !loc.isEmpty { Text("· \(loc)") }
+                    // C2-6: mood as a first-class chip, parsed out of the note
+                    // instead of the raw "[mood:x]" string leaking into the UI.
+                    if let mood = parsedMood {
+                        Text("\(mood.emoji) \(mood.label)")
+                            .scaledFont(10, weight: .medium)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(NDS.surface2, in: Capsule())
+                    }
                 }
                 .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                if !encounter.notes.isEmpty {
-                    Text(encounter.notes).font(NDS.small).foregroundStyle(NDS.textSecondary)
+                if !cleanNotes.isEmpty {
+                    Text(cleanNotes).font(NDS.small).foregroundStyle(NDS.textSecondary)
                 }
             }
             Spacer(minLength: 0)
