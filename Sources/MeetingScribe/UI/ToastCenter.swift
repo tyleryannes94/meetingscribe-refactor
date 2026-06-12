@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Lightweight bottom toast with an optional Undo action (D4-3). Gives
-/// otherwise-irreversible operations (e.g. a tag rename that physically moves
-/// vault folders) a safety net.
+/// Bottom toasts with optional Undo + a secondary action (Toast v2, D3-12).
+/// Now stacks (up to 3), pauses auto-dismiss on hover, and supports a second
+/// action button (e.g. "Add note" alongside "Undo"). Gives otherwise-irreversible
+/// operations a safety net and quick follow-ups.
 @available(macOS 14.0, *)
 @MainActor
 final class ToastCenter: ObservableObject {
@@ -13,29 +14,53 @@ final class ToastCenter: ObservableObject {
         let message: String
         let undoTitle: String?
         let undo: (() -> Void)?
+        let actionTitle: String?
+        let action: (() -> Void)?
     }
 
-    @Published var current: Toast?
-    private var dismissTask: Task<Void, Never>?
+    /// The visible stack, oldest first. Newest is shown at the bottom.
+    @Published private(set) var toasts: [Toast] = []
+    private var dismissTasks: [UUID: Task<Void, Never>] = [:]
+    private let lifetime: UInt64 = 6_000_000_000
 
-    func show(_ message: String, undoTitle: String? = nil, undo: (() -> Void)? = nil) {
-        current = Toast(message: message, undoTitle: undoTitle, undo: undo)
-        dismissTask?.cancel()
-        dismissTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 6_000_000_000)
-            if !Task.isCancelled { current = nil }
+    func show(_ message: String,
+              undoTitle: String? = nil, undo: (() -> Void)? = nil,
+              actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        let toast = Toast(message: message, undoTitle: undoTitle, undo: undo,
+                          actionTitle: actionTitle, action: action)
+        toasts.append(toast)
+        if toasts.count > 3 { dismiss(toasts.first!.id) }
+        schedule(toast.id)
+    }
+
+    private func schedule(_ id: UUID) {
+        dismissTasks[id]?.cancel()
+        dismissTasks[id] = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: lifetime)
+            if !Task.isCancelled { dismiss(id) }
         }
     }
 
-    func performUndo() {
-        current?.undo?()
-        dismiss()
+    func performUndo(_ toast: Toast) { toast.undo?(); dismiss(toast.id) }
+    func performAction(_ toast: Toast) { toast.action?(); dismiss(toast.id) }
+
+    func dismiss(_ id: UUID) {
+        dismissTasks[id]?.cancel()
+        dismissTasks[id] = nil
+        toasts.removeAll { $0.id == id }
     }
 
+    /// Clears every toast (back-compat with the old no-arg dismiss).
     func dismiss() {
-        current = nil
-        dismissTask?.cancel()
+        dismissTasks.values.forEach { $0.cancel() }
+        dismissTasks.removeAll()
+        toasts.removeAll()
     }
+
+    /// Hover-pause: stop the auto-dismiss timers while the pointer is over the
+    /// stack so the user has time to click Undo/the action.
+    func pauseDismissal() { dismissTasks.values.forEach { $0.cancel() } }
+    func resumeDismissal() { toasts.forEach { schedule($0.id) } }
 }
 
 @available(macOS 14.0, *)
@@ -45,28 +70,43 @@ struct ToastOverlay: View {
     var body: some View {
         VStack {
             Spacer()
-            if let t = center.current {
-                HStack(spacing: 12) {
-                    Text(t.message).font(.callout).foregroundStyle(.white).lineLimit(2)
-                    if let title = t.undoTitle, t.undo != nil {
-                        Button(title) { center.performUndo() }
-                            .buttonStyle(.plain)
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(NDS.brandHover)
-                    }
-                    Button { center.dismiss() } label: {
-                        Image(systemName: "xmark").font(.caption2)
-                    }
-                    .buttonStyle(.plain).foregroundStyle(.white.opacity(0.6))
+            VStack(spacing: 8) {
+                ForEach(center.toasts) { t in
+                    toastView(t)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .padding(.horizontal, 16).padding(.vertical, 11)
-                .background(Color.black.opacity(0.86), in: Capsule())
-                .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
-                .padding(.bottom, 28)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            .padding(.bottom, 28)
+            .onHover { hovering in
+                if hovering { center.pauseDismissal() } else { center.resumeDismissal() }
             }
         }
-        .animation(.easeOut(duration: 0.2), value: center.current?.id)
-        .allowsHitTesting(center.current != nil)
+        .animation(.easeOut(duration: 0.2), value: center.toasts.map(\.id))
+        .allowsHitTesting(!center.toasts.isEmpty)
+    }
+
+    private func toastView(_ t: ToastCenter.Toast) -> some View {
+        HStack(spacing: 12) {
+            Text(t.message).font(.callout).foregroundStyle(.white).lineLimit(2)
+            if let title = t.actionTitle, t.action != nil {
+                Button(title) { center.performAction(t) }
+                    .buttonStyle(.plain)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.white)
+            }
+            if let title = t.undoTitle, t.undo != nil {
+                Button(title) { center.performUndo(t) }
+                    .buttonStyle(.plain)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(NDS.brandHover)
+            }
+            Button { center.dismiss(t.id) } label: {
+                Image(systemName: "xmark").font(.caption2)
+            }
+            .buttonStyle(.plain).foregroundStyle(.white.opacity(0.6))
+        }
+        .padding(.horizontal, 16).padding(.vertical, 11)
+        .background(Color.black.opacity(0.86), in: Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
     }
 }
