@@ -231,9 +231,12 @@ struct QuickEncounterSheet: View {
     /// The 1-tap path (D3-6): save the check-in immediately on chip tap, dismiss,
     /// and offer Undo via a toast — no mood/note required for the common case.
     private func instantLog(_ kind: Encounter.Kind) {
+        // C2-7: persist the plain kind (e.g. "Call") — no emoji in stored data.
+        // The emoji/symbol is rendered at view time. Old rows still carry a
+        // leading emoji and are tolerated by readers.
         let enc = people.addEncounter(
             to: person.id,
-            eventName: "\(kind.emoji) \(kind.rawValue)",
+            eventName: kind.rawValue,
             date: date,
             notes: ""
         )
@@ -242,7 +245,7 @@ struct QuickEncounterSheet: View {
             await RelationshipNotificationManager.shared.syncPersonReminders(people: people.people)
         }
         let first = person.displayName.split(separator: " ").first.map(String.init) ?? person.displayName
-        ToastCenter.shared.show("Logged \(kind.emoji) \(kind.shortLabel) with \(first)",
+        ToastCenter.shared.show("Logged \(kind.shortLabel) with \(first)",
                                 undoTitle: "Undo") { [people] in
             people.deleteEncounter(enc)
         }
@@ -253,9 +256,10 @@ struct QuickEncounterSheet: View {
         guard let kind = selectedKind else { return }
         let moodTag = selectedMood.map { " [mood:\($0.rawValue)]" } ?? ""
         let noteFull = note.trimmingCharacters(in: .whitespacesAndNewlines) + moodTag
+        // C2-7: persist the plain kind — no emoji in stored data.
         let enc = people.addEncounter(
             to: person.id,
-            eventName: "\(kind.emoji) \(kind.rawValue)",
+            eventName: kind.rawValue,
             date: date,
             notes: noteFull.trimmingCharacters(in: .whitespacesAndNewlines)
         )

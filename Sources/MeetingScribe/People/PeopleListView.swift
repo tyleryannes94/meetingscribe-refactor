@@ -521,7 +521,7 @@ struct PeopleListView: View {
                 }
                 ForEach(presentTypes, id: \.self) { rtype in
                     FilterChip(
-                        label: "\(rtype.emoji) \(rtype.displayName)",
+                        label: rtype.displayName,
                         active: relationshipTypeFilter == rtype
                     ) {
                         relationshipTypeFilter = (relationshipTypeFilter == rtype) ? nil : rtype
@@ -623,9 +623,7 @@ private struct PersonRow: View {
                     Text(person.displayName).scaledFont(13.5, weight: .semibold).lineLimit(1)
                     // Relationship type badge — only shown when type is set.
                     if person.relationshipType != .unset {
-                        Text(person.relationshipType.emoji)
-                            .scaledFont(11)
-                            .help(person.relationshipType.displayName)
+                        RelationshipTypeChip(type: person.relationshipType, showLabel: false)
                     }
                 }
                 if !subtitle.isEmpty {
