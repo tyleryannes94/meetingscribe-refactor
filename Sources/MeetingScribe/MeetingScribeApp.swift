@@ -168,6 +168,12 @@ struct MeetingScribeApp: App {
         wireNotifications()
         wireDetector()
         wirePipelineNotification()
+        // Live-event snap (U2-1): let the manager resolve a quick recording onto
+        // the single currently-live calendar event when one exists.
+        manager.liveCalendarMeetingProvider = { [weak calendar] in
+            let live = calendar?.upcoming.filter { $0.isLive } ?? []
+            return live.count == 1 ? live.first : nil
+        }
         // Ambient mic-based meeting detection (off unless enabled in Settings).
         AmbientMeetingDetector.shared.startIfEnabled()
         registerHotkey()

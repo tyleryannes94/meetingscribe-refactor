@@ -179,6 +179,15 @@ final class MeetingPipelineController: ObservableObject {
             lastError = "Couldn't save the transcript: \(error.localizedDescription)"
         }
 
+        // Auto-title ad-hoc captures from the first spoken line (U2-9) so the
+        // Meetings list shows real content instead of an "Ad-hoc Recording" wall.
+        if workingMeeting.isImpromptu,
+           (workingMeeting.userTitle?.isEmpty ?? true),
+           workingMeeting.title == "Ad-hoc Recording",
+           let derived = Self.deriveTitle(from: transcript) {
+            workingMeeting.title = derived
+        }
+
         // 3. Summarize.
         let summary: String
         var summaryFailed = false
@@ -370,6 +379,33 @@ final class MeetingPipelineController: ObservableObject {
 
         // Signal completion to registered observers.
         await MainActor.run { self.onComplete?(meeting, summaryFailed) }
+    }
+
+    // MARK: - Auto-title (U2-9)
+
+    /// Derive a short meeting title from the first spoken line of a transcript.
+    /// Strips a leading speaker/timestamp prefix ("Me [0:05]:") and caps the
+    /// result to ~8 words / 60 chars. Returns nil for an empty transcript.
+    nonisolated static func deriveTitle(from transcript: String) -> String? {
+        for raw in transcript.components(separatedBy: .newlines) {
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") || line.hasPrefix(">") || line.hasPrefix("---") { continue }
+            // Strip a short leading "Speaker:" / "Me [0:05]:" prefix. Use the
+            // LAST colon within the first ~24 chars so the "0:05" timestamp
+            // colon doesn't truncate the speaker label mid-prefix.
+            let headEnd = line.index(line.startIndex, offsetBy: min(24, line.count))
+            if let lastColon = line[line.startIndex..<headEnd].lastIndex(of: ":") {
+                line = String(line[line.index(after: lastColon)...]).trimmingCharacters(in: .whitespaces)
+            }
+            guard !line.isEmpty else { continue }
+            let words = line.split(separator: " ").prefix(8)
+            var title = words.joined(separator: " ")
+            if title.count > 60 {
+                title = String(title.prefix(60)).trimmingCharacters(in: .whitespaces) + "…"
+            }
+            return title.isEmpty ? nil : title
+        }
+        return nil
     }
 
     // MARK: - Disk helpers (nonisolated; called from detached tasks)
