@@ -53,6 +53,7 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
+                turnaroundCard  // U3-2: the back-to-back bridge (imminent only)
                 dayShapeStrip   // U3-3: the 7am coffee scan, answered in 10s
                 quickActions
                 upNextCard
@@ -108,6 +109,55 @@ struct TodayView: View {
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: - Turnaround card (U3-2)
+
+    /// The back-to-back bridge: shown only when the next meeting is ≤15 min away,
+    /// so the 30 seconds between calls answer "what's next, who, one number".
+    @ViewBuilder
+    private var turnaroundCard: some View {
+        if let m = nextMeeting {
+            let mins = Int(m.startDate.timeIntervalSince(Date()) / 60)
+            if mins >= 0 && mins <= 15 {
+                let people = PeopleStore.shared.people
+                let person = m.attendees.compactMap { PersonResolver.resolve($0, in: people) }
+                    .first.flatMap { id in people.first { $0.id == id } }
+                let loops = person.map { p in
+                    manager.actionItems.items.filter { $0.ownerPersonID == p.id && $0.status != .completed }.count
+                } ?? 0
+                Button { router.openMeeting(m) } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(mins == 0 ? "Starting now" : "Up next in \(mins) min")
+                                .scaledFont(12, weight: .bold).foregroundStyle(NDS.gold)
+                            Text(m.displayTitle).scaledFont(15, weight: .semibold)
+                                .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                            Text(turnaroundSubtitle(meeting: m, person: person, loops: loops))
+                                .scaledFont(11.5).foregroundStyle(NDS.textSecondary).lineLimit(1)
+                        }
+                        Spacer()
+                        if m.conferenceURL != nil {
+                            Label("Join", systemImage: "video.fill").scaledFont(12, weight: .semibold)
+                                .foregroundStyle(NDS.brand)
+                        }
+                    }
+                    .padding(14)
+                    .background(NDS.gold.opacity(0.10), in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+                    .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius).strokeBorder(NDS.gold.opacity(0.3), lineWidth: 1))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func turnaroundSubtitle(meeting m: Meeting, person: Person?, loops: Int) -> String {
+        var parts: [String] = []
+        if let p = person { parts.append("with \(p.displayName.split(separator: " ").first.map(String.init) ?? p.displayName)") }
+        else if !m.attendees.isEmpty { parts.append("\(m.attendees.count) attendee\(m.attendees.count == 1 ? "" : "s")") }
+        if loops > 0 { parts.append("\(loops) open loop\(loops == 1 ? "" : "s")") }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Your 1:1 Day (U1-1)
