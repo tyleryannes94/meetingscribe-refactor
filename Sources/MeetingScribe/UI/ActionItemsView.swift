@@ -7,6 +7,7 @@ import AppKit
 @available(macOS 14.0, *)
 struct ActionItemsView: View {
     @EnvironmentObject var manager: MeetingManager
+    @EnvironmentObject var router: WorkspaceRouter
     @ObservedObject var store: ActionItemStore
 
     @State var filter: Filter = .all
@@ -189,8 +190,12 @@ struct ActionItemsView: View {
                     tasksDashboard
                 } else if let mid = selectedMeetingID,
                    let m = manager.pastMeetings.first(where: { $0.id == mid }) {
-                    MeetingNotesPage(meeting: m, store: store)
-                        .environmentObject(manager)
+                    // D1-4: one canonical meeting surface. Instead of the parallel
+                    // MeetingNotesPage, route to the Meetings-tab detail.
+                    Color.clear.onAppear {
+                        router.openMeeting(m)
+                        selectedMeetingID = nil
+                    }
                 } else {
                     taskDatabasePane
                 }
