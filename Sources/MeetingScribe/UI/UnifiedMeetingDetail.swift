@@ -18,6 +18,7 @@ struct UnifiedMeetingDetail: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var recordingMonitor: RecordingMonitor
+    @EnvironmentObject var router: WorkspaceRouter
     @ObservedObject var drive = GoogleDriveService.shared
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
@@ -89,6 +90,31 @@ struct UnifiedMeetingDetail: View {
         return manager.pastMeetings
             .filter { $0.seriesID == sid && $0.id != m.id && $0.startDate < m.startDate }
             .sorted { $0.startDate > $1.startDate }
+    }
+
+    /// Series spine (D1-6): every recorded occurrence of this series, oldest →
+    /// newest, including the current one. The thread the 1:1 lives on.
+    var allOccurrences: [Meeting] {
+        guard let m = meeting, let sid = m.seriesID, !sid.isEmpty else { return [] }
+        var all = manager.pastMeetings.filter { $0.seriesID == sid }
+        if !all.contains(where: { $0.id == m.id }) { all.append(m) }
+        return all.sorted { $0.startDate < $1.startDate }
+    }
+
+    /// The current occurrence's 1-based index in the series, or nil.
+    var occurrenceIndex: Int? {
+        guard let m = meeting else { return nil }
+        return allOccurrences.firstIndex(where: { $0.id == m.id }).map { $0 + 1 }
+    }
+
+    /// The previous / next occurrence in the series, if any.
+    var previousOccurrence: Meeting? {
+        guard let idx = occurrenceIndex, idx > 1 else { return nil }
+        return allOccurrences[idx - 2]
+    }
+    var nextOccurrence: Meeting? {
+        guard let idx = occurrenceIndex, idx < allOccurrences.count else { return nil }
+        return allOccurrences[idx]
     }
 
     var body: some View {
