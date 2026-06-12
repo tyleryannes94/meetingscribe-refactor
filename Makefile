@@ -106,6 +106,13 @@ app: scribecore check-sparkle-key check-version
 		echo "  ! MeetingScribeSync not built"; \
 	fi
 	@cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
+	@# App icon (C3-1). Regenerate with scripts/make-appicon.sh.
+	@if [ -f Resources/AppIcon.icns ]; then \
+		cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/AppIcon.icns; \
+		echo "  + bundled AppIcon.icns"; \
+	else \
+		echo "  ! Resources/AppIcon.icns missing (run scripts/make-appicon.sh)"; \
+	fi
 	@# Bundle the Bloom fonts (Bricolage Grotesque + Plus Jakarta Sans). They're
 	@# auto-registered at launch via ATSApplicationFontsPath=Fonts in Info.plist.
 	@if [ -d Resources/Fonts ]; then \
