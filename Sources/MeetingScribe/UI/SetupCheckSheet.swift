@@ -73,7 +73,7 @@ struct SetupCheckSheet: View {
     @ViewBuilder
     private var ollamaRow: some View {
         componentRow(
-            title: "Local AI engine (Ollama)",
+            title: "Summary engine (on-device AI)",
             subtitle: ollamaSubtitle,
             ready: setup.ollamaRunning,
             busy: setup.busy == .startingOllama,

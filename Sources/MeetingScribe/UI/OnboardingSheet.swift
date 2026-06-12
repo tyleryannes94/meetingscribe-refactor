@@ -57,7 +57,7 @@ struct OnboardingSheet: View {
                 Image(systemName: "externaldrive.fill.badge.icloud")
                     .scaledFont(38, weight: .regular)
                     .foregroundStyle(.tint)
-                Text("Where to store your vault?")
+                Text("Where should we keep your library?")
                     .font(.title2.weight(.semibold))
                 Text("MeetingScribe keeps all recordings, transcripts, and notes in a single folder on your Mac.")
                     .font(.body)
@@ -126,7 +126,7 @@ struct OnboardingSheet: View {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a folder for your MeetingScribe vault"
+        panel.message = "Choose a folder for your MeetingScribe library"
         panel.prompt = "Select"
         if panel.runModal() == .OK, let url = panel.url {
             vaultURL = url
@@ -366,7 +366,7 @@ enum PermissionKind: String, CaseIterable {
     var subtitle: String {
         switch self {
         case .microphone: return "Captures your side of the conversation."
-        case .screenRecording: return "Captures the OTHER side of the call via ScreenCaptureKit. Grant it in System Settings — this screen detects it and offers a one-tap Reopen."
+        case .screenRecording: return "Captures the OTHER side of the call using macOS screen-audio access. Grant it in System Settings — this screen detects it and offers a one-tap Reopen."
         case .calendar: return "Labels recordings with the meeting title and attendees from your calendar."
         case .notifications: return "Notifies you 10 seconds before a calendar meeting starts and offers to join + record."
         case .accessibility: return "Only needed for the F5 global dictation hotkey — lets the app paste the transcript at your cursor."
@@ -375,7 +375,7 @@ enum PermissionKind: String, CaseIterable {
 
     var bullets: [String] {
         switch self {
-        case .microphone: return ["Your voice during recordings", "Voice notes from the Notes tab", "Whispr-Flow-style F5 dictation"]
+        case .microphone: return ["Your voice during recordings", "Voice notes from the Notes tab", "F5 quick dictation"]
         case .screenRecording: return ["Captures meeting audio without a virtual audio device", "Used only for audio — no video, no screenshots", "After granting, tap Reopen here — no manual relaunch"]
         case .calendar: return ["Reads any calendar already in macOS Calendar (Google, iCloud, Outlook)", "Read-only — never writes to your calendar", "Used for titles, attendees, and auto-record"]
         case .notifications: return ["\"Meeting starting in 10s — Join & Record\" alerts", "Impromptu Zoom / Meet detection", "Pipeline-finished confirmations"]

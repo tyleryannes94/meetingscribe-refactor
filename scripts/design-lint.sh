@@ -52,4 +52,18 @@ if [[ "$MODE" == "fail" && "$total" -gt 0 ]]; then
     echo "intentional exception with a trailing  // design-lint:allow  comment."
     exit 1
 fi
+
+# ── Jargon scan (D4-6) — INFORMATIONAL ONLY for now ──────────────────────────
+# The ratified word-map (vault→library, Ollama→summary engine, MCP→Claude
+# connection, whisper→speech-to-text) is being swept across user-facing strings.
+# This reports remaining jargon inside Text("…") so the sweep can be finished and
+# then promoted to a gating rule. It never affects the exit code yet.
+JARGON="$(grep -rnE --include='*.swift' \
+    'Text\("[^"]*(vault|Ollama|MCP|whisper|ScreenCaptureKit|daemon|FTS5)' \
+    "${UI_DIRS[@]}" 2>/dev/null \
+    | grep -viE 'SettingsView|design-lint:allow' || true)"
+if [[ -n "$JARGON" ]]; then
+    jn="$(printf '%s\n' "$JARGON" | grep -c .)"
+    echo "design-lint(jargon, informational): $jn user-facing jargon string(s) remain — D4-6 sweep in progress."
+fi
 exit 0
