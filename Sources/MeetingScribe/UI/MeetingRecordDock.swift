@@ -14,6 +14,10 @@ struct MeetingRecordDock: View {
     @EnvironmentObject var recordingMonitor: RecordingMonitor
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
+    /// U2-6: inline capture line — a note or quick-add task without leaving the dock.
+    @State private var capture = ""
+    @State private var captureFlash: String?
+    @FocusState private var captureFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,6 +64,8 @@ struct MeetingRecordDock: View {
                     .buttonStyle(MSSecondaryButtonStyle())
                     .help("Stop recording")
                 }
+
+                captureLine
             }
             .padding(12)
         }
@@ -76,6 +82,78 @@ struct MeetingRecordDock: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Recording meeting")
+    }
+
+    /// U2-6: a one-line capture field. Plain text appends a timestamped bullet
+    /// to the live meeting's notes; a leading `!` or `todo ` files it through the
+    /// quick-add parser as a task instead — so capture is one field, not Open →
+    /// detail → Notes tab.
+    @ViewBuilder
+    private var captureLine: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 7) {
+                Image(systemName: "plus.circle")
+                    .scaledFont(12, weight: .medium).foregroundStyle(NDS.textTertiary)
+                TextField("Note or todo…", text: $capture)
+                    .textFieldStyle(.plain)
+                    .scaledFont(12.5)
+                    .foregroundStyle(NDS.textPrimary)
+                    .focused($captureFocused)
+                    .onSubmit(submitCapture)
+            }
+            .padding(.horizontal, 9).padding(.vertical, 6)
+            .background(NDS.fieldBg)
+            .clipShape(RoundedRectangle(cornerRadius: NDS.rowRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius, style: .continuous)
+                .strokeBorder(NDS.hairline, lineWidth: 1))
+
+            if let flash = captureFlash {
+                Text(flash)
+                    .font(NDS.tiny).foregroundStyle(NDS.mint)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func submitCapture() {
+        let raw = capture.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
+
+        let lower = raw.lowercased()
+        if lower.hasPrefix("todo ") || raw.hasPrefix("!") {
+            // Task: drop a leading "todo " label; keep "!" (it's the priority token).
+            let body = lower.hasPrefix("todo ") ? String(raw.dropFirst(5)) : raw
+            _ = manager.actionItems.createTask(parsing: body)
+            flash("Task added")
+        } else {
+            // Note: append a timestamped bullet to the live meeting's notes.
+            if let m = manager.activeMeeting {
+                let stamp = elapsed(asOf: Date())
+                let existing = manager.userNotes(for: m)
+                let bullet = "- [\(stamp)] \(raw)"
+                let merged = existing.isEmpty ? bullet : existing + "\n" + bullet
+                manager.saveUserNotes(merged, for: m)
+                flash("Noted at \(stamp)")
+            } else {
+                _ = manager.actionItems.createTask(parsing: raw)
+                flash("Captured")
+            }
+        }
+        capture = ""
+    }
+
+    private func flash(_ message: String) {
+        withAnimation(NDS.motion(.easeOut(duration: NDS.motionFast), reduce: reduceMotion)) {
+            captureFlash = message
+        }
+        let token = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if captureFlash == token {
+                withAnimation(NDS.motion(.easeOut(duration: NDS.motionFast), reduce: reduceMotion)) {
+                    captureFlash = nil
+                }
+            }
+        }
     }
 
     private func elapsed(asOf now: Date) -> String {

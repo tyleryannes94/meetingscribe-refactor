@@ -1,0 +1,15 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>MeetingScribe</title>
+        <item>
+            <title>1.3</title>
+            <pubDate>Tue, 09 Jun 2026 22:24:26 -0500</pubDate>
+            <sparkle:version>1.3</sparkle:version>
+            <sparkle:shortVersionString>1.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/tyleryannes94/meetingscribe-refactor/releases/download/v1.3/MeetingScribe.zip" length="8376496" type="application/octet-stream" sparkle:edSignature="YZ3VeUXwKx34DBixJ4DNmXWcehwZad8G4KTjY3bvThv9uo6Y4ABEe7yWtB8NZ/WnuXkWGTZh2GJ2c2p5MxJNAA=="/>
+        </item>
+    </channel>
+</rss>
