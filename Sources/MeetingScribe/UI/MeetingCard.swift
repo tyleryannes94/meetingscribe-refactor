@@ -314,7 +314,7 @@ struct MeetingCard: View {
 
     private var backgroundFill: some ShapeStyle {
         switch variant {
-        case .live: return AnyShapeStyle(Color.red.opacity(0.05))
+        case .live: return AnyShapeStyle(NDS.recording.opacity(0.05))
         default:
             if isExpanded { return AnyShapeStyle(NDS.brand.opacity(0.06)) }
             return AnyShapeStyle(NDS.fieldBg)
@@ -322,7 +322,7 @@ struct MeetingCard: View {
     }
     private var borderColor: Color {
         switch variant {
-        case .live: return .red.opacity(0.55)
+        case .live: return NDS.recording.opacity(0.55)
         default:
             if isExpanded { return NDS.brand.opacity(0.5) }
             return hovering ? NDS.brand.opacity(0.3) : NDS.hairline

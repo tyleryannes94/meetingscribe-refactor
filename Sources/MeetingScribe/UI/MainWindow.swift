@@ -68,10 +68,6 @@ struct MainWindow: View {
     // instead of a chat panel that crowds content (and confuses first-run users
     // with an empty assistant). Existing users keep their stored preference.
     @AppStorage("chatRailVisible") private var chatVisible = false
-    /// Stored as a Bool for toggle simplicity; false = light, true = dark.
-    /// Bloom is dark-mode-first, so new installs default to dark (existing
-    /// users keep their stored preference). The Light/Dark toggle still works.
-    @AppStorage("appearanceDark") private var appearanceDark = true
     /// First-launch onboarding — pre-explains every macOS permission BEFORE
     /// the system dialog so a "Don't Allow" tap doesn't silently strand the
     /// user (audit 8.3). Shown once and then never again per `hasCompletedOnboarding`.
@@ -149,10 +145,9 @@ struct MainWindow: View {
             Spacer()
             Divider().overlay(NDS.divider).padding(.horizontal, 10).padding(.bottom, 6)
 
-            // Bottom row: appearance toggle + search + settings
+            // Bottom row: search + settings. The Light/Dark toggle was removed
+            // (C3-4) — the app follows the system appearance like a native Mac app.
             HStack(spacing: 6) {
-                AppearanceToggle(dark: $appearanceDark)
-                    .frame(width: 124)
                 Spacer(minLength: 0)
                 Button { activeSheet = .search } label: {
                     HStack(spacing: 4) {
@@ -435,7 +430,7 @@ struct MainWindow: View {
             .overlay(ToastOverlay())   // undo toasts (D4-3)
         }
         .tint(NDS.brand)
-        .preferredColorScheme(appearanceDark ? .dark : .light)
+        // No forced color scheme (C3-4): follow the system appearance.
         .navigationTitle("MeetingScribe")
         .onAppear {
             chatSession.setContext(contextLabel(section))
@@ -823,7 +818,7 @@ struct PersistentToolbarButtons: View {
             Button(role: .destructive) {
                 Task { await manager.stopRecording() }
             } label: {
-                Label("Stop Recording", systemImage: "stop.circle.fill").foregroundStyle(.red)
+                Label("Stop Recording", systemImage: "stop.circle.fill").foregroundStyle(NDS.recording)
             }
         }
 

@@ -21,9 +21,12 @@ enum NDS {
     // Bloom is chunkier/rounder — radii bumped to match `designs/bloom.css`
     // (--r-ctl 14, --r-card 20). Chips/badges/nav/tabs go fully rounded
     // (Capsule) at their call sites.
-    static let radius: CGFloat = 14      // controls/fields (--r-ctl); was 8
-    static let rowRadius: CGFloat = 12   // list rows; was 8
-    static let cardRadius: CGFloat = 20  // cards (--r-card); was 12
+    // Radius ramp (D2-3): four tokens. Everything maps to one of these; chips/
+    // badges/nav/tabs go fully rounded (Capsule) at the call site.
+    static let radiusSmall: CGFloat = 8  // chips, inline controls, small pills
+    static let rowRadius: CGFloat = 12   // list rows
+    static let radius: CGFloat = 14      // controls/fields (--r-ctl)
+    static let cardRadius: CGFloat = 20  // cards, sheets, panels (--r-card)
 
     // MARK: Button dimension tokens
     // Minimum 44pt invisible tap target via .minTap() extension below
@@ -56,6 +59,10 @@ enum NDS {
     static let sky         = Color(hex: "#8ab4ff") ?? .blue    // info / in progress
     static let gold        = Color(hex: "#ffce6b") ?? .yellow  // warning / due today / voice
     static let danger      = Color(hex: "#ff7a8a") ?? .red     // overdue / high / destructive
+    /// Live-capture red (D2-7). Distinct from `danger`: this means "recording in
+    /// progress", not "error/overdue". Use everywhere a recording dot/border/Stop
+    /// affordance appears instead of raw `.red`.
+    static let recording   = Color(hex: "#ff5a5f") ?? .red
 
     /// Coral primary-CTA gradient (135° #ff9173 → #f06a4c).
     static let accentGradient = LinearGradient(
@@ -238,6 +245,40 @@ enum NDS {
     /// Canonical spring for view/page transitions and hover affordances.
     /// Bloom personality: a touch livelier/bouncier than the old 0.34/0.86.
     static let springStandard: Animation = .spring(response: 0.32, dampingFraction: 0.80)
+
+    // MARK: Elevation (D2-2)
+    //
+    // Dark-first elevation: lift comes mostly from a *lighter surface*, with a
+    // restrained shadow for the floating tiers — not the 12 ad-hoc `.shadow`
+    // recipes (radius 1…20, random opacities) the app accumulated. Apply with
+    // `.ndsElevation(_:)`; use the surface color via `Elevation.surface`.
+    enum Elevation {
+        case flat       // inline with the page — no shadow
+        case raised     // cards, rows pulled off the page
+        case floating   // popovers, menus, toasts
+        case modal      // sheets, the command palette
+
+        /// The surface fill for this tier (lighter as it rises, dark-first).
+        var surface: Color {
+            switch self {
+            case .flat:     return NDS.fieldBg
+            case .raised:   return NDS.surface2
+            case .floating: return NDS.surface2
+            case .modal:    return NDS.rightRailBg
+            }
+        }
+
+        /// A restrained shadow. Dark UIs read depth from contrast, so these stay
+        /// soft; the heavy lifting is the surface color above.
+        var shadow: (color: Color, radius: CGFloat, y: CGFloat) {
+            switch self {
+            case .flat:     return (.clear, 0, 0)
+            case .raised:   return (.black.opacity(0.18), 6, 2)
+            case .floating: return (.black.opacity(0.28), 14, 6)
+            case .modal:    return (.black.opacity(0.40), 28, 14)
+            }
+        }
+    }
 
     // MARK: Semantic status / priority / due colors (DV-5 / VD-5 / DV-8)
     //
@@ -615,6 +656,13 @@ extension View {
             .padding(.horizontal, NDS.pagePadding)
             .padding(.vertical, 28)
     }
+
+    /// Apply one elevation tier's shadow (D2-2). Pair with a surface fill of
+    /// `tier.surface` for the dark-first "lighter as it rises" treatment.
+    func ndsElevation(_ tier: NDS.Elevation) -> some View {
+        let s = tier.shadow
+        return self.shadow(color: s.color, radius: s.radius, y: s.y)
+    }
 }
 
 // MARK: - Direction A: quick-action pill
@@ -692,41 +740,6 @@ struct FlowLayout: Layout {
 
 // MARK: - Direction A: appearance toggle
 
-/// Two-segment Light / Dark switch that sits in the bottom-left of the nav rail.
-/// Writes to the caller's `dark` binding (backed by `@AppStorage`).
-@available(macOS 14.0, *)
-struct AppearanceToggle: View {
-    @Binding var dark: Bool
-
-    var body: some View {
-        HStack(spacing: 2) {
-            segment(isDark: false, label: "Light", icon: "sun.max.fill")
-            segment(isDark: true,  label: "Dark",  icon: "moon.fill")
-        }
-        .padding(3)
-        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(NDS.hairline, lineWidth: 1))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Appearance")
-    }
-
-    private func segment(isDark: Bool, label: String, icon: String) -> some View {
-        let active = (dark == isDark)
-        return Button {
-            dark = isDark
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: icon).scaledFont(10)
-                Text(label).scaledFont(11.5, weight: active ? .semibold : .medium, relativeTo: .caption)
-            }
-            .foregroundStyle(active ? NDS.textPrimary : NDS.textSecondary)
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .frame(maxWidth: .infinity)
-            .background(active ? NDS.segmentActiveBg : .clear,
-                        in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .shadow(color: active && !isDark ? .black.opacity(0.10) : .clear, radius: 1, y: 0.5)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
+// AppearanceToggle was removed (C3-4): the app follows the system appearance
+// like a native Mac app rather than carrying a web-style in-rail Light/Dark
+// switch. The light palette remains as the system-light fallback.
