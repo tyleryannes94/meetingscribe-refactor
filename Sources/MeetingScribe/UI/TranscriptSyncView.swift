@@ -94,6 +94,8 @@ struct TranscriptSyncView: View {
     let rawTranscript: String
     /// Optional reference to the audio controller for seek + sync.
     var audioController: AudioPlayerController?
+    /// Seed the find bar (U2-2) — e.g. carried from a search hit.
+    var initialSearch: String? = nil
 
     @State private var segments: [TranscriptSegment] = []
     @State private var isVisible = false
@@ -114,7 +116,10 @@ struct TranscriptSyncView: View {
                 transcriptScroll
             }
         }
-        .onAppear { isVisible = true; parse() }
+        .onAppear {
+            isVisible = true; parse()
+            if let seed = initialSearch, !seed.isEmpty, searchText.isEmpty { searchText = seed }
+        }
         .onDisappear { isVisible = false }
         .onChange(of: rawTranscript) { _, _ in parse() }
         .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in

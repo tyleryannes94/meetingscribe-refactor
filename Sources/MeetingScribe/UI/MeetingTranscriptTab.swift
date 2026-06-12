@@ -42,9 +42,19 @@ var transcriptBody: some View {
                 // Pass the shared controller (C1-3) so tapping a timestamp seeks
                 // the same audio the transport bar plays — only when audio exists.
                 TranscriptSyncView(rawTranscript: transcript,
-                                   audioController: audioURLs.isEmpty ? nil : audioController)
+                                   audioController: audioURLs.isEmpty ? nil : audioController,
+                                   initialSearch: transcriptSearchSeed)
             }
         }
+    }
+
+    /// U2-2: pull a search query carried from a search hit, switch to the
+    /// transcript tab, and clear the router channel.
+    func consumeTranscriptQuery() {
+        guard let q = router.pendingTranscriptQuery, !q.isEmpty else { return }
+        transcriptSearchSeed = q
+        tab = .transcript
+        router.pendingTranscriptQuery = nil
     }
 
     /// When recording started (used by the live transcript pane to count down
