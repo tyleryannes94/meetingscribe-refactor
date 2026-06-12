@@ -74,6 +74,8 @@ struct TodayView: View {
                     router.section = .actions
                 }
 
+                weeklyLedgerSection   // U3-6: "what did I commit to this week"
+
                 // Forgotten follow-ups to send. (P2-6/U3-3)
                 followUpsSection
 
@@ -104,6 +106,63 @@ struct TodayView: View {
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: - Weekly ledger (U3-6)
+
+    private var weekStart: Date {
+        Calendar.current.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
+    }
+    private var weekCompleted: [ActionItem] {
+        manager.actionItems.items.filter {
+            $0.status == .completed && ($0.completedAt.map { $0 >= weekStart } ?? false)
+        }
+    }
+    private var weekOpenCommitments: [ActionItem] {
+        manager.actionItems.items.filter { $0.status != .completed && $0.delegated != true }
+    }
+
+    @ViewBuilder
+    private var weeklyLedgerSection: some View {
+        let done = weekCompleted
+        if !done.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    sectionLabel("This week")
+                    Spacer()
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(weeklyUpdateText(), forType: .string)
+                        ToastCenter.shared.show("Weekly update copied")
+                    } label: { Label("Copy as update", systemImage: "doc.on.doc").font(NDS.small) }
+                    .buttonStyle(.borderless)
+                }
+                Text("\(done.count) completed").font(NDS.small).foregroundStyle(NDS.textSecondary)
+                ForEach(done.prefix(8)) { t in
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill").scaledFont(12).foregroundStyle(NDS.mint)
+                        Text(t.title).font(NDS.body).foregroundStyle(NDS.textSecondary).lineLimit(1)
+                        Spacer()
+                    }
+                }
+                if done.count > 8 {
+                    Text("+ \(done.count - 8) more").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                }
+            }
+            .padding(14)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+        }
+    }
+
+    private func weeklyUpdateText() -> String {
+        let f = DateFormatter(); f.dateFormat = "MMM d"
+        var out = "Weekly update — week of \(f.string(from: weekStart))\n\nDone this week:\n"
+        out += weekCompleted.map { "✓ \($0.title)" }.joined(separator: "\n")
+        let open = weekOpenCommitments.prefix(10)
+        if !open.isEmpty {
+            out += "\n\nOpen:\n" + open.map { "• \($0.title)" }.joined(separator: "\n")
+        }
+        return out
     }
 
     // MARK: - Follow-ups to send (P2-6/U3-3)
