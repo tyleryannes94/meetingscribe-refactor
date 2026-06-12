@@ -36,6 +36,11 @@ final class MeetingManager: ObservableObject {
 
     let liveTranscriber = LiveTranscriber()
 
+    /// Returns the currently-live calendar meeting to snap an ad-hoc recording
+    /// onto (U2-1). Injected at app wiring so the manager stays decoupled from
+    /// CalendarService. Returns nil when there isn't exactly one live event.
+    var liveCalendarMeetingProvider: (() -> Meeting?)?
+
     // MARK: - Sub-controllers (Batch 6 / audit 5.1)
 
     let store = MeetingStore()
@@ -218,8 +223,13 @@ final class MeetingManager: ObservableObject {
         Task { await ActivityLog.shared.log(.recordStart) }  // 1C funnel
         do {
             try store.ensureRoot()
-            var m = meeting ?? Self.adhocMeeting()
-            if meeting == nil { m.isImpromptu = true }
+            // Live-event snap (U2-1): a "quick record" with no meeting attaches
+            // to the currently-live calendar event when there's exactly one, so
+            // zero-click capture is born metadata-correct (title + attendees)
+            // instead of an attendee-less "Ad-hoc Recording" orphan.
+            let resolved = meeting ?? liveCalendarMeetingProvider?()
+            var m = resolved ?? Self.adhocMeeting()
+            if resolved == nil { m.isImpromptu = true }
             if m.isImpromptu, tagStore.tagIDs(for: m).isEmpty {
                 tagStore.addTag("preset-impromptu", to: m, propagateToSeries: false)
             }
