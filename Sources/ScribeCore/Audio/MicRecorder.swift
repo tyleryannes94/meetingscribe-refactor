@@ -78,16 +78,10 @@ final class MicRecorder {
         let inputFormat = input.outputFormat(forBus: 0)
 
         if reopenFile || file == nil {
-            let fileSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: inputFormat.sampleRate,
-                AVNumberOfChannelsKey: inputFormat.channelCount,
-                AVEncoderBitRateKey: 32_000
-            ]
-            file = try AVAudioFile(forWriting: outputURL,
-                                   settings: fileSettings,
-                                   commonFormat: .pcmFormatFloat32,
-                                   interleaved: false)
+            file = try Self.makeMicFile(outputURL: outputURL,
+                                        inputFormat: inputFormat,
+                                        log: log,
+                                        counters: counters)
         }
 
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
@@ -118,6 +112,58 @@ final class MicRecorder {
         try engine.start()
         self.engine = engine
         log.info("Mic capture started: \(outputURL.path, privacy: .public)")
+    }
+
+    /// Open the per-segment mic file for writing.
+    ///
+    /// The AAC encoder's `AVEncoderBitRateKey` property fails on some input
+    /// devices/formats with CoreAudio `kAudioConverterEncodeBitRate`
+    /// (error 560226676). AVFoundation has already created the container by
+    /// then, so the throw leaves a headerless, untranscribable `.m4a`
+    /// (observed 2026-06-11: a 557-byte mic segment that afconvert later
+    /// rejected with "Couldn't open input file ('dta?')", yielding a silent
+    /// empty transcript). Two-step hardening:
+    ///   1. Reject a null input format up front — a 0-channel / 0-Hz device
+    ///      can never produce valid AAC, so fail loudly instead of writing a
+    ///      doomed stub.
+    ///   2. If the bitrate'd open throws, scrub the partial file and retry
+    ///      letting AAC pick its own bitrate. Only a second failure
+    ///      propagates, and never with a corrupt file left behind.
+    private static func makeMicFile(outputURL: URL,
+                                    inputFormat: AVAudioFormat,
+                                    log: Logger,
+                                    counters: AudioCounters) throws -> AVAudioFile {
+        guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
+            throw NSError(domain: "MeetingScribe.Mic", code: 11, userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Microphone input is unavailable (\(inputFormat.channelCount)ch @ \(Int(inputFormat.sampleRate))Hz). Check the input device and mic permission."
+            ])
+        }
+
+        var settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: inputFormat.sampleRate,
+            AVNumberOfChannelsKey: inputFormat.channelCount,
+            AVEncoderBitRateKey: 32_000
+        ]
+        do {
+            return try AVAudioFile(forWriting: outputURL, settings: settings,
+                                   commonFormat: .pcmFormatFloat32, interleaved: false)
+        } catch {
+            log.error("Mic AAC file at 32kbps failed (\(error.localizedDescription, privacy: .public)); retrying at codec-default bitrate")
+            try? FileManager.default.removeItem(at: outputURL)
+            settings.removeValue(forKey: AVEncoderBitRateKey)
+            do {
+                let file = try AVAudioFile(forWriting: outputURL, settings: settings,
+                                           commonFormat: .pcmFormatFloat32, interleaved: false)
+                counters.setLastError("Mic encoder rejected the target bitrate; recording at the codec default for this segment.")
+                return file
+            } catch {
+                // Encoder unavailable entirely — don't leave a headerless stub.
+                try? FileManager.default.removeItem(at: outputURL)
+                throw error
+            }
+        }
     }
 
     /// Called from AudioRecorder's watchdog.
