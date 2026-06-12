@@ -29,6 +29,7 @@ struct PreMeetingBriefView: View {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
                 synthesizedSection
+                talkingPointsSection   // U1-5: "discuss next time" per attendee
                 if !openItems.isEmpty   { openItemsSection }
                 if !priorMeetings.isEmpty { priorMeetingsSection }
                 if priorMeetings.isEmpty && openItems.isEmpty { emptyState }
@@ -37,6 +38,39 @@ struct PreMeetingBriefView: View {
         }
         .onAppear { computeBrief() }
         .onChange(of: meeting.id) { _, _ in computeBrief() }
+    }
+
+    /// U1-5: surface "discuss next time" talking points for the meeting's
+    /// resolved attendees — the notes you jotted are waiting where you need them.
+    @ViewBuilder
+    private var talkingPointsSection: some View {
+        let people = PeopleStore.shared.people
+        let entries: [(name: String, points: [String])] = meeting.attendees.compactMap { raw in
+            guard let id = PersonResolver.resolve(raw, in: people),
+                  let p = people.first(where: { $0.id == id }), !p.talkingPoints.isEmpty
+            else { return nil }
+            return (p.displayName, p.talkingPoints)
+        }
+        if !entries.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Discuss next time", systemImage: "bubble.left.fill")
+                    .font(.headline).foregroundStyle(NDS.gold)
+                ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.name).font(.subheadline.weight(.semibold))
+                        ForEach(Array(entry.points.enumerated()), id: \.offset) { _, pt in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•").foregroundStyle(NDS.gold)
+                                Text(pt).font(.callout).foregroundStyle(NDS.textSecondary)
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(NDS.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+                }
+            }
+        }
     }
 
     @ViewBuilder
