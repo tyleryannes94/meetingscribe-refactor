@@ -127,6 +127,40 @@ extension UnifiedMeetingDetail {
     }
 
     @ViewBuilder
+    /// C1-6: copy the recap for the channel you're pasting into.
+    private var copyMenu: some View {
+        Menu {
+            Button("Copy as plain text") { copyToClipboard(summary) }
+            Button("Copy for Slack") { copyToClipboard(slackFormatted(summary)) }
+            Button("Copy as email") { copyToClipboard(emailFormatted(summary)) }
+        } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+    }
+
+    private func copyToClipboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        ToastCenter.shared.show("Copied")
+    }
+
+    /// Lightly de-markdown for Slack: `## H` → `*H*`, `**b**` → `*b*`.
+    private func slackFormatted(_ md: String) -> String {
+        var s = md
+        s = s.replacingOccurrences(of: #"(?m)^#{1,6}\s*(.+)$"#, with: "*$1*", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"\*\*(.+?)\*\*"#, with: "*$1*", options: .regularExpression)
+        let title = meeting?.displayTitle ?? "Meeting"
+        return "*\(title) — recap*\n\n" + s
+    }
+
+    private func emailFormatted(_ md: String) -> String {
+        let title = meeting?.displayTitle ?? "Meeting"
+        let plain = md.replacingOccurrences(of: #"(?m)^#{1,6}\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\*\*(.+?)\*\*"#, with: "$1", options: .regularExpression)
+        return "Hi all,\n\nHere's a quick recap of \(title):\n\n\(plain)\n\nBest,"
+    }
+
     private var pastSummaryBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -140,10 +174,14 @@ extension UnifiedMeetingDetail {
                     // AttributedString for long documents.
                     // Draft follow-up is the #1 post-meeting action — surface it
                     // at the TOP of the summary instead of buried below it (DEF-3).
-                    followUpButton
-                        .padding(.horizontal)
-                        .padding(.top, 4)
-                        .padding(.bottom, 10)
+                    HStack(spacing: 8) {
+                        followUpButton
+                        copyMenu   // C1-6
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 4)
+                    .padding(.bottom, 10)
 
                     MarkdownEditor(text: .constant(summary), isEditable: false)
                         .padding(.bottom, 8)
