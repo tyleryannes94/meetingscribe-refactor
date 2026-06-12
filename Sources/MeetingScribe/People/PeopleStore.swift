@@ -1180,6 +1180,19 @@ final class PeopleStore: ObservableObject {
         PersonResolver.resolveOwner(owner, in: people)
     }
 
+    /// How many typed relationships are overdue for a check-in (last interaction
+    /// + cadence is in the past). Mirrors the Today drift strip's triage; drives
+    /// the People nav-rail badge (D1-1). Untyped one-off imports don't count.
+    var overdueCheckInCount: Int {
+        let now = Date()
+        return people.reduce(into: 0) { acc, p in
+            guard p.relationshipType != .unset else { return }
+            let last = p.lastInteractionAt ?? p.createdAt
+            let daysSince = Int(now.timeIntervalSince(last) / 86400)
+            if daysSince > p.effectiveCheckInDays { acc += 1 }
+        }
+    }
+
     /// One-time backfill so the identity layer is retroactive: link every
     /// existing meeting's attendees to people. Guarded by a UserDefaults flag.
     func backfillMeetingLinks(_ meetings: [Meeting]) {
