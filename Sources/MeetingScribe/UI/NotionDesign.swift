@@ -80,7 +80,10 @@ enum NDS {
     static let hairline    = dyn(dark: (245, 238, 250, 0.16), light: (40, 25, 60, 0.16))   // --line-2
     static let textPrimary   = dyn(dark: (243, 238, 246, 1),   light: (28, 22, 38, 1))     // #f3eef6
     static let textSecondary = dyn(dark: (243, 238, 246, 0.68), light: (28, 22, 38, 0.66)) // --txt-2
-    static let textTertiary  = dyn(dark: (243, 238, 246, 0.44), light: (28, 22, 38, 0.50)) // --txt-3
+    // D5-2: raised from 0.44/0.50 — the old token sat at ~3.9:1 on the dark
+    // surface, an AA failure at its 11pt (NDS.tiny) usage. These alphas clear
+    // 4.5:1 normal-text AA while staying below textSecondary so the hierarchy holds.
+    static let textTertiary  = dyn(dark: (243, 238, 246, 0.54), light: (28, 22, 38, 0.62)) // --txt-3
     // Card / field fill — the opaque `--surface` plum (#1e1925).
     static let fieldBg       = dyn(dark: (30, 25, 37, 1),      light: (255, 255, 255, 1))
     // Elevated / segment-thumb / gray-chip fill — `--surface-2` (#271f31).
