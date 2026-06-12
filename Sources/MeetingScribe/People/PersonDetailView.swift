@@ -253,6 +253,7 @@ struct PersonDetailView: View {
     @State private var confirmDelete = false
     @State private var newMemory = ""
     @State private var newTalkingPoint = ""
+    @State private var showEvidence = false
     @State private var newTaskTitle = ""
     @State private var newFavorite = ""
     @State private var showNewTag = false
@@ -509,6 +510,7 @@ struct PersonDetailView: View {
             messagesSection
         case .notes:
             talkingPointsSection
+            evidenceSection
             memoriesSection
             attachedNotesSection
         }
@@ -1737,6 +1739,75 @@ struct PersonDetailView: View {
 
     private func hasEncounter(forMeeting id: String) -> Bool {
         people.encounters(for: current.id).contains { $0.meetingID == id }
+    }
+
+    // MARK: - Evidence compiler (U1-4)
+
+    private var evidenceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Perf-review evidence").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+            HStack(spacing: 8) {
+                Button { showEvidence = true } label: {
+                    Label("Compile last 6 months", systemImage: "doc.text.magnifyingglass")
+                }
+                Spacer()
+            }
+            Text("A deterministic summary of meetings, decisions, completed work, and check-ins — no AI, instant.")
+                .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+        }
+        .sheet(isPresented: $showEvidence) { evidenceSheet }
+    }
+
+    private var evidenceSheet: some View {
+        let text = personEvidenceText()
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Evidence — \(current.displayName)").font(.headline)
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    ToastCenter.shared.show("Evidence copied")
+                } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button("Done") { showEvidence = false }
+            }
+            .padding(12)
+            Divider()
+            ScrollView { Text(text).font(NDS.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(14) }
+        }
+        .frame(width: 520, height: 560)
+    }
+
+    /// Deterministic 6-month evidence pack (U1-4) — meetings, decisions,
+    /// completed work, and check-ins. No LLM, no wait.
+    private func personEvidenceText() -> String {
+        let cutoff = Calendar.current.date(byAdding: .month, value: -6, to: Date()) ?? .distantPast
+        let f = DateFormatter(); f.dateStyle = .medium
+        let meetings = manager.pastMeetings
+            .filter { attendeeMatches($0) && $0.startDate >= cutoff }
+            .sorted { $0.startDate > $1.startDate }
+        let meetingIDs = Set(meetings.map(\.id))
+        let decisionLines = decisions.decisions
+            .filter { meetingIDs.contains($0.meetingID) }
+            .map { "- \($0.text)" }
+        let doneTasks = actionItems.items
+            .filter { $0.ownerPersonID == current.id && $0.status == .completed && (($0.completedAt ?? $0.updatedAt) >= cutoff) }
+            .map { "- \($0.title)" }
+        let encs = people.encounters(for: current.id)
+            .filter { $0.date >= cutoff }
+            .sorted { $0.date > $1.date }
+
+        var out = "# Evidence — \(current.displayName) (last 6 months)\n"
+        if !current.role.isEmpty || !current.company.isEmpty {
+            out += [current.role, current.company].filter { !$0.isEmpty }.joined(separator: " · ") + "\n"
+        }
+        out += "\n## Meetings (\(meetings.count))\n"
+        out += meetings.prefix(30).map { "- \(f.string(from: $0.startDate)) — \($0.displayTitle)" }.joined(separator: "\n")
+        out += "\n\n## Decisions (\(decisionLines.count))\n" + (decisionLines.isEmpty ? "- (none recorded)" : decisionLines.joined(separator: "\n"))
+        out += "\n\n## Completed work (\(doneTasks.count))\n" + (doneTasks.isEmpty ? "- (none recorded)" : doneTasks.joined(separator: "\n"))
+        out += "\n\n## Check-ins (\(encs.count))\n"
+        out += encs.prefix(30).map { "- \(f.string(from: $0.date)) — \($0.eventName)" }.joined(separator: "\n")
+        return out
     }
 
     // MARK: - Discuss next time (U1-5)
