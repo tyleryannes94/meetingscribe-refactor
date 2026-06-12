@@ -26,6 +26,16 @@ final class QuickDictation: ObservableObject {
 
     enum Version { case raw, polished, prompt }
 
+    /// Where the transcript for the *current* capture will land once it's
+    /// transcribed. Drives the floating overlay's destination line so a private
+    /// mid-meeting thought can't silently paste into a shared chat.
+    enum Destination: Equatable {
+        /// Auto-paste is on — the transcript types into the named frontmost app.
+        case paste(appName: String)
+        /// Save-only — the transcript is kept as a note and pasted nowhere.
+        case saveOnly
+    }
+
     /// Tracks the most recent dictation so the swap / prompt hotkeys can
     /// replace the inserted text in place.
     private struct LastDictation {
@@ -43,6 +53,14 @@ final class QuickDictation: ObservableObject {
 
     @Published private(set) var state: State = .idle
     @Published private(set) var lastInsertedText: String?
+    /// Destination for the in-progress capture. Set the moment recording starts
+    /// (see `start()`), read by the floating overlay's recording pill.
+    @Published private(set) var destination: Destination = .saveOnly
+
+    /// True when the current capture was forced save-only (Shift held at start),
+    /// regardless of the persistent `dictationAutoPaste` default. Threaded into
+    /// `finish()` so the paste step is skipped for exactly this capture.
+    private var forcedSaveOnly = false
 
     private let recorder = MicOnlyRecorder()
     private let transcriber = QuickTranscribe()
@@ -177,6 +195,17 @@ final class QuickDictation: ObservableObject {
     }
 
     private func start() {
+        // Resolve the destination for THIS capture up front so the overlay pill
+        // can show it the instant recording begins. Holding Shift forces a
+        // save-only capture even when auto-paste is the persistent default.
+        forcedSaveOnly = NSEvent.modifierFlags.contains(.shift)
+        if AppSettings.shared.dictationAutoPaste && !forcedSaveOnly {
+            let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "the active app"
+            destination = .paste(appName: app)
+        } else {
+            destination = .saveOnly
+        }
+
         let now = Date()
         let note = QuickNote(id: UUID().uuidString,
                              title: "Dictation \(Self.timestampFormatter.string(from: now))",
@@ -266,13 +295,22 @@ final class QuickDictation: ObservableObject {
         }
 
         let usePolished = AppSettings.shared.dictationUsePolished
-        let autoPaste = AppSettings.shared.dictationAutoPaste
+        // The persistent default, overridden to false when this one capture was
+        // forced save-only (Shift held at start).
+        let autoPaste = AppSettings.shared.dictationAutoPaste && !forcedSaveOnly
 
         guard autoPaste else {
-            // No paste — still record raw so a later swap could work if the
-            // user manually placed the cursor (rare). Mostly a no-op.
-            last = LastDictation(raw: rawText, polished: nil, promptStructured: nil,
-                                 shown: .raw, insertedText: rawText, note: finalized)
+            if forcedSaveOnly {
+                // Per-capture save-only override: nothing was pasted, so a later
+                // swap/prompt hotkey must NOT touch the focused app. Clearing
+                // `last` makes those hotkeys no-op (beep) for this capture.
+                last = nil
+            } else {
+                // Persistent "don't paste" mode — still record raw so a swap
+                // works if the user manually placed the cursor (rare).
+                last = LastDictation(raw: rawText, polished: nil, promptStructured: nil,
+                                     shown: .raw, insertedText: rawText, note: finalized)
+            }
             state = .idle
             return
         }
