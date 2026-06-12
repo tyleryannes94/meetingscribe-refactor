@@ -22,6 +22,7 @@ struct FollowUpView: View {
     @State private var isGenerating = false
     @State private var errorText: String?
     @State private var copied = false
+    @State private var loggedTouches = false
 
     private let generator = FollowUpGeneratorService()
 
@@ -146,6 +147,7 @@ struct FollowUpView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copied = true
+        logFollowUpTouches()
     }
 
     /// Open the default mail client with a pre-composed draft (recipients +
@@ -161,6 +163,19 @@ struct FollowUpView: View {
         // mailto requires %20 (not '+') for spaces in the query.
         if let url = comps.url ?? URL(string: "mailto:") {
             NSWorkspace.shared.open(url)
+        }
+        logFollowUpTouches()
+    }
+
+    /// P1-8: sending/copying a follow-up self-records a touch on each recipient
+    /// (feeds relationship health + last-interaction), so the loop closes itself.
+    private func logFollowUpTouches() {
+        guard !loggedTouches else { return }
+        loggedTouches = true
+        let store = PeopleStore.shared
+        for email in recipients {
+            guard let p = store.person(forEmail: email) else { continue }
+            store.addEncounter(to: p.id, eventName: "✉️ Follow-up", date: Date())
         }
     }
 }
