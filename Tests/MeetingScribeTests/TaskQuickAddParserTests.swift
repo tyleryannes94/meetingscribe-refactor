@@ -37,5 +37,29 @@ final class TaskQuickAddParserTests: XCTestCase {
         XCTAssertNil(p.priority)
         XCTAssertNil(p.dueDate)
         XCTAssertTrue(p.labelNames.isEmpty)
+        XCTAssertNil(p.ownerToken)
+    }
+
+    // P2-8 — person-addressed capture
+
+    func testAtTokenAssignsOwner() {
+        let p = TaskQuickAddParser.parse("Send the deck @jane !high")
+        XCTAssertEqual(p.ownerToken, "jane")
+        XCTAssertFalse(p.delegated)
+        XCTAssertEqual(p.priority, .high)
+        XCTAssertEqual(p.title, "Send the deck")
+    }
+
+    func testGreaterTokenDelegates() {
+        let p = TaskQuickAddParser.parse("Review contract >priya tomorrow")
+        XCTAssertEqual(p.ownerToken, "priya")
+        XCTAssertTrue(p.delegated)
+        XCTAssertFalse(p.title.lowercased().contains("priya"))
+        XCTAssertTrue(p.title.contains("Review contract"))
+    }
+
+    func testNoOwnerTokenWhenNoMarker() {
+        let p = TaskQuickAddParser.parse("email sarah about budget")
+        XCTAssertNil(p.ownerToken)
     }
 }

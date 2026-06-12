@@ -35,6 +35,7 @@ struct ActionItemRow: View {
     let onPushLinear: () -> Void
     let onOpenLinear: (String) -> Void
 
+    @EnvironmentObject private var router: WorkspaceRouter
     @State private var hovering = false
     /// Drives the one-click completion celebration beat (D3-2).
     @State private var celebrate = false
@@ -107,10 +108,24 @@ struct ActionItemRow: View {
                     .lineLimit(2)
                 HStack(spacing: 8) {
                     if let owner = item.owner, !owner.isEmpty {
-                        Label(owner, systemImage: "person.fill")
-                            .labelStyle(.titleAndIcon)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                        // P2-3: when the owner resolves to a Person, the chip
+                        // navigates there (avatar + name); otherwise it's a plain label.
+                        if let pid = item.ownerPersonID {
+                            Button { router.openPerson(pid) } label: {
+                                HStack(spacing: 4) {
+                                    MSAvatar(name: owner, size: 14)
+                                    Text(owner).font(.caption2)
+                                }
+                                .foregroundStyle(NDS.brand)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Open \(owner) in People")
+                        } else {
+                            Label(owner, systemImage: "person.fill")
+                                .labelStyle(.titleAndIcon)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     if let projectName {
                         Label(projectName, systemImage: "folder.fill")
