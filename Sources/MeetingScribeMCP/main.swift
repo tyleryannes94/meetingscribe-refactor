@@ -973,8 +973,80 @@ let toolList: [JSONValue] = [
                 "limit": .object(["type": "integer", "description": "Max results (default 20).", "default": 20])
             ])
         ])
+    ]),
+    .object([
+        "name": "get_today",
+        "description": "The Today aggregate (P3-10): today's meetings, open tasks due today or overdue, and the people most overdue for a check-in — the same daily picture the desktop Today screen shows. Use at the start of a session to orient on what needs attention.",
+        "inputSchema": .object([
+            "type": "object",
+            "properties": .object([:])
+        ])
     ])
 ]
+
+/// P3-10 — MCP parity with the desktop Today: meetings + due tasks + drifting people.
+func tool_today(args: [String: Any]) -> JSONValue {
+    let cal = Calendar.current
+    let now = Date()
+
+    let todays = allMeetings()
+        .filter { cal.isDate($0.startDate, inSameDayAs: now) }
+        .sorted { $0.startDate < $1.startDate }
+    let meetingRows: [JSONValue] = todays.map { m in
+        .object([
+            "id": .string(m.id),
+            "title": .string(m.userTitle ?? m.title),
+            "startDate": .string(iso(m.startDate)),
+            "attendees": .array(m.attendees.map { .string($0) })
+        ])
+    }
+
+    let startOfToday = cal.startOfDay(for: now)
+    let endOfToday = cal.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+    let dueTasks = loadActionItemsFromDisk()
+        .filter { $0.status != "completed" }
+        .filter { ($0.dueDate.map { $0 <= endOfToday }) ?? false }
+        .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+    let taskRows: [JSONValue] = dueTasks.prefix(25).map { t in
+        .object([
+            "id": .string(t.id),
+            "title": .string(t.title),
+            "owner": t.owner.map(JSONValue.string) ?? .null,
+            "dueDate": t.dueDate.map { .string(iso($0)) } ?? .null,
+            "overdue": .bool((t.dueDate ?? .distantFuture) < startOfToday)
+        ])
+    }
+
+    var drift: [(p: PersonDTO, overdue: Int, health: RelationshipHealth)] = []
+    for p in loadAllPeople() where (p.relationshipType ?? "unset") != "unset" {
+        let encs = loadEncounters(forPersonID: p.id)
+        let dates = encs.compactMap { ($0["date"] as? String).flatMap(isoDate) }.sorted(by: >)
+        let last = dates.first ?? p.lastInteractionAt ?? p.createdAt
+        let daysSince = Int(now.timeIntervalSince(last) / 86400)
+        let cadence = p.checkInCadenceDays ?? defaultCadence(for: p.relationshipType)
+        guard daysSince > cadence else { continue }
+        let h = RelationshipHealth(daysSinceLast: daysSince, cadenceDays: cadence,
+                                   encounterCount: encs.count, medianGapDays: 0)
+        drift.append((p, daysSince - cadence, h))
+    }
+    drift.sort { $0.overdue > $1.overdue }
+    let peopleRows: [JSONValue] = drift.prefix(8).map { item in
+        .object([
+            "id": .string(item.p.id),
+            "name": .string(item.p.displayName),
+            "healthScore": .int(item.health.score),
+            "band": .string(item.health.band.rawValue),
+            "daysOverdue": .int(item.overdue)
+        ])
+    }
+
+    return .object([
+        "date": .string(iso(now)),
+        "meetings": .array(meetingRows),
+        "dueTasks": .array(taskRows),
+        "peopleToReconnect": .array(peopleRows)
+    ])
+}
 
 func tool_listMeetings(args: [String: Any]) -> JSONValue {
     let limit = (args["limit"] as? Int) ?? 100
@@ -1919,6 +1991,7 @@ func isoDate(_ string: String) -> Date? {
 
 func runTool(name: String, args: [String: Any]) -> JSONValue {
     switch name {
+    case "get_today":             return tool_today(args: args)
     case "list_meetings":         return tool_listMeetings(args: args)
     case "get_meeting":           return tool_getMeeting(args: args)
     case "get_transcript":        return tool_getText(args: args, filename: "transcript.md")
