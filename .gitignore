@@ -57,3 +57,6 @@ MeetingNotes/
 
 # Local Claude Code worktree tooling state
 .claude/
+
+# Release build artifacts (local; produced by make/dist)
+dist/
