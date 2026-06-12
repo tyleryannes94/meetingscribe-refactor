@@ -229,6 +229,14 @@ extension UnifiedMeetingDetail {
                     MarkdownEditor(text: .constant(summary), isEditable: false)
                         .padding(.bottom, 8)
 
+                    // C1-12: tweak the recap in plain language ("shorter", "turn
+                    // into an email") — a targeted local rewrite with one-tap undo.
+                    if let m = meeting, manager.ollamaReachable, !summary.isEmpty {
+                        SummaryEditByAsking(meeting: m, current: summary,
+                                            onChanged: { summary = $0 })
+                            .padding(.horizontal).padding(.bottom, 10)
+                    }
+
                     // 👍/👎 feedback that steers regeneration (P5-3).
                     if let m = meeting {
                         SummaryFeedbackRow(meetingID: m.id) {
@@ -556,5 +564,121 @@ struct SummaryFeedbackRow: View {
         up = u
         SummaryFeedback.set(up: u, why: u ? nil : (why.isEmpty ? nil : why), for: meetingID)
         showWhy = !u
+    }
+}
+
+/// C1-12: "edit the summary by asking." Quick chips + a free-text instruction run
+/// a targeted local-model rewrite of the recap, with one-step undo. Faithful by
+/// prompt (no invented facts); gated by the caller on engine availability.
+@available(macOS 14.0, *)
+struct SummaryEditByAsking: View {
+    let meeting: Meeting
+    let current: String
+    /// Push the rewritten (or restored) text up to the detail's `summary` state.
+    var onChanged: (String) -> Void
+
+    @EnvironmentObject var manager: MeetingManager
+    @State private var instruction = ""
+    @State private var isRunning = false
+    @State private var beforeUndo: String?
+    @State private var errorText: String?
+
+    private static let presets: [(label: String, instruction: String)] = [
+        ("Shorter", "Make it noticeably shorter — keep only the most important points."),
+        ("More on decisions", "Expand the decisions: what was decided and why, in more detail."),
+        ("Turn into an email", "Rewrite as a short email recap: a greeting, the recap, then next steps."),
+        ("Plain language", "Rewrite in plainer language, fewer headings, no jargon.")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .scaledFont(11, weight: .semibold).foregroundStyle(NDS.brand)
+                Text("Edit by asking")
+                    .scaledFont(11, weight: .bold, relativeTo: .caption2).tracking(0.6)
+                    .foregroundStyle(NDS.textSecondary)
+                if isRunning {
+                    ProgressView().controlSize(.small).padding(.leading, 2)
+                }
+                Spacer()
+                if beforeUndo != nil {
+                    Button { undo() } label: {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                            .scaledFont(11, weight: .medium)
+                    }
+                    .buttonStyle(.plain).foregroundStyle(NDS.brand)
+                }
+            }
+
+            FlowLayout(spacing: 6) {
+                ForEach(Self.presets, id: \.label) { preset in
+                    Button { run(preset.instruction) } label: {
+                        Text(preset.label)
+                            .scaledFont(11, weight: .medium).foregroundStyle(NDS.textPrimary)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(NDS.fieldBg)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRunning)
+                }
+            }
+
+            HStack(spacing: 6) {
+                TextField("Ask for a change…", text: $instruction)
+                    .textFieldStyle(.plain).scaledFont(12)
+                    .foregroundStyle(NDS.textPrimary)
+                    .onSubmit { if !trimmed.isEmpty { run(trimmed) } }
+                    .padding(.horizontal, 9).padding(.vertical, 6)
+                    .background(NDS.fieldBg)
+                    .clipShape(RoundedRectangle(cornerRadius: NDS.rowRadius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius, style: .continuous)
+                        .strokeBorder(NDS.hairline, lineWidth: 1))
+                Button { run(trimmed) } label: {
+                    Image(systemName: "arrow.up.circle.fill").scaledFont(18)
+                }
+                .buttonStyle(.plain).foregroundStyle(NDS.brand)
+                .disabled(isRunning || trimmed.isEmpty)
+            }
+
+            if let err = errorText {
+                Text(err).font(NDS.tiny).foregroundStyle(NDS.danger)
+            }
+        }
+    }
+
+    private var trimmed: String { instruction.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func run(_ ask: String) {
+        guard !ask.isEmpty, !isRunning else { return }
+        let snapshot = current
+        isRunning = true
+        errorText = nil
+        Task {
+            do {
+                let rewritten = try await manager.rewriteSummary(
+                    instruction: ask, current: snapshot, for: meeting)
+                await MainActor.run {
+                    beforeUndo = snapshot
+                    instruction = ""
+                    isRunning = false
+                    onChanged(rewritten)
+                }
+            } catch {
+                await MainActor.run {
+                    isRunning = false
+                    errorText = "Couldn't rewrite the summary. Is the summary engine running?"
+                }
+            }
+        }
+    }
+
+    private func undo() {
+        guard let original = beforeUndo else { return }
+        manager.applyEditedSummary(original, for: meeting)
+        onChanged(original)
+        beforeUndo = nil
     }
 }

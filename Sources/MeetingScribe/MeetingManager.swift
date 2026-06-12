@@ -798,6 +798,39 @@ final class MeetingManager: ObservableObject {
         await bodyCache.load(meeting)
     }
 
+    /// C1-12: persist an edited summary (used by both the edit-by-asking apply
+    /// and its one-step undo). Writes to disk and patches the cache so the next
+    /// read — and the open detail's `summary` state — see it immediately.
+    func applyEditedSummary(_ markdown: String, for meeting: Meeting) {
+        let primary = tagStore.primaryTag(for: meeting)
+        bodyCache.patchSummary(meetingID: meeting.id, summary: markdown)
+        try? store.writeSummary(markdown, for: meeting, primaryTag: primary)
+    }
+
+    /// C1-12: "edit the summary by asking" — rewrite the current summary per a
+    /// plain-language instruction ("shorter", "more on decisions", "turn into an
+    /// email") with the local model, persist it, and return the new text so the
+    /// caller can show it and offer undo. Throws if the engine is unreachable.
+    func rewriteSummary(instruction: String, current: String,
+                        for meeting: Meeting) async throws -> String {
+        let prompt = """
+        You are editing an existing meeting summary. Apply this instruction:
+        "\(instruction)"
+
+        Rules: stay faithful to the original — do not invent facts, names, dates,
+        or action items. Output ONLY the rewritten summary in Markdown, with no
+        preamble or commentary.
+
+        ----- CURRENT SUMMARY -----
+        \(current)
+        """
+        let rewritten = try await summarizer.generate(prompt: prompt, temperature: 0.2)
+        let cleaned = rewritten.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { throw OllamaService.SummaryError.unreachable("empty rewrite") }
+        applyEditedSummary(cleaned, for: meeting)
+        return cleaned
+    }
+
     /// After a Transcribe Now / summary / notes-save operation, callers
     /// should invalidate so the next read returns the new on-disk file.
     func invalidateBodyCache(_ meetingID: String) {
