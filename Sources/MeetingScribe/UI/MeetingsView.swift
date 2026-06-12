@@ -132,18 +132,10 @@ struct MeetingsView: View {
             .labelsHidden()
             .padding(.horizontal, 12).padding(.bottom, 2)
 
-            // Scope filter pills
+            // Scope filter pills — one shared chip component (D4-10).
             HStack(spacing: 6) {
                 ForEach(Scope.allCases) { s in
-                    Button { scope = s } label: {
-                        Text(s.label)
-                            .scaledFont(11.5, weight: scope == s ? .semibold : .regular)
-                            .foregroundStyle(scope == s ? NDS.brand : NDS.textSecondary)
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(scope == s ? NDS.brand.opacity(0.12) : .clear,
-                                        in: Capsule())
-                    }
-                    .buttonStyle(.plain)
+                    MSFilterChip(label: s.label, active: scope == s) { scope = s }
                 }
                 Spacer()
             }

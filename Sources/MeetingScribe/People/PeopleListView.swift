@@ -623,22 +623,14 @@ private struct PersonRow: View {
 }
 
 @available(macOS 14.0, *)
+/// Thin alias over the shared `MSFilterChip` (D4-10) so the People tab's many
+/// `FilterChip(...)` call sites keep working while using one component.
+@available(macOS 14.0, *)
 private struct FilterChip: View {
     let label: String
     let active: Bool
     let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(NDS.tiny)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(active ? NDS.brand.opacity(0.18) : NDS.fieldBg, in: Capsule())
-                .overlay(Capsule().strokeBorder(active ? NDS.brand.opacity(0.5) : NDS.hairline, lineWidth: 1))
-                .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
-        }
-        .buttonStyle(.plain)
-    }
+    var body: some View { MSFilterChip(label: label, active: active, action: action) }
 }
 
 /// Review surface for likely-duplicate people (§12.3) — merge or keep separate.
