@@ -39,7 +39,7 @@ struct ProPaywallView: View {
                           text: "Connection strength score + encounter heat map",
                           color: NDS.lilac)
                 ProBullet(icon: "sparkles",
-                          text: "Full MCP relationship tools for Claude (log encounters, get coaching context)",
+                          text: "Ask Claude about your relationships — log encounters and pull coaching context in chat",
                           color: NDS.sky)
                 ProBullet(icon: "doc.text.fill",
                           text: "Monthly Relationship Intelligence Report",
@@ -85,10 +85,10 @@ struct ProPaywallView: View {
         }
         .padding(28)
         .frame(minWidth: 400, idealWidth: 480, maxWidth: 520)
-        .alert("Coming Soon", isPresented: $showPurchaseAlert) {
+        .alert("Pro isn't on sale yet", isPresented: $showPurchaseAlert) {
             Button("OK") {}
         } message: {
-            Text("StoreKit 2 purchase is not yet wired. To unlock Pro during development, set FeatureGate.shared.isPro = true in Xcode.")
+            Text("Purchasing Pro isn't available just yet — it's coming in a future update. Everything that's here today stays free and fully local on your Mac.")
         }
     }
 
@@ -97,7 +97,7 @@ struct ProPaywallView: View {
         case .checkInNotifications:  return "Check-in reminders require Pro"
         case .relationshipContent:   return "Coaching frameworks require Pro"
         case .healthScore:           return "Connection strength score requires Pro"
-        case .mcpPeopleTools:        return "MCP relationship tools require Pro"
+        case .mcpPeopleTools:        return "Asking Claude about your relationships requires Pro"
         case .unlimitedPeople:       return "Unlimited typed relationships require Pro"
         case .unlimitedCheckIns:     return "Unlimited reminders require Pro"
         case .monthlyReport:         return "Monthly Relationship Intelligence Report requires Pro"

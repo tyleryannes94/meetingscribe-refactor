@@ -606,9 +606,21 @@ extension UnifiedMeetingDetail {
     }
 
     func addAllAttendeesToPeople(_ m: Meeting) {
+        var created: [Person] = []
         for a in m.attendees where !attendeeExists(a) {
             let p = parseAttendee(a)
-            _ = PeopleStore.shared.createPerson(displayName: p.name, email: p.email)
+            let person = PeopleStore.shared.createPerson(displayName: p.name, email: p.email)
+            // P1-6: don't leave a hollow Person divorced from the meeting that
+            // created them. Link this meeting and count it as an interaction so
+            // the new record shows up in their history and ages correctly.
+            PeopleStore.shared.addMeetingMention(m.id, toPersonID: person.id)
+            PeopleStore.shared.bumpLastInteraction(personID: person.id, date: m.startDate)
+            created.append(person)
+        }
+        guard !created.isEmpty else { return }
+        let label = created.count == 1 ? created[0].displayName : "\(created.count) people"
+        ToastCenter.shared.show("Added \(label) to People", undoTitle: "Undo") {
+            for person in created { PeopleStore.shared.deletePerson(person) }
         }
     }
 

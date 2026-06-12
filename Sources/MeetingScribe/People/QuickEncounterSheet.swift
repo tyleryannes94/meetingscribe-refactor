@@ -85,6 +85,10 @@ struct QuickEncounterSheet: View {
     @State private var note: String = ""
     @State private var date: Date = Date()
     @State private var showDatePicker = false
+    /// D3-6: when false (the default), tapping a Kind chip logs the check-in
+    /// optimistically and dismisses with an Undo toast — the true 1-tap path.
+    /// Flip on to reveal mood/note/date and commit with Save.
+    @State private var detailed = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -99,6 +103,19 @@ struct QuickEncounterSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                // Opt into mood / note / date capture. Off by default so the
+                // common case stays one tap (D3-6).
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { detailed.toggle() }
+                } label: {
+                    Label(detailed ? "Quick" : "Add details",
+                          systemImage: detailed ? "bolt.fill" : "slider.horizontal.3")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(detailed ? "Back to one-tap logging" : "Add mood, a note, or a different date")
+
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
@@ -121,16 +138,21 @@ struct QuickEncounterSheet: View {
                             kind: kind,
                             selected: selectedKind == kind
                         ) {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                selectedKind = (selectedKind == kind) ? nil : kind
+                            if detailed {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    selectedKind = (selectedKind == kind) ? nil : kind
+                                }
+                            } else {
+                                instantLog(kind)
                             }
                         }
                     }
                 }
             }
 
-            // Mood chips (optional)
-            if selectedKind != nil {
+            // Mood chips (optional) — only in detailed mode; in the 1-tap
+            // default the chip tap has already saved and dismissed.
+            if detailed, selectedKind != nil {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("How did it feel?")
                         .font(.caption.weight(.semibold))
@@ -182,22 +204,49 @@ struct QuickEncounterSheet: View {
                 }
             }
 
-            // Save button
-            HStack {
-                Spacer()
-                Button {
-                    saveIfValid()
-                } label: {
-                    Label(selectedKind == nil ? "Select a type above" : "Save check-in",
-                          systemImage: selectedKind == nil ? "hand.tap" : "checkmark")
+            // Save button (detailed mode only; the 1-tap path saves on chip tap)
+            if detailed {
+                HStack {
+                    Spacer()
+                    Button {
+                        saveIfValid()
+                    } label: {
+                        Label(selectedKind == nil ? "Select a type above" : "Save check-in",
+                              systemImage: selectedKind == nil ? "hand.tap" : "checkmark")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedKind == nil)
+                    .keyboardShortcut(.return, modifiers: [])
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedKind == nil)
-                .keyboardShortcut(.return, modifiers: [])
+            } else {
+                Text("Tap how you connected — it logs instantly. Need mood or a note? Add details.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(20)
         .frame(minWidth: 360, idealWidth: 400, maxWidth: 480)
+    }
+
+    /// The 1-tap path (D3-6): save the check-in immediately on chip tap, dismiss,
+    /// and offer Undo via a toast — no mood/note required for the common case.
+    private func instantLog(_ kind: Encounter.Kind) {
+        let enc = people.addEncounter(
+            to: person.id,
+            eventName: "\(kind.emoji) \(kind.rawValue)",
+            date: date,
+            notes: ""
+        )
+        onSave?(enc)
+        Task { @MainActor in
+            await RelationshipNotificationManager.shared.syncPersonReminders(people: people.people)
+        }
+        let first = person.displayName.split(separator: " ").first.map(String.init) ?? person.displayName
+        ToastCenter.shared.show("Logged \(kind.emoji) \(kind.shortLabel) with \(first)",
+                                undoTitle: "Undo") { [people] in
+            people.deleteEncounter(enc)
+        }
+        dismiss()
     }
 
     private func saveIfValid() {

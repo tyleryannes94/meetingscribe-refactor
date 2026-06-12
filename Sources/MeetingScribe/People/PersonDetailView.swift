@@ -340,9 +340,10 @@ struct PersonDetailView: View {
                 .environmentObject(peopleTags)
         }
         .sheet(isPresented: $showAddEncounter) {
-            AddEncounterSheet(personID: current.id)
+            // C2-12: one encounter flow. The profile now opens the same 1-tap
+            // QuickEncounterSheet used from Today, not the retired long-form sheet.
+            QuickEncounterSheet(person: current)
                 .environmentObject(people)
-                .environmentObject(peopleTags)
         }
         .sheet(isPresented: $showAddRelationship) {
             AddRelationshipSheet(personID: current.id).environmentObject(people)
@@ -2285,75 +2286,6 @@ private struct EncounterRow: View {
         }
         .padding(10)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
-    }
-}
-
-/// Lightweight encounter capture from a person's detail view.
-@available(macOS 14.0, *)
-private struct AddEncounterSheet: View {
-    @EnvironmentObject var people: PeopleStore
-    @EnvironmentObject var peopleTags: PeopleTagStore
-    @Environment(\.dismiss) private var dismiss
-
-    let personID: String
-
-    @State private var eventName = ""
-    @State private var date = Date()
-    @State private var location = ""
-    @State private var notes = ""
-    @State private var eventTagID: String?
-
-    private var trimmedName: String { eventName.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Add Encounter").font(.headline)
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Save", action: save).keyboardShortcut(.defaultAction)
-                    .disabled(trimmedName.isEmpty)
-            }
-            .padding(12)
-            Divider()
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Event").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                    TextField("Purple Party 2026", text: $eventName).textFieldStyle(.roundedBorder)
-                }
-                DatePicker("Date", selection: $date, displayedComponents: .date)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Location").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                    TextField("Optional", text: $location).textFieldStyle(.roundedBorder)
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Notes").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                    TextEditor(text: $notes).font(NDS.body).frame(minHeight: 80)
-                        .padding(6)
-                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
-                        .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
-                }
-            }
-            .padding(16)
-            Spacer()
-        }
-        .frame(width: 420, height: 460)
-    }
-
-    private func save() {
-        guard !trimmedName.isEmpty else { return }
-        // Reuse/create an event-kind tag dated to this encounter, so it shows
-        // under that tag's filter chip and carries a real date range (§4.3).
-        let loc = location.trimmingCharacters(in: .whitespacesAndNewlines)
-        let tag = peopleTags.createTag(name: trimmedName, kind: .event, startDate: date,
-                                       locationHint: loc.isEmpty ? nil : loc)
-        people.addEncounter(to: personID,
-                            eventName: trimmedName,
-                            eventTagID: tag.id,
-                            date: date,
-                            location: location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : location,
-                            notes: notes)
-        dismiss()
     }
 }
 

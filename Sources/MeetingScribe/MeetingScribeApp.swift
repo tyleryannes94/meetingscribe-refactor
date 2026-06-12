@@ -290,7 +290,13 @@ struct MeetingScribeApp: App {
 
     /// Post a "Meeting ready" banner when transcription + summary finishes.
     private func wirePipelineNotification() {
-        manager.pipelineController.onComplete = { [weak notifications, weak manager] meeting in
+        manager.pipelineController.onComplete = { [weak notifications, weak manager] meeting, summaryFailed in
+            // U4-4: if the summary failed, the capture promise is half-kept —
+            // say so instead of staying silent, and point at the in-app retry.
+            guard !summaryFailed else {
+                notifications?.notifySummaryNeedsRetry(meeting: meeting)
+                return
+            }
             // Pull a clean prose snippet from the summary for the notification
             // body (skip markdown headings/blank lines). (U3-5)
             let summary = manager?.summaryMarkdown(for: meeting) ?? ""

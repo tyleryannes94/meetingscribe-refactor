@@ -8,8 +8,8 @@ extension UnifiedMeetingDetail {
     @ViewBuilder
 var audioBar: some View {
         if !audioURLs.isEmpty {
-            AudioPlayerView(title: audioURLs.count > 1 ? "Audio (mic + system)" : "Audio",
-                            urls: audioURLs)
+            AudioPlayerBar(title: audioURLs.count > 1 ? "Audio (mic + system)" : "Audio",
+                           controller: audioController)
                 .padding(.horizontal)
                 .padding(.vertical, 6)
         }
@@ -39,7 +39,10 @@ var transcriptBody: some View {
             } else {
                 // Use the navigable sync view when transcript has structured
                 // speaker/timestamp data. Falls back gracefully if format is plain prose.
-                TranscriptSyncView(rawTranscript: transcript)
+                // Pass the shared controller (C1-3) so tapping a timestamp seeks
+                // the same audio the transport bar plays — only when audio exists.
+                TranscriptSyncView(rawTranscript: transcript,
+                                   audioController: audioURLs.isEmpty ? nil : audioController)
             }
         }
     }

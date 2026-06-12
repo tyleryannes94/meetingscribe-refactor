@@ -5,16 +5,13 @@ import Combine
 /// Apple Voice Memos-style audio player:
 ///   ⏪15  ⏯  ⏩15  •  scrubbable progress bar  •  current / total time
 /// Optionally accepts multiple URLs and stitches them into a single queue.
-@available(macOS 14.0, *)
 struct AudioPlayerView: View {
     let title: String?
-    let urls: [URL]
 
     @StateObject private var controller: AudioPlayerController
 
     init(title: String? = nil, urls: [URL]) {
         self.title = title
-        self.urls = urls
         _controller = StateObject(wrappedValue: AudioPlayerController(urls: urls))
     }
 
@@ -22,6 +19,24 @@ struct AudioPlayerView: View {
     init(title: String? = nil, url: URL) {
         self.init(title: title, urls: [url])
     }
+
+    var body: some View {
+        // C1-3: render the controls from the owned controller. Standalone
+        // callers (e.g. voice notes) own their player here; the meeting detail
+        // hosts a shared controller and drives `AudioPlayerBar` directly so the
+        // transcript's tap-to-seek and the visible player are the same player.
+        AudioPlayerBar(title: title, controller: controller)
+            .onDisappear { controller.release() }
+    }
+}
+
+/// The audio-transport UI bound to an externally-owned controller. Used both by
+/// `AudioPlayerView` (which owns the controller) and by the meeting detail,
+/// which shares one controller with `TranscriptSyncView` so tap-to-seek works.
+@available(macOS 14.0, *)
+struct AudioPlayerBar: View {
+    let title: String?
+    @ObservedObject var controller: AudioPlayerController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -74,7 +89,6 @@ struct AudioPlayerView: View {
             }
         }
         .padding(.vertical, 4)
-        .onDisappear { controller.release() }
     }
 
     private func format(_ t: TimeInterval) -> String {
@@ -99,7 +113,7 @@ final class AudioPlayerController: ObservableObject {
     var scrubbing = false
 
     private let player = AVPlayer()
-    private let urls: [URL]
+    private var urls: [URL]
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
 
@@ -201,6 +215,24 @@ final class AudioPlayerController: ObservableObject {
     func stop() {
         player.pause()
         isPlaying = false
+    }
+
+    /// Swap in a new set of source files and rebuild the composition. Used by
+    /// the meeting detail when the user switches meetings while one shared
+    /// controller backs both the transport bar and the synced transcript
+    /// (C1-3). No-ops when the URLs are unchanged so playback isn't restarted.
+    func reload(urls newURLs: [URL]) {
+        guard newURLs != urls else { return }
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        isPlaying = false
+        currentTime = 0
+        duration = 0
+        ready = false
+        loadError = nil
+        urls = newURLs
+        guard !newURLs.isEmpty else { return }
+        Task { await buildComposition() }
     }
 
     /// Fully tears down the player: removes observers and drops the current

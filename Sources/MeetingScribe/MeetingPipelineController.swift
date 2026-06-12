@@ -27,8 +27,10 @@ final class MeetingPipelineController: ObservableObject {
     @Published var lastError: String?
 
     /// Called on the main actor when a pipeline run (finalize OR transcribeNow)
-    /// completes successfully. Wire this to show a notification.
-    var onComplete: ((Meeting) -> Void)?
+    /// completes. The `Bool` is true when summarization failed (transcript saved
+    /// but no summary) so the notification layer can tell the user instead of
+    /// failing silently (U4-4). Wire this to show a notification.
+    var onComplete: ((Meeting, Bool) -> Void)?
 
     private let store: MeetingStore
     private let tagStore: TagStore
@@ -179,6 +181,7 @@ final class MeetingPipelineController: ObservableObject {
 
         // 3. Summarize.
         let summary: String
+        var summaryFailed = false
         do {
             summary = try await summarizer.summarize(meeting: workingMeeting, transcript: transcript)
         } catch {
@@ -186,6 +189,7 @@ final class MeetingPipelineController: ObservableObject {
             ErrorReporter.shared.report(error, category: .summary,
                                         context: ["meeting": meeting.id])
             summary = "# Summary\n\n_Summary unavailable: \(error.localizedDescription)_\n"
+            summaryFailed = true
         }
         do { try store.writeSummary(summary, for: workingMeeting, primaryTag: primary) }
         catch {
@@ -236,7 +240,7 @@ final class MeetingPipelineController: ObservableObject {
 
         // Notify interested parties (e.g. NotificationManager) that the
         // pipeline for this meeting has finished.
-        onComplete?(workingMeeting)
+        onComplete?(workingMeeting, summaryFailed)
     }
 
     // MARK: - Transcribe Now
@@ -319,6 +323,7 @@ final class MeetingPipelineController: ObservableObject {
         }
 
         // 5. Regenerate summary (best effort).
+        var summaryFailed = false
         if regenerateSummary {
             do {
                 let summary = try await summarizer.summarize(meeting: meeting, transcript: transcript)
@@ -340,6 +345,7 @@ final class MeetingPipelineController: ObservableObject {
                 log.error("transcribeNow summary failed: \(error.localizedDescription, privacy: .public)")
                 ErrorReporter.shared.reportAsync(error, category: .summary,
                                                  context: ["phase": "transcribe-now-summary", "meeting": meeting.id])
+                summaryFailed = true
             }
         } else {
             // Even without a summary regeneration, refresh the markdown snapshot.
@@ -351,7 +357,7 @@ final class MeetingPipelineController: ObservableObject {
         }
 
         // Signal completion to registered observers.
-        await MainActor.run { self.onComplete?(meeting) }
+        await MainActor.run { self.onComplete?(meeting, summaryFailed) }
     }
 
     // MARK: - Disk helpers (nonisolated; called from detached tasks)

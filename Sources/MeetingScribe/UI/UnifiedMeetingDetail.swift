@@ -48,6 +48,10 @@ struct UnifiedMeetingDetail: View {
     @State var editingHeader: Bool = false
     @State var previousPrimaryTagID: String?
     @State var audioURLs: [URL] = []
+    /// One audio player shared by the transport bar and the synced transcript
+    /// so tapping a transcript timestamp seeks the same player you can hear
+    /// (C1-3). Reloaded whenever `audioURLs` changes on a meeting switch.
+    @StateObject var audioController = AudioPlayerController(urls: [])
     /// In-flight body refresh — cancelled when the user switches meetings
     /// so a slow disk read on meeting A doesn't overwrite meeting B's
     /// freshly-painted state.
@@ -117,6 +121,7 @@ struct UnifiedMeetingDetail: View {
             hasAppliedTabDefault = false
             reload()
         }
+        .onChange(of: audioURLs) { _, urls in audioController.reload(urls: urls) }
         .onChange(of: noteDraft) { _, _ in scheduleNoteSave() }
         .onChange(of: meeting.flatMap { tagStore.tagIDs(for: $0) }) { _, _ in handleTagChange() }
         .onChange(of: manager.state) { _, _ in reloadIfLiveFinished() }
@@ -131,6 +136,7 @@ struct UnifiedMeetingDetail: View {
             flushNoteSave()
             bodyLoadTask?.cancel()
             bodyLoadTask = nil
+            audioController.release()
         }
         .fileImporter(isPresented: $showAudioImporter,
                       allowedContentTypes: [.audio, .mpeg4Audio, .wav, .mp3, .movie],

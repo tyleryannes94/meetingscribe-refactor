@@ -21,8 +21,11 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
     var systemImage: String {
         switch self {
         case .today:    return "sun.max.fill"
-        case .meetings: return "person.2.fill"
-        case .people:   return "person.2"
+        // D2-8: Meetings carried People's glyph (person.2.fill vs person.2),
+        // making the two most-used tabs visual twins. Meetings = recorded
+        // conversations, so it wears a conversation glyph; People keeps person.2.
+        case .meetings: return "bubble.left.and.bubble.right.fill"
+        case .people:   return "person.2.fill"
         case .actions:  return "checklist"
         case .notes:    return "waveform.badge.plus"
         }
