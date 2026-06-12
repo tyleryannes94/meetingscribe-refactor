@@ -21,6 +21,7 @@ struct AddPersonSheet: View {
     @State private var tagIDs: Set<String>
     @State private var hasBirthday: Bool
     @State private var birthday: Date
+    @State private var specialDates: [SpecialDate]
     @State private var addresses: [String]
     @State private var favorites: String
     @State private var relationshipType: RelationshipType
@@ -37,6 +38,7 @@ struct AddPersonSheet: View {
         _tagIDs = State(initialValue: editing?.tagIDs ?? (seedTagID.map { [$0] } ?? []))
         _hasBirthday = State(initialValue: editing?.birthday != nil)
         _birthday = State(initialValue: editing?.birthday ?? Date())
+        _specialDates = State(initialValue: editing?.specialDates ?? [])
         _addresses = State(initialValue: (editing?.addresses.isEmpty == false) ? editing!.addresses : [""])
         _favorites = State(initialValue: (editing?.favorites ?? []).joined(separator: ", "))
         _relationshipType = State(initialValue: editing?.relationshipType ?? .unset)
@@ -104,6 +106,8 @@ struct AddPersonSheet: View {
                         }
                     }
 
+                    specialDatesSection
+
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Tags").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                         EventTagSelector(selected: $tagIDs)
@@ -126,6 +130,42 @@ struct AddPersonSheet: View {
         }
         .frame(width: 460, height: 540)
         .onAppear { if editing == nil { nameFocused = true } }
+    }
+
+    /// C2-5 — anniversaries, kids' birthdays, and other custom dates. Each row
+    /// edits a label, a date, and a "repeats yearly" toggle; blank-label rows are
+    /// dropped on save.
+    private var specialDatesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Special dates").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+            ForEach($specialDates) { $sd in
+                HStack(spacing: 6) {
+                    TextField("Anniversary", text: $sd.label)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 160)
+                    DatePicker("", selection: $sd.date, displayedComponents: .date)
+                        .labelsHidden()
+                    Toggle("Yearly", isOn: $sd.recurring)
+                        .toggleStyle(.checkbox)
+                        .help("Repeats every year")
+                    Spacer(minLength: 0)
+                    Button {
+                        specialDates.removeAll { $0.id == sd.id }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(NDS.textTertiary)
+                    .help("Remove")
+                }
+            }
+            Button {
+                specialDates.append(SpecialDate(label: "", date: Date(), recurring: true))
+            } label: {
+                Label("Add date", systemImage: "plus.circle").font(.caption)
+            }
+            .buttonStyle(.borderless)
+        }
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String) -> some View {
@@ -157,6 +197,10 @@ struct AddPersonSheet: View {
         person.bio = bio
         person.tagIDs = tagIDs
         person.birthday = hasBirthday ? birthday : nil
+        // C2-5 — drop rows the user added but never labeled.
+        person.specialDates = specialDates
+            .map { var sd = $0; sd.label = sd.label.trimmingCharacters(in: .whitespacesAndNewlines); return sd }
+            .filter { !$0.label.isEmpty }
         person.relationshipType = relationshipType
         person.importSources.insert("manual")
         people.updatePerson(person)
