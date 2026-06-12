@@ -173,7 +173,7 @@ struct MenuBarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Label("Recording", systemImage: "record.circle.fill")
                     .foregroundStyle(NDS.recording).font(.headline)
-                Text(meeting?.displayTitle ?? "Ad-hoc").font(.subheadline)
+                Text(meeting?.displayTitle ?? "Quick recording").font(.subheadline)
                 Text("Started \(startedAt.formatted(date: .omitted, time: .shortened))")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Stop & Transcribe") {

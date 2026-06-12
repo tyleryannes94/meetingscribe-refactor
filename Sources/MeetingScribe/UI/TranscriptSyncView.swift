@@ -136,6 +136,10 @@ struct TranscriptSyncView: View {
                 TextField("Search transcript…", text: $searchText)
                     .scaledFont(12)
                 if !searchText.isEmpty {
+                    // C1-7: live match counter so you know if it's worth scanning.
+                    Text("\(filteredSegments.count)")
+                        .scaledFont(10.5, weight: .semibold).monospacedDigit()
+                        .foregroundStyle(filteredSegments.isEmpty ? NDS.danger : NDS.textTertiary)
                     Button { searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill").scaledFont(11)
                             .foregroundStyle(NDS.textTertiary)
