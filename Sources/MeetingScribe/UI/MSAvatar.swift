@@ -1,5 +1,33 @@
 import SwiftUI
 import AppKit
+import VaultKit
+
+/// The relationship-health ring color for a person (C2-10), or nil for untyped
+/// one-off contacts (no ring). Uses the shared health formula so the ring agrees
+/// with the badge and the MCP coach.
+@available(macOS 14.0, *)
+@MainActor
+func healthRingColor(for person: Person, in store: PeopleStore) -> Color? {
+    guard person.relationshipType != .unset else { return nil }
+    let encs = store.encounters(for: person.id)
+    let dates = encs.map(\.date).sorted(by: >)
+    let medianGap: Int = {
+        guard dates.count >= 2 else { return 0 }
+        var gaps = (0..<(dates.count - 1)).map { Int(dates[$0].timeIntervalSince(dates[$0 + 1]) / 86400) }
+        gaps.sort()
+        return gaps[gaps.count / 2]
+    }()
+    let last = dates.first ?? person.lastInteractionAt
+    let daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 9_999
+    let h = RelationshipHealth(daysSinceLast: daysSince, cadenceDays: person.effectiveCheckInDays,
+                               encounterCount: encs.count, medianGapDays: medianGap)
+    switch h.band {
+    case .thriving: return NDS.mint
+    case .steady:   return NDS.sky
+    case .drifting: return NDS.gold
+    case .overdue:  return NDS.danger
+    }
+}
 
 /// Shared avatar (VD-6). A colored disc with up to two initials tinted
 /// deterministically from the name, or a photo when one is available. One
@@ -10,6 +38,9 @@ struct MSAvatar: View {
     let name: String
     var image: NSImage? = nil
     var size: CGFloat = 18
+    /// Relationship-health ring color (C2-10). When set, a colored ring is drawn
+    /// just outside the avatar — one glanceable people language everywhere.
+    var ringColor: Color? = nil
 
     /// Squircle corner radius (Bloom uses 34% of the side).
     private var shape: RoundedRectangle {
@@ -32,7 +63,7 @@ struct MSAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(shape)
-        .overlay(shape.strokeBorder(NDS.hairline, lineWidth: 0.5))
+        .overlay(shape.strokeBorder(ringColor ?? NDS.hairline, lineWidth: ringColor == nil ? 0.5 : 2))
         .accessibilityLabel(name.isEmpty ? "No owner" : name)
     }
 

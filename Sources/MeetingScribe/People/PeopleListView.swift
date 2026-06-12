@@ -582,6 +582,7 @@ private struct SnapshotPersonRow: View {
 @available(macOS 14.0, *)
 private struct PersonRow: View {
     let person: Person
+    @EnvironmentObject var people: PeopleStore
 
     private var subtitle: String {
         [person.role, person.company].filter { !$0.isEmpty }.joined(separator: " · ")
@@ -589,7 +590,8 @@ private struct PersonRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            MSAvatar(name: person.displayName, size: 28)
+            MSAvatar(name: person.displayName, size: 28,
+                     ringColor: healthRingColor(for: person, in: people))
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(person.displayName).scaledFont(13.5, weight: .semibold).lineLimit(1)
