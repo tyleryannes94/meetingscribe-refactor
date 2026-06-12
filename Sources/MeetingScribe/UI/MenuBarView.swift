@@ -6,10 +6,14 @@ struct MenuBarView: View {
     @EnvironmentObject var calendar: CalendarService
     @EnvironmentObject var manager: MeetingManager
     @Environment(\.openWindow) private var openWindow
+    @State private var now = Date()
+    private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             statusRow
+
+            nextMeetingCard   // U3-1: next-meeting intelligence (the Cron move)
 
             Divider()
 
@@ -60,6 +64,7 @@ struct MenuBarView: View {
         }
         .padding(10)
         .frame(width: 340)
+        .onReceive(tick) { now = $0 }
         .task {
             if !calendar.authorized { await calendar.requestAccess() }
             calendar.refreshUpcoming()
@@ -68,12 +73,66 @@ struct MenuBarView: View {
         }
     }
 
+    /// The single most imminent upcoming meeting (not yet ended).
+    private var nextMeeting: Meeting? {
+        calendar.upcoming
+            .filter { $0.endDate > now }
+            .sorted { $0.startDate < $1.startDate }
+            .first
+    }
+
+    @ViewBuilder
+    private var nextMeetingCard: some View {
+        if let m = nextMeeting {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: m.isLive ? "record.circle.fill" : "clock")
+                        .foregroundStyle(m.isLive ? NDS.recording : NDS.brand)
+                    Text(countdownLabel(m))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(m.isLive ? NDS.recording : NDS.brand)
+                    Spacer()
+                    if m.isLive, m.conferenceURL != nil, isIdle {
+                        Button("Join & record") { Task { await manager.switchToRecording(m) } }
+                            .font(.caption)
+                    }
+                }
+                Text(m.displayTitle).font(.subheadline.weight(.semibold)).lineLimit(1)
+                if !m.attendees.isEmpty {
+                    Text(attendeeSummary(m)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+        }
+    }
+
+    private func countdownLabel(_ m: Meeting) -> String {
+        if m.isLive { return "Live now" }
+        let mins = Int(m.startDate.timeIntervalSince(now) / 60)
+        if mins < 1 { return "Starting now" }
+        if mins < 60 { return "In \(mins) min" }
+        let h = mins / 60, mm = mins % 60
+        return mm == 0 ? "In \(h)h" : "In \(h)h \(mm)m"
+    }
+
+    private func attendeeSummary(_ m: Meeting) -> String {
+        let names = m.attendees.prefix(3).map { raw -> String in
+            let id = PersonResolver.parse(raw)
+            let full = id.hasName ? id.name : PersonResolver.localPart(of: id.email)
+            return full.split(separator: " ").first.map(String.init) ?? full
+        }
+        let extra = m.attendees.count - names.count
+        return names.joined(separator: ", ") + (extra > 0 ? " +\(extra)" : "")
+    }
+
     @ViewBuilder
     private var quickActions: some View {
         Button {
             Task { await manager.startRecording(for: nil) }
         } label: {
-            Label("Record Ad-hoc Meeting", systemImage: "record.circle")
+            Label("Quick recording", systemImage: "record.circle")
         }
         .disabled(!isIdle)
 
