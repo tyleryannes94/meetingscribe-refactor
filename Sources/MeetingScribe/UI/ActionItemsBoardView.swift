@@ -29,56 +29,17 @@ extension ActionItemsView {
     }
 
     func boardColumn(_ status: ActionItem.Status) -> some View {
-        let items = columnItems(status)
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                Circle().fill(NDS.status(status)).frame(width: 8, height: 8)
-                Image(systemName: status.systemImage)
-                    .scaledFont(11, weight: .semibold).foregroundStyle(NDS.status(status))
-                Text(status.label).font(.callout.weight(.bold))
-                Text("\(items.count)").font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-                Spacer()
-                Button {
-                    let pid = (selectedProjectID == Self.noProjectSentinel) ? nil : selectedProjectID
-                    let t = store.createTask(title: "New task", projectID: pid, status: status)
-                    selectedTaskID = t.id
-                    viewMode = .list
-                } label: { Image(systemName: "plus") }
-                .buttonStyle(.borderless).help("Add a task to \(status.label)")
-                .accessibilityLabel("Add a task to \(status.label)")
-            }
-            .padding(.horizontal, 4)
-            ForEach(items) { item in
-                boardCard(item)
-                    .draggable(item.id) {
-                        Text(item.title).font(.caption).lineLimit(2)
-                            .padding(8)
-                            .frame(width: 220, alignment: .leading)
-                            .background(NDS.fieldBg,
-                                        in: RoundedRectangle(cornerRadius: NDS.rowRadius))
-                    }
-                    .dropDestination(for: String.self) { ids, _ in
-                        for id in ids { dropCard(id, toStatus: status, beforeID: item.id) }
-                        return true
-                    }
-            }
-            // Tall droppable filler so the whole column accepts a drop (incl.
-            // dropping onto an empty column → append at the end).
-            Color.clear
-                .frame(maxWidth: .infinity, minHeight: 80)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .dropDestination(for: String.self) { ids, _ in
-                    for id in ids { dropCard(id, toStatus: status, beforeID: nil) }
-                    return true
-                }
-        }
-        .frame(width: 280, alignment: .top)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .padding(8)
-        .background(NDS.columnBg,
-                    in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+        // The drop-target highlight (D3-5) needs per-column `@State` to track
+        // whether a dragged card is hovering this column. `ActionItemsView` is a
+        // big shared struct, so the state lives in this small wrapper view
+        // instead — it owns `isTargeted` and drives the tint/ring, while the
+        // actual move math (`dropCard`) and card rendering stay on the parent.
+        BoardColumnView(parent: self,
+                        status: status,
+                        items: columnItems(status),
+                        store: store,
+                        selectedTaskID: $selectedTaskID,
+                        viewMode: $viewMode)
     }
 
     /// Moves `id` into `status` and reorders it just before `beforeID` (or to
@@ -171,5 +132,103 @@ extension ActionItemsView {
         .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius)
             .strokeBorder(NDS.hairline, lineWidth: 0.5))
         .opacity(item.status == .completed ? 0.6 : 1)
+    }
+}
+
+// MARK: - Board column with drop-target choreography (D3-5)
+
+/// One kanban column. Owns the `isTargeted` highlight state so that, while a
+/// card is dragged over this column, the column background tints to the status
+/// color and an accent ring appears — the user can see where the card will land
+/// *before* releasing. The move math (`parent.dropCard`) and card rendering
+/// (`parent.boardCard`) are unchanged; this view only adds the visual feedback.
+@available(macOS 14.0, *)
+private struct BoardColumnView: View {
+    let parent: ActionItemsView
+    let status: ActionItem.Status
+    let items: [ActionItem]
+    @ObservedObject var store: ActionItemStore
+    @Binding var selectedTaskID: String?
+    @Binding var viewMode: ActionItemsView.ViewMode
+
+    // A counter rather than a plain Bool: a column holds several drop
+    // destinations (one per card + the tail filler), and SwiftUI's
+    // enter/exit callbacks for adjacent targets can interleave. Counting
+    // keeps the highlight stable as the pointer slides between cards.
+    @State private var targetCount = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isTargeted: Bool { targetCount > 0 }
+
+    /// Increment on enter, decrement on exit; clamp so stray exits can't go
+    /// negative and strand the highlight on.
+    private func setTargeted(_ targeted: Bool) {
+        targetCount = max(0, targetCount + (targeted ? 1 : -1))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            header
+            ForEach(items) { item in
+                parent.boardCard(item)
+                    .draggable(item.id) {
+                        Text(item.title).font(.caption).lineLimit(2)
+                            .padding(8)
+                            .frame(width: 220, alignment: .leading)
+                            .background(NDS.fieldBg,
+                                        in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+                    }
+                    .dropDestination(for: String.self) { ids, _ in
+                        for id in ids { parent.dropCard(id, toStatus: status, beforeID: item.id) }
+                        return true
+                    } isTargeted: { setTargeted($0) }
+            }
+            // Tall droppable filler so the whole column accepts a drop (incl.
+            // dropping onto an empty column → append at the end).
+            Color.clear
+                .frame(maxWidth: .infinity, minHeight: 80)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .dropDestination(for: String.self) { ids, _ in
+                    for id in ids { parent.dropCard(id, toStatus: status, beforeID: nil) }
+                    return true
+                } isTargeted: { setTargeted($0) }
+        }
+        .frame(width: 280, alignment: .top)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(8)
+        .background(isTargeted ? NDS.status(status).opacity(0.10) : NDS.columnBg,
+                    in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: NDS.cardRadius)
+                .strokeBorder(NDS.status(status).opacity(isTargeted ? 0.85 : 0),
+                              lineWidth: 1.5)
+        )
+        // Reduce-motion-proof: `NDS.motion` returns nil (instant) when the user
+        // has Reduce Motion on, so the tint/ring snaps instead of animating.
+        .animation(NDS.motion(.easeOut(duration: NDS.motionFast), reduce: reduceMotion),
+                   value: isTargeted)
+    }
+
+    private var header: some View {
+        HStack(spacing: 7) {
+            Circle().fill(NDS.status(status)).frame(width: 8, height: 8)
+            Image(systemName: status.systemImage)
+                .scaledFont(11, weight: .semibold).foregroundStyle(NDS.status(status))
+            Text(status.label).font(.callout.weight(.bold))
+            Text("\(items.count)").font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+            Spacer()
+            Button {
+                let pid = (parent.selectedProjectID == ActionItemsView.noProjectSentinel)
+                    ? nil : parent.selectedProjectID
+                let t = store.createTask(title: "New task", projectID: pid, status: status)
+                selectedTaskID = t.id
+                viewMode = .list
+            } label: { Image(systemName: "plus") }
+            .buttonStyle(.borderless).help("Add a task to \(status.label)")
+            .accessibilityLabel("Add a task to \(status.label)")
+        }
+        .padding(.horizontal, 4)
     }
 }
