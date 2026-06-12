@@ -68,7 +68,8 @@ struct MeetingPeopleRail: View {
     private func linkedRow(_ person: Person) -> some View {
         Button { router.openPerson(person.id) } label: {
             HStack(alignment: .top, spacing: 10) {
-                MSAvatar(name: person.displayName, size: 30)
+                MSAvatar(name: person.displayName, size: 30,
+                         ringColor: healthRingColor(for: person, in: people))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(person.displayName).scaledFont(12.5, weight: .semibold)
                         .foregroundStyle(NDS.textPrimary).lineLimit(1)
