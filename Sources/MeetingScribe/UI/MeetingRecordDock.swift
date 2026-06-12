@@ -42,9 +42,26 @@ struct MeetingRecordDock: View {
                 }
 
                 if let m = manager.activeMeeting {
-                    Text(m.displayTitle)
-                        .scaledFont(13, weight: .semibold)
-                        .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(m.displayTitle)
+                            .scaledFont(13, weight: .semibold)
+                            .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                        // C1-10: time-remaining / overrun cue for scheduled meetings.
+                        if !m.isImpromptu {
+                            Spacer(minLength: 6)
+                            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                                if let cue = remainingCue(m, asOf: ctx.date) {
+                                    Text(cue.text)
+                                        .scaledFont(11, weight: .semibold).monospacedDigit()
+                                        .foregroundStyle(cue.color)
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(cue.color.opacity(0.12))
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            .fixedSize()
+                        }
+                    }
                     Text(metaLine(m))
                         .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
                 }
@@ -153,6 +170,25 @@ struct MeetingRecordDock: View {
                     captureFlash = nil
                 }
             }
+        }
+    }
+
+    /// C1-10: "12 min left" for a scheduled meeting, going amber under 5 min and
+    /// "+8 over" once past `endDate`. nil before the meeting is anywhere near
+    /// ending so the cue doesn't shout for a freshly-started hour-long block.
+    private func remainingCue(_ m: Meeting, asOf now: Date) -> (text: String, color: Color)? {
+        let remaining = m.endDate.timeIntervalSince(now)
+        let mins = Int(ceil(remaining / 60))
+        switch remaining {
+        case ..<0:
+            let over = Int(floor(-remaining / 60))
+            return ("+\(over) min over", NDS.danger)
+        case 0..<(5 * 60):
+            return ("\(max(1, mins)) min left", NDS.gold)
+        case (5 * 60)..<(20 * 60):
+            return ("\(mins) min left", NDS.textTertiary)
+        default:
+            return nil   // plenty of time — stay quiet
         }
     }
 
