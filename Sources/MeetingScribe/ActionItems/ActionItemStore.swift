@@ -423,6 +423,21 @@ final class ActionItemStore: ObservableObject {
                 ?? createLabel(name: name)
             toggleLabel(created.id, labelID: label.id)
         }
+        // P2-8: @name / >name addresses the task to a real Person. Exact identity
+        // match first, then a first-name / prefix match for the quick "@jane" case.
+        if let token = parsed.ownerToken {
+            let lc = token.lowercased()
+            let people = PeopleStore.shared.people
+            let match = PersonResolver.resolve(token, in: people).flatMap { id in people.first { $0.id == id } }
+                ?? people.first { $0.displayName.lowercased().hasPrefix(lc) }
+                ?? people.first { ($0.displayName.split(separator: " ").first.map(String.init)?.lowercased() ?? "") == lc }
+            if let m = match {
+                setOwnerPerson(created.id, personID: m.id, ownerName: m.displayName)
+            } else {
+                setOwner(created.id, owner: token)   // keep the typed name even if unresolved
+            }
+            if parsed.delegated { update(created.id) { $0.delegated = true } }
+        }
         return items.first { $0.id == created.id } ?? created
     }
 

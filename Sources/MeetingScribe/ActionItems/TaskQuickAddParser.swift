@@ -6,6 +6,12 @@ struct ParsedQuickAdd: Equatable {
     var dueDate: Date?
     var priority: ActionItem.Priority?
     var labelNames: [String]
+    /// Person-addressed capture (P2-8): the bare name token from `@name`
+    /// (assign to) or `>name` (waiting on / delegated). The caller resolves it
+    /// to a Person via PersonResolver. Nil when no token was typed.
+    var ownerToken: String? = nil
+    /// True when the owner was given with `>` (you're waiting on them).
+    var delegated: Bool = false
 }
 
 /// Parses a single capture line like
@@ -39,6 +45,20 @@ enum TaskQuickAddParser {
             }
         }
 
+        // Owner token (P2-8): @name (assign) or >name (waiting on). Single word
+        // token of letters/digits/._-. First match wins; stripped from the title.
+        var ownerToken: String?
+        var delegated = false
+        if let regex = try? NSRegularExpression(pattern: "(?:^|\\s)([@>])([A-Za-z0-9._\\-]+)") {
+            let ns = text as NSString
+            if let m = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)),
+               m.numberOfRanges > 2 {
+                delegated = ns.substring(with: m.range(at: 1)) == ">"
+                ownerToken = ns.substring(with: m.range(at: 2))
+                if let r = Range(m.range, in: text) { text.replaceSubrange(r, with: " ") }
+            }
+        }
+
         // Labels: #word (letters/digits/_/-). Collect and strip.
         if let regex = try? NSRegularExpression(pattern: "#([A-Za-z0-9_\\-]+)") {
             let ns = text as NSString
@@ -66,6 +86,7 @@ enum TaskQuickAddParser {
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return ParsedQuickAdd(title: title, dueDate: dueDate, priority: priority, labelNames: labels)
+        return ParsedQuickAdd(title: title, dueDate: dueDate, priority: priority,
+                              labelNames: labels, ownerToken: ownerToken, delegated: delegated)
     }
 }
