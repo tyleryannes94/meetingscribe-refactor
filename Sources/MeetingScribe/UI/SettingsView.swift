@@ -24,6 +24,8 @@ struct SettingsView: View {
     @State private var hotkeyMods: UInt32 = AppSettings.shared.dictationHotkeyModifiers
     @State private var meetingRecKeyCode: UInt32 = AppSettings.shared.meetingRecordHotkeyKeyCode
     @State private var meetingRecMods: UInt32 = AppSettings.shared.meetingRecordHotkeyModifiers
+    @State private var quickEntryKeyCode: UInt32 = AppSettings.shared.quickEntryHotkeyKeyCode
+    @State private var quickEntryMods: UInt32 = AppSettings.shared.quickEntryHotkeyModifiers
     @State private var swapKeyCode: UInt32 = AppSettings.shared.dictationSwapHotkeyKeyCode
     @State private var swapMods: UInt32 = AppSettings.shared.dictationSwapHotkeyModifiers
     @State private var promptKeyCode: UInt32 = AppSettings.shared.dictationPromptHotkeyKeyCode
@@ -180,6 +182,22 @@ struct SettingsView: View {
                     .frame(width: 90)
                 }
                 Text("A system-wide shortcut that starts an ad-hoc recording when idle and stops it when recording — works even when MeetingScribe isn't focused. Default: ⌥⌘R.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                HStack {
+                    Text("Quick entry (task / note)")
+                    Spacer()
+                    HotkeyRecorder(keyCode: $quickEntryKeyCode, modifiers: $quickEntryMods)
+                    Menu("Presets") {
+                        ForEach(quickPresets, id: \.label) { preset in
+                            Button(preset.label) {
+                                quickEntryKeyCode = preset.key
+                                quickEntryMods = preset.mods
+                            }
+                        }
+                    }
+                    .frame(width: 90)
+                }
+                Text("Pops a small capture bar over any app to add a task or note without switching windows — type, press Return, and you're back. If a recording is live, the entry links to it. Default: ⌥⌘Space.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
             Section("Dictation (Whispr Flow)") {
@@ -778,6 +796,8 @@ struct SettingsView: View {
         s.dictationHotkeyModifiers = hotkeyMods
         s.meetingRecordHotkeyKeyCode = meetingRecKeyCode
         s.meetingRecordHotkeyModifiers = meetingRecMods
+        s.quickEntryHotkeyKeyCode = quickEntryKeyCode
+        s.quickEntryHotkeyModifiers = quickEntryMods
         s.dictationSwapHotkeyKeyCode = swapKeyCode
         s.dictationSwapHotkeyModifiers = swapMods
         s.dictationPromptHotkeyKeyCode = promptKeyCode

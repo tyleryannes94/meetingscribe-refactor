@@ -27,6 +27,8 @@ final class AppSettings {
         static let dictationHotkeyModifiers = "dictationHotkeyModifiers"
         static let meetingRecordHotkeyKeyCode = "meetingRecordHotkeyKeyCode"
         static let meetingRecordHotkeyModifiers = "meetingRecordHotkeyModifiers"
+        static let quickEntryHotkeyKeyCode = "quickEntryHotkeyKeyCode"
+        static let quickEntryHotkeyModifiers = "quickEntryHotkeyModifiers"
         static let dictationAutoPaste = "dictationAutoPaste"
         static let dictationUsePolished = "dictationUsePolished"
         static let dictationSwapHotkeyKeyCode = "dictationSwapHotkeyKeyCode"
@@ -402,6 +404,25 @@ final class AppSettings {
             return UInt32(v ?? 2304)
         }
         set { defaults.set(Int(newValue), forKey: Keys.meetingRecordHotkeyModifiers) }
+    }
+
+    /// Carbon virtual keycode for the GLOBAL quick-entry panel (capture a task /
+    /// note without alt-tabbing out of the current app). Default: Space (49). (U2-5)
+    var quickEntryHotkeyKeyCode: UInt32 {
+        get {
+            let v = defaults.integer(forKey: Keys.quickEntryHotkeyKeyCode)
+            return v == 0 ? 49 : UInt32(v)
+        }
+        set { defaults.set(Int(newValue), forKey: Keys.quickEntryHotkeyKeyCode) }
+    }
+
+    /// Carbon modifier mask for the quick-entry panel. Default: ⌥⌘ (2304).
+    var quickEntryHotkeyModifiers: UInt32 {
+        get {
+            let v = defaults.object(forKey: Keys.quickEntryHotkeyModifiers) as? Int
+            return UInt32(v ?? 2304)
+        }
+        set { defaults.set(Int(newValue), forKey: Keys.quickEntryHotkeyModifiers) }
     }
 
     /// If true, after transcribing a hotkey-triggered dictation, paste the
