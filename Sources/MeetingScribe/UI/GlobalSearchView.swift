@@ -7,6 +7,7 @@ import AppKit
 @available(macOS 14.0, *)
 struct GlobalSearchView: View {
     @EnvironmentObject var manager: MeetingManager
+    @EnvironmentObject var router: WorkspaceRouter
     @Binding var isPresented: Bool
     /// Called with the chosen entity. The host handles navigation.
     var onOpen: (WorkspaceEntity) -> Void
@@ -375,6 +376,10 @@ struct GlobalSearchView: View {
     }
 
     private func open(_ e: WorkspaceEntity) {
+        // U2-2: carry the query into the opened meeting's transcript so it lands
+        // pre-highlighted — no retyping.
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if e.kind == .meeting, !q.isEmpty { router.pendingTranscriptQuery = q }
         // Don't dismiss here — the host's router dismisses the search sheet and
         // hops to the next runloop tick before presenting, so the transition
         // doesn't fight itself.

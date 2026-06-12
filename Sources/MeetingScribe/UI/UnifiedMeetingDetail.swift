@@ -71,6 +71,8 @@ struct UnifiedMeetingDetail: View {
     @State var connectingAttendee: String?
     /// The persistent "Who's here" people rail (P1-2). On by default; toggle ⌥⌘P.
     @AppStorage("meetingPeopleRailVisible") var peopleRailVisible = true
+    /// Query carried from a search hit into the transcript find bar (U2-2).
+    @State var transcriptSearchSeed: String?
 
     var meeting: Meeting? {
         switch mode {
@@ -150,6 +152,8 @@ struct UnifiedMeetingDetail: View {
             reload()
         }
         .onChange(of: audioURLs) { _, urls in audioController.reload(urls: urls) }
+        .onAppear { consumeTranscriptQuery() }
+        .onChange(of: router.pendingTranscriptQuery) { _, _ in consumeTranscriptQuery() }
         .onChange(of: noteDraft) { _, _ in scheduleNoteSave() }
         .onChange(of: meeting.flatMap { tagStore.tagIDs(for: $0) }) { _, _ in handleTagChange() }
         .onChange(of: manager.state) { _, _ in reloadIfLiveFinished() }

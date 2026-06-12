@@ -54,6 +54,11 @@ final class WorkspaceRouter: ObservableObject {
         case tagFilter(String)
     }
 
+    /// Carried from a search hit to the opened meeting's transcript so it lands
+    /// pre-highlighted with the find-bar populated (U2-2). Consumed + cleared by
+    /// the meeting detail.
+    @Published var pendingTranscriptQuery: String?
+
     /// Clear the mailbox once a destination view has acted on it.
     func consume(_ route: PendingRoute) {
         if pendingRoute == route { pendingRoute = nil }
