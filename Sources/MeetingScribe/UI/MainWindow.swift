@@ -61,6 +61,9 @@ struct MainWindow: View {
         nonmutating set { router.section = newValue }
     }
     @State private var activeSheet: ActiveSheet?
+    /// The ⌘K command palette presents as a floating, blurred, spring-in surface
+    /// (C3-2) — a Raycast-grade overlay, not a system sheet.
+    @State private var showSearch = false
     /// "New meeting" quick sheet (§1) + in-flight audio import flag.
     @State private var showNewMeeting = false
     @State private var importingMeeting = false
@@ -149,7 +152,7 @@ struct MainWindow: View {
             // (C3-4) — the app follows the system appearance like a native Mac app.
             HStack(spacing: 6) {
                 Spacer(minLength: 0)
-                Button { activeSheet = .search } label: {
+                Button { showSearch = true } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "magnifyingglass").scaledFont(11)
                         Text("⌘K").font(NDS.tiny)
@@ -195,7 +198,7 @@ struct MainWindow: View {
     /// Wire each toolbar action to app behavior.
     private func runToolbarAction(_ action: ToolbarModel.Action) {
         switch action {
-        case .search:       activeSheet = .search
+        case .search:       showSearch = true
         case .addPerson:    activeSheet = .addPerson
         case .voiceNote, .newVoiceNote:
             // Toggle: start, or stop if a voice note is already recording.
@@ -357,6 +360,34 @@ struct MainWindow: View {
         }
     }
 
+    /// The floating, blurred, spring-in command palette (C3-2). A Raycast-grade
+    /// overlay: dimmed backdrop, glass card pinned near the top, click-out /
+    /// Escape to dismiss.
+    @ViewBuilder
+    private var searchPalette: some View {
+        if showSearch {
+            ZStack(alignment: .top) {
+                // Dimmed backdrop — click to dismiss.
+                Color.black.opacity(0.28)
+                    .ignoresSafeArea()
+                    .onTapGesture { showSearch = false }
+                    .transition(.opacity)
+
+                GlobalSearchView(isPresented: $showSearch, onOpen: handleEntity)
+                    .environmentObject(manager)
+                    .frame(maxWidth: 600)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
+                        .strokeBorder(NDS.hairline, lineWidth: 1))
+                    .ndsElevation(.modal)
+                    .padding(.top, 96)
+                    .padding(.horizontal, 24)
+                    .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity).combined(with: .offset(y: -8)))
+            }
+            .animation(NDS.motion(.spring(response: 0.30, dampingFraction: 0.82), reduce: reduceMotion), value: showSearch)
+        }
+    }
+
     @ViewBuilder
     private func tabView(for s: TopLevelSection) -> some View {
         switch s {
@@ -379,12 +410,10 @@ struct MainWindow: View {
     /// Meetings no longer open in a sheet (D1-1) — they route to the Meetings
     /// tab detail via `WorkspaceRouter`.
     enum ActiveSheet: Identifiable {
-        case search
         case addPerson
         case setup
         var id: String {
             switch self {
-            case .search: return "search"
             case .addPerson: return "addPerson"
             case .setup: return "setup"
             }
@@ -428,6 +457,7 @@ struct MainWindow: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .animation(.easeOut(duration: 0.18), value: showChat)
             .overlay(ToastOverlay())   // undo toasts (D4-3)
+            .overlay(searchPalette)    // floating ⌘K command palette (C3-2)
         }
         .tint(NDS.brand)
         // No forced color scheme (C3-4): follow the system appearance.
@@ -484,12 +514,6 @@ struct MainWindow: View {
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
-            case .search:
-                GlobalSearchView(isPresented: Binding(
-                    get: { if case .search = activeSheet { return true } else { return false } },
-                    set: { if !$0 { activeSheet = nil } }
-                ), onOpen: handleEntity)
-                .environmentObject(manager)
             case .addPerson:
                 AddPersonSheet()
                     .environmentObject(PeopleStore.shared)
@@ -593,7 +617,7 @@ struct MainWindow: View {
             section = .notes
         }
         .onReceive(NotificationCenter.default.publisher(for: .meetingScribeOpenSearch)) { _ in
-            activeSheet = .search
+            showSearch = true
         }
         // ⇧⌘P — jump to People and open the add-person sheet. Owned here (not
         // in PeopleListView) so it works even before the People tab is built.
