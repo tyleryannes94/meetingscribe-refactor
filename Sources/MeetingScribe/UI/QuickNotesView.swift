@@ -11,6 +11,7 @@ struct QuickNotesView: View {
     /// for the legacy forwarding-shim API; new code paths should route
     /// through `quickNotes` directly.
     @EnvironmentObject var quickNotes: QuickNotesController
+    @EnvironmentObject var router: WorkspaceRouter
     @State private var selection: String?
     @State private var importing = false
 
@@ -25,6 +26,18 @@ struct QuickNotesView: View {
                 manager.refreshQuickNotes()
                 selection = id
             }
+        }
+        // Deep-link routing via the router mailbox (D1-3): consumed on appear so
+        // it lands even when the Notes tab is built for the first time.
+        .onAppear { consumeRouterVoiceNote() }
+        .onChange(of: router.pendingRoute) { _, _ in consumeRouterVoiceNote() }
+    }
+
+    private func consumeRouterVoiceNote() {
+        if case .voiceNote(let id)? = router.pendingRoute {
+            manager.refreshQuickNotes()
+            selection = id
+            router.consume(.voiceNote(id))
         }
     }
 

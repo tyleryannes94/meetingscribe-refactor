@@ -8,6 +8,7 @@ struct PeopleListView: View {
     @EnvironmentObject var people: PeopleStore
     @EnvironmentObject var peopleTags: PeopleTagStore
     @EnvironmentObject var manager: MeetingManager
+    @EnvironmentObject var router: WorkspaceRouter
     @StateObject private var importer = PeopleImportController()
 
     @State private var query = ""
@@ -119,24 +120,38 @@ struct PeopleListView: View {
             get: { dedupResult != nil }, set: { if !$0 { dedupResult = nil } })) {
             Button("OK", role: .cancel) { }
         } message: { Text(dedupResult ?? "") }
-        // Search-palette routing: jump to a specific person or apply a
-        // tag filter. The notifications are posted by MainWindow's
-        // routeEntity when the user picks one of these result types.
-        .onReceive(NotificationCenter.default.publisher(for: .meetingScribeOpenPerson)) { note in
-            if let id = note.userInfo?["id"] as? String { selection = id }
+        // Search-palette / deep-link routing (D1-3): the router holds the
+        // destination as state, so this works even on the People tab's first
+        // build (a notification would have been missed). Consume on appear and
+        // on change; keep `selection` and the router in sync both directions.
+        .onAppear {
+            if let id = router.selectedPersonID { selection = id }
+            if case .tagFilter(let name)? = router.pendingRoute { applyTagFilter(name) }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .meetingScribeFilterByTag)) { note in
-            guard let name = note.userInfo?["name"] as? String else { return }
-            // Resolve the typed tag name to a tag id from PeopleTagStore.
-            if let match = peopleTags.allTags.first(where: {
-                $0.name.lowercased() == name.lowercased()
-                    || $0.name.lowercased().contains(name.lowercased())
-            }) {
-                tagFilters = [match.id]
-            } else {
-                query = name
-            }
+        .onChange(of: router.selectedPersonID) { _, id in
+            if let id { selection = id }
         }
+        .onChange(of: router.pendingRoute) { _, route in
+            if case .tagFilter(let name)? = route { applyTagFilter(name) }
+        }
+        .onChange(of: selection) { _, id in
+            // Reflect manual list selection back into the router so back/forward
+            // history (D1-2) and the rail's last-person memory stay truthful.
+            if router.selectedPersonID != id { router.selectedPersonID = id }
+        }
+    }
+
+    /// Resolve a typed tag name to a tag id and apply it as the people filter.
+    private func applyTagFilter(_ name: String) {
+        if let match = peopleTags.allTags.first(where: {
+            $0.name.lowercased() == name.lowercased()
+                || $0.name.lowercased().contains(name.lowercased())
+        }) {
+            tagFilters = [match.id]
+        } else {
+            query = name
+        }
+        router.consume(.tagFilter(name))
     }
 
     @ViewBuilder
