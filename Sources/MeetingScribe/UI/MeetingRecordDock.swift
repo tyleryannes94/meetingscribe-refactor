@@ -18,6 +18,9 @@ struct MeetingRecordDock: View {
     @State private var capture = ""
     @State private var captureFlash: String?
     @FocusState private var captureFocused: Bool
+    /// C1-2: count of "mark moment" highlights flagged this session.
+    @State private var markCount = 0
+    @State private var markFlash = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -71,6 +74,22 @@ struct MeetingRecordDock: View {
                                     systemLevel: recordingMonitor.recordingHealth.systemLevel,
                                     isActive: true, height: 18)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    Button(action: markMoment) {
+                        Image(systemName: markFlash ? "flag.fill" : "flag")
+                            .foregroundStyle(markFlash ? NDS.gold : NDS.textSecondary)
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
+                    .help("Mark this moment (adds a highlight to the recap)")
+                    .overlay(alignment: .topTrailing) {
+                        if markCount > 0 {
+                            Text("\(markCount)")
+                                .scaledFont(9, weight: .bold).monospacedDigit()
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                .background(NDS.gold).clipShape(Capsule())
+                                .offset(x: 5, y: -5)
+                        }
+                    }
                     Button(action: onOpen) {
                         Label("Open & add notes", systemImage: "note.text")
                     }
@@ -94,6 +113,7 @@ struct MeetingRecordDock: View {
         .shadow(color: .black.opacity(0.32), radius: 16, y: 8)
         .padding(18)
         .onAppear {
+            if let m = manager.activeMeeting { markCount = MeetingMarks.load(m.id).count }
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) { pulse = true }
         }
@@ -157,6 +177,24 @@ struct MeetingRecordDock: View {
             }
         }
         capture = ""
+    }
+
+    /// C1-2: flag the current moment. Writes a timestamped highlight (relative to
+    /// the recording start) to the live meeting's marks sidecar; the finished
+    /// recap surfaces these as a "Highlights" anchor list.
+    private func markMoment() {
+        guard let m = manager.activeMeeting else { return }
+        let second = max(0, Date().timeIntervalSince(startedAt))
+        let marks = MeetingMarks.add(second: second, to: m.id)
+        markCount = marks.count
+        withAnimation(NDS.motion(.easeOut(duration: NDS.motionFast), reduce: reduceMotion)) {
+            markFlash = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation(NDS.motion(.easeOut(duration: NDS.motionFast), reduce: reduceMotion)) {
+                markFlash = false
+            }
+        }
     }
 
     private func flash(_ message: String) {

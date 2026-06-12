@@ -13,6 +13,7 @@ extension UnifiedMeetingDetail {
         case .past:
             VStack(spacing: 0) {
                 outcomesStrip        // action items + decisions, always visible (TM-5)
+                highlightsStrip      // C1-2 "mark moment" anchors, if any
                 summaryDisclosure
                 Divider().overlay(NDS.divider)
                 notesEditor
@@ -20,6 +21,48 @@ extension UnifiedMeetingDetail {
         default:
             // Live/upcoming: no finished summary yet — just the notes editor.
             notesEditor
+        }
+    }
+
+    /// C1-2: highlights the user flagged with "mark moment" during the call,
+    /// pinned atop the recap as navigable anchors. Tapping one jumps to the
+    /// transcript so the surrounding context is one click away.
+    @ViewBuilder
+    private var highlightsStrip: some View {
+        if let m = meeting {
+            let marks = MeetingMarks.load(m.id)
+            if !marks.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "flag.fill")
+                            .scaledFont(11, weight: .semibold).foregroundStyle(NDS.gold)
+                        Text("Highlights")
+                            .scaledFont(11, weight: .bold, relativeTo: .caption2).tracking(0.6)
+                            .foregroundStyle(NDS.textSecondary)
+                    }
+                    FlowLayout(spacing: 6) {
+                        ForEach(marks) { mark in
+                            Button { tab = .transcript } label: {
+                                HStack(spacing: 5) {
+                                    Text(mark.timestamp)
+                                        .scaledFont(11, weight: .semibold).monospacedDigit()
+                                        .foregroundStyle(NDS.gold)
+                                    if !mark.label.isEmpty {
+                                        Text(mark.label)
+                                            .scaledFont(11).foregroundStyle(NDS.textPrimary)
+                                    }
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(NDS.gold.opacity(0.12))
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .help("Jump to the transcript")
+                        }
+                    }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 10)
+            }
         }
     }
 
