@@ -11,6 +11,9 @@ struct VaultSearchResult {
     let title: String?
     let dateEpoch: Int64?
     let rankScore: Double
+    /// FTS5 snippet of the matched body, with matches wrapped in the U+0001 /
+    /// U+0002 sentinels so the UI can bold them (U2-3). Nil when unavailable.
+    var snippet: String? = nil
 }
 
 /// SQLite + FTS5 query/index layer for the second brain (audit §6.1).
@@ -400,7 +403,8 @@ final class SecondBrainDB {
         guard !q.isEmpty else { return [] }
         let sql = """
             SELECT vc.entity_id, vc.entity_kind, vc.title, vc.date_epoch,
-                (bm25(vault_fts, 10.0, 1.0, 0.5) * (1.0 + 0.5 * MAX(0.0, 1.0 - (CAST(strftime('%s','now') AS REAL) - CAST(COALESCE(vc.date_epoch,0) AS REAL)) / 15552000.0))) AS rank_score
+                (bm25(vault_fts, 10.0, 1.0, 0.5) * (1.0 + 0.5 * MAX(0.0, 1.0 - (CAST(strftime('%s','now') AS REAL) - CAST(COALESCE(vc.date_epoch,0) AS REAL)) / 15552000.0))) AS rank_score,
+                snippet(vault_fts, 1, char(1), char(2), '…', 10) AS snip
             FROM vault_fts
             JOIN vault_content vc ON vault_fts.rowid = vc.rowid
             WHERE vault_fts MATCH ?
@@ -421,8 +425,10 @@ final class SecondBrainDB {
             let title      = sqlite3_column_text(stmt, 2).map { String(cString: $0) }
             let dateEpoch  = sqlite3_column_type(stmt, 3) != SQLITE_NULL ? sqlite3_column_int64(stmt, 3) : nil
             let rankScore  = sqlite3_column_double(stmt, 4)
+            let snippet    = sqlite3_column_text(stmt, 5).map { String(cString: $0) }
             results.append(VaultSearchResult(entityID: entityID, entityKind: entityKind,
-                                             title: title, dateEpoch: dateEpoch, rankScore: rankScore))
+                                             title: title, dateEpoch: dateEpoch, rankScore: rankScore,
+                                             snippet: snippet))
         }
         return results
     }

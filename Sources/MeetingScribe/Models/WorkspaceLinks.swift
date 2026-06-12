@@ -49,6 +49,9 @@ struct WorkspaceEntity: Identifiable, Hashable, Sendable {
     let title: String
     let subtitle: String
     let date: Date?
+    /// Matched-context snippet for search results (U2-3), match-wrapped with the
+    /// U+0001 / U+0002 sentinels. Nil for non-search entities.
+    var snippet: String? = nil
 
     var id: String { "\(kind.rawValue):\(rawID)" }
 
