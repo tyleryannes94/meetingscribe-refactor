@@ -582,23 +582,8 @@ extension UnifiedMeetingDetail {
 
     // MARK: - Add all attendees to People (TM-9)
 
-    /// (fullName, email) for an attendee string "Name <email>".
-    private func parseAttendee(_ a: String) -> (name: String, email: String) {
-        let name = a.components(separatedBy: "<").first?
-            .trimmingCharacters(in: .whitespaces) ?? a
-        var email = ""
-        if let lt = a.firstIndex(of: "<"), let gt = a.firstIndex(of: ">"), lt < gt {
-            email = String(a[a.index(after: lt)..<gt]).trimmingCharacters(in: .whitespaces)
-        }
-        return (name.isEmpty ? a : name, email)
-    }
-
     private func attendeeExists(_ a: String) -> Bool {
-        let p = parseAttendee(a)
-        return PeopleStore.shared.people.contains { person in
-            person.displayName.caseInsensitiveCompare(p.name) == .orderedSame
-            || (!p.email.isEmpty && person.emails.contains { $0.caseInsensitiveCompare(p.email) == .orderedSame })
-        }
+        PersonResolver.resolve(a, in: PeopleStore.shared.people) != nil
     }
 
     func unaddedAttendeeCount(_ m: Meeting) -> Int {
@@ -608,8 +593,9 @@ extension UnifiedMeetingDetail {
     func addAllAttendeesToPeople(_ m: Meeting) {
         var created: [Person] = []
         for a in m.attendees where !attendeeExists(a) {
-            let p = parseAttendee(a)
-            let person = PeopleStore.shared.createPerson(displayName: p.name, email: p.email)
+            let id = PersonResolver.parse(a)
+            let name = id.hasName ? id.name : PersonResolver.localPart(of: id.email)
+            let person = PeopleStore.shared.createPerson(displayName: name, email: id.email)
             // P1-6: don't leave a hollow Person divorced from the meeting that
             // created them. Link this meeting and count it as an interaction so
             // the new record shows up in their history and ages correctly.

@@ -168,6 +168,12 @@ struct MeetingScribeApp: App {
         wireNotifications()
         wireDetector()
         wirePipelineNotification()
+        // Live-event snap (U2-1): let the manager resolve a quick recording onto
+        // the single currently-live calendar event when one exists.
+        manager.liveCalendarMeetingProvider = { [weak calendar] in
+            let live = calendar?.upcoming.filter { $0.isLive } ?? []
+            return live.count == 1 ? live.first : nil
+        }
         // Ambient mic-based meeting detection (off unless enabled in Settings).
         AmbientMeetingDetector.shared.startIfEnabled()
         registerHotkey()
@@ -224,6 +230,20 @@ struct MeetingScribeApp: App {
         Task.detached(priority: .utility) { [manager] in
             try? await Task.sleep(nanoseconds: 600_000_000)
             await MainActor.run { manager.prefetchTopMeetingBodies(limit: 10) }
+        }
+
+        // BACKGROUND: one-time attendee backfill (P1-1). Retroactively links
+        // every existing meeting's attendees to their Person records via the
+        // identity layer, so health/timelines/follow-ups are truthful for
+        // history, not just future meetings. Reads a definitive list from the
+        // store (not the still-loading published `pastMeetings`); guarded by a
+        // UserDefaults flag inside the store helper, so it runs at most once.
+        Task.detached(priority: .background) { [manager] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await MainActor.run {
+                let meetings = manager.store.listPastMeetings()
+                PeopleStore.shared.backfillMeetingLinks(meetings)
+            }
         }
     }
 

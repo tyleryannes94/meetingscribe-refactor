@@ -622,15 +622,11 @@ struct TodayView: View {
         return parts.joined(separator: " · ")
     }
 
-    /// Jump to the People tab and open a specific person (used by the
-    /// "Stay in touch" nudges). Small delay lets the People tab mount and
-    /// register its notification listener before we post.
+    /// Jump to the People tab and open a specific person (used by the "Stay in
+    /// touch" nudges). Deterministic via the router (D1-3) — no asyncAfter race
+    /// against the People tab mounting.
     private func openPerson(_ p: Person) {
-        router.section = .people
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            NotificationCenter.default.post(name: .meetingScribeOpenPerson,
-                                            object: nil, userInfo: ["id": p.id])
-        }
+        router.openPerson(p.id)
     }
 
     private func adhocPlaceholder() -> Meeting {

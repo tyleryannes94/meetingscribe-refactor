@@ -23,29 +23,16 @@ struct MeetingPersonConnectPanel: View {
     /// Set after a successful link so we can show a confirmation state.
     @State private var connectedID: String?
 
-    // MARK: - Parsing (mirrors AttendeeChip)
+    // MARK: - Parsing (via the one identity layer, P1-1)
 
-    private var fullName: String {
-        let n = attendee.components(separatedBy: "<").first?
-            .trimmingCharacters(in: .whitespaces) ?? attendee
-        return n.isEmpty ? attendee : n
-    }
+    private var identity: AttendeeIdentity { PersonResolver.parse(attendee) }
+    private var fullName: String { identity.hasName ? identity.name : attendee }
+    private var email: String { identity.email }
 
-    private var email: String {
-        guard let lt = attendee.firstIndex(of: "<"),
-              let gt = attendee.firstIndex(of: ">"), lt < gt else {
-            // Bare email with no angle brackets?
-            return attendee.contains("@") ? attendee.trimmingCharacters(in: .whitespaces) : ""
-        }
-        return String(attendee[attendee.index(after: lt)..<gt]).trimmingCharacters(in: .whitespaces)
-    }
-
-    /// The person this attendee already resolves to (by email first, then name).
+    /// The person this attendee already resolves to (email first, exact name).
     private var existingPerson: Person? {
-        if !email.isEmpty, let p = people.person(forEmail: email) { return p }
-        return people.people.first {
-            $0.displayName.caseInsensitiveCompare(fullName) == .orderedSame
-        }
+        guard let id = PersonResolver.resolve(identity: identity, in: people.people) else { return nil }
+        return people.person(by: id)
     }
 
     /// People matching the search box. When the box is empty we surface the

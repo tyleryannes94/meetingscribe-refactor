@@ -1150,6 +1150,60 @@ final class PeopleStore: ObservableObject {
         writePerson(people[idx])
     }
 
+    // MARK: - PersonResolver bridge (P1-1)
+
+    /// Resolve an attendee string to a Person through the one identity layer
+    /// (email-first, exact-name-second — never substring).
+    func resolvedPerson(forAttendee raw: String) -> Person? {
+        guard let id = PersonResolver.resolve(raw, in: people) else { return nil }
+        return person(by: id)
+    }
+
+    /// Auto-link every attendee of a finalized meeting that resolves to an
+    /// existing Person: add the meeting to their timeline and bump
+    /// last-interaction. Idempotent (`addMeetingMention` de-dupes). This is the
+    /// edge that previously only existed when a person was linked by hand or
+    /// happened to be named in the transcript. Returns the number of links made.
+    @discardableResult
+    func linkAttendees(of meeting: Meeting) -> Int {
+        let matches = PersonResolver.resolvedAttendees(meeting.attendees, in: people)
+        for (pid, _) in matches {
+            addMeetingMention(meeting.id, toPersonID: pid)
+            bumpLastInteraction(personID: pid, date: meeting.startDate)
+        }
+        return matches.count
+    }
+
+    /// Resolve a free-text action-item owner to a Person id (or nil for self /
+    /// no match), so extracted tasks carry a real person edge.
+    func resolveOwnerPersonID(_ owner: String?) -> String? {
+        PersonResolver.resolveOwner(owner, in: people)
+    }
+
+    /// How many typed relationships are overdue for a check-in (last interaction
+    /// + cadence is in the past). Mirrors the Today drift strip's triage; drives
+    /// the People nav-rail badge (D1-1). Untyped one-off imports don't count.
+    var overdueCheckInCount: Int {
+        let now = Date()
+        return people.reduce(into: 0) { acc, p in
+            guard p.relationshipType != .unset else { return }
+            let last = p.lastInteractionAt ?? p.createdAt
+            let daysSince = Int(now.timeIntervalSince(last) / 86400)
+            if daysSince > p.effectiveCheckInDays { acc += 1 }
+        }
+    }
+
+    /// One-time backfill so the identity layer is retroactive: link every
+    /// existing meeting's attendees to people. Guarded by a UserDefaults flag.
+    func backfillMeetingLinks(_ meetings: [Meeting]) {
+        let key = "people.attendeeBackfill.v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        var linked = 0
+        for m in meetings { linked += linkAttendees(of: m) }
+        UserDefaults.standard.set(true, forKey: key)
+        log.info("Attendee backfill linked \(linked, privacy: .public) meeting↔person edge(s)")
+    }
+
     // MARK: - Auto-extraction (Phase B)
 
     func hasExtracted(_ meetingID: String) -> Bool { extractedMeetingIDs.contains(meetingID) }

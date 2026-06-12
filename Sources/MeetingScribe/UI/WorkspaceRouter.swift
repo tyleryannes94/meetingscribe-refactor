@@ -32,6 +32,33 @@ final class WorkspaceRouter: ObservableObject {
         }
     }
 
+    /// The person shown in the People tab (D1-3): a real router property, not a
+    /// fire-and-forget NotificationCenter post a lazily-built tab can miss.
+    /// `PeopleListView` binds its selection to this and consumes it on appear,
+    /// so deep links land even on first visit. Also remembered in history (D1-2).
+    @Published var selectedPersonID: String? {
+        didSet {
+            guard selectedPersonID != oldValue else { return }
+            scheduleHistoryRecord()
+        }
+    }
+
+    /// A one-shot deep-link destination for sections whose target view owns its
+    /// own selection state (voice notes, people tag filter). The router sets it;
+    /// the destination view consumes it in `.onAppear`/`.onChange` and clears it
+    /// via `consume(_:)`. Replaces the NotificationCenter + asyncAfter races.
+    @Published var pendingRoute: PendingRoute?
+
+    enum PendingRoute: Equatable {
+        case voiceNote(String)
+        case tagFilter(String)
+    }
+
+    /// Clear the mailbox once a destination view has acted on it.
+    func consume(_ route: PendingRoute) {
+        if pendingRoute == route { pendingRoute = nil }
+    }
+
     /// Invoked for a `.chatQuery` entity so the host (MainWindow) can reveal the
     /// chat rail before the query is dispatched. The router doesn't own the
     /// rail's visibility, so it delegates that one concern back out.
@@ -44,6 +71,7 @@ final class WorkspaceRouter: ObservableObject {
     private struct NavState: Equatable {
         var section: TopLevelSection
         var meetingID: String?
+        var personID: String?
     }
 
     private var backStack: [NavState] = []
@@ -62,7 +90,7 @@ final class WorkspaceRouter: ObservableObject {
         let raw = UserDefaults.standard.string(forKey: Self.sectionKey) ?? ""
         let initial = TopLevelSection(rawValue: raw) ?? .today
         self.section = initial
-        self.currentState = NavState(section: initial, meetingID: nil)
+        self.currentState = NavState(section: initial, meetingID: nil, personID: nil)
     }
 
     /// Coalesce the back-to-back `section` + `selectedMeetingID` mutations of a
@@ -77,7 +105,7 @@ final class WorkspaceRouter: ObservableObject {
     private func recordHistory() {
         recordScheduled = false
         defer { suppressHistory = false }
-        let new = NavState(section: section, meetingID: selectedMeetingID)
+        let new = NavState(section: section, meetingID: selectedMeetingID, personID: selectedPersonID)
         guard new != currentState else { return }
         if !suppressHistory {
             backStack.append(currentState)
@@ -98,6 +126,7 @@ final class WorkspaceRouter: ObservableObject {
         currentState = state
         suppressHistory = true
         selectedMeetingID = state.meetingID
+        selectedPersonID = state.personID
         section = state.section
         updateHistoryFlags()
     }
@@ -125,12 +154,12 @@ final class WorkspaceRouter: ObservableObject {
         section = .meetings
     }
 
-    /// Open a person in the People tab. Person routing is notification-based
-    /// (PeopleListView observes it), so this needs no manager.
+    /// Open a person in the People tab (D1-3). Deterministic: sets the router's
+    /// `selectedPersonID` (which `PeopleListView` binds to and consumes on
+    /// appear) instead of posting a notification a lazily-built tab can miss.
     func openPerson(_ id: String) {
+        selectedPersonID = id
         section = .people
-        NotificationCenter.default.post(name: .meetingScribeOpenPerson,
-                                        object: nil, userInfo: ["id": id])
     }
 
     /// Single entry point for opening any workspace entity (search palette,
@@ -152,9 +181,8 @@ final class WorkspaceRouter: ObservableObject {
                 manager.refreshPastMeetings(force: true)
             }
         case .voiceNote:
+            pendingRoute = .voiceNote(id)
             section = .notes
-            NotificationCenter.default.post(name: .meetingScribeOpenVoiceNote,
-                                            object: nil, userInfo: ["id": id])
         case .project, .actionItem:
             section = .actions
         case .person:
@@ -166,9 +194,8 @@ final class WorkspaceRouter: ObservableObject {
         case .chatQuery:
             openChat?(id)
         case .tag:
+            pendingRoute = .tagFilter(id)
             section = .people
-            NotificationCenter.default.post(name: .meetingScribeFilterByTag,
-                                            object: nil, userInfo: ["name": id])
         }
     }
 }

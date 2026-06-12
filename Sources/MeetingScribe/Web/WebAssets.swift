@@ -162,7 +162,7 @@ enum WebAssets {
     function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1400); }
 
     function go(render, title){ stack.push({render,title}); paint(); }
-    function back(){ if(stack.length>1){ stack.pop(); paint(); } }
+    function back(){ if(stack.length>1){ stack.pop(); if(stack.length===1){ const a=document.querySelector('#tabs button.active'); if(a) setHash('#/'+a.dataset.tab); } paint(); } }
     backBtn.onclick = back;
     async function paint(){
       const top = stack[stack.length-1];
@@ -196,9 +196,44 @@ enum WebAssets {
       document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
       const t = TABS[tab];
       stack = [{render:t[1], title:t[0]}];
+      setHash('#/'+tab);
       paint();
     }
     document.querySelectorAll('#tabs button').forEach(b=> b.onclick=()=>openTab(b.dataset.tab));
+
+    // P3-1: hash routing twinned 1:1 with the desktop meetingscribe://<kind>/<id>
+    // scheme, so a deep link / citation works identically on phone and Mac.
+    const KIND_TAB = { meeting:'meetings', person:'people', task:'tasks', actionItem:'tasks', project:'projects', note:'notes', voiceNote:'notes' };
+    const KIND_DETAIL = {
+      meeting:   id=>({t:'Meeting', r:()=>renderMeetingDetail(id)}),
+      person:    id=>({t:'Person',  r:()=>renderPersonDetail(id)}),
+      task:      id=>({t:'Task',    r:()=>renderTaskDetail(id)}),
+      actionItem:id=>({t:'Task',    r:()=>renderTaskDetail(id)}),
+      project:   id=>({t:'Project', r:()=>renderProjectDetail(id)}),
+      note:      id=>({t:'Note',    r:()=>renderNoteDetail(id)}),
+      voiceNote: id=>({t:'Note',    r:()=>renderNoteDetail(id)})
+    };
+    let suppressHash = false;
+    function entityHash(kind,id){ return '#/'+kind+'/'+encodeURIComponent(id); }
+    function setHash(h){ if(location.hash===h) return; suppressHash=true; location.hash=h; }
+    function applyHash(){
+      let h = location.hash || '';
+      h = h.indexOf('#/')===0 ? h.slice(2) : '';
+      const slash = h.indexOf('/');
+      if(slash > 0){
+        const kind = h.slice(0, slash);
+        const id = decodeURIComponent(h.slice(slash+1));
+        const tab=KIND_TAB[kind], make=KIND_DETAIL[kind];
+        if(tab && make && id){
+          document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+          const e=make(id);
+          stack=[{render:TABS[tab][1], title:TABS[tab][0]}, {render:e.r, title:e.t}];
+          paint(); return;
+        }
+      }
+      openTab(h && TABS[h] ? h : 'today');
+    }
+    window.addEventListener('hashchange', ()=>{ if(suppressHash){ suppressHash=false; return; } applyHash(); });
 
     function listRow(title, sub, onClick, trailing){
       const row=document.createElement('button'); row.className='row';
@@ -259,6 +294,7 @@ enum WebAssets {
       view.appendChild(list);
     }
     async function renderMeetingDetail(id){
+      setHash(entityHash('meeting',id));
       const m = await api('GET','/meetings/'+id);
       view.innerHTML='';
       const c=document.createElement('div'); c.className='detail';
@@ -334,6 +370,7 @@ enum WebAssets {
       view.appendChild(list);
     }
     async function renderTaskDetail(id){
+      setHash(entityHash('task',id));
       const t = await api('GET','/tasks/'+id);
       const proj = await api('GET','/projects');
       view.innerHTML='';
@@ -405,6 +442,7 @@ enum WebAssets {
       view.appendChild(list);
     }
     async function renderProjectDetail(id){
+      setHash(entityHash('project',id));
       const p = await api('GET','/projects/'+id);
       view.innerHTML='';
       const c=document.createElement('div'); c.className='detail';
@@ -467,6 +505,7 @@ enum WebAssets {
       view.appendChild(list);
     }
     async function renderPersonDetail(id){
+      setHash(entityHash('person',id));
       const p = await api('GET','/people/'+id);
       view.innerHTML='';
       const c=document.createElement('div'); c.className='detail';
@@ -535,6 +574,7 @@ enum WebAssets {
       view.appendChild(list);
     }
     async function renderNoteDetail(id){
+      setHash(entityHash('note',id));
       const n = await api('GET','/voicenotes/'+id);
       view.innerHTML='';
       const c=document.createElement('div'); c.className='detail';
@@ -606,7 +646,7 @@ enum WebAssets {
       send.onclick=run;
     }
 
-    openTab('today');
+    applyHash();   // P3-1: honor a deep-link hash on load, else default to Today
     </script>
     </body>
     </html>

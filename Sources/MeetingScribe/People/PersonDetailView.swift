@@ -1144,15 +1144,11 @@ struct PersonDetailView: View {
 
     // MARK: - Meeting history (right column, Meetings tab)
 
-    /// True when `m` lists this person as an attendee (by email, most reliable,
-    /// or display name).
+    /// True when `m` lists this person as an attendee. Resolved through the one
+    /// identity layer (email-first, exact-name-second) — the old substring test
+    /// matched "Dan" against every "Daniel" (P1-1).
     private func attendeeMatches(_ m: Meeting) -> Bool {
-        let email = current.emails.first?.lowercased() ?? ""
-        let personName = current.displayName.lowercased()
-        return m.attendees.contains {
-            let a = $0.lowercased()
-            return (!email.isEmpty && a.contains(email)) || a.contains(personName)
-        }
+        m.attendees.contains { PersonResolver.resolve($0, in: [current]) == current.id }
     }
 
     /// Load unrecorded calendar meetings with this person over the last ~180

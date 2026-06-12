@@ -315,7 +315,26 @@ struct MainWindow: View {
     }
 
     private func navItem(_ s: TopLevelSection) -> some View {
-        NavRailItem(section: s, selected: section == s) { section = s }
+        NavRailItem(section: s, selected: section == s,
+                    badge: railBadge(for: s)) { section = s }
+    }
+
+    /// State-bearing rail (D1-1): a glanceable count/pulse per section so users
+    /// stop opening tabs "to check if anything needs me".
+    private func railBadge(for s: TopLevelSection) -> NavRailItem.Badge {
+        switch s {
+        case .meetings:
+            let finalizing = manager.transcribingMeetingIDs.count
+            return finalizing > 0 ? .pulse(finalizing) : .none
+        case .actions:
+            let overdue = manager.actionItems.overdueTasks.count
+            return overdue > 0 ? .count(overdue, NDS.danger) : .none
+        case .people:
+            let drifting = PeopleStore.shared.overdueCheckInCount
+            return drifting > 0 ? .count(drifting, NDS.gold) : .none
+        case .today, .notes:
+            return .none
+        }
     }
 
     private func navActionRow(_ title: String, systemImage: String, _ action: @escaping () -> Void) -> some View {
@@ -659,9 +678,21 @@ private struct SettingsGearButton: View {
 private struct NavRailItem: View {
     let section: TopLevelSection
     let selected: Bool
+    var badge: Badge = .none
     let action: () -> Void
 
+    /// A glanceable rail indicator (D1-1).
+    enum Badge: Equatable {
+        case none
+        /// A colored count pill (overdue tasks, drifting people).
+        case count(Int, Color)
+        /// An animated dot + count for in-flight work (meetings finalizing).
+        case pulse(Int)
+    }
+
     @State private var isHovered = false
+    @State private var pulsing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -674,6 +705,7 @@ private struct NavRailItem: View {
                     .scaledFont(13.5, weight: selected ? .bold : .medium)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                 Spacer(minLength: 0)
+                badgeView
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(
@@ -687,6 +719,44 @@ private struct NavRailItem: View {
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .accessibilityLabel(section.label)
+        .accessibilityValue(badgeAccessibility)
+    }
+
+    @ViewBuilder
+    private var badgeView: some View {
+        switch badge {
+        case .none:
+            EmptyView()
+        case .count(let n, let color):
+            Text("\(n)")
+                .scaledFont(10, weight: .bold)
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6).padding(.vertical, 1)
+                .background(color, in: Capsule())
+        case .pulse(let n):
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(NDS.brand)
+                    .frame(width: 6, height: 6)
+                    .opacity(pulsing && !reduceMotion ? 0.35 : 1)
+                    .animation(reduceMotion ? nil :
+                        .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                        value: pulsing)
+                Text("\(n)")
+                    .scaledFont(10, weight: .bold).monospacedDigit()
+                    .foregroundStyle(NDS.textSecondary)
+            }
+            .onAppear { pulsing = true }
+        }
+    }
+
+    private var badgeAccessibility: String {
+        switch badge {
+        case .none: return ""
+        case .count(let n, _): return "\(n) need attention"
+        case .pulse(let n): return "\(n) finalizing"
+        }
     }
 }
 

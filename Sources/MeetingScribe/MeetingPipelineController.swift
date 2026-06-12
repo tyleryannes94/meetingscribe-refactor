@@ -179,6 +179,15 @@ final class MeetingPipelineController: ObservableObject {
             lastError = "Couldn't save the transcript: \(error.localizedDescription)"
         }
 
+        // Auto-title ad-hoc captures from the first spoken line (U2-9) so the
+        // Meetings list shows real content instead of an "Ad-hoc Recording" wall.
+        if workingMeeting.isImpromptu,
+           (workingMeeting.userTitle?.isEmpty ?? true),
+           workingMeeting.title == "Ad-hoc Recording",
+           let derived = Self.deriveTitle(from: transcript) {
+            workingMeeting.title = derived
+        }
+
         // 3. Summarize.
         let summary: String
         var summaryFailed = false
@@ -203,9 +212,16 @@ final class MeetingPipelineController: ObservableObject {
         // Persist health alongside the meeting.
         try? store.writeMeeting(workingMeeting, primaryTag: primary)
 
-        // 4. Action items.
-        let extracted = ActionItemExtractor.extract(from: summary, meeting: workingMeeting)
+        // 4. Action items. Resolve each owner string to a real Person id via the
+        // one identity layer so tasks carry a person edge (P1-1/P2-1), then
+        // auto-link the meeting's calendar attendees to their Person records.
+        var extracted = ActionItemExtractor.extract(from: summary, meeting: workingMeeting)
+        let knownPeople = PeopleStore.shared.people
+        for i in extracted.indices where extracted[i].ownerPersonID == nil {
+            extracted[i].ownerPersonID = PersonResolver.resolveOwner(extracted[i].owner, in: knownPeople)
+        }
         actionItems.reconcileExtracted(extracted, for: workingMeeting.id)
+        PeopleStore.shared.linkAttendees(of: workingMeeting)
 
         lastCompletedDir = store.directory(for: workingMeeting, primaryTag: primary)
 
@@ -329,8 +345,13 @@ final class MeetingPipelineController: ObservableObject {
                 let summary = try await summarizer.summarize(meeting: meeting, transcript: transcript)
                 await MainActor.run {
                     try? store.writeSummary(summary, for: meeting, primaryTag: primary)
-                    let extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
+                    var extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
+                    let knownPeople = PeopleStore.shared.people
+                    for i in extracted.indices where extracted[i].ownerPersonID == nil {
+                        extracted[i].ownerPersonID = PersonResolver.resolveOwner(extracted[i].owner, in: knownPeople)
+                    }
                     actionItems.reconcileExtracted(extracted, for: meeting.id)
+                    PeopleStore.shared.linkAttendees(of: meeting)
                     let tagNameList = tagStore.tagIDs(for: meeting)
                         .compactMap { tagStore.tag(by: $0)?.name }
                     ObsidianExporter.writeMarkdownFile(for: meeting, to: dir, tags: tagNameList)
@@ -358,6 +379,33 @@ final class MeetingPipelineController: ObservableObject {
 
         // Signal completion to registered observers.
         await MainActor.run { self.onComplete?(meeting, summaryFailed) }
+    }
+
+    // MARK: - Auto-title (U2-9)
+
+    /// Derive a short meeting title from the first spoken line of a transcript.
+    /// Strips a leading speaker/timestamp prefix ("Me [0:05]:") and caps the
+    /// result to ~8 words / 60 chars. Returns nil for an empty transcript.
+    nonisolated static func deriveTitle(from transcript: String) -> String? {
+        for raw in transcript.components(separatedBy: .newlines) {
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") || line.hasPrefix(">") || line.hasPrefix("---") { continue }
+            // Strip a short leading "Speaker:" / "Me [0:05]:" prefix. Use the
+            // LAST colon within the first ~24 chars so the "0:05" timestamp
+            // colon doesn't truncate the speaker label mid-prefix.
+            let headEnd = line.index(line.startIndex, offsetBy: min(24, line.count))
+            if let lastColon = line[line.startIndex..<headEnd].lastIndex(of: ":") {
+                line = String(line[line.index(after: lastColon)...]).trimmingCharacters(in: .whitespaces)
+            }
+            guard !line.isEmpty else { continue }
+            let words = line.split(separator: " ").prefix(8)
+            var title = words.joined(separator: " ")
+            if title.count > 60 {
+                title = String(title.prefix(60)).trimmingCharacters(in: .whitespaces) + "…"
+            }
+            return title.isEmpty ? nil : title
+        }
+        return nil
     }
 
     // MARK: - Disk helpers (nonisolated; called from detached tasks)
