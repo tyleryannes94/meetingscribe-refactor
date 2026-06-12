@@ -289,6 +289,9 @@ private struct RecordingPill: View {
                 Text(elapsedString())
                     .font(.callout.weight(.semibold).monospacedDigit())
                     .foregroundStyle(.primary)
+                if let dest = dictationDestination {
+                    DictationDestinationLabel(destination: dest)
+                }
             }
             AudioLevelMeter(level: controller.manager?.recordingMonitor.voiceNoteLevel ?? 0,
                             tint: NDS.gold, bars: 14, height: 24)
@@ -318,6 +321,47 @@ private struct RecordingPill: View {
         let m = s / 60
         let r = s % 60
         return String(format: "%d:%02d", m, r)
+    }
+
+    /// Destination for the active capture — but only when the live recording is
+    /// a hotkey dictation (which can paste). UI-button voice notes always just
+    /// save, so they show no destination line.
+    private var dictationDestination: QuickDictation.Destination? {
+        guard let dictation = controller.manager?.dictation,
+              case .recording = dictation.state else { return nil }
+        return dictation.destination
+    }
+}
+
+/// Glanceable, subtle line under the timer telling the user where this capture
+/// will land — typed into the frontmost app, or saved to Notes only. The trust
+/// win for U2-7: a private thought can't silently paste into a shared chat.
+@available(macOS 14.0, *)
+private struct DictationDestinationLabel: View {
+    let destination: QuickDictation.Destination
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: iconName).scaledFont(9, weight: .semibold)
+            Text(text).scaledFont(10, weight: .medium, relativeTo: .caption2)
+        }
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(text)
+    }
+
+    private var iconName: String {
+        switch destination {
+        case .paste:    return "arrow.right"
+        case .saveOnly: return "lock.fill"
+        }
+    }
+
+    private var text: String {
+        switch destination {
+        case .paste(let app): return "types into \(app)"
+        case .saveOnly:       return "saves to Notes"
+        }
     }
 }
 
