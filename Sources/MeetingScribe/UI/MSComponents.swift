@@ -247,3 +247,34 @@ extension MSEmptyState where Actions == EmptyView {
         self.init(systemImage: systemImage, title: title, message: message) { EmptyView() }
     }
 }
+
+/// One filter chip, everywhere (D4-10). Bordered capsule with an optional count
+/// badge — used by the Meetings scope pills, People tag/type chips, and search
+/// filters so filtering looks and behaves identically wherever the user filters.
+@available(macOS 14.0, *)
+struct MSFilterChip: View {
+    let label: String
+    var count: Int? = nil
+    let active: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(label).font(NDS.tiny)
+                if let count {
+                    Text("\(count)")
+                        .font(NDS.tiny.monospacedDigit())
+                        .foregroundStyle(active ? NDS.brand : NDS.textTertiary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(active ? NDS.brand.opacity(0.18) : NDS.surface2, in: Capsule())
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(active ? NDS.brand.opacity(0.18) : NDS.fieldBg, in: Capsule())
+            .overlay(Capsule().strokeBorder(active ? NDS.brand.opacity(0.5) : NDS.hairline, lineWidth: 1))
+            .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
+        }
+        .buttonStyle(.plain)
+    }
+}
