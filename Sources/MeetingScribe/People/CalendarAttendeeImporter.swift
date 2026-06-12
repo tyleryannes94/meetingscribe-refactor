@@ -27,19 +27,11 @@ enum CalendarAttendeeImporter {
     }
 
     private static func parse(_ raw: String) -> PersonImport? {
-        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !s.isEmpty else { return nil }
-
-        var name = ""
-        var email = ""
-        if let lt = s.firstIndex(of: "<"), let gt = s.firstIndex(of: ">"), lt < gt {
-            name = String(s[..<lt]).trimmingCharacters(in: .whitespacesAndNewlines)
-            email = String(s[s.index(after: lt)..<gt]).trimmingCharacters(in: .whitespacesAndNewlines)
-        } else if s.contains("@"), !s.contains(" ") {
-            email = s
-        } else {
-            name = s
-        }
+        // Split via the one identity layer (P1-1); keep this importer's prettier
+        // localPart name stub and its self-token filtering.
+        let id = PersonResolver.parse(raw)
+        let name = id.name
+        let email = id.email
 
         let display = name.isEmpty ? localPart(of: email) : name
         guard !display.isEmpty else { return nil }

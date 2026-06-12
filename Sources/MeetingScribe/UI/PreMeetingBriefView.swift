@@ -238,17 +238,11 @@ struct PreMeetingBriefView: View {
         }
     }
 
-    /// Extract the email portion from "Name <email>" attendee strings.
+    /// Normalized emails for a meeting's attendees, via the one identity layer.
     private func attendeeEmails(from attendees: [String]) -> Set<String> {
         Set(attendees.compactMap { str -> String? in
-            guard let open = str.lastIndex(of: "<"),
-                  let close = str.lastIndex(of: ">"),
-                  open < close else {
-                // Plain email with no angle brackets — use as-is.
-                return str.contains("@") ? str.lowercased() : nil
-            }
-            let start = str.index(after: open)
-            return String(str[start..<close]).lowercased()
+            let id = PersonResolver.parse(str)
+            return id.hasEmail ? id.email : nil
         })
     }
 }

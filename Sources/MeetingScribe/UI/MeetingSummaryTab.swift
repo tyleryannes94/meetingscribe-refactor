@@ -298,12 +298,19 @@ extension UnifiedMeetingDetail {
         manager.actionItems.upsert(t)
     }
 
-    /// Resolve attendee names to known People emails, for prefilling Mail.
+    /// Resolve attendees to emails for prefilling Mail. The old version compared
+    /// the *raw* "Jane <jane@acme.com>" string against displayName and never
+    /// parsed the email sitting right there — so invite-sourced meetings opened
+    /// the follow-up with empty recipients. Now: linked person's email first,
+    /// then the email parsed straight out of the attendee string (P1-1).
     private func attendeeEmails(for m: Meeting) -> [String] {
-        m.attendees.compactMap { name in
-            PeopleStore.shared.people
-                .first { $0.displayName.caseInsensitiveCompare(name) == .orderedSame }?
-                .emails.first
+        m.attendees.compactMap { raw in
+            if let p = PeopleStore.shared.resolvedPerson(forAttendee: raw),
+               !p.primaryEmail.isEmpty {
+                return p.primaryEmail
+            }
+            let id = PersonResolver.parse(raw)
+            return id.hasEmail ? id.email : nil
         }
     }
 }
