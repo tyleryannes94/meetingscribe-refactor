@@ -57,6 +57,8 @@ struct TodayView: View {
                 quickActions
                 upNextCard
 
+                oneOnOneDaySection   // U1-1: your 1:1s today, person-first
+
                 if isRecording { liveSection }
 
                 // Overdue + due-today work, surfaced above meetings (TDY-2).
@@ -106,6 +108,69 @@ struct TodayView: View {
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: - Your 1:1 Day (U1-1)
+
+    /// Today's 1:1s — calendar meetings today that resolve to exactly one known
+    /// person. Manager morning prep, person-first.
+    private var todaysOneOnOnes: [(meeting: Meeting, person: Person)] {
+        let cal = Calendar.current
+        let now = Date()
+        let people = PeopleStore.shared.people
+        return calendar.upcoming
+            .filter { cal.isDate($0.startDate, inSameDayAs: now) && $0.endDate > now.addingTimeInterval(-300) }
+            .sorted { $0.startDate < $1.startDate }
+            .compactMap { m in
+                let ids = m.attendees.compactMap { PersonResolver.resolve($0, in: people) }
+                guard Set(ids).count == 1, let p = people.first(where: { $0.id == ids[0] }) else { return nil }
+                return (m, p)
+            }
+    }
+
+    @ViewBuilder
+    private var oneOnOneDaySection: some View {
+        let items = todaysOneOnOnes
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                sectionLabel("Your 1:1s today")
+                ForEach(Array(items.enumerated()), id: \.offset) { _, pair in
+                    Button { router.openMeeting(pair.meeting) } label: {
+                        HStack(spacing: 10) {
+                            MSAvatar(name: pair.person.displayName, size: 30,
+                                     ringColor: healthRingColor(for: pair.person, in: PeopleStore.shared))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(pair.person.displayName)
+                                    .scaledFont(13.5, weight: .semibold).foregroundStyle(NDS.textPrimary)
+                                Text(oneOnOneSubtitle(pair))
+                                    .scaledFont(11.5).foregroundStyle(NDS.textSecondary)
+                            }
+                            Spacer()
+                            Text(pair.meeting.startDate.formatted(date: .omitted, time: .shortened))
+                                .scaledFont(12, weight: .medium).foregroundStyle(NDS.textSecondary)
+                            Image(systemName: "chevron.right").scaledFont(11).foregroundStyle(NDS.textTertiary)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func oneOnOneSubtitle(_ pair: (meeting: Meeting, person: Person)) -> String {
+        var parts: [String] = []
+        if let last = pair.person.lastInteractionAt {
+            let d = Int(Date().timeIntervalSince(last) / 86400)
+            parts.append(d <= 0 ? "last met today" : "last met \(d)d ago")
+        }
+        let loops = manager.actionItems.items.filter {
+            $0.ownerPersonID == pair.person.id && $0.status != .completed
+        }.count
+        if loops > 0 { parts.append("\(loops) open loop\(loops == 1 ? "" : "s")") }
+        return parts.isEmpty ? "First recorded meeting" : parts.joined(separator: " · ")
     }
 
     // MARK: - Weekly ledger (U3-6)
