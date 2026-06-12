@@ -376,12 +376,68 @@ final class WebAPI {
 
         let recentMeetings = meetingStore.listPastMeetings(limit: 6).map(meetingSummary)
 
-        return .jsonObject([
+        var payload: [String: Any] = [
             "drift": Array(drift),
             "dueTasks": Array(dueTasks),
             "recentMeetings": recentMeetings,
             "recording": recordingInfo()
-        ])
+        ]
+        // P3-4 — pocket schedule: lead Today with the next meeting + the humans
+        // in it, so "walking to the meeting, phone in hand" is the canonical
+        // mobile moment instead of a stale list of past meetings.
+        if let next = nextMeetingInfo() { payload["nextMeeting"] = next }
+        return .jsonObject(payload)
+    }
+
+    // MARK: - Next meeting (P3-4)
+
+    /// The single upcoming (or currently-live) calendar meeting the phone should
+    /// surface at the top of Today, with its attendees resolved to people (name,
+    /// company, connection health) so the user can see who they're about to meet
+    /// and what they owe them. Source is the same `.upcoming-cache.json`
+    /// `CalendarService` warms on the Mac — read here directly so the phone needs
+    /// no EventKit access of its own and the two surfaces never disagree.
+    private func nextMeetingInfo() -> [String: Any]? {
+        let url = AppSettings.shared.storageDir.appendingPathComponent(".upcoming-cache.json")
+        guard let data = try? Data(contentsOf: url),
+              let cached: [Meeting] = try? SchemaEnvelope.decode(
+                  [Meeting].self, from: data,
+                  currentVersion: CalendarService.cacheSchemaVersion,
+                  decoder: SharedCoders.decoder())
+        else { return nil }
+
+        let now = Date()
+        guard let next = cached
+            .filter({ $0.endDate >= now })
+            .sorted(by: { $0.startDate < $1.startDate })
+            .first
+        else { return nil }
+
+        let roster = people.people
+        var attendeeDicts: [[String: Any]] = []
+        for raw in next.attendees {
+            let name = raw.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { continue }
+            var a: [String: Any] = ["name": name]
+            if let pid = PersonResolver.resolve(name, in: roster), let p = people.person(by: pid) {
+                a["personID"] = pid
+                a["name"] = p.displayName
+                if !p.company.isEmpty { a["company"] = p.company }
+                if let h = personHealth(p) { a["health"] = h }
+            }
+            attendeeDicts.append(a)
+        }
+
+        return [
+            "id": next.id,
+            "title": next.displayTitle,
+            "start": isoString(next.startDate),
+            "end": isoString(next.endDate),
+            "isLive": next.isLive,
+            "location": next.location ?? "",
+            "conferenceURL": next.conferenceURL ?? "",
+            "attendees": attendeeDicts
+        ]
     }
 
     // MARK: - Live recording presence (P3-3)
