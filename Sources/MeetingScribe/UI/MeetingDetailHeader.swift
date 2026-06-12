@@ -176,13 +176,11 @@ extension UnifiedMeetingDetail {
     @ViewBuilder
     private var chipRow: some View {
         HStack(spacing: 6) {
-            if isRecurring {
-                NotionChip("Recurring", color: NDS.selectColor("purple"), systemImage: "repeat")
-                if !priorOccurrences.isEmpty {
-                    Text("\(priorOccurrences.count) previous")
-                        .font(.caption2)
-                        .foregroundStyle(NDS.textTertiary)
-                }
+            if isRecurring, let m = meeting {
+                // The "Recurring" chip opens the Series Hub (C1-4) — the page for
+                // the standing meeting itself (timeline, rolling open follow-ups,
+                // decisions, roster), not just a caption.
+                RecurringChip(meeting: m, priorCount: priorOccurrences.count)
             }
             if let cal = meeting?.calendarName {
                 NotionChip(cal, color: NDS.selectColor("blue"), systemImage: "calendar")
@@ -900,6 +898,38 @@ private struct AttendeeChip: View {
         } else {
             let p = people.createPerson(displayName: fullName, email: email)
             router.openPerson(p.id)
+        }
+    }
+}
+
+// MARK: - Recurring chip → Series Hub (C1-4)
+
+/// The "Recurring" header chip, made tappable. It owns the Series Hub sheet's
+/// presentation state itself (a self-contained subview) so the host detail view
+/// needs no new `@State` — and no router section is added. The hub inherits the
+/// detail view's `MeetingManager` / `WorkspaceRouter` environment objects.
+@available(macOS 14.0, *)
+private struct RecurringChip: View {
+    let meeting: Meeting
+    let priorCount: Int
+    @State private var showHub = false
+
+    var body: some View {
+        Button { showHub = true } label: {
+            HStack(spacing: 6) {
+                NotionChip("Recurring", color: NDS.selectColor("purple"), systemImage: "repeat")
+                if priorCount > 0 {
+                    Text("\(priorCount) previous")
+                        .scaledFont(11, relativeTo: .caption2)
+                        .foregroundStyle(NDS.textTertiary)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open the series hub — timeline, open follow-ups, and decisions across every occurrence.")
+        .sheet(isPresented: $showHub) {
+            SeriesHubView(meeting: meeting)
         }
     }
 }
