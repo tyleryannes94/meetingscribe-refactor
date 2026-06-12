@@ -56,8 +56,9 @@ struct GlobalSearchView: View {
             Divider().opacity(0.6)
             content
         }
-        .frame(width: 620, height: 480)
-        .background(NDS.bg)
+        // Floating-palette sizing (C3-2): flexible width, capped height; the
+        // host supplies the glass material + rounded corners, so no opaque bg here.
+        .frame(maxWidth: .infinity, minHeight: 420, maxHeight: 520)
         .onAppear {
             recompute()
             DispatchQueue.main.async { fieldFocused = true }
