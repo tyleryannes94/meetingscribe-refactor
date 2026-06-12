@@ -36,6 +36,9 @@ struct ActionItemRow: View {
     let onOpenLinear: (String) -> Void
 
     @State private var hovering = false
+    /// Drives the one-click completion celebration beat (D3-2).
+    @State private var celebrate = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var titleDraft: String = ""
     @State private var ownerDraft: String = ""
     @State private var notesDraft: String = ""
@@ -181,22 +184,41 @@ struct ActionItemRow: View {
     }
 
     private var statusButton: some View {
-        Menu {
-            ForEach(ActionItem.Status.allCases) { s in
-                Button {
-                    onStatus(s)
-                } label: {
-                    Label(s.label, systemImage: s.systemImage)
-                }
+        // D3-2: one click completes (was a menu click). The full status set
+        // moves to the right-click context menu so in-progress is still reachable.
+        Button {
+            let willComplete = item.status != .completed
+            onStatus(willComplete ? .completed : .open)
+            if willComplete && !reduceMotion {
+                celebrate = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { celebrate = false }
             }
         } label: {
-            Image(systemName: item.status.systemImage)
-                .font(.title3)
-                .foregroundStyle(statusColor)
+            ZStack {
+                // A ring that pops outward once on completion — the Things-3 beat.
+                if celebrate {
+                    Circle()
+                        .stroke(NDS.mint, lineWidth: 2)
+                        .frame(width: 22, height: 22)
+                        .scaleEffect(celebrate ? 2.1 : 0.6)
+                        .opacity(celebrate ? 0 : 0.9)
+                        .animation(.easeOut(duration: 0.5), value: celebrate)
+                }
+                Image(systemName: item.status.systemImage)
+                    .font(.title3)
+                    .foregroundStyle(statusColor)
+                    .scaleEffect(celebrate ? 1.35 : 1.0)
+                    .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.5), value: celebrate)
+            }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .frame(width: 22)
+        .help(item.status == .completed ? "Mark open" : "Mark done")
+        .contextMenu {
+            ForEach(ActionItem.Status.allCases) { s in
+                Button { onStatus(s) } label: { Label(s.label, systemImage: s.systemImage) }
+            }
+        }
     }
 
     private var statusColor: Color { NDS.status(item.status) }
