@@ -128,12 +128,14 @@ enum WebAssets {
     <body>
       <header><button id="back" hidden>&lsaquo;</button><h1 id="title">MeetingScribe</h1></header>
       <main id="view"></main>
+      <!-- P3-2: section order mirrors the desktop rail (Today · Meetings ·
+           People · Tasks · Projects · Notes) so muscle memory transfers. -->
       <nav id="tabs">
         <button data-tab="today"><span class="ic">&#127968;</span>Today</button>
         <button data-tab="meetings"><span class="ic">&#128197;</span>Meetings</button>
+        <button data-tab="people"><span class="ic">&#128100;</span>People</button>
         <button data-tab="tasks"><span class="ic">&#9989;</span>Tasks</button>
         <button data-tab="projects"><span class="ic">&#128193;</span>Projects</button>
-        <button data-tab="people"><span class="ic">&#128100;</span>People</button>
         <button data-tab="notes"><span class="ic">&#127908;</span>Notes</button>
         <button data-tab="search"><span class="ic">&#128269;</span>Search</button>
         <button data-tab="chat"><span class="ic">&#129302;</span>Ask AI</button>
