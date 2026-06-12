@@ -31,7 +31,7 @@ struct ProjectRail: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Text("📁").scaledFont(15)
-                Text("Workspace")
+                Text("Projects")   // D1-4: was "Workspace" (collided with the nav group)
                     .scaledFont(14, weight: .bold)
                 Spacer()
             }
