@@ -218,6 +218,9 @@ struct Person: Identifiable, Codable, Hashable {
     /// person, populated by the auto-extraction pipeline and by confirming a
     /// suggestion. Surfaced as "Mentioned in" in the detail view.
     var meetingMentions: Set<String>
+    /// "Discuss next time" talking points (U1-5): things you've jotted to raise
+    /// the next time you see this person. Surfaced in the pre-meeting brief.
+    var talkingPoints: [String] = []
 
     // MARK: - Phase C — rich profile + import provenance
 
@@ -273,6 +276,7 @@ struct Person: Identifiable, Codable, Hashable {
          updatedAt: Date = Date(),
          lastInteractionAt: Date? = nil,
          meetingMentions: Set<String> = [],
+         talkingPoints: [String] = [],
          birthday: Date? = nil,
          addresses: [String] = [],
          favorites: [String] = [],
@@ -297,6 +301,7 @@ struct Person: Identifiable, Codable, Hashable {
         self.updatedAt = updatedAt
         self.lastInteractionAt = lastInteractionAt
         self.meetingMentions = meetingMentions
+        self.talkingPoints = talkingPoints
         self.birthday = birthday
         self.addresses = addresses
         self.favorites = favorites
@@ -332,7 +337,7 @@ struct Person: Identifiable, Codable, Hashable {
 extension Person {
     private enum CodingKeys: String, CodingKey {
         case id, displayName, company, role, emails, phones, bio, tagIDs,
-             createdAt, updatedAt, lastInteractionAt, meetingMentions,
+             createdAt, updatedAt, lastInteractionAt, meetingMentions, talkingPoints,
              birthday, addresses, favorites, memories, photoRelativePaths,
              contactIdentifier, importSources, relationships, attachedNotes,
              relationshipType, checkInCadenceDays, checkInGoalDays
@@ -356,6 +361,7 @@ extension Person {
         updatedAt = (try? c.decode(Date.self, forKey: .updatedAt)) ?? Date()
         lastInteractionAt = (try? c.decodeIfPresent(Date.self, forKey: .lastInteractionAt)) ?? nil
         meetingMentions = (try? c.decode(Set<String>.self, forKey: .meetingMentions)) ?? []
+        talkingPoints = (try? c.decode([String].self, forKey: .talkingPoints)) ?? []
         birthday = (try? c.decodeIfPresent(Date.self, forKey: .birthday)) ?? nil
         addresses = (try? c.decode([String].self, forKey: .addresses)) ?? []
         favorites = (try? c.decode([String].self, forKey: .favorites)) ?? []

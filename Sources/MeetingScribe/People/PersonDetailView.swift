@@ -252,6 +252,7 @@ struct PersonDetailView: View {
     @State private var showAddRelationship = false
     @State private var confirmDelete = false
     @State private var newMemory = ""
+    @State private var newTalkingPoint = ""
     @State private var newTaskTitle = ""
     @State private var newFavorite = ""
     @State private var showNewTag = false
@@ -507,6 +508,7 @@ struct PersonDetailView: View {
         case .messages:
             messagesSection
         case .notes:
+            talkingPointsSection
             memoriesSection
             attachedNotesSection
         }
@@ -1735,6 +1737,51 @@ struct PersonDetailView: View {
 
     private func hasEncounter(forMeeting id: String) -> Bool {
         people.encounters(for: current.id).contains { $0.meetingID == id }
+    }
+
+    // MARK: - Discuss next time (U1-5)
+
+    private var talkingPointsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Discuss next time").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+            HStack(spacing: 6) {
+                TextField("Add a talking point to raise next time…", text: $newTalkingPoint)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addTalkingPoint)
+                Button("Add", action: addTalkingPoint)
+                    .disabled(newTalkingPoint.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            ForEach(Array(current.talkingPoints.enumerated()), id: \.offset) { idx, point in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "bubble.left.fill").scaledFont(11)
+                        .foregroundStyle(NDS.gold.opacity(0.8)).padding(.top, 2)
+                    Text(point).font(NDS.body).frame(maxWidth: .infinity, alignment: .leading)
+                    Button { removeTalkingPoint(at: idx) } label: {
+                        Image(systemName: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless).foregroundStyle(NDS.mint)
+                    .help("Done — remove this point")
+                }
+                .padding(10)
+                .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+            }
+        }
+    }
+
+    private func addTalkingPoint() {
+        let text = newTalkingPoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        var updated = current
+        updated.talkingPoints.append(text)
+        people.updatePerson(updated)
+        newTalkingPoint = ""
+    }
+
+    private func removeTalkingPoint(at idx: Int) {
+        var updated = current
+        guard idx < updated.talkingPoints.count else { return }
+        updated.talkingPoints.remove(at: idx)
+        people.updatePerson(updated)
     }
 
     // MARK: - Memories
