@@ -887,7 +887,7 @@ struct PersonDetailView: View {
                         people.updatePerson(updated)
                     } label: {
                         HStack {
-                            Text("\(rtype.emoji) \(rtype.displayName)")
+                            Label(rtype.displayName, systemImage: rtype.symbol)
                             if current.relationshipType == rtype {
                                 Spacer()
                                 Image(systemName: "checkmark")
@@ -896,16 +896,11 @@ struct PersonDetailView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Text(current.relationshipType.emoji)
-                    Text(current.relationshipType.displayName)
-                        .font(NDS.small)
-                        .foregroundStyle(current.relationshipType == .unset ? NDS.textTertiary : NDS.textPrimary)
+                HStack(spacing: 6) {
+                    RelationshipTypeChip(type: current.relationshipType)
                     Image(systemName: "chevron.down").scaledFont(9)
                         .foregroundStyle(NDS.textTertiary)
                 }
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 6))
             }
             .menuStyle(.borderlessButton)
             .help("Set relationship type — controls check-in cadence and coaching content")
@@ -1854,7 +1849,7 @@ struct PersonDetailView: View {
         else { return nil }
         let note = enc.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         if !note.isEmpty { return note }
-        let name = enc.eventName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = enc.eventName.strippingLeadingEmoji().trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : name
     }
 
@@ -2734,13 +2729,19 @@ private struct EncounterRow: View {
             .replacingOccurrences(of: #"\s*\[mood:[a-z]+\]"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+    /// Event name with any leading emoji stripped (C2-7). New encounters persist
+    /// the plain kind ("Call"); older rows stored "📞 Call", "📅 Meeting", etc. —
+    /// strip a leading emoji glyph so both render as clean typed text.
+    private var displayEventName: String {
+        encounter.eventName.strippingLeadingEmoji()
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "mappin.and.ellipse").scaledFont(13)
                 .foregroundStyle(NDS.brand.opacity(0.7)).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
-                Text(encounter.eventName).scaledFont(13.5, weight: .semibold)
+                Text(displayEventName).scaledFont(13.5, weight: .semibold)
                 HStack(spacing: 6) {
                     Text(Self.dateFormatter.string(from: encounter.date))
                     if let loc = encounter.location, !loc.isEmpty { Text("· \(loc)") }
@@ -2815,5 +2816,21 @@ private struct AddRelationshipSheet: View {
         people.addRelationship(from: personID, to: selectedID,
                                label: label.trimmingCharacters(in: .whitespacesAndNewlines))
         dismiss()
+    }
+}
+
+// MARK: - C2-7 emoji tolerance
+
+extension String {
+    /// Drops a single leading emoji glyph (and any following whitespace) from a
+    /// stored string. Older encounters persisted their kind as "📞 Call",
+    /// "📅 Meeting", "✉️ Follow-up"; new writes store the plain text. This lets
+    /// both render as clean typed text without a destructive migration (C2-7).
+    func strippingLeadingEmoji() -> String {
+        guard let scalar = unicodeScalars.first,
+              scalar.properties.isEmoji,
+              scalar.value > 0x238C   // skip ASCII digits / # / * that are emoji-capable
+        else { return self }
+        return String(dropFirst()).trimmingCharacters(in: .whitespaces)
     }
 }

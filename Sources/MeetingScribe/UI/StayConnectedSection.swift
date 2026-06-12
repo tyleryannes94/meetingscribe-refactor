@@ -75,12 +75,11 @@ struct StayConnectedSection: View {
                     let h = health(for: person)
                     let color = healthColor(h.band)
                     HStack(spacing: 12) {
-                        // Squircle avatar + emoji type badge
+                        // Squircle avatar + typed-glyph type badge (C2-7)
                         ZStack(alignment: .bottomTrailing) {
                             MSAvatar(name: person.displayName, size: 36)
-                            Text(person.relationshipType.emoji)
-                                .scaledFont(10)
-                                .offset(x: 4, y: 4)
+                            RelationshipTypeChip(type: person.relationshipType, showLabel: false)
+                                .offset(x: 6, y: 6)
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
