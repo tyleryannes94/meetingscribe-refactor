@@ -737,11 +737,9 @@ extension UnifiedMeetingDetail {
     }
 
     private func infoAlert(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        // U3-11: an in-app toast instead of a blocking NSAlert modal — modal
+        // jank reads cheap, and these are informational confirmations.
+        ToastCenter.shared.show(message)
     }
 
     // MARK: - Open in Obsidian (C3-x)
