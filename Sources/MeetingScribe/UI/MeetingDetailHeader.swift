@@ -50,6 +50,17 @@ extension UnifiedMeetingDetail {
                 .padding(.bottom, 8)
             }
 
+            // P1-5: shared-history strip — continuity at a glance, where the
+            // "second brain" should brag that it remembers.
+            if let strip = sharedHistoryLine(for: meeting) {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .scaledFont(10).foregroundStyle(NDS.textTertiary)
+                    Text(strip).scaledFont(11.5).foregroundStyle(NDS.textSecondary).lineLimit(1)
+                }
+                .padding(.horizontal, 20).padding(.bottom, 8)
+            }
+
             // Conference URL — prominent, tappable
             if let url = meeting?.conferenceURL, let u = URL(string: url) {
                 HStack(spacing: 6) {
@@ -578,6 +589,34 @@ extension UnifiedMeetingDetail {
             transcript: manager.transcriptMarkdown(for: m),
             tags: tagNames)
         ObsidianExporter.export(md, filename: m.slug)
+    }
+
+    // MARK: - Shared history (P1-5)
+
+    /// "You've met Jane 12× · last: pricing follow-up" for the meeting's
+    /// most-significant resolved attendee (by shared past-meeting count).
+    func sharedHistoryLine(for meeting: Meeting?) -> String? {
+        guard let m = meeting else { return nil }
+        let people = PeopleStore.shared.people
+        var best: (name: String, count: Int, last: Meeting?)?
+        for raw in m.attendees {
+            guard let pid = PersonResolver.resolve(raw, in: people),
+                  let person = people.first(where: { $0.id == pid }) else { continue }
+            let shared = manager.pastMeetings.filter {
+                $0.id != m.id && person.meetingMentions.contains($0.id)
+            }
+            if shared.count > (best?.count ?? 0) {
+                best = (person.displayName, shared.count,
+                        shared.max(by: { $0.startDate < $1.startDate }))
+            }
+        }
+        guard let b = best, b.count > 0 else { return nil }
+        let first = b.name.split(separator: " ").first.map(String.init) ?? b.name
+        let times = b.count == 1 ? "once before" : "\(b.count)× before"
+        if let last = b.last {
+            return "You've met \(first) \(times) · last: \(last.displayTitle)"
+        }
+        return "You've met \(first) \(times)"
     }
 
     // MARK: - Add all attendees to People (TM-9)
