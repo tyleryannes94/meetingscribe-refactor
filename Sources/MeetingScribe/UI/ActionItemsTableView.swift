@@ -1,6 +1,18 @@
 import SwiftUI
 import AppKit
 
+/// Single source of truth for the Tasks-table column widths (D4-3). The header
+/// row and the matching data cell MUST both read from here so columns can never
+/// drift out of alignment.
+private enum Col {
+    static let check: CGFloat = 22
+    static let project: CGFloat = 140
+    static let owner: CGFloat = 90
+    static let priority: CGFloat = 80
+    static let due: CGFloat = 80
+    static let meeting: CGFloat = 160
+}
+
 @available(macOS 14.0, *)
 extension ActionItemsView {
     // MARK: - Table view
@@ -39,13 +51,13 @@ extension ActionItemsView {
 
     var tableHeaderRow: some View {
         HStack(spacing: 10) {
-            Text("").frame(width: 22)
+            Text("").frame(width: Col.check)
             sortHeader("Task", .task).frame(maxWidth: .infinity, alignment: .leading)
-            sortHeader("Project", .project).frame(width: 140, alignment: .leading)
-            sortHeader("Owner", .owner).frame(width: 90, alignment: .leading)
-            sortHeader("Priority", .priority).frame(width: 80, alignment: .leading)
-            sortHeader("Due", .due).frame(width: 80, alignment: .leading)
-            Text("Meeting").frame(width: 160, alignment: .leading)
+            sortHeader("Project", .project).frame(width: Col.project, alignment: .leading)
+            sortHeader("Owner", .owner).frame(width: Col.owner, alignment: .leading)
+            sortHeader("Priority", .priority).frame(width: Col.priority, alignment: .leading)
+            sortHeader("Due", .due).frame(width: Col.due, alignment: .leading)
+            Text("Meeting").frame(width: Col.meeting, alignment: .leading)
         }
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
@@ -78,24 +90,17 @@ extension ActionItemsView {
                     .foregroundStyle(item.status == .completed ? .green
                                      : item.status == .inProgress ? .orange : .blue)
             }
-            .buttonStyle(.plain).frame(width: 22)
+            .buttonStyle(.plain).frame(width: Col.check)
             Text(item.title)
                 .font(.callout)
                 .strikethrough(item.status == .completed)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            projectCell(item).frame(width: 140, alignment: .leading)
-            Group {
-                if let owner = item.owner, !owner.isEmpty {
-                    HStack(spacing: 5) {
-                        TaskOwnerAvatar(name: owner, size: 16)
-                        Text(owner).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                } else {
-                    Text("—").font(.caption).foregroundStyle(.tertiary)
-                }
-            }
-            .frame(width: 90, alignment: .leading)
+            projectCell(item).frame(width: Col.project, alignment: .leading)
+            // Owner cell — adopts the shared `TaskOwnerLabel` (D4-3), the same
+            // primitive `TaskMetaCluster` composes.
+            TaskOwnerLabel(owner: item.owner)
+                .frame(width: Col.owner, alignment: .leading)
             Menu {
                 ForEach(ActionItem.Priority.allCases) { p in
                     Button(p.label) { store.setPriority(item.id, priority: p) }
@@ -104,7 +109,7 @@ extension ActionItemsView {
                 MSPriorityBadge(priority: item.priority)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden)
-            .frame(width: 96, alignment: .leading)
+            .frame(width: Col.priority, alignment: .leading)
             Menu {
                 Button("Today") { store.setDueDate(item.id, dueDate: Self.startOfToday()) }
                 Button("Tomorrow") { store.setDueDate(item.id, dueDate: Self.daysFromToday(1)) }
@@ -117,9 +122,9 @@ extension ActionItemsView {
                 DueChip(date: item.dueDate, status: item.status, style: .plain)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden)
-            .frame(width: 96, alignment: .leading)
+            .frame(width: Col.due, alignment: .leading)
             Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary)
-                .lineLimit(1).frame(width: 160, alignment: .leading)
+                .lineLimit(1).frame(width: Col.meeting, alignment: .leading)
         }
         .padding(.vertical, 7)
         .contentShape(Rectangle())
