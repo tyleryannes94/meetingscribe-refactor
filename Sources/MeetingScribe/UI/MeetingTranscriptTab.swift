@@ -129,17 +129,11 @@ struct LiveTranscriptScroll: View {
     }
 
     private func errorBanner(_ err: String) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Live transcription error").font(.caption.bold())
-                Text(err).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            }
-        }
-        .padding(8)
-        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-        .padding(.horizontal)
+        // D4-1: translate raw engine stderr (e.g. "whisper-cli failed (1)… run
+        // ./scripts/setup.sh") into a plain diagnosis; the raw text lives behind
+        // "Details", never leading.
+        MSErrorState(presented: ErrorPresenter.present(err), raw: err)
+            .padding(.horizontal)
     }
 
     private func countdownString() -> String {

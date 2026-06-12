@@ -167,36 +167,37 @@ extension UnifiedMeetingDetail {
     @ViewBuilder
     private var emptySummaryView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "sparkles")
-                .scaledFont(36)
-                .foregroundStyle(.secondary)
-            Text("No summary")
-                .font(.headline)
-            Text("Ollama wasn't running when this meeting finished, or summarization failed.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            // Regenerate button — visible when transcript exists but summary is empty.
-            if !transcript.isEmpty {
-                if let m = meeting {
-                    let isRunning = manager.transcribingMeetingIDs.contains(m.id)
-                    Button {
-                        manager.pipelineController.transcribeNow(meeting: m,
-                                                                  regenerateSummary: true)
-                    } label: {
-                        if isRunning {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text("Generating…")
-                            }
-                        } else {
-                            Label("Generate Summary", systemImage: "sparkles")
-                        }
+            if !transcript.isEmpty, let m = meeting {
+                // We have a transcript but no summary → summarization failed.
+                // D4-1: a designed failure state with the Generate retry as its
+                // one-click fix, not jargon prose ("Ollama wasn't running…").
+                let isRunning = manager.transcribingMeetingIDs.contains(m.id)
+                MSErrorState(
+                    presented: PresentedError(
+                        title: "The summary engine wasn't running",
+                        diagnosis: "Your on-device summary engine was off when this finished, so there's no summary yet. The recording and transcript are safe.",
+                        fixLabel: isRunning ? nil : "Generate summary",
+                        kind: .summaryEngine),
+                    onFix: isRunning ? nil : {
+                        manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
+                    })
+                if isRunning {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Generating…").font(.caption).foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isRunning)
                 }
+            } else {
+                // Genuinely empty (upcoming / no transcript yet).
+                Image(systemName: "sparkles")
+                    .scaledFont(36)
+                    .foregroundStyle(.secondary)
+                Text("No summary yet")
+                    .font(.headline)
+                Text("A short recap appears here once this conversation has been recorded and processed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
