@@ -252,6 +252,8 @@ struct PersonDetailView: View {
     @State private var showAddRelationship = false
     @State private var confirmDelete = false
     @State private var newMemory = ""
+    /// C2-11: keyboard-first verbs — `N` jumps focus to the add-memory field.
+    @FocusState private var memoryFieldFocused: Bool
     @State private var newTalkingPoint = ""
     @State private var showEvidence = false
     // C2-4: reconnect-with-context + local AI-drafted opener.
@@ -334,6 +336,28 @@ struct PersonDetailView: View {
         peopleTags.allTags.filter { current.tagIDs.contains($0.id) }
     }
 
+    /// C2-11: keyboard-first profile verbs (Clay-style). Single keys for the
+    /// common actions — N add memory, L log an encounter, T new task — plus
+    /// ⌘1–5 to switch tabs. Rendered as a hidden, zero-size shortcut layer; while
+    /// a text field is focused the keystroke goes to the field, not these.
+    @ViewBuilder
+    private var keyboardVerbs: some View {
+        Group {
+            Button("") { personTab = .overview; DispatchQueue.main.async { memoryFieldFocused = true } }
+                .keyboardShortcut("n", modifiers: [])
+            Button("") { showAddEncounter = true }
+                .keyboardShortcut("l", modifiers: [])
+            Button("") { personTab = .tasks }
+                .keyboardShortcut("t", modifiers: [])
+            ForEach(Array(PersonTab.allCases.enumerated()), id: \.offset) { idx, tab in
+                Button("") { personTab = tab }
+                    .keyboardShortcut(KeyEquivalent(Character("\(idx + 1)")), modifiers: .command)
+            }
+        }
+        .opacity(0).frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
     var body: some View {
         // One scrollable page of sections (no tabs) on the left so everything is
         // visible at once, with the AI chat embedded as a persistent right column
@@ -343,6 +367,7 @@ struct PersonDetailView: View {
             detailPane
                 .frame(minWidth: 560, idealWidth: 760)
                 .background(NDS.bg)
+                .background(keyboardVerbs)   // C2-11: N / L / T / ⌘1–5
 
             personChatColumn
                 .frame(minWidth: 320, idealWidth: 380, maxWidth: 480)
@@ -2120,6 +2145,7 @@ struct PersonDetailView: View {
             HStack(spacing: 6) {
                 TextField("Add a memory — \"loves single-origin coffee\"", text: $newMemory)
                     .textFieldStyle(.roundedBorder)
+                    .focused($memoryFieldFocused)
                     .onSubmit(addMemory)
                 Button("Add", action: addMemory)
                     .disabled(newMemory.trimmingCharacters(in: .whitespaces).isEmpty)
