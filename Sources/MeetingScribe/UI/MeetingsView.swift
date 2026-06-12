@@ -36,6 +36,23 @@ struct MeetingsView: View {
     @State private var monthCursor = Calendar.current.startOfDay(for: Date())
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
 
+    // MARK: Filters + saved views (C1-5)
+    // Ad-hoc filter chips. Selecting a saved view just populates these (+ scope);
+    // any manual change clears `activeSavedViewID` so the saved-view chip de-lights.
+    @State private var filterTagID: String?
+    @State private var filterSource: MeetingSource?
+    @State private var filterRecordingOnly = false
+    @State private var activeSavedViewID: String?
+    @State private var showSaveSheet = false
+    /// The saved-view array, JSON-encoded into a single String pref (matches the
+    /// `meetings.scope` lightweight-pref idiom above).
+    @AppStorage("meetings.savedViews") private var savedViewsJSON: String = ""
+
+    private var savedViews: [SavedView] { SavedViewStore.decode(savedViewsJSON) }
+    private var hasActiveFilters: Bool {
+        filterTagID != nil || filterSource != nil || filterRecordingOnly
+    }
+
     enum ListMode: String, CaseIterable, Identifiable {
         case list, month
         var id: String { rawValue }
@@ -132,15 +149,152 @@ struct MeetingsView: View {
             .labelsHidden()
             .padding(.horizontal, 12).padding(.bottom, 2)
 
-            // Scope filter pills — one shared chip component (D4-10).
+            // Scope + saved-view tabs — one shared chip component (D4-10).
+            // Horizontally scrollable so a long saved-view list never overflows
+            // the narrow list pane.
+            scopeRow
+
+            // Filter chips — tag / source / has-recording (C1-5). Person filter
+            // deferred (attendee→person lives in PeopleStore, out of scope here).
+            filterRow
+        }
+        .sheet(isPresented: $showSaveSheet) {
+            SaveViewSheet(
+                scopeLabel: scope.label,
+                tagName: filterTagID.flatMap { tagStore.tag(by: $0)?.name },
+                sourceName: filterSource?.displayName,
+                requiresRecording: filterRecordingOnly,
+                onSave: { name in addSavedView(named: name); showSaveSheet = false },
+                onCancel: { showSaveSheet = false }
+            )
+        }
+    }
+
+    private var scopeRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(Scope.allCases) { s in
-                    MSFilterChip(label: s.label, active: scope == s) { scope = s }
+                    MSFilterChip(label: s.label,
+                                 active: scope == s && activeSavedViewID == nil) {
+                        scope = s; activeSavedViewID = nil
+                    }
                 }
-                Spacer()
+                if !savedViews.isEmpty {
+                    Divider().frame(height: 16).overlay(NDS.divider)
+                    ForEach(savedViews) { v in
+                        MSFilterChip(label: v.name, active: activeSavedViewID == v.id) {
+                            apply(v)
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) { deleteSavedView(v) } label: {
+                                Label("Delete view", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                saveViewButton
             }
-            .padding(.horizontal, 12).padding(.bottom, 6)
+            .padding(.horizontal, 12)
         }
+        .padding(.bottom, 4)
+    }
+
+    private var saveViewButton: some View {
+        Button { showSaveSheet = true } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "plus").scaledFont(9)
+                Text("Save view").font(NDS.tiny)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(NDS.fieldBg, in: Capsule())
+            .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
+            .foregroundStyle(NDS.textSecondary)
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasActiveFilters)
+        .opacity(hasActiveFilters ? 1 : 0.45)
+        .help("Save the current filters as a one-click tab")
+    }
+
+    private var filterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                tagFilterMenu
+                sourceFilterMenu
+                MSFilterChip(label: "Has recording", active: filterRecordingOnly) {
+                    filterRecordingOnly.toggle(); activeSavedViewID = nil
+                }
+                if hasActiveFilters {
+                    Button { clearFilters() } label: {
+                        Text("Clear").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            .padding(.horizontal, 8).padding(.vertical, 5)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+        .padding(.bottom, 6)
+    }
+
+    private var tagFilterMenu: some View {
+        Menu {
+            Button("All tags") { filterTagID = nil; activeSavedViewID = nil }
+            Divider()
+            ForEach(tagStore.allTags) { t in
+                Button {
+                    filterTagID = t.id; activeSavedViewID = nil
+                } label: {
+                    if filterTagID == t.id { Label(t.name, systemImage: "checkmark") }
+                    else { Text(t.name) }
+                }
+            }
+        } label: {
+            filterChipLabel(tagChipLabel, active: filterTagID != nil)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    private var sourceFilterMenu: some View {
+        Menu {
+            Button("All sources") { filterSource = nil; activeSavedViewID = nil }
+            Divider()
+            ForEach(MeetingSource.allCases, id: \.self) { s in
+                Button {
+                    filterSource = s; activeSavedViewID = nil
+                } label: {
+                    if filterSource == s { Label(s.displayName, systemImage: "checkmark") }
+                    else { Text(s.displayName) }
+                }
+            }
+        } label: {
+            filterChipLabel(sourceChipLabel, active: filterSource != nil)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    private var tagChipLabel: String {
+        if let id = filterTagID, let t = tagStore.tag(by: id) { return t.name }
+        return "Tag"
+    }
+    private var sourceChipLabel: String { filterSource?.displayName ?? "Source" }
+
+    /// Capsule label that mirrors MSFilterChip's look for the menu-backed chips
+    /// (MSFilterChip is a plain Button and can't host a Menu).
+    private func filterChipLabel(_ text: String, active: Bool) -> some View {
+        HStack(spacing: 4) {
+            Text(text).font(NDS.tiny)
+            Image(systemName: "chevron.down").scaledFont(8)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(active ? NDS.brand.opacity(0.18) : NDS.fieldBg, in: Capsule())
+        .overlay(Capsule().strokeBorder(active ? NDS.brand.opacity(0.5) : NDS.hairline,
+                                        lineWidth: 1))
+        .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
     }
 
     // MARK: - Meeting list
@@ -217,10 +371,63 @@ struct MeetingsView: View {
     // MARK: - Data
 
     private func matches(_ m: Meeting) -> Bool {
-        guard !search.isEmpty else { return true }
-        let q = search.lowercased()
-        return m.displayTitle.lowercased().contains(q)
-            || m.attendees.contains { $0.lowercased().contains(q) }
+        // Free-text search (title + attendees).
+        if !search.isEmpty {
+            let q = search.lowercased()
+            guard m.displayTitle.lowercased().contains(q)
+                || m.attendees.contains(where: { $0.lowercased().contains(q) })
+            else { return false }
+        }
+        // Saved-view / ad-hoc filter chips (C1-5).
+        if let tagID = filterTagID, !tagStore.tagIDs(for: m).contains(tagID) {
+            return false
+        }
+        if let source = filterSource, m.effectiveSource != source {
+            return false
+        }
+        // `hasAudio` walks the meeting dir, so only pay that cost when the chip
+        // is actually engaged.
+        if filterRecordingOnly, !manager.hasAudio(for: m) {
+            return false
+        }
+        return true
+    }
+
+    // MARK: - Saved views (C1-5)
+
+    /// Apply a saved view's scope + filters in one click.
+    private func apply(_ v: SavedView) {
+        if let s = Scope(rawValue: v.scopeRaw) { scope = s }
+        filterTagID = v.tagID
+        filterSource = v.source
+        filterRecordingOnly = v.requiresRecording
+        activeSavedViewID = v.id
+    }
+
+    /// Snapshot the current scope + filter chips into a new named tab.
+    private func addSavedView(named name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let v = SavedView(name: trimmed,
+                          scopeRaw: scope.rawValue,
+                          tagID: filterTagID,
+                          source: filterSource,
+                          requiresRecording: filterRecordingOnly)
+        savedViewsJSON = SavedViewStore.encode(savedViews + [v])
+        activeSavedViewID = v.id
+    }
+
+    private func deleteSavedView(_ v: SavedView) {
+        savedViewsJSON = SavedViewStore.encode(savedViews.filter { $0.id != v.id })
+        if activeSavedViewID == v.id { activeSavedViewID = nil }
+    }
+
+    /// Reset all ad-hoc filters (but not scope) and clear the active saved view.
+    private func clearFilters() {
+        filterTagID = nil
+        filterSource = nil
+        filterRecordingOnly = false
+        activeSavedViewID = nil
     }
 
     private var upcoming: [Meeting] {
