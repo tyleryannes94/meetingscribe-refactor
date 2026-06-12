@@ -51,6 +51,7 @@ final class WebAPI {
         switch rest.first {
         case "health":     return health()
         case "today":      return today()
+        case "recording":  return await recording(request, rest)
         case "chat":       return await chat(request)
         case "meetings":   return await meetings(request, rest)
         case "people":     return people(request, rest)
@@ -378,8 +379,39 @@ final class WebAPI {
         return .jsonObject([
             "drift": Array(drift),
             "dueTasks": Array(dueTasks),
-            "recentMeetings": recentMeetings
+            "recentMeetings": recentMeetings,
+            "recording": recordingInfo()
         ])
+    }
+
+    // MARK: - Live recording presence (P3-3)
+
+    /// Snapshot of the Mac's capture state so the phone can show a live banner
+    /// and offer a remote stop. Mirrors `MeetingManager.state` — the same source
+    /// the desktop record dock reads — so the two surfaces never disagree.
+    private func recordingInfo() -> [String: Any] {
+        if case let .recording(meeting, startedAt) = manager.state {
+            let m = meeting ?? manager.activeMeeting
+            return [
+                "isRecording": true,
+                "title": m?.displayTitle ?? "Recording",
+                "startedAt": isoString(startedAt)
+            ]
+        }
+        return ["isRecording": false]
+    }
+
+    /// POST /api/recording/stop — remote-stop the in-progress capture from the
+    /// phone. Routes through the same `manager.stopRecording()` the desktop uses,
+    /// so finalization/transcription proceed identically.
+    private func recording(_ request: HTTPRequest, _ rest: [String]) async -> HTTPResponse {
+        guard rest.count == 2, rest[1] == "stop" else { return .error(404, "Unknown endpoint") }
+        guard request.method == "POST" else { return .error(405, "Method not allowed") }
+        guard case .recording = manager.state else {
+            return .jsonObject(["ok": true, "wasRecording": false])
+        }
+        await manager.stopRecording()
+        return .jsonObject(["ok": true, "wasRecording": true])
     }
 
     // MARK: - Ask AI (local, vault-grounded)

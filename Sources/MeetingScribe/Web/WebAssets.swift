@@ -123,6 +123,16 @@ enum WebAssets {
       .subtask .st { font-size:.92rem; }
       .subtask .st.strike { text-decoration:line-through; color:var(--muted); }
       a { color:var(--accent); }
+      .rec-banner { display:flex; align-items:center; gap:.55rem; background:#2a1418; border:1px solid #5a2530;
+                    border-radius:14px; padding:.65rem .8rem; margin:.5rem 0 .2rem; }
+      .rec-banner .rec-dot { flex:0 0 auto; width:11px; height:11px; border-radius:50%; background:#ff4d5e;
+                             box-shadow:0 0 0 0 rgba(255,77,94,.6); animation:recpulse 1.4s ease-out infinite; }
+      .rec-banner .rec-text { flex:1; min-width:0; font-size:.9rem; color:#ffd7dc; overflow:hidden;
+                              text-overflow:ellipsis; white-space:nowrap; }
+      .rec-banner .rec-stop { flex:0 0 auto; background:#ff4d5e; border:0; color:#fff; font-weight:600;
+                              font-size:.82rem; border-radius:999px; padding:.4rem .9rem; }
+      .rec-banner .rec-stop:disabled { opacity:.5; }
+      @keyframes recpulse { 0% { box-shadow:0 0 0 0 rgba(255,77,94,.6); } 70% { box-shadow:0 0 0 7px rgba(255,77,94,0); } 100% { box-shadow:0 0 0 0 rgba(255,77,94,0); } }
     </style>
     </head>
     <body>
@@ -252,6 +262,24 @@ enum WebAssets {
       const data = await api('GET','/today');
       view.innerHTML='';
       let any=false;
+      const rec = data.recording;
+      if(rec && rec.isRecording){
+        any=true;
+        const b=document.createElement('div'); b.className='rec-banner';
+        const dot=document.createElement('span'); dot.className='rec-dot';
+        const txt=document.createElement('span'); txt.className='rec-text';
+        let elapsed='';
+        if(rec.startedAt){ const s=Math.floor((Date.now()-new Date(rec.startedAt).getTime())/1000); if(s>=0) elapsed=' · '+dur(s); }
+        txt.textContent='Recording on Mac: '+(rec.title||'Recording')+elapsed;
+        const stop=document.createElement('button'); stop.className='rec-stop'; stop.textContent='Stop';
+        stop.onclick=async()=>{
+          stop.disabled=true;
+          try { await api('POST','/recording/stop'); toast('Stopping…'); setTimeout(()=>paint(),700); }
+          catch(e){ toast('Could not stop'); stop.disabled=false; }
+        };
+        b.appendChild(dot); b.appendChild(txt); b.appendChild(stop);
+        view.appendChild(b);
+      }
       if(data.drift && data.drift.length){
         any=true;
         const sh=document.createElement('div'); sh.innerHTML=sectionH('Stay connected'); view.appendChild(sh);
