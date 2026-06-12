@@ -45,25 +45,27 @@ scan "raw priority/status color" 'case \.(low|medium|high|urgent|open|inProgress
 # 3. Cold AppKit surface colors — should be NDS.fieldBg/rowHover/hairline/columnBg.
 scan "cold AppKit surface color" 'Color\(NSColor\.(controlBackgroundColor|separatorColor|windowBackgroundColor|textBackgroundColor)\)'
 
-echo "design-lint: $total violation(s) in tracked drift classes."
-
-if [[ "$MODE" == "fail" && "$total" -gt 0 ]]; then
-    echo "design-lint: FAIL (mode=fail). Route these through NDS, or annotate an"
-    echo "intentional exception with a trailing  // design-lint:allow  comment."
-    exit 1
-fi
-
-# ── Jargon scan (D4-6) — INFORMATIONAL ONLY for now ──────────────────────────
-# The ratified word-map (vault→library, Ollama→summary engine, MCP→Claude
-# connection, whisper→speech-to-text) is being swept across user-facing strings.
-# This reports remaining jargon inside Text("…") so the sweep can be finished and
-# then promoted to a gating rule. It never affects the exit code yet.
+# 4. Jargon in user-facing Text("…") — the ratified word-map (D4-6): vault→library,
+#    Ollama→summary engine, MCP→Claude connection, whisper→speech-to-text. Tech
+#    names are allowed only on Settings/Advanced + diagnostics surfaces (excluded
+#    below), or with an explicit // design-lint:allow.
 JARGON="$(grep -rnE --include='*.swift' \
     'Text\("[^"]*(vault|Ollama|MCP|whisper|ScreenCaptureKit|daemon|FTS5)' \
     "${UI_DIRS[@]}" 2>/dev/null \
-    | grep -viE 'SettingsView|design-lint:allow' || true)"
+    | grep -viE 'SettingsView|IntegrationsView|CrossDeviceSyncSection|DiagnosticsExportRow|design-lint:allow' || true)"
 if [[ -n "$JARGON" ]]; then
     jn="$(printf '%s\n' "$JARGON" | grep -c .)"
-    echo "design-lint(jargon, informational): $jn user-facing jargon string(s) remain — D4-6 sweep in progress."
+    total=$((total + jn))
+    echo "── user-facing jargon ($jn) ────────────────────────────────"
+    printf '%s\n' "$JARGON" | sed "s#$ROOT/##"
+    echo
+fi
+
+echo "design-lint: $total violation(s) in tracked drift classes."
+
+if [[ "$MODE" == "fail" && "$total" -gt 0 ]]; then
+    echo "design-lint: FAIL (mode=fail). Route these through NDS / the word-map, or"
+    echo "annotate an intentional exception with a trailing  // design-lint:allow  comment."
+    exit 1
 fi
 exit 0

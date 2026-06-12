@@ -789,43 +789,24 @@ private struct AttendeeChip: View {
     // create/tag a person — it read PeopleStore.shared statically before. (SP-3)
     @EnvironmentObject var people: PeopleStore
 
-    private var initials: String {
-        // Extract display name (before <email>)
-        let name = attendee.components(separatedBy: "<").first?
-            .trimmingCharacters(in: .whitespaces) ?? attendee
-        let parts = name.components(separatedBy: " ").filter { !$0.isEmpty }
-        guard !parts.isEmpty else { return "?" }
-        if parts.count >= 2 {
-            return String(parts[0].prefix(1)) + String(parts[1].prefix(1))
-        }
-        return String(parts[0].prefix(2))
+    // Parsed once through the one identity layer (P1-1) — no more bespoke
+    // substring parsing here.
+    private var identity: AttendeeIdentity { PersonResolver.parse(attendee) }
+
+    /// Full name (or email localpart), for creating a Person.
+    private var fullName: String {
+        identity.hasName ? identity.name : PersonResolver.localPart(of: identity.email)
     }
 
     private var displayName: String {
-        attendee.components(separatedBy: "<").first?
-            .trimmingCharacters(in: .whitespaces)
-            .components(separatedBy: " ").first ?? attendee
+        fullName.split(separator: " ").first.map(String.init) ?? fullName
     }
 
-    /// Full name (everything before an "<email>"), for creating a Person.
-    private var fullName: String {
-        let n = attendee.components(separatedBy: "<").first?
-            .trimmingCharacters(in: .whitespaces) ?? attendee
-        return n.isEmpty ? attendee : n
-    }
-
-    /// Email inside "Name <email>", if present.
-    private var email: String {
-        guard let lt = attendee.firstIndex(of: "<"),
-              let gt = attendee.firstIndex(of: ">"), lt < gt else { return "" }
-        return String(attendee[attendee.index(after: lt)..<gt]).trimmingCharacters(in: .whitespaces)
-    }
+    private var email: String { identity.email }
 
     private var existingPerson: Person? {
-        people.people.first {
-            $0.displayName.caseInsensitiveCompare(fullName) == .orderedSame
-            || (!email.isEmpty && $0.emails.contains { $0.caseInsensitiveCompare(email) == .orderedSame })
-        }
+        guard let id = PersonResolver.resolve(identity: identity, in: people.people) else { return nil }
+        return people.person(by: id)
     }
 
     var body: some View {
@@ -834,25 +815,23 @@ private struct AttendeeChip: View {
         // attendee to a saved person or add them as a new one without losing the
         // meeting context. A filled dot marks attendees already in People.
         Button(action: openConnectPanel) {
+            let linked = existingPerson != nil
             HStack(spacing: 5) {
-                Circle()
-                    .fill(NDS.selectColor(displayName))
-                    .frame(width: 20, height: 20)
-                    .overlay(
-                        Text(initials.uppercased())
-                            .scaledFont(8, weight: .bold)
-                            .foregroundStyle(.white)
-                    )
+                // Shared avatar so attendees read identically to People rows.
+                MSAvatar(name: fullName, size: 20)
                 Text(displayName)
                     .scaledFont(12)
-                    .foregroundStyle(NDS.textSecondary)
+                    .foregroundStyle(linked ? NDS.textPrimary : NDS.textSecondary)
                     .lineLimit(1)
-                if existingPerson != nil {
-                    Circle().fill(Color.green.opacity(0.7)).frame(width: 5, height: 5)
-                }
+                // D5-10: a legible linked state — a clear checkmark badge when in
+                // People, a subtle "+" hint when not, instead of a 5pt dot.
+                Image(systemName: linked ? "checkmark.circle.fill" : "plus.circle")
+                    .scaledFont(11)
+                    .foregroundStyle(linked ? NDS.mint : NDS.textTertiary)
             }
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(NDS.fieldBg, in: Capsule())
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(linked ? NDS.mint.opacity(0.12) : NDS.fieldBg, in: Capsule())
+            .overlay(Capsule().strokeBorder(linked ? NDS.mint.opacity(0.3) : NDS.hairline, lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
