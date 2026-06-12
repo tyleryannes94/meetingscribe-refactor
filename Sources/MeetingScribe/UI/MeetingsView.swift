@@ -672,6 +672,13 @@ private struct MeetingListRow: View {
                             .scaledFont(13, weight: isSelected ? .semibold : .regular)
                             .foregroundStyle(NDS.textPrimary)
                             .lineLimit(1)
+                        if (meeting.userTitle?.isEmpty ?? true),
+                           !(meeting.autoTitle?.isEmpty ?? true) {
+                            Image(systemName: "sparkles")
+                                .scaledFont(9)
+                                .foregroundStyle(NDS.textTertiary)
+                                .help("Named automatically from the recording")
+                        }
                         if meeting.seriesID?.isEmpty == false {
                             Image(systemName: "repeat")
                                 .scaledFont(9)
