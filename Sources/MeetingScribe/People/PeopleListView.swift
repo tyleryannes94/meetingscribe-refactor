@@ -25,6 +25,8 @@ struct PeopleListView: View {
     @State private var dedupResult: String?
     /// Phase 7 — toggles the force-directed mindmap in place of the list/detail.
     @State private var graphMode = false
+    /// C2-2 — toggles the keep-in-touch health-band board in place of list/detail.
+    @State private var boardMode = false
 
     // Multi-select + bulk actions (FT3-2/FT3-3).
     @State private var selectMode = false
@@ -84,7 +86,23 @@ struct PeopleListView: View {
 
     var body: some View {
         Group {
-            if graphMode {
+            if boardMode {
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        Text("Keep in touch").font(.title2).bold()
+                        Spacer()
+                        Button { boardMode = false } label: {
+                            Label("Done", systemImage: "list.bullet")
+                        }
+                        .help("Back to the people list")
+                    }
+                    .padding(.horizontal).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 6)
+                    KeepInTouchBoard(
+                        people: people.people.filter { $0.relationshipType != .unset },
+                        onOpen: { id in boardMode = false; router.openPerson(id) }
+                    )
+                }
+            } else if graphMode {
                 PeopleGraphView(
                     onExit: { graphMode = false },
                     onOpenProfile: { id in graphMode = false; selection = id }
@@ -228,6 +246,14 @@ struct PeopleListView: View {
                 // with 500+ contacts and is just decorative at large scale.
                 // Accessible via a compact icon button, not a primary action.
                 if !people.people.isEmpty {
+                    // Keep-in-touch board (C2-2): triage typed relationships by
+                    // health band. Only useful once some people have a type.
+                    if people.people.contains(where: { $0.relationshipType != .unset }) {
+                        NotionIconButton(systemName: "rectangle.split.3x1",
+                                         help: "Keep-in-touch board") {
+                            boardMode = true
+                        }
+                    }
                     NotionIconButton(systemName: "circle.hexagongrid",
                                      help: "Graph view (experimental)") {
                         graphMode = true
