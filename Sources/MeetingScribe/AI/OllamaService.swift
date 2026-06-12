@@ -22,6 +22,84 @@ final class OllamaService {
         let response: String
     }
 
+    // MARK: - Meeting-type templates (C1-8)
+    //
+    // The summary prompt used to be one-size-fits-all, so a 1:1 recap and a
+    // sales-call recap came out shaped identically. We infer the meeting TYPE
+    // from its title + attendee count and inject a short, type-specific
+    // instruction block into the prompt so summaries become scannable documents
+    // shaped to the meeting kind. `.general` injects nothing, preserving the
+    // exact pre-existing prompt for anything we can't confidently classify.
+
+    enum MeetingType {
+        case oneOnOne, standup, salesCall, interview, general
+
+        /// Best-effort classification from the meeting's title and attendee
+        /// count. Conservative by design: when no clear signal is present we
+        /// return `.general`, which leaves today's prompt unchanged.
+        static func infer(from meeting: Meeting) -> MeetingType {
+            // Prefer a user-edited title if present; otherwise the invite title.
+            let title = (meeting.userTitle ?? meeting.title).lowercased()
+            let attendeeCount = meeting.attendees.count
+
+            func titleHas(_ needles: [String]) -> Bool {
+                needles.contains { title.contains($0) }
+            }
+
+            // Explicit title keywords win, checked specific → broad so that an
+            // "Interview / demo prep" leans interview rather than salesCall.
+            if titleHas(["interview", "candidate", "screen"]) { return .interview }
+            if titleHas(["sales", "demo", "discovery", "prospect"]) { return .salesCall }
+            if titleHas(["standup", "stand-up", "scrum", "daily"]) { return .standup }
+            if titleHas(["1:1", "1-on-1", "1 on 1", "one on one", "one-on-one"]) { return .oneOnOne }
+
+            // "<Name A> / <Name B>" sync naming — only a 1:1 when it's really
+            // two people.
+            if title.contains(" / "), attendeeCount <= 2 { return .oneOnOne }
+
+            // Attendee-count tiebreaker, used ONLY when the title gave no signal:
+            // exactly two participants with a neutral title leans 1:1. Anything
+            // else (0, 1, or many) stays conservative and falls back to general.
+            if attendeeCount == 2 { return .oneOnOne }
+
+            return .general
+        }
+
+        /// Short instruction block injected into the summary prompt. Empty for
+        /// `.general` so the assembled prompt is byte-for-byte unchanged.
+        var instructionBlock: String {
+            switch self {
+            case .general:
+                return ""
+            case .oneOnOne:
+                return """
+                This was a 1:1. Focus on what each person committed to, the \
+                follow-ups and blockers each owns, and any feedback or growth \
+                notes that came up. Keep it personal and forward-looking.
+                """
+            case .standup:
+                return """
+                This was a standup. Organize the recap per person as \
+                yesterday / today / blockers. Keep each entry terse, and \
+                surface blockers prominently so they aren't buried.
+                """
+            case .salesCall:
+                return """
+                This was a sales call. Capture the prospect's needs and pain \
+                points, objections raised, any budget / timeline / \
+                decision-maker signals, and clear next steps to advance the deal.
+                """
+            case .interview:
+                return """
+                This was an interview. Summarize the signal on each competency \
+                discussed, the candidate's strengths and any concerns, citing \
+                evidence from the transcript. Stay neutral and evidence-based, \
+                and end with a hire / no-hire recommendation prompt.
+                """
+            }
+        }
+    }
+
     enum SummaryError: Error, LocalizedError {
         case unreachable(String)
         case notInstalled
@@ -273,8 +351,13 @@ final class OllamaService {
             "\n\nThe user was unhappy with the previous summary for this meeting. Their feedback: \"\($0)\". Address it directly in this version.\n"
         } ?? ""
 
+        // C1-8: type-specific shaping. Empty (and thus a no-op) for `.general`,
+        // so untyped meetings get exactly the prompt they got before.
+        let typeGuidance = MeetingType.infer(from: meeting).instructionBlock
+        let typeBlock = typeGuidance.isEmpty ? "" : "\n\n\(typeGuidance)"
+
         return """
-        You are an assistant that writes concise, action-oriented meeting summaries.\(feedback)
+        You are an assistant that writes concise, action-oriented meeting summaries.\(feedback)\(typeBlock)
 
         Meeting: \(meeting.title)
         When: \(when)
