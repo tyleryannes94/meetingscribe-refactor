@@ -39,14 +39,34 @@ struct OnboardingSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            brandHeader   // C3-9: brand the first five minutes
             if isVaultStep {
                 vaultStepBody
             } else {
                 permissionStepBody
             }
         }
-        .frame(width: 480, height: 480)
+        .frame(width: 480, height: 520)
         .task { await refreshAllStatuses() }
+    }
+
+    /// The app mark + wordmark (C3-9), matching the nav rail — so onboarding
+    /// reads as MeetingScribe, not a system-gray setup wizard.
+    private var brandHeader: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "waveform")
+                .scaledFont(15, weight: .bold)
+                .foregroundStyle(NDS.avatarText)
+                .frame(width: 30, height: 30)
+                .background(NDS.brandMarkGradient,
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: NDS.accent.opacity(0.30), radius: 7, y: 4)
+            Text("MeetingScribe")
+                .scaledFont(17, weight: .bold, relativeTo: .title3, kind: .display)
+                .tracking(-0.3)
+            Spacer()
+        }
+        .padding(.horizontal, 28).padding(.top, 22).padding(.bottom, 6)
     }
 
     // MARK: - Vault location step
