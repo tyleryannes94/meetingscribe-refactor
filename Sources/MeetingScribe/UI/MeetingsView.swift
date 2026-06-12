@@ -189,7 +189,7 @@ struct MeetingsView: View {
     // MARK: - Empty states
 
     private var emptyState: some View {
-        MSEmptyState(systemImage: "person.2",
+        MSEmptyState(systemImage: "bubble.left.and.bubble.right",   // D4-2: was the People icon
                      title: search.isEmpty ? "No meetings yet" : "No matches",
                      message: "Meetings appear after you record a call, or when your calendar syncs.") {
             // Actionable empty state — don't dead-end the user. (UX9-1)
