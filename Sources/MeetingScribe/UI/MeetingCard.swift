@@ -26,6 +26,8 @@ struct MeetingCard: View {
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var recordingMonitor: RecordingMonitor
     @State private var hovering = false
+    /// One-line meeting outcome (U3-4) — cache-first, then a lazy disk load.
+    @State private var outcome: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -58,6 +60,19 @@ struct MeetingCard: View {
         .onHover { hovering = $0 }
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu { rowMenu }   // right-click actions (V5 SC-7)
+        .task(id: meeting.id) { await loadOutcome() }
+    }
+
+    /// Cache-first one-line outcome (U3-4). Only past meetings have a summary;
+    /// LazyVStack means only visible rows trigger the (coalesced) disk load.
+    private func loadOutcome() async {
+        guard variant == .past else { return }
+        if let cached = manager.bodyCache.cachedSummaryPreview(meeting.id, maxChars: 120) {
+            outcome = cached
+            return
+        }
+        _ = await manager.bodyCache.load(meeting)
+        outcome = manager.bodyCache.cachedSummaryPreview(meeting.id, maxChars: 120)
     }
 
     /// Right-click row actions. Past meetings get the full set; live/upcoming
@@ -146,6 +161,14 @@ struct MeetingCard: View {
                 }
             }
             metaRow
+            // U3-4: one-line outcome so a list answers "what happened" without
+            // opening anything. Lazily loaded (cache-first) for past meetings.
+            if variant == .past, let outcome, !outcome.isEmpty {
+                Text(outcome)
+                    .font(.caption)
+                    .foregroundStyle(NDS.textSecondary)
+                    .lineLimit(1)
+            }
             if variant == .live { liveLine } else { actionsRow }
         }
     }
