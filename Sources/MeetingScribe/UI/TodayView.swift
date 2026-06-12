@@ -20,6 +20,11 @@ struct TodayView: View {
     @EnvironmentObject var actionItems: ActionItemStore
     @State private var showStandup = false
 
+    /// D5-1 "Today, calm by default": the long-tail sections collapse under one
+    /// "More" disclosure so Today opens calm. Default-collapsed; remembered.
+    @AppStorage("today.moreExpanded") private var moreExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     /// Navigation is owned by `WorkspaceRouter` (D1-1): meeting cards route to
     /// the canonical Meetings-tab detail, and the widgets flip sections through
     /// it. Today no longer keeps its own pushed meeting detail.
@@ -77,6 +82,48 @@ struct TodayView: View {
                     router.section = .actions
                 }
 
+                // D5-1: everything below the fold collapses under one "More"
+                // disclosure so the home screen opens calm.
+                moreSection
+            }
+            .padding(.horizontal, 28).padding(.vertical, 24)
+            // Full window width (req #5) — the feed is cards/lists, not prose,
+            // so no reading-measure cap. (Prose panes keep their own measure.)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - "More" shelf (D5-1)
+
+    /// D5-1 "Today, calm by default": the long-tail sections (weekly ledger,
+    /// follow-ups, commitments, decisions, on-this-day, recent notes, and people
+    /// context) collapse under one disclosure so the home screen opens calm.
+    /// Default-collapsed; remembers its open/closed state across launches.
+    @ViewBuilder
+    private var moreSection: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            Button {
+                withAnimation(NDS.motion(.easeInOut(duration: 0.2), reduce: reduceMotion)) {
+                    moreExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .scaledFont(12, weight: .semibold)
+                        .foregroundStyle(NDS.textSecondary)
+                        .rotationEffect(.degrees(moreExpanded ? 90 : 0))
+                    Text("More").scaledFont(13, weight: .semibold)
+                        .foregroundStyle(NDS.textSecondary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(moreExpanded ? "Hide the rest of your day" : "Show the rest of your day")
+            .accessibilityLabel(moreExpanded ? "More, expanded" : "More, collapsed")
+            .accessibilityHint("Weekly ledger, follow-ups, commitments, decisions, on this day, recent notes, and people")
+
+            if moreExpanded {
                 weeklyLedgerSection   // U3-6: "what did I commit to this week"
 
                 // Forgotten follow-ups to send. (P2-6/U3-3)
@@ -98,16 +145,11 @@ struct TodayView: View {
                 // People suggestions below meetings — they're context, not actions
                 SuggestedPeopleView()
 
-                // "Stay connected" — overdue relationship check-ins with quick-log (Phase 2)
+                // D4-4: StayConnectedSection (health-scored) is the single
+                // people-nudge module we keep; the near-duplicate ReconnectView
+                // call was dropped from the layout to remove the redundancy.
                 StayConnectedSection { p in openPerson(p) }
-
-                // "Stay in touch" — people you're drifting from (by last interaction).
-                ReconnectView { p in openPerson(p) }
             }
-            .padding(.horizontal, 28).padding(.vertical, 24)
-            // Full window width (req #5) — the feed is cards/lists, not prose,
-            // so no reading-measure cap. (Prose panes keep their own measure.)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
