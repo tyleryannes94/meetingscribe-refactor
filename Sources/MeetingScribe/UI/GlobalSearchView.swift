@@ -98,7 +98,7 @@ struct GlobalSearchView: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Search meetings, notes, projects, action items…", text: $query)
+            TextField("Find anything that was said — people, conversations, tasks…", text: $query)
                 .textFieldStyle(.plain)
                 .font(.title3)
                 .focused($fieldFocused)
@@ -187,7 +187,13 @@ struct GlobalSearchView: View {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(e.title).font(.body).lineLimit(1)
-                    Text(e.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    if let snip = e.snippet {
+                        // U2-3: the matched sentence, query terms bolded — proof
+                        // the result is relevant without opening it.
+                        snippetText(snip).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    } else {
+                        Text(e.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
                 }
                 Spacer()
                 Text(e.kind.label).font(.caption2).foregroundStyle(.tertiary)
@@ -200,6 +206,24 @@ struct GlobalSearchView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Render an FTS5 snippet, bolding the spans the matcher wrapped in the
+    /// U+0001 / U+0002 sentinels (U2-3).
+    private func snippetText(_ raw: String) -> Text {
+        var result = Text("")
+        var rest = Substring(raw)
+        while let start = rest.firstIndex(of: "\u{1}") {
+            result = result + Text(rest[..<start])
+            let afterStart = rest.index(after: start)
+            if let end = rest[afterStart...].firstIndex(of: "\u{2}") {
+                result = result + Text(rest[afterStart..<end]).bold().foregroundColor(NDS.textPrimary)
+                rest = rest[rest.index(after: end)...]
+            } else {
+                rest = rest[afterStart...]
+            }
+        }
+        return result + Text(rest)
     }
 
     private func recompute() {
@@ -260,9 +284,12 @@ struct GlobalSearchView: View {
         }
         let date = r.dateEpoch.map { Date(timeIntervalSince1970: TimeInterval($0)) }
         let subtitle = date.map { MeetingManager.entityDateString($0) } ?? ""
+        // Only show a snippet when it actually contains a highlighted match
+        // (U2-3) — otherwise FTS returns the document head, which is noise.
+        let snip = (r.snippet?.contains("\u{1}") == true) ? r.snippet : nil
         return WorkspaceEntity(kind: kind, rawID: r.entityID,
                                title: r.title ?? "(untitled)",
-                               subtitle: subtitle, date: date)
+                               subtitle: subtitle, date: date, snippet: snip)
     }
 
     /// Reduce the full result set to the kinds the active filter wants.

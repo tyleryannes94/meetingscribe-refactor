@@ -247,7 +247,8 @@ final class PeopleStore: ObservableObject {
         for (kk, s) in score.sorted(by: { $0.value > $1.value }).prefix(limit) {
             if let r = meta[kk] {
                 out.append(VaultSearchResult(entityID: r.entityID, entityKind: r.entityKind,
-                                             title: r.title, dateEpoch: r.dateEpoch, rankScore: s))
+                                             title: r.title, dateEpoch: r.dateEpoch, rankScore: s,
+                                             snippet: r.snippet))   // keep the matched snippet (U2-3)
             } else {
                 let parts = kk.split(separator: "\u{1}", maxSplits: 1)
                 guard parts.count == 2 else { continue }
