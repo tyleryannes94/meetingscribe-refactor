@@ -16,11 +16,13 @@ struct MeetingScribeApp: App {
     @StateObject private var updater = UpdaterController()
     @StateObject private var vaultMigrator = VaultMigrationManager()
     @StateObject private var router = WorkspaceRouter()
+    @StateObject private var quickEntry = QuickEntryController()
     @State private var calendarTimer: Timer?
     @State private var hotkey = GlobalHotkey()
     @State private var swapHotkey = GlobalHotkey()
     @State private var promptHotkey = GlobalHotkey()
     @State private var meetingRecordHotkey = GlobalHotkey()
+    @State private var quickEntryHotkey = GlobalHotkey()
     @State private var settingsObserver: AnyCancellable?
 
     var body: some Scene {
@@ -178,6 +180,7 @@ struct MeetingScribeApp: App {
         AmbientMeetingDetector.shared.startIfEnabled()
         registerHotkey()
         overlay.attach(to: manager)
+        quickEntry.attach(to: manager)
         chatSession.attach(manager: manager)
         observeSettingsChanges()
 
@@ -389,6 +392,13 @@ struct MeetingScribeApp: App {
         }
         meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
                                      modifiers: s.meetingRecordHotkeyModifiers)
+        // Global quick-entry (U2-5): pops a non-activating capture panel for a
+        // task/note without alt-tabbing out of whatever app you're in.
+        quickEntryHotkey.onTrigger = { [quickEntry] in
+            quickEntry.toggle()
+        }
+        quickEntryHotkey.register(keyCode: s.quickEntryHotkeyKeyCode,
+                                  modifiers: s.quickEntryHotkeyModifiers)
     }
 
     // MARK: - Login Item registration
@@ -476,6 +486,8 @@ struct MeetingScribeApp: App {
                                       modifiers: s.dictationPromptHotkeyModifiers)
                 meetingRecordHotkey.register(keyCode: s.meetingRecordHotkeyKeyCode,
                                              modifiers: s.meetingRecordHotkeyModifiers)
+                quickEntryHotkey.register(keyCode: s.quickEntryHotkeyKeyCode,
+                                          modifiers: s.quickEntryHotkeyModifiers)
                 notifications.scheduleDailyBrief()
                 Task { @MainActor in
                     calendar.refreshUpcoming(force: true)
