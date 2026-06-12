@@ -7,6 +7,7 @@ extension UnifiedMeetingDetail {
 
     var header: some View {
         VStack(alignment: .leading, spacing: 0) {
+            seriesSpine   // D1-6: recurring-series prev/next thread
             // Main title row
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -589,6 +590,48 @@ extension UnifiedMeetingDetail {
             transcript: manager.transcriptMarkdown(for: m),
             tags: tagNames)
         ObsidianExporter.export(md, filename: m.slug)
+    }
+
+    // MARK: - Series spine (D1-6)
+
+    /// Prev/next navigation across a recurring series — "the 1:1 home, both
+    /// directions". Only shown when there are 2+ recorded occurrences.
+    @ViewBuilder
+    var seriesSpine: some View {
+        if isRecurring, allOccurrences.count > 1, let idx = occurrenceIndex {
+            HStack(spacing: 8) {
+                Image(systemName: "repeat").scaledFont(10).foregroundStyle(NDS.lilac)
+                Button { if let p = previousOccurrence { router.openMeeting(p) } } label: {
+                    Image(systemName: "chevron.left").scaledFont(11)
+                }
+                .buttonStyle(.plain).disabled(previousOccurrence == nil)
+                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                .help("Previous in series (⌥⌘←)")
+
+                Menu {
+                    ForEach(allOccurrences.reversed()) { occ in
+                        Button { router.openMeeting(occ) } label: {
+                            Text(MeetingManager.entityDateString(occ.startDate)
+                                 + (occ.id == meeting?.id ? "  ✓" : ""))
+                        }
+                    }
+                } label: {
+                    Text("Occurrence \(idx) of \(allOccurrences.count)")
+                        .scaledFont(11, weight: .medium).foregroundStyle(NDS.textSecondary)
+                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+
+                Button { if let n = nextOccurrence { router.openMeeting(n) } } label: {
+                    Image(systemName: "chevron.right").scaledFont(11)
+                }
+                .buttonStyle(.plain).disabled(nextOccurrence == nil)
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                .help("Next in series (⌥⌘→)")
+                Spacer()
+            }
+            .foregroundStyle(NDS.textSecondary)
+            .padding(.horizontal, 20).padding(.top, 10)
+        }
     }
 
     // MARK: - Shared history (P1-5)
