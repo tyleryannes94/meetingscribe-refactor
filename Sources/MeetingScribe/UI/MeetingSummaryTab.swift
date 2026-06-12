@@ -114,9 +114,13 @@ extension UnifiedMeetingDetail {
             // Pre-meeting brief is rendered in a separate view for .upcoming
             // (see upcomingBriefBody). The Summary tab shows a helpful
             // placeholder directing the user to start recording.
+            // U4-9: never promise a capability that isn't ready. If the summary
+            // engine is off, say so plainly instead of naming a tool that won't run.
             placeholder(systemImage: "sparkles",
                         title: "No summary yet",
-                        message: "Start a recording and stop it. Ollama will draft a summary from the transcript.")
+                        message: manager.ollamaReachable
+                            ? "Start a recording and stop it — a summary is drafted from the transcript."
+                            : "Start a recording and stop it. Turn on the summary engine in Settings to get summaries.")
         case .past:
             pastSummaryBody
         }
