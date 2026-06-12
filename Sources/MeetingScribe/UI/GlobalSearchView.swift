@@ -228,8 +228,30 @@ struct GlobalSearchView: View {
         return result + Text(rest)
     }
 
+    /// Parse `in:<kind>` qualifiers (U2-10): `in:meetings pricing` scopes the
+    /// search and searches "pricing". Returns the cleaned query + an optional scope.
+    private func parseQualifiers(_ raw: String) -> (query: String, scope: SearchFilter?) {
+        var scope: SearchFilter?
+        var words: [Substring] = []
+        for word in raw.split(separator: " ") {
+            if word.lowercased().hasPrefix("in:") {
+                switch String(word.dropFirst(3)).lowercased() {
+                case "meeting", "meetings":     scope = .meetings
+                case "person", "people":        scope = .people
+                case "task", "tasks":           scope = .tasks
+                case "note", "notes":           scope = .notes
+                case "voice", "voicenote", "voicenotes": scope = .voiceNotes
+                default: words.append(word)
+                }
+            } else { words.append(word) }
+        }
+        return (words.joined(separator: " "), scope)
+    }
+
     private func recompute() {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsed = parseQualifiers(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        if let scope = parsed.scope, filter != scope { filter = scope }   // re-fires recompute
+        let q = parsed.query
         if q.isEmpty {
             // Empty-query suggestions, scoped to the current tab. For
             // .all and .meetings: recent meetings. For .people: recent
@@ -267,7 +289,7 @@ struct GlobalSearchView: View {
             // against a stale query so fast typing isn't clobbered. (C2-1b)
             Task { @MainActor in
                 let hybrid = await PeopleStore.shared.searchVaultHybrid(q)
-                guard q == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+                guard q == parseQualifiers(query.trimmingCharacters(in: .whitespacesAndNewlines)).query else { return }
                 results = filteredResults(hybrid.compactMap(ftsEntity) + other)
             }
         }
