@@ -520,9 +520,21 @@ final class WebAPI {
         QUESTION: \(q)
         """
 
+        // P3-6: surface the entities that grounded the answer as structured
+        // citations (kind/id/title) using the same <kind>/<id> grammar as the
+        // web hash routes + meetingscribe:// scheme, so the phone UI can render
+        // tappable source chips that deep-link straight to the record.
+        var sources: [[String: Any]] = []
+        for (_, m) in scoredMeetings {
+            sources.append(["kind": "meeting", "id": m.id, "title": m.displayTitle])
+        }
+        for (_, p) in scoredPeople {
+            sources.append(["kind": "person", "id": p.id, "title": p.displayName])
+        }
+
         do {
             let answer = try await ollama.generate(prompt: prompt)
-            return .jsonObject(["answer": answer, "sources": contextParts.count])
+            return .jsonObject(["answer": answer, "sources": sources])
         } catch {
             return .jsonObject([
                 "answer": "Local AI (Ollama) isn't reachable on your Mac right now. Start Ollama there and try again — nothing leaves your machine.",
