@@ -213,6 +213,23 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(req)
     }
 
+    /// Failure parity (U4-4): the transcript saved but the summary didn't.
+    /// Success notifies, so silence on failure reads as "nothing happened" and
+    /// the user discovers the gap days later mid-prep. Tell them now, and deep
+    /// link to the meeting where the "Generate Summary" retry already lives.
+    func notifySummaryNeedsRetry(meeting: Meeting) {
+        let content = UNMutableNotificationContent()
+        content.title = "Saved — summary still needs you"
+        content.body = "\(meeting.displayTitle): the recording and transcript are safe. Open it to finish the summary."
+        content.sound = .default
+        content.userInfo[deepLinkKey] = "meetingscribe://meeting/\(meeting.id)"
+        let req = UNNotificationRequest(
+            identifier: "summary-retry-\(meeting.id)",
+            content: content,
+            trigger: nil)
+        UNUserNotificationCenter.current().add(req)
+    }
+
     /// Schedules (or cancels) a repeating 8am "morning brief" nudge. (P2-5)
     func scheduleDailyBrief() {
         let center = UNUserNotificationCenter.current()
