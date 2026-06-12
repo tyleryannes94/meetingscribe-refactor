@@ -663,6 +663,29 @@ extension View {
         let s = tier.shadow
         return self.shadow(color: s.color, radius: s.radius, y: s.y)
     }
+
+    /// Standard hover affordance (D3-10): a subtle row-wash background on hover,
+    /// reduce-motion-proof. Replaces the app's many bespoke `@State isHovered`
+    /// implementations with one consistent treatment.
+    func ndsHover(cornerRadius: CGFloat = NDS.rowRadius) -> some View {
+        modifier(NDSHoverModifier(cornerRadius: cornerRadius))
+    }
+}
+
+@available(macOS 14.0, *)
+private struct NDSHoverModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .background(hovering ? NDS.rowHover : Color.clear,
+                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .onHover { hovering = $0 }
+            .animation(NDS.motion(.easeOut(duration: 0.12), reduce: reduceMotion), value: hovering)
+    }
 }
 
 // MARK: - Direction A: quick-action pill

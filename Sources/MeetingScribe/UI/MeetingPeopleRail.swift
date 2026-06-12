@@ -86,7 +86,7 @@ struct MeetingPeopleRail: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .ndsHover()   // D3-10
         }
         .buttonStyle(.plain)
     }
