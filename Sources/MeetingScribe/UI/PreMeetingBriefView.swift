@@ -76,10 +76,18 @@ struct PreMeetingBriefView: View {
     @ViewBuilder
     private var synthesizedSection: some View {
         if generating {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Synthesizing brief…").font(.caption).foregroundStyle(.secondary)
+            // D4-9: a shaped skeleton + labeled spinner instead of a bare one,
+            // so the loading brief reads as "coming", not broken.
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Synthesizing brief…").font(.caption).foregroundStyle(.secondary)
+                }
+                MSSkeleton(lines: 4)
             }
+            .padding(12)
+            .background(NDS.brand.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else if let brief, !brief.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Label("Summary", systemImage: "sparkles")
