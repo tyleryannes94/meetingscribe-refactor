@@ -6,10 +6,17 @@ import AppKit
 @available(macOS 14.0, *)
 struct ProjectRail: View {
     @ObservedObject var store: ActionItemStore
+    /// People facet (P2-2 / P2-6): observed so owner buckets recount live as
+    /// records change. Defaulted so the call site needs no new plumbing.
+    @ObservedObject private var peopleStore = PeopleStore.shared
     let meetings: [Meeting]
     @Binding var selectedProjectID: String?
     @Binding var selectedMeetingID: String?
     @Binding var selectedInitiativeID: String?
+    /// Collapsible state for the People facet section.
+    @State private var peopleExpanded = true
+    /// Collapsible state for the Waiting-on (delegated) section.
+    @State private var waitingExpanded = true
     @State private var newName: String = ""
     @State private var creating = false
     @State private var creatingInitiative = false
@@ -58,6 +65,10 @@ struct ProjectRail: View {
                     railItem(title: "Unsorted tasks", icon: "tray",
                              count: store.items.filter { $0.projectID == nil && $0.status != .completed }.count,
                              id: ActionItemsView.noProjectSentinel)
+
+                    // People facet (P2-2) + Waiting-on lifecycle (P2-6).
+                    peopleSection
+                    waitingSection
 
                     // Initiatives (top tier) — each expands to its projects.
                     HStack {
@@ -245,6 +256,204 @@ struct ProjectRail: View {
                 } label: { Label("Delete project", systemImage: "trash") }
             }
         }
+    }
+
+    // MARK: - People facet (P2-2)
+
+    /// People who own at least one open task, with their open-task count,
+    /// highest first. Only resolved (`ownerPersonID`-linked) owners appear.
+    private var ownerBuckets: [(person: Person, open: Int)] {
+        var counts: [String: Int] = [:]
+        for item in store.items where item.status != .completed {
+            guard let pid = item.ownerPersonID, !pid.isEmpty else { continue }
+            counts[pid, default: 0] += 1
+        }
+        return counts.compactMap { pid, c -> (person: Person, open: Int)? in
+            guard let p = peopleStore.person(by: pid) else { return nil }
+            return (p, c)
+        }
+        .sorted { $0.open > $1.open }
+    }
+
+    @ViewBuilder
+    private var peopleSection: some View {
+        let buckets = ownerBuckets
+        if !buckets.isEmpty {
+            disclosureHeader(title: "People", count: buckets.count, expanded: $peopleExpanded)
+            if peopleExpanded {
+                ForEach(buckets.prefix(8), id: \.person.id) { bucket in
+                    personRow(bucket.person, open: bucket.open)
+                }
+                if buckets.count > 8 {
+                    Text("+\(buckets.count - 8) more")
+                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                        .padding(.horizontal, 12).padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    private func personRow(_ person: Person, open: Int) -> some View {
+        let sentinel = ActionItemsView.personSentinel(person.id)
+        let selected = selectedMeetingID == nil && selectedInitiativeID == nil && selectedProjectID == sentinel
+        return SidebarRow(selected: selected) {
+            selectedMeetingID = nil
+            selectedInitiativeID = nil
+            selectedProjectID = sentinel
+        } content: {
+            HStack(spacing: 8) {
+                Image(systemName: "person.crop.circle.fill")
+                    .scaledFont(14)
+                    .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+                    .frame(width: 16)
+                Text(person.displayName).lineLimit(1).font(NDS.body)
+                Spacer()
+                if open > 0 {
+                    Text("\(open)").font(NDS.tiny.monospacedDigit())
+                        .foregroundStyle(NDS.textTertiary)
+                }
+            }
+        }
+    }
+
+    // MARK: - Waiting-on lifecycle (P2-6)
+
+    /// Open tasks you've delegated (you're waiting on someone), oldest first so
+    /// the most-aged commitments rise to the top.
+    private var waitingTasks: [ActionItem] {
+        store.items
+            .filter { $0.delegated == true && $0.status != .completed }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    @ViewBuilder
+    private var waitingSection: some View {
+        let tasks = waitingTasks
+        if !tasks.isEmpty {
+            // Header doubles as a scope: tapping the label filters the main list
+            // to delegated tasks; the chevron toggles the inline list.
+            waitingHeader(count: tasks.count)
+            if waitingExpanded {
+                ForEach(tasks.prefix(12)) { waitingRow($0) }
+            }
+        }
+    }
+
+    private func waitingHeader(count: Int) -> some View {
+        let selected = selectedProjectID == ActionItemsView.waitingSentinel
+            && selectedMeetingID == nil && selectedInitiativeID == nil
+        return HStack(spacing: 3) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { waitingExpanded.toggle() }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .scaledFont(8, weight: .bold)
+                    .rotationEffect(.degrees(waitingExpanded ? 90 : 0))
+                    .foregroundStyle(NDS.textTertiary)
+                    .frame(width: 14, height: 14)
+            }
+            .buttonStyle(.plain)
+            Image(systemName: "hourglass")
+                .scaledFont(11)
+                .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+                .frame(width: 15)
+            Text("Waiting on").font(NDS.body)
+                .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+            Spacer(minLength: 4)
+            Text("\(count)").font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(selected ? NDS.rowSelected : .clear,
+                    in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedMeetingID = nil
+            selectedInitiativeID = nil
+            selectedProjectID = ActionItemsView.waitingSentinel
+        }
+        .padding(.top, 6)
+    }
+
+    private func waitingRow(_ item: ActionItem) -> some View {
+        WaitingRow(item: item) { nudge(item) }
+    }
+
+    /// Copies a person-addressed follow-up line to the clipboard so the user can
+    /// drop it into mail/Slack with one click (P2-6 nudge affordance).
+    private func nudge(_ item: ActionItem) {
+        let name = (item.owner ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let greeting = name.isEmpty ? "Hi," : "Hi \(name),"
+        let line = "\(greeting) following up on “\(item.title)” — any update on this?"
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(line, forType: .string)
+        ToastCenter.shared.show("Nudge copied to clipboard")
+    }
+
+    /// Shared collapsible section header (chevron + title + count).
+    private func disclosureHeader(title: String, count: Int, expanded: Binding<Bool>) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { expanded.wrappedValue.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.right")
+                    .scaledFont(8, weight: .bold)
+                    .rotationEffect(.degrees(expanded.wrappedValue ? 90 : 0))
+                    .foregroundStyle(NDS.textTertiary)
+                NotionEyebrow(text: title)
+                Spacer(minLength: 4)
+                Text("\(count)").font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary)
+            }
+            .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// One row in the "Waiting on" sidebar bucket: owner + age badge + a hover-only
+/// Nudge button that copies a follow-up line (P2-6).
+@available(macOS 14.0, *)
+private struct WaitingRow: View {
+    let item: ActionItem
+    let onNudge: () -> Void
+    @State private var hovering = false
+
+    private var ageDays: Int {
+        Calendar.current.dateComponents([.day], from: item.createdAt, to: Date()).day ?? 0
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "hourglass.tophalf.filled")
+                .scaledFont(11).foregroundStyle(NDS.textTertiary).frame(width: 16)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(item.title).lineLimit(1).font(NDS.body)
+                let owner = (item.owner ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                Text(owner.isEmpty ? "Unassigned" : owner)
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+            Spacer(minLength: 4)
+            if hovering {
+                Button(action: onNudge) {
+                    Image(systemName: "bell.badge")
+                        .scaledFont(11, weight: .semibold)
+                        .foregroundStyle(NDS.brand)
+                }
+                .buttonStyle(.plain).help("Copy a follow-up nudge")
+            } else if ageDays > 0 {
+                Text("\(ageDays)d").font(NDS.tiny.monospacedDigit())
+                    .foregroundStyle(ageDays >= 7 ? NDS.selectColor("orange") : NDS.textTertiary)
+            }
+        }
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(hovering ? NDS.rowHover : .clear,
+                    in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }
 

@@ -336,6 +336,17 @@ extension ActionItemsView {
 
     /// `filtered` narrowed to the project selected in the rail (if any).
     var projectFiltered: [ActionItem] {
+        // People facet (P2-2): route the person scope through the shared
+        // `TaskQueryEngine` so `TaskQuery.Scope.person` stops being dead code.
+        if let personID = selectedPersonID {
+            let query = TaskQuery(scope: .person(personID))
+            return filtered.filter { TaskQueryEngine.matches($0, query, now: Date()) }
+        }
+        // Waiting-on bucket (P2-6): delegated commitments, oldest first.
+        if isWaitingScope {
+            return filtered.filter { $0.delegated == true }
+                .sorted { $0.createdAt < $1.createdAt }
+        }
         guard let pid = selectedProjectID else { return filtered }
         if pid == Self.noProjectSentinel {
             return filtered.filter { $0.projectID == nil }

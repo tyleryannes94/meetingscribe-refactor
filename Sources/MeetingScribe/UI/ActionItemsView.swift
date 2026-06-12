@@ -75,6 +75,24 @@ struct ActionItemsView: View {
     static let noProjectSentinel = "__none__"
     static let homeSentinel = "__home__"
     static let triageSentinel = "__triage__"
+    /// People facet (P2-2): a person scope is encoded into `selectedProjectID`
+    /// as `"__person__<personID>"` so it shares the single left-column
+    /// selection model — any other rail tap that sets `selectedProjectID`
+    /// naturally clears the person scope.
+    static let personSentinelPrefix = "__person__"
+    static func personSentinel(_ id: String) -> String { personSentinelPrefix + id }
+    /// Waiting-on lifecycle (P2-6): scopes the list to delegated tasks
+    /// (commitments you're waiting on others for).
+    static let waitingSentinel = "__waiting__"
+
+    /// The person id currently scoping the task list, if a People-facet row is
+    /// selected in the rail (P2-2). Decoded from `selectedProjectID`.
+    var selectedPersonID: String? {
+        guard let pid = selectedProjectID, pid.hasPrefix(Self.personSentinelPrefix) else { return nil }
+        return String(pid.dropFirst(Self.personSentinelPrefix.count))
+    }
+    /// True when the rail's "Waiting on" bucket is selected (P2-6).
+    var isWaitingScope: Bool { selectedProjectID == Self.waitingSentinel }
 
     enum Filter: String, CaseIterable, Identifiable {
         case all, thisWeek, open, inProgress, completed, upcoming, overdue
