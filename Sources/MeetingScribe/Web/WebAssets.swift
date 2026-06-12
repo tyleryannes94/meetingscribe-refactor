@@ -149,6 +149,12 @@ enum WebAssets {
       .open-mac { display:inline-block; font-size:.8rem; color:var(--muted); text-decoration:none;
                   border:1px solid var(--line); border-radius:999px; padding:.32rem .8rem; background:var(--panel); }
       .open-mac::before { content:"\\2318  "; }
+      .quick-cap { display:flex; gap:.4rem; margin:.3rem 0 .5rem; }
+      .quick-cap input { flex:1; min-width:0; background:var(--panel); border:1px solid var(--line); color:#fff;
+                         border-radius:12px; padding:.7rem; font-size:1rem; font-family:inherit; }
+      .quick-cap .qc-btn { flex:0 0 auto; background:var(--accent); border:0; color:#fff; font-weight:600;
+                           font-size:.9rem; border-radius:12px; padding:0 1rem; }
+      .quick-cap .qc-btn:disabled { opacity:.5; }
     </style>
     </head>
     <body>
@@ -283,6 +289,21 @@ enum WebAssets {
       const data = await api('GET','/today');
       view.innerHTML='';
       let any=false;
+      // P3-8: quick capture — a thought drops straight into the vault _inbox/,
+      // the same channel Siri/Shortcuts use, ingested by the running app.
+      const cap=document.createElement('div'); cap.className='quick-cap';
+      cap.innerHTML='<input id="qc-text" placeholder="+ Quick note…" autocapitalize="sentences" autocomplete="off"><button id="qc-add" class="qc-btn">Add</button>';
+      view.appendChild(cap);
+      const qcText=cap.querySelector('#qc-text'), qcAdd=cap.querySelector('#qc-add');
+      async function qcSubmit(){
+        const t=qcText.value.trim(); if(!t) return;
+        qcAdd.disabled=true;
+        try{ await api('POST','/inbox',{body:t,type:'quick-note'}); qcText.value=''; toast('Captured to inbox'); }
+        catch(e){ toast('Could not capture'); }
+        qcAdd.disabled=false; qcText.focus();
+      }
+      qcAdd.onclick=qcSubmit;
+      qcText.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); qcSubmit(); } });
       const rec = data.recording;
       if(rec && rec.isRecording){
         any=true;
@@ -356,7 +377,7 @@ enum WebAssets {
         });
         view.appendChild(list);
       }
-      if(!any) view.innerHTML='<div class="empty">All clear — nothing needs your attention.</div>';
+      if(!any){ const e=document.createElement('div'); e.className='empty'; e.textContent='All clear — nothing needs your attention.'; view.appendChild(e); }
     }
 
     // ---- Meetings ----

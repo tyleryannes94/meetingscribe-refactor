@@ -59,6 +59,7 @@ final class WebAPI {
         case "tasks":      return tasks(request, rest)
         case "voicenotes": return voicenotes(request, rest)
         case "search":     return search(request)
+        case "inbox":      return inbox(request)
         default:           return .error(404, "Unknown endpoint")
         }
     }
@@ -902,6 +903,50 @@ final class WebAPI {
             results.append(["kind": "voicenote", "id": n.id, "title": n.title, "subtitle": n.snippet])
         }
         return .jsonObject(["results": Array(results.prefix(80))])
+    }
+
+    // MARK: - Quick capture (P3-8)
+
+    /// POST /api/inbox — phone quick capture. Writes the *same* `_inbox/`
+    /// envelope the App Intents capture verbs drop (`Widgets/CaptureIntents.swift`),
+    /// so a thought captured on the phone flows through the identical watcher
+    /// (`iCloudInboxWatcher`) as one captured via Siri/Shortcuts. One capture
+    /// mental model: anything captured anywhere lands in the inbox.
+    ///
+    /// Body: `{ "body": "...", "type": "quick-note" | "action-item" }`
+    /// (`type` defaults to `quick-note`; `text`/`note`/`title` accepted as
+    /// aliases for `body`). Action items use the `title` field per `InboxEnvelope`.
+    private func inbox(_ request: HTTPRequest) -> HTTPResponse {
+        guard request.method == "POST" else { return .error(405, "Method not allowed") }
+        let body = jsonBody(request)
+        let text = ((body["body"] as? String)
+                    ?? (body["text"] as? String)
+                    ?? (body["note"] as? String)
+                    ?? (body["title"] as? String)
+                    ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return .error(400, "body is required") }
+
+        let type = (body["type"] as? String) == "action-item" ? "action-item" : "quick-note"
+        let id = UUID().uuidString
+        var envelope: [String: String] = [
+            "type": type,
+            "id": id,
+            "created": isoString(Date())
+        ]
+        // The watcher's `InboxEnvelope` keys text differently per type.
+        if type == "action-item" { envelope["title"] = text } else { envelope["body"] = text }
+
+        let inboxDir = AppSettings.shared.storageDir.appendingPathComponent("_inbox", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: inboxDir, withIntermediateDirectories: true)
+            let url = inboxDir.appendingPathComponent("\(id).json")
+            let data = try JSONSerialization.data(withJSONObject: envelope, options: [.sortedKeys])
+            try data.write(to: url, options: .atomic)
+        } catch {
+            return .error(500, "Failed to write inbox note")
+        }
+        return .jsonObject(["ok": true, "id": id, "type": type], status: 201)
     }
 
     // MARK: - File serving (audio, with Range support)
