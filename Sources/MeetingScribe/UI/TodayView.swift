@@ -840,7 +840,7 @@ struct TodayView: View {
 
     private func adhocPlaceholder() -> Meeting {
         Meeting(id: UUID().uuidString,
-                title: "Ad-hoc Recording",
+                title: "Quick recording",
                 startDate: Date(),
                 endDate: Date().addingTimeInterval(3600),
                 attendees: [], notes: nil, location: nil,
