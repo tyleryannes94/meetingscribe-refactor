@@ -59,36 +59,10 @@ struct MeetingPeopleRail: View {
         let name = id.hasName ? id.name : PersonResolver.localPart(of: id.email)
         if let pid = PersonResolver.resolve(identity: id, in: people.people),
            let person = people.person(by: pid) {
-            linkedRow(person)
+            MeetingPersonRow(person: person, meeting: meeting)
         } else {
             unlinkedRow(name: name, raw: raw)
         }
-    }
-
-    private func linkedRow(_ person: Person) -> some View {
-        Button { router.openPerson(person.id) } label: {
-            HStack(alignment: .top, spacing: 10) {
-                MSAvatar(name: person.displayName, size: 30,
-                         ringColor: healthRingColor(for: person, in: people))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(person.displayName).scaledFont(12.5, weight: .semibold)
-                        .foregroundStyle(NDS.textPrimary).lineLimit(1)
-                    if let sub = roleLine(person) {
-                        Text(sub).scaledFont(11).foregroundStyle(NDS.textTertiary).lineLimit(1)
-                    }
-                    HStack(spacing: 6) {
-                        healthCapsule(person)
-                        if let last = lastMet(person) {
-                            Text(last).scaledFont(10.5).foregroundStyle(NDS.textTertiary)
-                        }
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .ndsHover()   // D3-10
-        }
-        .buttonStyle(.plain)
     }
 
     private func unlinkedRow(name: String, raw: String) -> some View {
@@ -107,6 +81,118 @@ struct MeetingPeopleRail: View {
             .help("Connect \(name) to a person")
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+}
+
+/// A single linked-person row in the "Who's here" rail. Tapping it opens the
+/// person; the trailing "＋" reveals an inline field to jot a note attributed to
+/// this person — "Priya promised the migration doc" — without leaving the live
+/// meeting. The note is saved as an encounter tagged to the current meeting so it
+/// surfaces on the person's profile later. (P1-12)
+@available(macOS 14.0, *)
+private struct MeetingPersonRow: View {
+    let person: Person
+    let meeting: Meeting
+
+    @EnvironmentObject private var people: PeopleStore
+    @EnvironmentObject private var router: WorkspaceRouter
+
+    @State private var capturing = false
+    @State private var noteText = ""
+    @State private var justSaved = false
+    @FocusState private var fieldFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { router.openPerson(person.id) } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    MSAvatar(name: person.displayName, size: 30,
+                             ringColor: healthRingColor(for: person, in: people))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(person.displayName).scaledFont(12.5, weight: .semibold)
+                            .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                        if let sub = roleLine(person) {
+                            Text(sub).scaledFont(11).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                        }
+                        HStack(spacing: 6) {
+                            healthCapsule(person)
+                            if let last = lastMet(person) {
+                                Text(last).scaledFont(10.5).foregroundStyle(NDS.textTertiary)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .ndsHover()   // D3-10
+            }
+            .buttonStyle(.plain)
+            .overlay(alignment: .topTrailing) { noteToggle }
+
+            if capturing { captureField }
+        }
+    }
+
+    // MARK: - Quick-capture (P1-12)
+
+    private var noteToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { capturing.toggle() }
+            if capturing { fieldFocused = true }
+        } label: {
+            Image(systemName: justSaved ? "checkmark" : (capturing ? "xmark" : "plus"))
+                .scaledFont(11, weight: .semibold)
+                .foregroundStyle(justSaved ? NDS.mint : NDS.brand)
+                .frame(width: 20, height: 20)
+                .background(NDS.fieldBg, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 10).padding(.top, 8)
+        .help("Note about \(person.displayName)")
+    }
+
+    private var captureField: some View {
+        HStack(spacing: NDS.spaceSM) {
+            TextField("Note about \(person.displayName)…", text: $noteText)
+                .textFieldStyle(.plain)
+                .scaledFont(12)
+                .foregroundStyle(NDS.textPrimary)
+                .focused($fieldFocused)
+                .onSubmit(save)
+            if !noteText.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button(action: save) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .scaledFont(15).foregroundStyle(NDS.brand)
+                }
+                .buttonStyle(.plain)
+                .help("Save note")
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+        .padding(.horizontal, 12).padding(.bottom, 8)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func save() {
+        let trimmed = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Attribute the note to the live meeting so it surfaces on the person's
+        // profile with the where/when context intact.
+        people.addEncounter(to: person.id,
+                            eventName: meeting.displayTitle,
+                            notes: trimmed,
+                            meetingID: meeting.id)
+        noteText = ""
+        withAnimation(.easeInOut(duration: 0.15)) {
+            capturing = false
+            justSaved = true
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            await MainActor.run { withAnimation { justSaved = false } }
+        }
     }
 
     // MARK: - Derived bits
