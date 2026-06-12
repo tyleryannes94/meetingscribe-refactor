@@ -133,6 +133,28 @@ enum WebAssets {
                               font-size:.82rem; border-radius:999px; padding:.4rem .9rem; }
       .rec-banner .rec-stop:disabled { opacity:.5; }
       @keyframes recpulse { 0% { box-shadow:0 0 0 0 rgba(255,77,94,.6); } 70% { box-shadow:0 0 0 7px rgba(255,77,94,0); } 100% { box-shadow:0 0 0 0 rgba(255,77,94,0); } }
+      .next-mtg { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:.8rem .85rem; margin-bottom:.4rem; }
+      .next-mtg.live { border-color:#5a2530; background:#1d1518; }
+      .next-mtg .nm-title { font-size:1.02rem; font-weight:600; }
+      .next-mtg .nm-when { font-size:.8rem; color:var(--muted); margin-top:.15rem; }
+      .next-mtg .nm-join { display:inline-block; margin-top:.5rem; background:var(--accent); color:#fff; font-size:.82rem;
+                           font-weight:600; border-radius:999px; padding:.35rem .9rem; text-decoration:none; }
+      .next-mtg .nm-people { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.65rem; }
+      .next-mtg .nm-att { display:inline-flex; align-items:center; gap:.35rem; background:#222834; border:1px solid var(--line);
+                          color:#e7e9ee; border-radius:999px; padding:.2rem .5rem .2rem .2rem; font-size:.78rem; text-align:left; }
+      .next-mtg .nm-av { flex:0 0 auto; width:22px; height:22px; border-radius:50%; background:#33405a; color:#dbe4f5;
+                         font-size:.62rem; font-weight:600; display:flex; align-items:center; justify-content:center; }
+      .next-mtg .nm-band { font-size:.7rem; }
+      .open-mac-row { margin:.5rem 0 .2rem; }
+      .open-mac { display:inline-block; font-size:.8rem; color:var(--muted); text-decoration:none;
+                  border:1px solid var(--line); border-radius:999px; padding:.32rem .8rem; background:var(--panel); }
+      .open-mac::before { content:"\\2318  "; }
+      .quick-cap { display:flex; gap:.4rem; margin:.3rem 0 .5rem; }
+      .quick-cap input { flex:1; min-width:0; background:var(--panel); border:1px solid var(--line); color:#fff;
+                         border-radius:12px; padding:.7rem; font-size:1rem; font-family:inherit; }
+      .quick-cap .qc-btn { flex:0 0 auto; background:var(--accent); border:0; color:#fff; font-weight:600;
+                           font-size:.9rem; border-radius:12px; padding:0 1rem; }
+      .quick-cap .qc-btn:disabled { opacity:.5; }
     </style>
     </head>
     <body>
@@ -226,6 +248,11 @@ enum WebAssets {
       voiceNote: id=>({t:'Note',    r:()=>renderNoteDetail(id)})
     };
     let suppressHash = false;
+    // P3-9: handoff — deep-link this entity straight into the desktop app via the
+    // registered meetingscribe://<kind>/<id> scheme. `kind` here is the desktop
+    // WorkspaceEntityKind rawValue (task→actionItem, note→voiceNote), so the Mac
+    // window jumps to the exact record you were viewing on the phone.
+    function openOnMac(kind,id){ const r=document.createElement('div'); r.className='open-mac-row'; r.innerHTML='<a class="open-mac" href="meetingscribe://'+kind+'/'+encodeURIComponent(id)+'">Open on Mac &rsaquo;</a>'; view.appendChild(r); }
     function entityHash(kind,id){ return '#/'+kind+'/'+encodeURIComponent(id); }
     function setHash(h){ if(location.hash===h) return; suppressHash=true; location.hash=h; }
     function applyHash(){
@@ -262,6 +289,21 @@ enum WebAssets {
       const data = await api('GET','/today');
       view.innerHTML='';
       let any=false;
+      // P3-8: quick capture — a thought drops straight into the vault _inbox/,
+      // the same channel Siri/Shortcuts use, ingested by the running app.
+      const cap=document.createElement('div'); cap.className='quick-cap';
+      cap.innerHTML='<input id="qc-text" placeholder="+ Quick note…" autocapitalize="sentences" autocomplete="off"><button id="qc-add" class="qc-btn">Add</button>';
+      view.appendChild(cap);
+      const qcText=cap.querySelector('#qc-text'), qcAdd=cap.querySelector('#qc-add');
+      async function qcSubmit(){
+        const t=qcText.value.trim(); if(!t) return;
+        qcAdd.disabled=true;
+        try{ await api('POST','/inbox',{body:t,type:'quick-note'}); qcText.value=''; toast('Captured to inbox'); }
+        catch(e){ toast('Could not capture'); }
+        qcAdd.disabled=false; qcText.focus();
+      }
+      qcAdd.onclick=qcSubmit;
+      qcText.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); qcSubmit(); } });
       const rec = data.recording;
       if(rec && rec.isRecording){
         any=true;
@@ -279,6 +321,33 @@ enum WebAssets {
         };
         b.appendChild(dot); b.appendChild(txt); b.appendChild(stop);
         view.appendChild(b);
+      }
+      // P3-4: pocket schedule — lead with the next meeting + the humans in it.
+      const nm = data.nextMeeting;
+      if(nm){
+        any=true;
+        const sh=document.createElement('div'); sh.innerHTML=sectionH(nm.isLive?'Happening now':'Next meeting'); view.appendChild(sh);
+        const card=document.createElement('div'); card.className='next-mtg'+(nm.isLive?' live':'');
+        let ch='<div class="nm-title">'+esc(nm.title)+'</div>';
+        ch+='<div class="nm-when">'+esc(nm.isLive?('Started '+fmtDate(nm.start)):fmtDate(nm.start))+(nm.location?' · '+esc(nm.location):'')+'</div>';
+        if(nm.conferenceURL) ch+='<a class="nm-join" href="'+esc(nm.conferenceURL)+'" target="_blank" rel="noopener">Join &rsaquo;</a>';
+        card.innerHTML=ch;
+        const atts=nm.attendees||[];
+        if(atts.length){
+          const wrap=document.createElement('div'); wrap.className='nm-people';
+          atts.forEach(a=>{
+            const chip=document.createElement(a.personID?'button':'span'); chip.className='nm-att';
+            const initials=(a.name||'?').trim().split(/\\s+/).map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+            const av='<span class="nm-av">'+esc(initials||'?')+'</span>';
+            const band=(a.health&&a.health.band)?(' · '+a.health.band):'';
+            chip.innerHTML=av+'<span class="nm-name">'+esc(a.name)+'</span>'+(a.health?'<span class="nm-band" style="color:'+(HEALTH_COLORS[a.health.band]||'#9aa3b2')+'">'+esc((a.health.band||'').charAt(0).toUpperCase()+(a.health.band||'').slice(1))+'</span>':'');
+            if(a.personID) chip.onclick=()=>go(()=>renderPersonDetail(a.personID), a.name);
+            chip.title=esc(a.name)+(a.company?' · '+esc(a.company):'')+band;
+            wrap.appendChild(chip);
+          });
+          card.appendChild(wrap);
+        }
+        view.appendChild(card);
       }
       if(data.drift && data.drift.length){
         any=true;
@@ -308,7 +377,7 @@ enum WebAssets {
         });
         view.appendChild(list);
       }
-      if(!any) view.innerHTML='<div class="empty">All clear — nothing needs your attention.</div>';
+      if(!any){ const e=document.createElement('div'); e.className='empty'; e.textContent='All clear — nothing needs your attention.'; view.appendChild(e); }
     }
 
     // ---- Meetings ----
@@ -342,6 +411,7 @@ enum WebAssets {
       h+='<textarea id="m-notes" rows="5">'+esc(m.notes)+'</textarea>';
       h+='<button class="primary" id="m-save">Save</button>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('meeting',id);
 
       if(m.actionItems && m.actionItems.length){
         const sh=document.createElement('div'); sh.innerHTML=sectionH('Action items'); view.appendChild(sh);
@@ -420,6 +490,7 @@ enum WebAssets {
         '<button class="primary" id="t-save">Save</button>';
       if(t.labels && t.labels.length) h+=sectionH('Labels')+'<div>'+labelDots(t.labels)+'</div>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('actionItem',id);
 
       // Subtasks
       const sh=document.createElement('div'); sh.innerHTML=sectionH('Subtasks'); view.appendChild(sh);
@@ -481,6 +552,7 @@ enum WebAssets {
       h+='<label>Notes</label><textarea id="pr-body" rows="6">'+esc(p.body)+'</textarea>';
       h+='<button class="primary" id="pr-save">Save</button>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('project',id);
 
       if(p.children && p.children.length){
         const sh=document.createElement('div'); sh.innerHTML=sectionH('Sub-projects'); view.appendChild(sh);
@@ -551,6 +623,7 @@ enum WebAssets {
         '<label>Notes / bio</label><textarea id="p-bio" rows="4">'+esc(p.bio)+'</textarea>'+
         '<button class="primary" id="p-save">Save</button>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('person',id);
 
       const info=document.createElement('div');
       let ih='';
@@ -615,6 +688,7 @@ enum WebAssets {
       if(n.polished){ h+=sectionH('Polished'); h+='<div class="prose">'+esc(n.polished)+'</div>'; }
       h+='<button class="danger" id="n-del">Delete note</button>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('voiceNote',id);
       document.getElementById('n-save').onclick=async()=>{ await api('PUT','/voicenotes/'+id,{transcript:document.getElementById('n-tx').value}); toast('Saved'); };
       document.getElementById('n-del').onclick=async()=>{ if(confirm('Delete this note?')){ await api('DELETE','/voicenotes/'+id); back(); } };
     }
