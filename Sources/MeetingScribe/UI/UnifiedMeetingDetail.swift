@@ -228,8 +228,17 @@ struct UnifiedMeetingDetail: View {
     var tabPicker: some View {
         HStack {
             MSPillTabs(tabs: DetailTab.allCases.map { t in
-                (t, t == .actions && unconfirmedActionCount > 0
-                    ? "Actions \(unconfirmedActionCount)" : t.label)
+                // C1-1: for an upcoming meeting the "Transcript" tab IS the
+                // pre-meeting brief — label it so prep greets you, not a misnomer.
+                let label: String
+                if t == .actions && unconfirmedActionCount > 0 {
+                    label = "Actions \(unconfirmedActionCount)"
+                } else if t == .transcript, case .upcoming = mode {
+                    label = "Brief"
+                } else {
+                    label = t.label
+                }
+                return (t, label)
             }, selection: $tab)
             Spacer(minLength: 0)
         }
