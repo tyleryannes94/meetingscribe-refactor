@@ -203,9 +203,16 @@ final class MeetingPipelineController: ObservableObject {
         // Persist health alongside the meeting.
         try? store.writeMeeting(workingMeeting, primaryTag: primary)
 
-        // 4. Action items.
-        let extracted = ActionItemExtractor.extract(from: summary, meeting: workingMeeting)
+        // 4. Action items. Resolve each owner string to a real Person id via the
+        // one identity layer so tasks carry a person edge (P1-1/P2-1), then
+        // auto-link the meeting's calendar attendees to their Person records.
+        var extracted = ActionItemExtractor.extract(from: summary, meeting: workingMeeting)
+        let knownPeople = PeopleStore.shared.people
+        for i in extracted.indices where extracted[i].ownerPersonID == nil {
+            extracted[i].ownerPersonID = PersonResolver.resolveOwner(extracted[i].owner, in: knownPeople)
+        }
         actionItems.reconcileExtracted(extracted, for: workingMeeting.id)
+        PeopleStore.shared.linkAttendees(of: workingMeeting)
 
         lastCompletedDir = store.directory(for: workingMeeting, primaryTag: primary)
 
@@ -329,8 +336,13 @@ final class MeetingPipelineController: ObservableObject {
                 let summary = try await summarizer.summarize(meeting: meeting, transcript: transcript)
                 await MainActor.run {
                     try? store.writeSummary(summary, for: meeting, primaryTag: primary)
-                    let extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
+                    var extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
+                    let knownPeople = PeopleStore.shared.people
+                    for i in extracted.indices where extracted[i].ownerPersonID == nil {
+                        extracted[i].ownerPersonID = PersonResolver.resolveOwner(extracted[i].owner, in: knownPeople)
+                    }
                     actionItems.reconcileExtracted(extracted, for: meeting.id)
+                    PeopleStore.shared.linkAttendees(of: meeting)
                     let tagNameList = tagStore.tagIDs(for: meeting)
                         .compactMap { tagStore.tag(by: $0)?.name }
                     ObsidianExporter.writeMarkdownFile(for: meeting, to: dir, tags: tagNameList)

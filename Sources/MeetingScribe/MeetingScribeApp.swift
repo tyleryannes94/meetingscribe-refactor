@@ -225,6 +225,20 @@ struct MeetingScribeApp: App {
             try? await Task.sleep(nanoseconds: 600_000_000)
             await MainActor.run { manager.prefetchTopMeetingBodies(limit: 10) }
         }
+
+        // BACKGROUND: one-time attendee backfill (P1-1). Retroactively links
+        // every existing meeting's attendees to their Person records via the
+        // identity layer, so health/timelines/follow-ups are truthful for
+        // history, not just future meetings. Reads a definitive list from the
+        // store (not the still-loading published `pastMeetings`); guarded by a
+        // UserDefaults flag inside the store helper, so it runs at most once.
+        Task.detached(priority: .background) { [manager] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await MainActor.run {
+                let meetings = manager.store.listPastMeetings()
+                PeopleStore.shared.backfillMeetingLinks(meetings)
+            }
+        }
     }
 
     /// Like `startCalendarTimer` but defers the first call so it doesn't
