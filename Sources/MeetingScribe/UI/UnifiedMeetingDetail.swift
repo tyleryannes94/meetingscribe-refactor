@@ -68,6 +68,8 @@ struct UnifiedMeetingDetail: View {
     /// panel can parse name/email and offer link-to-existing or add-as-new —
     /// without leaving the meeting (replaces the old jump-to-People behavior).
     @State var connectingAttendee: String?
+    /// The persistent "Who's here" people rail (P1-2). On by default; toggle ⌥⌘P.
+    @AppStorage("meetingPeopleRailVisible") var peopleRailVisible = true
 
     var meeting: Meeting? {
         switch mode {
@@ -156,7 +158,8 @@ struct UnifiedMeetingDetail: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Inline attendee → person connect panel (trailing inspector).
+            // Trailing inspector: the connect panel (transient) takes priority;
+            // otherwise the persistent "Who's here" people rail (P1-2).
             if let attendee = connectingAttendee, let m = meeting {
                 Divider().overlay(NDS.divider)
                 MeetingPersonConnectPanel(
@@ -166,10 +169,24 @@ struct UnifiedMeetingDetail: View {
                 )
                 .frame(width: 320)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if peopleRailVisible, let m = meeting, !m.attendees.isEmpty {
+                Divider().overlay(NDS.divider)
+                MeetingPeopleRail(meeting: m,
+                                  onConnect: { connectingAttendee = $0 },
+                                  onHide: { peopleRailVisible = false })
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
+        .background(
+            Button("") { peopleRailVisible.toggle() }
+                .keyboardShortcut("p", modifiers: [.command, .option])
+                .opacity(0)
+                .accessibilityHidden(true)
+        )
         .animation(NDS.motion(NDS.springStandard, reduce: reduceMotion),
                    value: connectingAttendee)
+        .animation(NDS.motion(NDS.springStandard, reduce: reduceMotion),
+                   value: peopleRailVisible)
         // Switching meetings closes any open connect panel.
         .onChange(of: meeting?.id) { _, _ in connectingAttendee = nil }
     }
