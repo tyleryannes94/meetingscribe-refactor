@@ -217,8 +217,15 @@ struct PreMeetingBriefView: View {
         // Synthesize a brief (once per meeting) when there's something to say.
         if briefMeetingID != meeting.id, !(priorMeetings.isEmpty && openItems.isEmpty) {
             briefMeetingID = meeting.id
-            brief = nil
-            generating = true
+            // U1-10: show the persisted brief instantly (no cold-Ollama wait),
+            // then refresh in the background (stale-while-revalidate).
+            if let cached = BriefCache.load(meeting.id) {
+                brief = cached
+                generating = false
+            } else {
+                brief = nil
+                generating = true
+            }
             let prior = priorMeetings, items = openItems
             Task { await generateSynthesis(prior: prior, items: items) }
         }
@@ -262,6 +269,7 @@ struct PreMeetingBriefView: View {
         """
         do {
             let result = try await OllamaService().generate(prompt: prompt, temperature: 0.3)
+            BriefCache.save(result, for: meeting.id)   // U1-10: persist for instant reload
             await MainActor.run {
                 guard self.meeting.id == self.briefMeetingID else { return }
                 self.brief = result
@@ -278,5 +286,28 @@ struct PreMeetingBriefView: View {
             let id = PersonResolver.parse(str)
             return id.hasEmail ? id.email : nil
         })
+    }
+}
+
+/// Persists pre-meeting briefs to disk so re-opening a meeting shows the brief
+/// instantly instead of waiting on a cold Ollama call (U1-10). A derived cache
+/// under Application Support — safe to delete; regenerated on demand.
+enum BriefCache {
+    private static var dir: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MeetingScribe/briefs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
+    private static func url(_ id: String) -> URL {
+        let safe = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
+        return dir.appendingPathComponent("\(safe).md")
+    }
+    static func load(_ meetingID: String) -> String? {
+        let text = try? String(contentsOf: url(meetingID), encoding: .utf8)
+        return (text?.isEmpty == false) ? text : nil
+    }
+    static func save(_ brief: String, for meetingID: String) {
+        try? brief.write(to: url(meetingID), atomically: true, encoding: .utf8)
     }
 }
