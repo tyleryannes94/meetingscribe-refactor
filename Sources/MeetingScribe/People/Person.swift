@@ -46,6 +46,26 @@ struct AttachedNote: Identifiable, Codable, Hashable {
     }
 }
 
+/// A meaningful date to remember for a person beyond their birthday (C2-5):
+/// an anniversary, a kid's birthday, "started new job", etc. `recurring`
+/// dates roll to their next annual occurrence (like a birthday); one-off
+/// dates surface only while still in the future.
+struct SpecialDate: Codable, Hashable, Identifiable {
+    var id: UUID
+    /// What the date marks — "Anniversary", "Mia's birthday", "Work-iversary".
+    var label: String
+    var date: Date
+    /// True = repeats every year (roll to next occurrence); false = one-off.
+    var recurring: Bool
+
+    init(id: UUID = UUID(), label: String, date: Date, recurring: Bool = true) {
+        self.id = id
+        self.label = label
+        self.date = date
+        self.recurring = recurring
+    }
+}
+
 // MARK: - Relationship Type
 
 /// The category of relationship this person represents.
@@ -225,6 +245,9 @@ struct Person: Identifiable, Codable, Hashable {
     // MARK: - Phase C — rich profile + import provenance
 
     var birthday: Date?
+    /// C2-5 — meaningful dates beyond birthday (anniversaries, kids' birthdays,
+    /// custom recurring/one-off milestones). Surfaced in the "Coming up" insight.
+    var specialDates: [SpecialDate] = []
     /// Postal addresses (multi-valued from Contacts). UI edits the first.
     var addresses: [String]
     /// "Favorite things" — coffee order, restaurants, gifts, whatever.
@@ -278,6 +301,7 @@ struct Person: Identifiable, Codable, Hashable {
          meetingMentions: Set<String> = [],
          talkingPoints: [String] = [],
          birthday: Date? = nil,
+         specialDates: [SpecialDate] = [],
          addresses: [String] = [],
          favorites: [String] = [],
          memories: [Memory] = [],
@@ -303,6 +327,7 @@ struct Person: Identifiable, Codable, Hashable {
         self.meetingMentions = meetingMentions
         self.talkingPoints = talkingPoints
         self.birthday = birthday
+        self.specialDates = specialDates
         self.addresses = addresses
         self.favorites = favorites
         self.memories = memories
@@ -338,7 +363,7 @@ extension Person {
     private enum CodingKeys: String, CodingKey {
         case id, displayName, company, role, emails, phones, bio, tagIDs,
              createdAt, updatedAt, lastInteractionAt, meetingMentions, talkingPoints,
-             birthday, addresses, favorites, memories, photoRelativePaths,
+             birthday, specialDates, addresses, favorites, memories, photoRelativePaths,
              contactIdentifier, importSources, relationships, attachedNotes,
              relationshipType, checkInCadenceDays, checkInGoalDays
     }
@@ -363,6 +388,9 @@ extension Person {
         meetingMentions = (try? c.decode(Set<String>.self, forKey: .meetingMentions)) ?? []
         talkingPoints = (try? c.decode([String].self, forKey: .talkingPoints)) ?? []
         birthday = (try? c.decodeIfPresent(Date.self, forKey: .birthday)) ?? nil
+        // C2-5 — tolerant: person.json written before special dates existed has
+        // no `specialDates` key, so a missing/garbled value decodes to [].
+        specialDates = (try? c.decode([SpecialDate].self, forKey: .specialDates)) ?? []
         addresses = (try? c.decode([String].self, forKey: .addresses)) ?? []
         favorites = (try? c.decode([String].self, forKey: .favorites)) ?? []
         memories = (try? c.decode([Memory].self, forKey: .memories)) ?? []

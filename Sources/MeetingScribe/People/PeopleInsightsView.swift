@@ -11,6 +11,15 @@ struct PeopleInsightsView: View {
 
     private static let birthdayWindowDays = 30
 
+    /// One upcoming date to surface in the "Coming up" card — a birthday or any
+    /// of a person's special dates (C2-5), already resolved to its next date.
+    private struct ComingUp: Identifiable {
+        let id: String
+        let person: Person
+        let label: String
+        let date: Date
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -37,10 +46,11 @@ struct PeopleInsightsView: View {
                     }
                 }
 
-                if let bdays = upcomingBirthdays, !bdays.isEmpty {
-                    card(title: "Upcoming birthdays", icon: "gift", subtitle: "Next \(Self.birthdayWindowDays) days") {
-                        ForEach(bdays, id: \.0.id) { person, date in
-                            row(person, trailing: Self.birthdayFormatter.string(from: date))
+                if let upcoming = comingUp, !upcoming.isEmpty {
+                    card(title: "Coming up", icon: "gift", subtitle: "Next \(Self.birthdayWindowDays) days") {
+                        ForEach(upcoming) { item in
+                            row(item.person,
+                                trailing: "\(item.label) · \(Self.birthdayFormatter.string(from: item.date))")
                         }
                     }
                 }
@@ -53,7 +63,7 @@ struct PeopleInsightsView: View {
                     }
                 }
 
-                if (goneCold?.isEmpty ?? true) && (upcomingBirthdays?.isEmpty ?? true) && (mostActive?.isEmpty ?? true) {
+                if (goneCold?.isEmpty ?? true) && (comingUp?.isEmpty ?? true) && (mostActive?.isEmpty ?? true) {
                     MSEmptyState(systemImage: "person.crop.circle",
                                  title: "No insights yet",
                                  message: "Select a person, or add interactions to see who to reconnect with here.")
@@ -90,17 +100,42 @@ struct PeopleInsightsView: View {
             .prefix(8).map { $0 }
     }
 
-    private var upcomingBirthdays: [(Person, Date)]? {
+    /// Upcoming birthdays + special dates (C2-5), within the window. A recurring
+    /// date rolls to its next annual occurrence (like a birthday); a one-off
+    /// shows only while still in the future.
+    private var comingUp: [ComingUp]? {
         let cal = Calendar.current
         let now = Date()
-        return people.people
-            .compactMap { p -> (Person, Date)? in
-                guard let bday = p.birthday, let next = nextOccurrence(of: bday, after: now, cal: cal) else { return nil }
-                let days = cal.dateComponents([.day], from: now, to: next).day ?? 999
-                return days <= Self.birthdayWindowDays ? (p, next) : nil
+
+        func withinWindow(_ date: Date) -> Bool {
+            let days = cal.dateComponents([.day], from: cal.startOfDay(for: now),
+                                          to: cal.startOfDay(for: date)).day ?? 999
+            return days >= 0 && days <= Self.birthdayWindowDays
+        }
+
+        var items: [ComingUp] = []
+        for p in people.people {
+            if let bday = p.birthday,
+               let next = nextOccurrence(of: bday, after: now, cal: cal),
+               withinWindow(next) {
+                items.append(ComingUp(id: "\(p.id)#birthday", person: p, label: "Birthday", date: next))
             }
-            .sorted { $0.1 < $1.1 }
-            .prefix(8).map { $0 }
+            for sd in p.specialDates {
+                let label = sd.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !label.isEmpty else { continue }
+                let when: Date?
+                if sd.recurring {
+                    when = nextOccurrence(of: sd.date, after: now, cal: cal)
+                } else {
+                    // One-off: surface only if it hasn't passed yet.
+                    when = cal.startOfDay(for: sd.date) >= cal.startOfDay(for: now) ? sd.date : nil
+                }
+                if let when, withinWindow(when) {
+                    items.append(ComingUp(id: "\(p.id)#\(sd.id.uuidString)", person: p, label: label, date: when))
+                }
+            }
+        }
+        return items.sorted { $0.date < $1.date }.prefix(8).map { $0 }
     }
 
     private var mostActive: [(Person, Int)]? {
