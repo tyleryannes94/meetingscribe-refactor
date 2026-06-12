@@ -145,6 +145,10 @@ enum WebAssets {
       .next-mtg .nm-av { flex:0 0 auto; width:22px; height:22px; border-radius:50%; background:#33405a; color:#dbe4f5;
                          font-size:.62rem; font-weight:600; display:flex; align-items:center; justify-content:center; }
       .next-mtg .nm-band { font-size:.7rem; }
+      .open-mac-row { margin:.5rem 0 .2rem; }
+      .open-mac { display:inline-block; font-size:.8rem; color:var(--muted); text-decoration:none;
+                  border:1px solid var(--line); border-radius:999px; padding:.32rem .8rem; background:var(--panel); }
+      .open-mac::before { content:"\\2318  "; }
     </style>
     </head>
     <body>
@@ -238,6 +242,11 @@ enum WebAssets {
       voiceNote: id=>({t:'Note',    r:()=>renderNoteDetail(id)})
     };
     let suppressHash = false;
+    // P3-9: handoff — deep-link this entity straight into the desktop app via the
+    // registered meetingscribe://<kind>/<id> scheme. `kind` here is the desktop
+    // WorkspaceEntityKind rawValue (task→actionItem, note→voiceNote), so the Mac
+    // window jumps to the exact record you were viewing on the phone.
+    function openOnMac(kind,id){ const r=document.createElement('div'); r.className='open-mac-row'; r.innerHTML='<a class="open-mac" href="meetingscribe://'+kind+'/'+encodeURIComponent(id)+'">Open on Mac &rsaquo;</a>'; view.appendChild(r); }
     function entityHash(kind,id){ return '#/'+kind+'/'+encodeURIComponent(id); }
     function setHash(h){ if(location.hash===h) return; suppressHash=true; location.hash=h; }
     function applyHash(){
@@ -381,6 +390,7 @@ enum WebAssets {
       h+='<textarea id="m-notes" rows="5">'+esc(m.notes)+'</textarea>';
       h+='<button class="primary" id="m-save">Save</button>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('meeting',id);
 
       if(m.actionItems && m.actionItems.length){
         const sh=document.createElement('div'); sh.innerHTML=sectionH('Action items'); view.appendChild(sh);
@@ -459,6 +469,7 @@ enum WebAssets {
         '<button class="primary" id="t-save">Save</button>';
       if(t.labels && t.labels.length) h+=sectionH('Labels')+'<div>'+labelDots(t.labels)+'</div>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('actionItem',id);
 
       // Subtasks
       const sh=document.createElement('div'); sh.innerHTML=sectionH('Subtasks'); view.appendChild(sh);
@@ -520,6 +531,7 @@ enum WebAssets {
       h+='<label>Notes</label><textarea id="pr-body" rows="6">'+esc(p.body)+'</textarea>';
       h+='<button class="primary" id="pr-save">Save</button>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('project',id);
 
       if(p.children && p.children.length){
         const sh=document.createElement('div'); sh.innerHTML=sectionH('Sub-projects'); view.appendChild(sh);
@@ -590,6 +602,7 @@ enum WebAssets {
         '<label>Notes / bio</label><textarea id="p-bio" rows="4">'+esc(p.bio)+'</textarea>'+
         '<button class="primary" id="p-save">Save</button>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('person',id);
 
       const info=document.createElement('div');
       let ih='';
@@ -654,6 +667,7 @@ enum WebAssets {
       if(n.polished){ h+=sectionH('Polished'); h+='<div class="prose">'+esc(n.polished)+'</div>'; }
       h+='<button class="danger" id="n-del">Delete note</button>';
       c.innerHTML=h; view.appendChild(c);
+      openOnMac('voiceNote',id);
       document.getElementById('n-save').onclick=async()=>{ await api('PUT','/voicenotes/'+id,{transcript:document.getElementById('n-tx').value}); toast('Saved'); };
       document.getElementById('n-del').onclick=async()=>{ if(confirm('Delete this note?')){ await api('DELETE','/voicenotes/'+id); back(); } };
     }
