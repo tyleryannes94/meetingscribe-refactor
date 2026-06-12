@@ -96,6 +96,11 @@ struct TranscriptSyncView: View {
     var audioController: AudioPlayerController?
     /// Seed the find bar (U2-2) — e.g. carried from a search hit.
     var initialSearch: String? = nil
+    /// Meeting id + attendees enable speaker→person mapping (P1-3).
+    var meetingID: String? = nil
+    var attendees: [String] = []
+    @EnvironmentObject private var people: PeopleStore
+    @State private var speakerMap: [String: String] = [:]   // label → personID
 
     @State private var segments: [TranscriptSegment] = []
     @State private var isVisible = false
@@ -119,6 +124,7 @@ struct TranscriptSyncView: View {
         .onAppear {
             isVisible = true; parse()
             if let seed = initialSearch, !seed.isEmpty, searchText.isEmpty { searchText = seed }
+            if let id = meetingID { speakerMap = SpeakerMap.load(id) }
         }
         .onDisappear { isVisible = false }
         .onChange(of: rawTranscript) { _, _ in parse() }
@@ -161,10 +167,23 @@ struct TranscriptSyncView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(speakers, id: \.self) { spk in
-                        Button {
-                            selectedSpeaker = selectedSpeaker == spk ? nil : spk
+                        Menu {
+                            Button(selectedSpeaker == spk ? "Show everyone" : "Show only \(speakerDisplay(spk))") {
+                                selectedSpeaker = selectedSpeaker == spk ? nil : spk
+                            }
+                            if !mappableAttendees.isEmpty {
+                                // P1-3: "This is Jane" — map this speaker label to a person.
+                                Section("This is…") {
+                                    ForEach(mappableAttendees, id: \.id) { p in
+                                        Button(p.displayName) { mapSpeaker(spk, to: p.id) }
+                                    }
+                                }
+                            }
+                            if speakerMap[spk] != nil {
+                                Button("Clear who this is") { mapSpeaker(spk, to: nil) }
+                            }
                         } label: {
-                            Text(spk)
+                            Text(speakerDisplay(spk))
                                 .scaledFont(11, weight: .medium)
                                 .foregroundStyle(selectedSpeaker == spk
                                     ? .white : (speakerColors[spk] ?? NDS.brand))
@@ -176,7 +195,7 @@ struct TranscriptSyncView: View {
                                     in: Capsule()
                                 )
                         }
-                        .buttonStyle(.plain)
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                     }
                 }
             }
@@ -208,6 +227,31 @@ struct TranscriptSyncView: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
     }
 
+    // MARK: - Speaker → person mapping (P1-3)
+
+    /// The display name for a speaker label — the mapped person's name if set,
+    /// else the raw label ("Speaker 2", "Them").
+    private func speakerDisplay(_ label: String) -> String {
+        if let pid = speakerMap[label], let p = people.person(by: pid) { return p.displayName }
+        return label
+    }
+
+    /// Resolved attendees offered as mapping targets, plus any already mapped.
+    private var mappableAttendees: [Person] {
+        let resolved = attendees.compactMap { raw in
+            PersonResolver.resolve(raw, in: people.people).flatMap { id in people.person(by: id) }
+        }
+        // De-dup by id, keep order.
+        var seen = Set<String>(); var out: [Person] = []
+        for p in resolved where seen.insert(p.id).inserted { out.append(p) }
+        return out
+    }
+
+    private func mapSpeaker(_ label: String, to personID: String?) {
+        if let personID { speakerMap[label] = personID } else { speakerMap[label] = nil }
+        if let id = meetingID { SpeakerMap.save(speakerMap, for: id) }
+    }
+
     // MARK: - Scroll body
 
     private var transcriptScroll: some View {
@@ -217,6 +261,7 @@ struct TranscriptSyncView: View {
                     ForEach(filteredSegments) { seg in
                         TranscriptRow(
                             segment: seg,
+                            speakerName: speakerDisplay(seg.speaker),
                             isActive: seg.id == activeSegmentID,
                             speakerColor: speakerColors[seg.speaker] ?? NDS.brand,
                             searchHighlight: searchText,
@@ -299,6 +344,8 @@ struct TranscriptSyncView: View {
 @available(macOS 14.0, *)
 private struct TranscriptRow: View {
     let segment: TranscriptSegment
+    /// Display name for the speaker (mapped person or raw label, P1-3).
+    var speakerName: String = ""
     let isActive: Bool
     let speakerColor: Color
     let searchHighlight: String
@@ -338,7 +385,7 @@ private struct TranscriptRow: View {
                 .padding(.horizontal, 6)
 
             // Speaker label
-            Text(segment.speaker)
+            Text(speakerName.isEmpty ? segment.speaker : speakerName)
                 .scaledFont(12, weight: .semibold)
                 .foregroundStyle(speakerColor)
                 .frame(width: 64, alignment: .leading)

@@ -43,7 +43,9 @@ var transcriptBody: some View {
                 // the same audio the transport bar plays — only when audio exists.
                 TranscriptSyncView(rawTranscript: transcript,
                                    audioController: audioURLs.isEmpty ? nil : audioController,
-                                   initialSearch: transcriptSearchSeed)
+                                   initialSearch: transcriptSearchSeed,
+                                   meetingID: meeting?.id,
+                                   attendees: meeting?.attendees ?? [])
             }
         }
     }
