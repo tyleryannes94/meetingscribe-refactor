@@ -247,6 +247,8 @@ struct PersonDetailView: View {
     @State private var draftAddress = ""
     @State private var draftBio = ""
     @State private var showAddEncounter = false
+    /// C2-3: the health "why" popover.
+    @State private var showHealthWhy = false
     @State private var showAddRelationship = false
     @State private var confirmDelete = false
     @State private var newMemory = ""
@@ -747,20 +749,79 @@ struct PersonDetailView: View {
     @ViewBuilder
     private func healthBadge(_ health: RelationshipHealth) -> some View {
         let color = healthColor(health.band)
-        HStack(spacing: 6) {
-            Image(systemName: "heart.fill")
-                .font(NDS.small)
-                .imageScale(.small)
-                .foregroundStyle(color)
-            Text("Health \(health.score) · \(health.band.rawValue.capitalized)")
-                .font(NDS.small)
-                .foregroundStyle(NDS.textSecondary)
+        VStack(alignment: .leading, spacing: 4) {
+            // C2-3: the badge is now a button that explains WHY + a next-best action.
+            Button { showHealthWhy.toggle() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "heart.fill").font(NDS.small).imageScale(.small).foregroundStyle(color)
+                    Text("Health \(health.score) · \(health.band.rawValue.capitalized)")
+                        .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                    Image(systemName: "chevron.down").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().fill(color.opacity(0.14)))
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showHealthWhy, arrowEdge: .bottom) { healthWhyPopover(health) }
+            .accessibilityLabel("Connection health \(health.score) out of 100, \(health.band.rawValue). Tap for details.")
+            // C2-9: "Known since" line.
+            if let since = knownSinceLine { Text(since).font(NDS.tiny).foregroundStyle(NDS.textTertiary) }
         }
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(Capsule().fill(color.opacity(0.14)))
-        .help("Connection health blends recency vs. cadence, how often you log encounters, and consistency.")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Connection health \(health.score) out of 100, \(health.band.rawValue)")
+    }
+
+    /// First-met date = earliest encounter, else the record's creation date.
+    private var firstMet: Date {
+        people.encounters(for: current.id).map(\.date).min() ?? current.createdAt
+    }
+
+    /// "Known for 3 years · first met Mar 2022" (C2-9).
+    private var knownSinceLine: String? {
+        let days = Int(Date().timeIntervalSince(firstMet) / 86400)
+        guard days >= 1 else { return nil }
+        let dur: String
+        if days >= 730 { dur = "Known for \(days / 365) years" }
+        else if days >= 365 { dur = "Known for 1 year" }
+        else if days >= 60 { dur = "Known for \(days / 30) months" }
+        else { dur = "Known for \(days) days" }
+        let f = DateFormatter(); f.dateFormat = "MMM yyyy"
+        return "\(dur) · first met \(f.string(from: firstMet))"
+    }
+
+    /// C2-3: a plain-language breakdown of the health score + next-best action.
+    @ViewBuilder
+    private func healthWhyPopover(_ health: RelationshipHealth) -> some View {
+        let encs = people.encounters(for: current.id)
+        let last = encs.map(\.date).max() ?? current.lastInteractionAt
+        let daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) }
+        let cadence = current.checkInCadenceDays ?? current.relationshipType.defaultCheckInDays
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Why \(health.score) · \(health.band.rawValue.capitalized)")
+                .font(NDS.body.weight(.semibold))
+            VStack(alignment: .leading, spacing: 4) {
+                whyRow("clock", daysSince.map { "Last contact \($0)d ago (aim: every \(cadence)d)" } ?? "No contact logged yet")
+                whyRow("repeat", "\(encs.count) encounter\(encs.count == 1 ? "" : "s") on record")
+            }
+            Divider()
+            // Next-best action.
+            let overdue = (daysSince ?? 9999) - cadence
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.right.circle.fill").foregroundStyle(NDS.brand)
+                Text(overdue > 0 ? "Reach out — \(overdue)d overdue" : "On track — next check-in in \(-overdue)d")
+                    .font(NDS.small)
+            }
+            Button { showHealthWhy = false; showAddEncounter = true } label: {
+                Label("Log a check-in", systemImage: "plus.circle")
+            }
+            .buttonStyle(.borderedProminent).controlSize(.small).tint(NDS.brand)
+        }
+        .padding(14).frame(width: 260)
+    }
+
+    private func whyRow(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(NDS.tiny).foregroundStyle(NDS.textTertiary).frame(width: 14)
+            Text(text).font(NDS.small).foregroundStyle(NDS.textSecondary)
+        }
     }
 
     /// Compact relationship-type selector displayed in the identity panel.
