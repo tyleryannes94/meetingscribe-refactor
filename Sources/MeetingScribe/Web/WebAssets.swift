@@ -105,6 +105,13 @@ enum WebAssets {
       .pill { display:inline-block; font-size:.72rem; padding:.15rem .55rem; border-radius:999px;
               background:#222834; color:#cdd3de; margin:.15rem .2rem 0 0; border:1px solid var(--line); }
       .pill.dot::before { content:"●"; margin-right:.3rem; }
+      .cites { margin-top:.5rem; display:flex; flex-wrap:wrap; gap:.3rem; }
+      .cite { display:inline-flex; align-items:center; gap:.25rem; font-size:.72rem; text-decoration:none;
+              padding:.18rem .55rem; border-radius:999px; background:#222834; color:#cdd3de;
+              border:1px solid var(--line); }
+      .cite::before { content:""; }
+      .cite.meeting::before { content:"\\1F4C5  "; }
+      .cite.person::before { content:"\\1F464  "; }
       .toast { position:fixed; left:50%; bottom:5.5rem; transform:translateX(-50%); background:#22a06b; color:#fff;
                padding:.55rem 1rem; border-radius:999px; font-size:.85rem; opacity:0; transition:opacity .2s; z-index:20; }
       .toast.show { opacity:1; }
@@ -726,13 +733,23 @@ enum WebAssets {
     async function renderChat(){
       view.innerHTML='';
       const log=document.createElement('div'); log.className='list'; view.appendChild(log);
-      function addMsg(role,text){
+      // P3-6: render the API's structured sources as tappable citation chips.
+      // Each chip is an <a href="#/<kind>/<id>"> built from entityHash, so a tap
+      // fires the existing hashchange → applyHash routing and lands on the
+      // record — the same grammar the desktop meetingscribe:// scheme uses.
+      function citeHtml(sources){
+        if(!sources || !sources.length) return '';
+        const valid=sources.filter(s=>s && s.id && KIND_TAB[s.kind]);
+        if(!valid.length) return '';
+        return '<div class="cites">'+valid.map(s=>'<a class="cite '+esc(s.kind)+'" href="'+entityHash(s.kind,s.id)+'">'+esc(s.title||s.kind)+'</a>').join('')+'</div>';
+      }
+      function addMsg(role,text,sources){
         const d=document.createElement('div'); d.className='card2';
-        d.innerHTML='<div style="text-transform:uppercase;font-size:.68rem;color:var(--muted)">'+(role==='you'?'You':'Assistant')+'</div><div class="s" style="white-space:pre-wrap">'+esc(text)+'</div>';
+        d.innerHTML='<div style="text-transform:uppercase;font-size:.68rem;color:var(--muted)">'+(role==='you'?'You':'Assistant')+'</div><div class="s" style="white-space:pre-wrap">'+esc(text)+'</div>'+citeHtml(sources);
         log.appendChild(d); d.scrollIntoView({block:'end'}); return d;
       }
       if(!chatLog.length){ const e=document.createElement('div'); e.className='empty'; e.textContent='Ask anything about your meetings, people, and tasks. Answered locally by the AI on your Mac — nothing leaves your machine.'; log.appendChild(e); }
-      chatLog.forEach(m=>addMsg(m.role,m.text));
+      chatLog.forEach(m=>addMsg(m.role,m.text,m.sources));
       const c=document.createElement('div'); c.className='detail';
       c.innerHTML='<textarea id="chat-q" rows="2" placeholder="e.g. What did I commit to in my last 1:1 with Priya?"></textarea><button class="primary" id="chat-send">Ask</button>';
       view.appendChild(c);
@@ -743,7 +760,7 @@ enum WebAssets {
         chatLog.push({role:'you',text}); addMsg('you',text); q.value='';
         send.disabled=true; send.textContent='Thinking…';
         const bubble=addMsg('ai','…');
-        try{ const r=await api('POST','/chat',{question:text}); bubble.querySelector('.s').textContent=r.answer; chatLog.push({role:'ai',text:r.answer}); }
+        try{ const r=await api('POST','/chat',{question:text}); bubble.querySelector('.s').textContent=r.answer; const ch=citeHtml(r.sources); if(ch) bubble.insertAdjacentHTML('beforeend',ch); chatLog.push({role:'ai',text:r.answer,sources:r.sources}); }
         catch(e){ bubble.querySelector('.s').textContent='Error: '+e.message; }
         send.disabled=false; send.textContent='Ask';
       }
