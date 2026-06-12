@@ -39,6 +39,27 @@ func chatContext(for m: Meeting) -> String {
         if !m.attendees.isEmpty {
             lines.append("- Attendees: \(m.attendees.joined(separator: ", "))")
         }
+        // P1-10: inject what the vault already knows about the resolved
+        // attendees so "what should I ask Jane?" answers from the relationship
+        // graph, not just this transcript. All local — no privacy cost.
+        let people = PeopleStore.shared.people
+        var blocks: [String] = []
+        for raw in m.attendees {
+            guard let id = PersonResolver.resolve(raw, in: people),
+                  let p = people.first(where: { $0.id == id }) else { continue }
+            var b = "  • \(p.displayName)"
+            let rc = [p.role, p.company].filter { !$0.isEmpty }.joined(separator: " at ")
+            if !rc.isEmpty { b += " (\(rc))" }
+            if p.relationshipType != .unset { b += " — \(p.relationshipType.displayName)" }
+            let mems = p.memories.prefix(3).map(\.text)
+            if !mems.isEmpty { b += "; you've noted: " + mems.joined(separator: "; ") }
+            if !p.talkingPoints.isEmpty { b += "; to discuss next: " + p.talkingPoints.joined(separator: "; ") }
+            blocks.append(b)
+        }
+        if !blocks.isEmpty {
+            lines.append("What you know about the people here (from your private notes):")
+            lines.append(contentsOf: blocks)
+        }
         lines.append("If you need the transcript, notes, or summary, call get_transcript / get_notes / get_summary with this meeting_id.")
         return lines.joined(separator: "\n")
     }
