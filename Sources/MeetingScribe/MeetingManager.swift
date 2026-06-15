@@ -241,6 +241,13 @@ final class MeetingManager: ObservableObject {
             let primary = tagStore.primaryTag(for: m)
             try store.writeMeeting(m, primaryTag: primary)
 
+            // Carry the pre-meeting brief into this recording's notes so it's
+            // visible (Notes tab) during and after the call, not just on the
+            // upcoming-event screen. No-op when no brief was generated.
+            if let cachedBrief = BriefCache.load(m.id) {
+                attachBriefToNotes(cachedBrief, for: m, onlyIfRecorded: false)
+            }
+
             // --- ScribeCore delegation with 1-second timeout fallback ---
             let scribeCoreSucceeded = await tryStartViaScribeCore()
             usingScribeCore = scribeCoreSucceeded
@@ -1075,6 +1082,36 @@ final class MeetingManager: ObservableObject {
             ErrorReporter.shared.report(error, category: .storage,
                                         context: ["phase": "save-notes", "meeting": meeting.id])
         }
+    }
+
+    /// Markers that delimit the auto-injected pre-meeting brief inside a
+    /// meeting's `notes.md`. Kept stable so regeneration updates in place and
+    /// the user's own notes around it are never touched.
+    static let briefNoteBegin = "<!-- ms-pre-meeting-brief -->"
+    static let briefNoteEnd = "<!-- /ms-pre-meeting-brief -->"
+
+    /// Writes (or updates) the pre-meeting brief at the TOP of the meeting's
+    /// `notes.md`, between markers, so the brief is visible in the always-present
+    /// Notes tab before, during, and after the call. Idempotent: re-running
+    /// replaces the existing block rather than stacking, and the user's own notes
+    /// are preserved. `onlyIfRecorded` avoids materializing a vault folder for a
+    /// calendar event that hasn't been recorded yet.
+    func attachBriefToNotes(_ brief: String, for meeting: Meeting, onlyIfRecorded: Bool = true) {
+        let trimmed = brief.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let primary = tagStore.primaryTag(for: meeting)
+        let dir = store.directory(for: meeting, primaryTag: primary)
+        if onlyIfRecorded, !FileManager.default.fileExists(atPath: dir.path) { return }
+        let block = "\(Self.briefNoteBegin)\n## 🧭 Pre-meeting brief\n\n\(trimmed)\n\(Self.briefNoteEnd)"
+        var notes = userNotes(for: meeting)
+        if let r1 = notes.range(of: Self.briefNoteBegin),
+           let r2 = notes.range(of: Self.briefNoteEnd),
+           r1.lowerBound < r2.upperBound {
+            notes.replaceSubrange(r1.lowerBound..<r2.upperBound, with: block)
+        } else {
+            notes = notes.isEmpty ? block : block + "\n\n" + notes
+        }
+        saveUserNotes(notes, for: meeting)
     }
 
     func revealInFinder(_ meeting: Meeting) {

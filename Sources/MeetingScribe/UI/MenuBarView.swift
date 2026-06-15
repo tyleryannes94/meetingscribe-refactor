@@ -92,7 +92,7 @@ struct MenuBarView: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(m.isLive ? NDS.recording : NDS.brand)
                     Spacer()
-                    if m.isLive, m.conferenceURL != nil, isIdle {
+                    if m.isJoinableWindow, m.conferenceURL != nil, isIdle {
                         Button("Join & record") { Task { await manager.switchToRecording(m) } }
                             .font(.caption)
                     }
@@ -144,7 +144,7 @@ struct MenuBarView: View {
             Label("New Voice Note", systemImage: "waveform.badge.plus")
         }
 
-        if let live = calendar.upcoming.first(where: { $0.isLive && $0.conferenceURL != nil }) {
+        if let live = calendar.upcoming.first(where: { $0.isJoinableWindow && $0.conferenceURL != nil }) {
             Button {
                 Task { await manager.switchToRecording(live) }
             } label: {

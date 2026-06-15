@@ -166,6 +166,7 @@ struct MeetingScribeApp: App {
         // and we don't want to block its first paint on Ollama probes or
         // disk walks.
         AppSettings.shared.migrateOllamaModelIfNeeded()
+        AppSettings.shared.migrateLiveTranscriptionDefaultIfNeeded()
         registerScribeCoreLoginItem()
         wireNotifications()
         wireDetector()

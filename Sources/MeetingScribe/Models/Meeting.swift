@@ -124,6 +124,17 @@ struct Meeting: Identifiable, Codable, Hashable {
         return now >= startDate.addingTimeInterval(-60) && now <= endDate
     }
 
+    /// Window during which we keep offering "Join & record": from 1 minute
+    /// before the scheduled start through 45 minutes after the scheduled end.
+    /// `isLive` ends exactly at `endDate`, which made the affordance vanish the
+    /// moment a call ran long or nominally ended — forcing the user to join by
+    /// hand and click record again. This wider window keeps one-tap join/record
+    /// available before, during, and well after the meeting.
+    var isJoinableWindow: Bool {
+        let now = Date()
+        return now >= startDate.addingTimeInterval(-60) && now <= endDate.addingTimeInterval(45 * 60)
+    }
+
     /// Effective source — user override wins, otherwise derived from the
     /// conference URL. Returns nil when we can't tell.
     var effectiveSource: MeetingSource? {

@@ -658,7 +658,7 @@ struct TodayView: View {
     @ViewBuilder
     private var upNextCard: some View {
         if !isRecording, let m = nextMeeting {
-            MSTintedHeaderCard(label: "Up next") {
+            MSTintedHeaderCard(label: m.isJoinableWindow ? "Happening now" : "Up next") {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(m.displayTitle)
@@ -683,10 +683,20 @@ struct TodayView: View {
         }
     }
 
-    /// The soonest upcoming meeting (prefers one with a conference link).
+    /// The meeting to surface in the "Up next" hero. A call you can still join
+    /// and record right now — currently live, or ended within the last 45 min —
+    /// takes priority over the next future event, so the one-tap Join & Record
+    /// never disappears the moment a call starts (or runs long). Falls back to
+    /// the soonest future meeting otherwise.
     private var nextMeeting: Meeting? {
+        let joinable = calendar.upcoming
+            .filter { $0.isJoinableWindow }
+            .sorted { $0.startDate < $1.startDate }
+        if let live = joinable.first(where: { $0.conferenceURL != nil }) ?? joinable.first {
+            return live
+        }
         let future = calendar.upcoming
-            .filter { $0.startDate > Date().addingTimeInterval(-5 * 60) }
+            .filter { $0.startDate > Date() }
             .sorted { $0.startDate < $1.startDate }
         return future.first { $0.conferenceURL != nil } ?? future.first
     }
