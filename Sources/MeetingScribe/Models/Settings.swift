@@ -65,6 +65,11 @@ final class AppSettings {
         /// to qwen2.5:7b, which actually emits proper `tool_calls` and
         /// doesn't hallucinate spurious safety refusals on benign messages.
         static let migratedToQwen2_5 = "migratedToQwen2_5"
+        /// One-time flag: turn OFF the old "defer live transcription on battery"
+        /// default for existing users, who had it persisted as `true` (every
+        /// Settings → Save wrote it), which silently disabled 5-minute chunked
+        /// live transcription.
+        static let migratedLiveTranscriptionDefault = "migratedLiveTranscriptionDefault"
         /// BCP-47 language code passed to whisper-cli via --language.
         /// "auto" = let whisper detect; "en", "es", "fr", etc. for forced lang.
         static let whisperLanguage = "whisperLanguage"
@@ -243,6 +248,18 @@ final class AppSettings {
         defaults.set(true, forKey: Keys.migratedToQwen2_5)
     }
 
+    /// One-time migration: existing installs had `deferLiveTranscriptionOnBattery`
+    /// persisted as `true` (Settings → Save wrote every field), which silently
+    /// turned off the 5-minute chunked live transcription — chunks were recorded
+    /// but only transcribed in one slow whole-call batch pass at the end. Flip it
+    /// off once so live transcription runs by default. Users can re-enable it in
+    /// Settings → Recording for battery saving. Idempotent.
+    func migrateLiveTranscriptionDefaultIfNeeded() {
+        guard !defaults.bool(forKey: Keys.migratedLiveTranscriptionDefault) else { return }
+        defaults.set(false, forKey: Keys.deferLiveTranscriptionOnBattery)
+        defaults.set(true, forKey: Keys.migratedLiveTranscriptionDefault)
+    }
+
     /// BCP-47 language hint for whisper-cli (--language flag).
     /// "auto" lets whisper detect; "en", "es", "fr", etc. force a language.
     /// Default "auto" — detection is fast and avoids broken output when the
@@ -322,8 +339,13 @@ final class AppSettings {
 
     /// When on battery / low-power, defer transcription to batch-on-stop to avoid
     /// the per-chunk Whisper cold-loads that dominate avoidable energy use.
+    /// Defaults to FALSE: deferring silently turned off the 5-minute live
+    /// chunked transcription (the chunks were recorded but never transcribed
+    /// until one slow whole-call batch pass at the end), which read as "chunked
+    /// transcription never happens." Users who want the battery saving can still
+    /// re-enable it in Settings → Recording.
     var deferLiveTranscriptionOnBattery: Bool {
-        get { defaults.object(forKey: Keys.deferLiveTranscriptionOnBattery) as? Bool ?? true }
+        get { defaults.object(forKey: Keys.deferLiveTranscriptionOnBattery) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Keys.deferLiveTranscriptionOnBattery) }
     }
 

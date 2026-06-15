@@ -250,7 +250,7 @@ struct MainWindow: View {
                     Label("Import meeting…", systemImage: "square.and.arrow.down")
                 }
             }
-            if let live = calendar.upcoming.first(where: { $0.isLive && $0.conferenceURL != nil }) {
+            if let live = calendar.upcoming.first(where: { $0.isJoinableWindow && $0.conferenceURL != nil }) {
                 Button { Task { await manager.switchToRecording(live) } } label: {
                     Label("Join & record “\(live.displayTitle)”", systemImage: "video.fill")
                 }
@@ -870,9 +870,10 @@ struct PersistentToolbarButtons: View {
             .help("Transcription / summary still running for stopped meeting(s).")
         }
 
-        // Join & Record (always visible when there's a live meeting with a
-        // conference URL; clickable even mid-recording — switches recording).
-        if let live = calendar.upcoming.first(where: { $0.isLive && $0.conferenceURL != nil }) {
+        // Join & Record (visible from just before a meeting through 45 min
+        // after it ends, with a conference URL; clickable even mid-recording —
+        // switches recording).
+        if let live = calendar.upcoming.first(where: { $0.isJoinableWindow && $0.conferenceURL != nil }) {
             Button {
                 Task { await manager.switchToRecording(live) }
             } label: {

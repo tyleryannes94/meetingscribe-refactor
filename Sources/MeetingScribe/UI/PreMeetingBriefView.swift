@@ -18,6 +18,10 @@ struct PreMeetingBriefView: View {
     // recompute on every re-render triggered by unrelated manager changes.
     @State private var priorMeetings: [Meeting] = []
     @State private var openItems: [ActionItem] = []
+    /// Recurring-only (P-2): the last 2 occurrences of THIS series, each with
+    /// the topics covered (bullet points pulled from its summary) and its action
+    /// items. Empty for one-off meetings.
+    @State private var seriesRecap: [SeriesRecapEntry] = []
     /// LLM-synthesized brief (P1-3). nil until generated; the static lists below
     /// are always shown as backup detail.
     @State private var brief: String?
@@ -29,6 +33,7 @@ struct PreMeetingBriefView: View {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
                 synthesizedSection
+                if !seriesRecap.isEmpty { seriesRecapSection }   // recurring only
                 talkingPointsSection   // U1-5: "discuss next time" per attendee
                 if !openItems.isEmpty   { openItemsSection }
                 if !priorMeetings.isEmpty { priorMeetingsSection }
@@ -69,6 +74,54 @@ struct PreMeetingBriefView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(NDS.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: NDS.rowRadius))
                 }
+            }
+        }
+    }
+
+    /// Recurring-only recap: the last 2 occurrences of this series, each with
+    /// the topics covered and that call's action items. (P-2)
+    private var seriesRecapSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Last 2 meetings in this series", systemImage: "repeat")
+                .font(.callout.weight(.semibold)).foregroundStyle(.purple)
+            ForEach(seriesRecap) { entry in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(entry.meeting.displayTitle).font(.callout.weight(.medium))
+                        Spacer()
+                        Text(entry.meeting.startDate, style: .date)
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if !entry.topics.isEmpty {
+                        Text("Topics covered").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        ForEach(Array(entry.topics.enumerated()), id: \.offset) { _, t in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•").foregroundStyle(.purple)
+                                Text(t).font(.callout).foregroundStyle(NDS.textSecondary)
+                            }
+                        }
+                    }
+                    if !entry.items.isEmpty {
+                        Text("Action items").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        ForEach(entry.items.prefix(8)) { item in
+                            HStack(alignment: .top, spacing: 6) {
+                                Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "circle")
+                                    .scaledFont(12)
+                                    .foregroundStyle(item.status == .completed ? .green : .secondary)
+                                    .padding(.top, 1)
+                                Text(item.title).font(.callout)
+                            }
+                        }
+                    }
+                    if entry.topics.isEmpty && entry.items.isEmpty {
+                        Text("No summary or action items captured for this occurrence.")
+                            .font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.purple.opacity(0.07),
+                            in: RoundedRectangle(cornerRadius: NDS.rowRadius))
             }
         }
     }
@@ -200,10 +253,30 @@ struct PreMeetingBriefView: View {
     // MARK: - Data computation
 
     private func computeBrief() {
+        // Recurring-only (P-2): the last 2 occurrences of THIS series, with the
+        // topics covered (from each summary) and that call's action items.
+        // Matched by seriesID, so this works even when attendees lack emails.
+        if let sid = meeting.seriesID, !sid.isEmpty {
+            let occurrences = manager.pastMeetings
+                .filter { $0.seriesID == sid && $0.id != meeting.id }
+                .sorted { $0.startDate > $1.startDate }
+                .prefix(2)
+            seriesRecap = occurrences.map { occ in
+                SeriesRecapEntry(
+                    meeting: occ,
+                    topics: Self.topicBullets(from: manager.summaryMarkdown(for: occ), limit: 6),
+                    items: manager.actionItems.items(for: occ.id)
+                )
+            }
+        } else {
+            seriesRecap = []
+        }
+
         let emails = attendeeEmails(from: meeting.attendees)
         guard !emails.isEmpty else {
             priorMeetings = []
             openItems = []
+            maybeSynthesize()
             return
         }
 
@@ -222,21 +295,26 @@ struct PreMeetingBriefView: View {
         }
         .sorted { $0.createdAt > $1.createdAt }
 
-        // Synthesize a brief (once per meeting) when there's something to say.
-        if briefMeetingID != meeting.id, !(priorMeetings.isEmpty && openItems.isEmpty) {
-            briefMeetingID = meeting.id
-            // U1-10: show the persisted brief instantly (no cold-Ollama wait),
-            // then refresh in the background (stale-while-revalidate).
-            if let cached = BriefCache.load(meeting.id) {
-                brief = cached
-                generating = false
-            } else {
-                brief = nil
-                generating = true
-            }
-            let prior = priorMeetings, items = openItems
-            Task { await generateSynthesis(prior: prior, items: items) }
+        maybeSynthesize()
+    }
+
+    /// Kicks off the LLM synthesis once per meeting when there's something to
+    /// say — prior meetings, open items, OR (for recurring calls) the series
+    /// recap. Shows the persisted brief instantly, then refreshes in background.
+    private func maybeSynthesize() {
+        guard briefMeetingID != meeting.id,
+              !(priorMeetings.isEmpty && openItems.isEmpty && seriesRecap.isEmpty)
+        else { return }
+        briefMeetingID = meeting.id
+        if let cached = BriefCache.load(meeting.id) {
+            brief = cached
+            generating = false
+        } else {
+            brief = nil
+            generating = true
         }
+        let prior = priorMeetings, items = openItems
+        Task { await generateSynthesis(prior: prior, items: items) }
     }
 
     /// Series-aware LLM synthesis (P1-3/P1-2): carries forward last-time context
@@ -251,7 +329,24 @@ struct PreMeetingBriefView: View {
         }
         var ctx = "Upcoming meeting: \(meeting.displayTitle)\n"
         ctx += "Attendees: \(meeting.attendees.joined(separator: ", "))\n\n"
-        if let sp = seriesPrior {
+        // Recurring (P-2): feed the last 2 occurrences — topics covered + action
+        // items — so the brief carries forward this series' running thread.
+        if !seriesRecap.isEmpty {
+            ctx += "This is a recurring meeting. Recap of the last \(seriesRecap.count) occurrence(s):\n"
+            for entry in seriesRecap {
+                ctx += "\n• \(entry.meeting.displayTitle) (\(df.string(from: entry.meeting.startDate)))\n"
+                if !entry.topics.isEmpty {
+                    ctx += "  Topics covered:\n"
+                    ctx += entry.topics.map { "    - \($0)" }.joined(separator: "\n") + "\n"
+                }
+                let open = entry.items.filter { $0.status != .completed }
+                if !open.isEmpty {
+                    ctx += "  Open action items:\n"
+                    ctx += open.prefix(10).map { "    - \($0.title)" }.joined(separator: "\n") + "\n"
+                }
+            }
+            ctx += "\n"
+        } else if let sp = seriesPrior {
             let summary = manager.summaryMarkdown(for: sp)
             ctx += "This is a recurring meeting. Last occurrence (\(df.string(from: sp.startDate))):\n"
             ctx += String(summary.prefix(2000)) + "\n\n"
@@ -268,9 +363,10 @@ struct PreMeetingBriefView: View {
         let prompt = """
         You are preparing the user for an upcoming meeting. Using ONLY the context below, write a tight pre-meeting brief in Markdown with these sections (omit any with no content):
         - **Where you left off** — 1–2 sentences on last time (only if recurring context is given).
+        - **Recap of the last 2 meetings** — bullets covering the key topics discussed and the action items from each (only if recurring context is given).
         - **Open commitments to follow up** — bullets: who owes what.
         - **Suggested talking points** — 2–4 bullets.
-        Under 150 words. No preamble, no closing remarks.
+        Under 180 words. No preamble, no closing remarks.
 
         CONTEXT:
         \(ctx)
@@ -282,6 +378,11 @@ struct PreMeetingBriefView: View {
                 guard self.meeting.id == self.briefMeetingID else { return }
                 self.brief = result
                 self.generating = false
+                // F3: if this meeting has already been recorded, drop the brief
+                // into its notes so it's visible during/after the call too. For
+                // not-yet-recorded calendar events this no-ops (no folder yet);
+                // startRecording seeds the brief from BriefCache at record time.
+                self.manager.attachBriefToNotes(result, for: self.meeting, onlyIfRecorded: true)
             }
         } catch {
             await MainActor.run { self.generating = false }  // fall back to static lists
@@ -295,6 +396,40 @@ struct PreMeetingBriefView: View {
             return id.hasEmail ? id.email : nil
         })
     }
+
+    /// Pulls up to `limit` "topics covered" bullets from a meeting's summary
+    /// markdown — bullet lines (`- `, `* `, `• `) and headings (`#`), stripped of
+    /// their markers. Lets the recap show what a prior occurrence was about
+    /// without depending on the LLM.
+    static func topicBullets(from summary: String, limit: Int) -> [String] {
+        var out: [String] = []
+        for rawLine in summary.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            var text: String?
+            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ") {
+                text = String(line.dropFirst(2))
+            } else if line.hasPrefix("#") {
+                text = line.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)
+            }
+            // Skip markdown checkbox lines (those are action items, shown separately).
+            if let t = text?.trimmingCharacters(in: .whitespaces),
+               !t.isEmpty, !t.hasPrefix("[ ]"), !t.hasPrefix("[x]"), !t.hasPrefix("[X]") {
+                out.append(t)
+                if out.count >= limit { break }
+            }
+        }
+        return out
+    }
+}
+
+/// One prior occurrence of a recurring series, summarized for the brief.
+@available(macOS 14.0, *)
+struct SeriesRecapEntry: Identifiable {
+    let meeting: Meeting
+    let topics: [String]
+    let items: [ActionItem]
+    var id: String { meeting.id }
 }
 
 /// Persists pre-meeting briefs to disk so re-opening a meeting shows the brief

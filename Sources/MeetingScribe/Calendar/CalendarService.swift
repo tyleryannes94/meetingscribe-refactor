@@ -119,7 +119,11 @@ final class CalendarService: ObservableObject {
         let now = Date()
         let startWindow = cal.startOfDay(for: now)
         let endWindow = cal.date(byAdding: .day, value: 8, to: startWindow) ?? now.addingTimeInterval(7 * 86400)
-        let from = now.addingTimeInterval(-30 * 60)
+        // Look back far enough that a meeting stays in the upcoming list through
+        // the whole "join & record" window (45 min past its end). EventKit
+        // includes any event whose end is >= `from`, so 46 min covers a call
+        // that ended 45 min ago without dropping it from the UI mid-window.
+        let from = now.addingTimeInterval(-46 * 60)
         let enabledIDs = AppSettings.shared.enabledCalendarIDs
         let filter = AppSettings.shared.filterToConferenceLinks
         Task {
