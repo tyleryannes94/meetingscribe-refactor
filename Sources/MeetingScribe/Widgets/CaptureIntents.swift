@@ -1,6 +1,5 @@
 import AppIntents
 import Foundation
-import ScribeCore
 
 // Phase 2 (1G/2D) — native capture verbs for Siri / Shortcuts / Spotlight that
 // work WITHOUT foregrounding the app. App Intents run outside the app's normal
