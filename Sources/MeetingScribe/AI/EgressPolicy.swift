@@ -34,6 +34,7 @@ enum EgressPolicy {
         // Sparkle appcast / release assets
         "github.com",
         "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
     ]
 
     /// True when the URL targets the local machine (the only place a transcript

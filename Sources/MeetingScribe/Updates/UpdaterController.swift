@@ -76,9 +76,19 @@ final class UpdaterController: ObservableObject {
             if await Self.feedIsReachable(feed) {
                 controller.checkForUpdates(nil)
             } else {
-                Self.presentNoFeedAlert()
+                Self.presentNoFeedAlert(releasesPage: Self.releasesPage(fromFeed: feed))
             }
         }
+    }
+
+    /// Derives the human-facing "latest release" page from the appcast feed URL
+    /// (…/releases/latest/download/appcast.xml → …/releases/latest) so the
+    /// fallback alert can send the user straight to a manual download.
+    nonisolated static func releasesPage(fromFeed feed: String) -> URL? {
+        if let r = feed.range(of: "/releases/") {
+            return URL(string: String(feed[..<r.upperBound]) + "latest")
+        }
+        return URL(string: feed)
     }
 
     /// True when the appcast feed responds with a success status. Used to avoid
@@ -98,18 +108,26 @@ final class UpdaterController: ObservableObject {
     }
 
     @MainActor
-    static func presentNoFeedAlert() {
+    static func presentNoFeedAlert(releasesPage: URL?) {
         let alert = NSAlert()
-        alert.messageText = "You're on the latest available build"
+        alert.messageText = "Couldn't reach the update feed"
         alert.informativeText = """
-        MeetingScribe couldn't find a published release to update from yet. \
-        In-app updates start working once a signed release is published to the \
-        project's GitHub Releases (push a version tag to run the release \
-        workflow — see RELEASING.md). Until then there's nothing to install.
+        MeetingScribe couldn't reach its update feed, so it can't check for a \
+        new version automatically right now. This happens when the latest \
+        GitHub Release doesn't include the signed appcast yet, or the releases \
+        aren't publicly reachable.
+
+        You can still grab the newest build manually from GitHub Releases.
         """
         alert.alertStyle = .informational
+        if releasesPage != nil {
+            alert.addButton(withTitle: "View Latest Release")
+        }
         alert.addButton(withTitle: "OK")
-        alert.runModal()
+        let response = alert.runModal()
+        if releasesPage != nil, response == .alertFirstButtonReturn, let url = releasesPage {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
 

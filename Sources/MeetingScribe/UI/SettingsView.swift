@@ -5,6 +5,7 @@ import Carbon.HIToolbox
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var updater: UpdaterController
+    @EnvironmentObject private var calendar: CalendarService
 
     @State private var storageDir: String = AppSettings.shared.storageDir.path
     @State private var whisperBinary: String = AppSettings.shared.whisperBinary
@@ -140,8 +141,22 @@ struct SettingsView: View {
             }
             Section("Calendar") {
                 Toggle("Only show meetings with a conference link", isOn: $filterToConference)
-                Text("MeetingScribe reads all calendars connected to macOS Calendar.app. To add Google work + personal calendars: System Settings → Internet Accounts → Google → sign in. Below, choose which of those calendars MeetingScribe should pull events from.")
+                Text("MeetingScribe reads every calendar connected to macOS Calendar.app — your Apple/iCloud calendars plus any Google or Outlook accounts you add. Connect as many Google accounts as you like (work + personal); each one's calendars appear below to switch on or off.")
                     .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button {
+                        CalendarAccountsHelper.openInternetAccounts()
+                    } label: {
+                        Label("Add Google account…", systemImage: "person.crop.circle.badge.plus")
+                    }
+                    Button {
+                        CalendarAccountsHelper.importAppleCalendars(into: calendar)
+                    } label: {
+                        Label("Import Apple calendars", systemImage: "calendar.badge.plus")
+                    }
+                }
+                Text("“Add Google account…” opens System Settings → Internet Accounts — sign in to each Google account you want and its calendars sync into macOS. “Import Apple calendars” grants Calendar access and pulls in your Apple/iCloud calendars. Everything you connect shows up in the list below.")
+                    .font(.caption2).foregroundStyle(.secondary)
                 CalendarPickerSection()
             }
         }
@@ -887,6 +902,39 @@ struct NotionKeyEditor: View {
     }
 }
 
+/// Helpers for connecting calendar accounts. We deliberately route Google (and
+/// Outlook/Exchange) sign-in through macOS Internet Accounts rather than an
+/// in-app OAuth flow: once an account is added there, macOS syncs its calendars
+/// into EventKit, which MeetingScribe already reads — so any number of Google
+/// accounts works, with no API keys to manage.
+@available(macOS 14.0, *)
+enum CalendarAccountsHelper {
+    /// Opens System Settings → Internet Accounts so the user can add a Google
+    /// (or Outlook/iCloud) account.
+    static func openInternetAccounts() {
+        // The pane's URL scheme has changed across macOS versions; try the
+        // modern Settings extension id first, then older ids, then the root.
+        let candidates = [
+            "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension",
+            "x-apple.systempreferences:com.apple.preferences.internetaccounts",
+            "x-apple.systempreferences:"
+        ]
+        for s in candidates {
+            if let url = URL(string: s), NSWorkspace.shared.open(url) { return }
+        }
+    }
+
+    /// Grants Calendar access (if not already granted) and re-pulls the
+    /// Apple/iCloud + connected calendars into the app.
+    @MainActor
+    static func importAppleCalendars(into calendar: CalendarService) {
+        Task {
+            await calendar.requestAccess()
+            calendar.refreshUpcoming(force: true)
+        }
+    }
+}
+
 /// Lists every calendar EventKit knows about (across all accounts the user
 /// has connected to macOS Calendar.app) with a checkbox per calendar.
 /// Empty set = include all (sensible default for first-run users).
@@ -901,6 +949,13 @@ struct CalendarPickerSection: View {
             HStack {
                 Text("Calendars to include").font(.caption.weight(.semibold))
                 Spacer()
+                if calendar.authorized {
+                    Button { Task { await refresh() } } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .controlSize(.small)
+                    .help("Re-scan connected calendars")
+                }
                 if !allCalendars.isEmpty {
                     Button(enabled.isEmpty || enabled.count == allCalendars.count
                            ? "Select specific…" : "Include all") {
@@ -910,16 +965,33 @@ struct CalendarPickerSection: View {
                             enabled.removeAll()
                         }
                         AppSettings.shared.enabledCalendarIDs = enabled
+                        NotificationCenter.default.post(name: .meetingScribeSettingsChanged, object: nil)
                     }
                     .controlSize(.small)
                 }
             }
             if !calendar.authorized {
-                Text("Grant Calendar access first.")
-                    .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Calendar access hasn't been granted yet.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button {
+                        Task { await calendar.requestAccess(); await refresh() }
+                    } label: {
+                        Label("Grant Calendar access", systemImage: "checkmark.shield")
+                    }
+                    .controlSize(.small)
+                }
             } else if allCalendars.isEmpty {
-                Text("No calendars yet. Add accounts via System Settings → Internet Accounts.")
-                    .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No calendars found yet. Add accounts via System Settings → Internet Accounts, then refresh.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button {
+                        Task { await refresh() }
+                    } label: {
+                        Label("Refresh calendars", systemImage: "arrow.clockwise")
+                    }
+                    .controlSize(.small)
+                }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(allCalendars) { cal in
@@ -949,6 +1021,21 @@ struct CalendarPickerSection: View {
     private func refresh() async {
         if !calendar.authorized { await calendar.requestAccess() }
         allCalendars = await calendar.availableCalendars()
+        // Re-read the persisted set (it may have been healed elsewhere) and
+        // drop any saved IDs that no longer map to a live calendar — EventKit
+        // churns identifiers for Google/CalDAV accounts. If every saved ID is
+        // stale the set collapses to empty, which means "include all", so the
+        // user's meetings keep showing instead of silently vanishing.
+        enabled = AppSettings.shared.enabledCalendarIDs
+        if !enabled.isEmpty {
+            let live = Set(allCalendars.map { $0.id })
+            let healed = enabled.intersection(live)
+            if healed != enabled {
+                enabled = healed
+                AppSettings.shared.enabledCalendarIDs = healed
+                NotificationCenter.default.post(name: .meetingScribeSettingsChanged, object: nil)
+            }
+        }
     }
 
     private func bindingFor(_ id: String) -> Binding<Bool> {
