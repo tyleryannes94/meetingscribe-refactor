@@ -82,6 +82,10 @@ struct TodayView: View {
                     router.section = .actions
                 }
 
+                // Kanban board of all open tasks, with one-tap add (Notion/Trello
+                // style) right on the home page.
+                HomeTasksBoard(store: manager.actionItems)
+
                 // D5-1: everything below the fold collapses under one "More"
                 // disclosure so the home screen opens calm.
                 moreSection
