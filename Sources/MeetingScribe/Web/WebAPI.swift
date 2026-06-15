@@ -1,6 +1,5 @@
 import Foundation
 import VaultKit
-import ScribeCore
 
 /// Routes HTTP requests to the in-memory stores. Runs on `@MainActor` because
 /// every store it touches (`MeetingManager`, `ActionItemStore`, `PeopleStore`,

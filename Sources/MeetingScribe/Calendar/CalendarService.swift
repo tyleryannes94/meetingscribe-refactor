@@ -35,6 +35,13 @@ final class CalendarService: ObservableObject {
     static let cacheSchemaVersion = 1
 
     init() {
+        // Seed `authorized` from EventKit's current status so the meeting list
+        // and the Settings calendar picker work immediately on launch. Without
+        // this the flag starts `false` until the async `requestAccess()` round
+        // -trips — which left the picker showing "Grant access" and let a stale
+        // refresh blank the upcoming list even when access was already granted.
+        authorized = (EKEventStore.authorizationStatus(for: .event) == .fullAccess)
+
         // Warm the list from the last session's cache so today's meetings
         // render instantly on cold start. Read OFF the main thread — the file
         // open can stall on slow/scanned disks and would block app launch.
@@ -74,7 +81,13 @@ final class CalendarService: ObservableObject {
     }
 
     func requestAccess() async {
-        authorized = await CalendarStoreActor.shared.requestAccess()
+        let granted = await CalendarStoreActor.shared.requestAccess()
+        authorized = granted
+        // The first launch path requests access asynchronously and the
+        // sibling `refreshUpcoming()` call runs before the grant lands, so it
+        // bails on `guard authorized`. Re-fire here the moment access flips on
+        // so meetings appear without waiting for the next 60s timer tick.
+        if granted { refreshUpcoming(force: true) }
     }
 
     /// Meetings between `from` and `to`. Excludes all-day events. When

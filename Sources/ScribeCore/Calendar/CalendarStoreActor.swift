@@ -49,9 +49,16 @@ actor CalendarStoreActor {
                   enabledIDs: Set<String>,
                   filterConferenceURLs: Bool) -> [Meeting] {
         let allCalendars = store.calendars(for: .event)
-        let calendars = enabledIDs.isEmpty
+        var calendars = enabledIDs.isEmpty
             ? allCalendars
             : allCalendars.filter { enabledIDs.contains($0.calendarIdentifier) }
+        // Stale-ID self-heal: EventKit regenerates `calendarIdentifier`s for
+        // Google/CalDAV accounts. When a saved filter matches zero live
+        // calendars, fall back to all of them rather than returning an empty
+        // list (which would blank the user's meetings). Mirrors the app target.
+        if calendars.isEmpty, !allCalendars.isEmpty, !enabledIDs.isEmpty {
+            calendars = allCalendars
+        }
         guard !calendars.isEmpty else { return [] }
         let predicate = store.predicateForEvents(withStart: from, end: to, calendars: calendars)
         var result = store.events(matching: predicate)

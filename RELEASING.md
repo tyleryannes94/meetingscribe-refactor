@@ -2,10 +2,21 @@
 
 MeetingScribe ships updates with [Sparkle](https://sparkle-project.org). Installed
 copies check `SUFeedURL` (in `Resources/Info.plist`) — which points at
-`https://github.com/tyleryannes94/meetingscribe/releases/latest/download/appcast.xml`
+`https://github.com/tyleryannes94/meetingscribe-refactor/releases/latest/download/appcast.xml`
 — and update themselves when you publish a new release. Updates are verified
 with an EdDSA signature, so only builds you signed with your private key are
 accepted.
+
+> **Two things must be true for in-app updates to work:**
+>
+> 1. **The repository (its Releases) must be publicly reachable.** Sparkle
+>    fetches `appcast.xml` and the build zip over plain HTTPS with no auth, so
+>    a *private* repo returns 404 and updates silently never appear. Keep the
+>    repo public, or host the appcast + zip on a public mirror / GitHub Pages.
+> 2. **Each release must include `appcast.xml`.** Cut releases by pushing a
+>    tag (or running the Release workflow) — never by hand. A manually-uploaded
+>    zip has no appcast, so the feed 404s and "Check for Updates" can't find
+>    anything. The workflow attaches both `MeetingScribe.zip` and `appcast.xml`.
 
 ## One-time setup (do this once)
 
@@ -25,7 +36,7 @@ The script is idempotent — re-running on an already-configured repo is a no-op
 (it refuses to clobber a real public key without `--force`). It prints a
 verification checklist at the end; the only manual step is pasting the printed
 private key into the GitHub `SPARKLE_PRIVATE_KEY` secret at
-<https://github.com/tyleryannes94/meetingscribe/settings/secrets/actions>.
+<https://github.com/tyleryannes94/meetingscribe-refactor/settings/secrets/actions>.
 
 Then commit the patched `Resources/Info.plist` — the **public** key is safe to
 commit; only the private key is sensitive.
