@@ -261,6 +261,10 @@ extension ActionItemsView {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         return store.items
+            // Meeting-extracted action items wait in the Triage inbox until the
+            // user accepts them — they are NOT auto-added to the task database.
+            // `needsTriage` = from a meeting, unconfirmed, not done, not trashed.
+            .filter { !$0.needsTriage }
             .filter { item in
                 switch filter {
                 case .all: return true

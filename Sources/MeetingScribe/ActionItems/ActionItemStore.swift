@@ -156,8 +156,11 @@ final class ActionItemStore: ObservableObject {
     /// Items whose source meeting was today or yesterday (any status).
     func todayAndYesterday(now: Date = Date()) -> [ActionItem] {
         let cal = Calendar.current
+        // Exclude items still awaiting triage — meeting-extracted action items
+        // only become "current tasks" once accepted in the Triage inbox.
         return items.filter { item in
-            cal.isDateInToday(item.meetingDate) || cal.isDateInYesterday(item.meetingDate)
+            guard !item.needsTriage else { return false }
+            return cal.isDateInToday(item.meetingDate) || cal.isDateInYesterday(item.meetingDate)
         }
         .sorted(by: defaultSort)
     }

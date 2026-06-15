@@ -6,13 +6,29 @@ extension ActionItemsView {
     // MARK: - Board (Kanban) view
 
     var boardBody: some View {
-        ScrollView([.horizontal, .vertical]) {
-            HStack(alignment: .top, spacing: 14) {
-                ForEach(ActionItem.Status.allCases) { status in
-                    boardColumn(status)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button {
+                    let pid = (selectedProjectID == Self.noProjectSentinel) ? nil : selectedProjectID
+                    let t = store.createTask(title: "New task", projectID: pid, status: .open)
+                    selectedTaskID = t.id
+                } label: {
+                    Label("Add task", systemImage: "plus")
                 }
+                .buttonStyle(.borderedProminent)
+                .help("Create a new task")
+                Spacer()
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            ScrollView([.horizontal, .vertical]) {
+                HStack(alignment: .top, spacing: 14) {
+                    ForEach(ActionItem.Status.allCases) { status in
+                        boardColumn(status)
+                    }
+                }
+                .padding(16)
+            }
         }
     }
 
@@ -171,6 +187,7 @@ private struct BoardColumnView: View {
             header
             ForEach(items) { item in
                 parent.boardCard(item)
+                    .taskQuickActions(item: item, store: store) { selectedTaskID = item.id }
                     .draggable(item.id) {
                         Text(item.title).font(.caption).lineLimit(2)
                             .padding(8)
@@ -224,7 +241,6 @@ private struct BoardColumnView: View {
                     ? nil : parent.selectedProjectID
                 let t = store.createTask(title: "New task", projectID: pid, status: status)
                 selectedTaskID = t.id
-                viewMode = .list
             } label: { Image(systemName: "plus") }
             .buttonStyle(.borderless).help("Add a task to \(status.label)")
             .accessibilityLabel("Add a task to \(status.label)")

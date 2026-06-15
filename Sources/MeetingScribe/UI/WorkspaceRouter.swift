@@ -59,6 +59,11 @@ final class WorkspaceRouter: ObservableObject {
     /// the meeting detail.
     @Published var pendingTranscriptQuery: String?
 
+    /// One-shot: a task to open in the Tasks tab. Set by surfaces outside the
+    /// Tasks tab (e.g. the home-page Kanban board), consumed by `ActionItemsView`
+    /// which selects the task and clears this. Mirrors the `pendingRoute` pattern.
+    @Published var pendingTaskID: String?
+
     /// Clear the mailbox once a destination view has acted on it.
     func consume(_ route: PendingRoute) {
         if pendingRoute == route { pendingRoute = nil }

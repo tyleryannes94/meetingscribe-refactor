@@ -79,6 +79,18 @@ struct ActionItemRow: View {
                     Button(p.label) { onPriority(p) }
                 }
             }
+            Menu("Labels") {
+                if allLabels.isEmpty {
+                    Text("No labels yet — add one below in the task")
+                } else {
+                    let assigned = Set(assignedLabels.map(\.id))
+                    ForEach(allLabels) { l in
+                        Button { onToggleLabel(l.id) } label: {
+                            Label(l.name, systemImage: assigned.contains(l.id) ? "checkmark" : "tag")
+                        }
+                    }
+                }
+            }
             Divider()
             if !projects.isEmpty {
                 Menu("Move to project") {

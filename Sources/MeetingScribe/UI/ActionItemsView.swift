@@ -205,7 +205,9 @@ struct ActionItemsView: View {
         .onAppear {
             manager.refreshPastMeetings()
             manager.backfillActionItemsIfNeeded()
+            consumePendingTask()
         }
+        .onChange(of: router.pendingTaskID) { _, _ in consumePendingTask() }
         .onChange(of: selectedProjectID) { _, _ in
             selectedTaskID = nil
             // Restore the project's last-used view (NP-3).
@@ -233,6 +235,18 @@ struct ActionItemsView: View {
         .sheet(isPresented: $showShortcuts) {
             TaskShortcutsView()
         }
+    }
+
+    /// Opens a task deep-linked from outside the Tasks tab (e.g. the home-page
+    /// Kanban). Shows "All tasks" so the item is in scope, selects it, and clears
+    /// the one-shot channel.
+    func consumePendingTask() {
+        guard let tid = router.pendingTaskID, store.items.contains(where: { $0.id == tid }) else { return }
+        selectedProjectID = nil
+        selectedMeetingID = nil
+        selectedInitiativeID = nil
+        selectedTaskID = tid
+        router.pendingTaskID = nil
     }
 
     var taskBreadcrumb: String {
