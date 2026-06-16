@@ -106,6 +106,13 @@ struct MainWindow: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Permanent top clearance for EVERY tab/page so content can never sit
+        // flush against (and be clipped by) the translucent window toolbar — no
+        // matter what layout a tab uses internally. One source of truth here
+        // means no tab has to remember to pad its own top.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: NDS.tabTopInset)
+        }
         .onChange(of: section) { _, s in
             visited.insert(s)
         }
