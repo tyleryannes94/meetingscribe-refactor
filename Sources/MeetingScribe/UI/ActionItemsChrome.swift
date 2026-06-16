@@ -456,7 +456,7 @@ extension ActionItemsView {
                 .focused($quickAddFocused)
                 .onSubmit { commitQuickAdd() }
                 .onAppear { quickAddFocused = true }
-            Text("Type a task — add !priority, #label, or a date like “tomorrow”.")
+            Text("Try +Project, due:friday, !high, #label, @person")
                 .font(NDS.small).foregroundStyle(NDS.textTertiary)
         }
         .padding(14)

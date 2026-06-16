@@ -185,7 +185,7 @@ struct ActionItemRow: View {
                 }
             }
             Spacer(minLength: 0)
-            priorityPicker
+            priorityDot
             dueChip
             syncButtons
             Menu {
@@ -267,23 +267,21 @@ struct ActionItemRow: View {
 
     private var statusColor: Color { NDS.status(item.status) }
 
-    private var priorityPicker: some View {
-        Menu {
-            ForEach(ActionItem.Priority.allCases) { p in
-                Button(p.label) { onPriority(p) }
+    /// Compact priority dot for the collapsed row (2-7): a 10×10 color disc with
+    /// a tooltip + right-click menu, replacing the verbose always-on capsule.
+    /// The full labeled picker stays in the expanded detail editor / task page.
+    private var priorityDot: some View {
+        Circle()
+            .fill(priorityColor)
+            .frame(width: 10, height: 10)
+            .overlay(Circle().strokeBorder(priorityColor.opacity(0.35), lineWidth: 2).frame(width: 14, height: 14))
+            .frame(width: 16, height: 16)
+            .help("Priority: \(item.priority.label)")
+            .contextMenu {
+                ForEach(ActionItem.Priority.allCases) { p in
+                    Button(p.label) { onPriority(p) }
+                }
             }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: priorityIcon).font(.caption2)
-                Text(item.priority.label).font(.caption2)
-            }
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(priorityColor.opacity(0.16), in: Capsule())
-            .foregroundStyle(priorityColor)
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
     }
 
     private var priorityColor: Color { NDS.priority(item.priority) }
@@ -310,24 +308,9 @@ struct ActionItemRow: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $datePickerShown) {
-            VStack(alignment: .leading, spacing: 10) {
-                DatePicker("Due", selection: Binding(
-                    get: { item.dueDate ?? Date() },
-                    set: { onDue($0) }
-                ), displayedComponents: [.date])
-                .datePickerStyle(.graphical)
-                HStack {
-                    Button("Clear", role: .destructive) {
-                        onDue(nil)
-                        datePickerShown = false
-                    }
-                    Spacer()
-                    Button("Done") { datePickerShown = false }
-                        .keyboardShortcut(.defaultAction)
-                }
-            }
-            .padding(14)
-            .frame(width: 280)
+            // 2-5: type-ahead date entry ("fri", "+3d", …) with a calendar fallback.
+            DateTypeAheadField(date: Binding(get: { item.dueDate }, set: { onDue($0) }),
+                               onCommit: { datePickerShown = false })
         }
     }
 
@@ -361,13 +344,31 @@ struct ActionItemRow: View {
 
     /// Push-to-Linear and Push-to-Notion buttons, side by side. While a push
     /// is in flight (either target) we collapse to a single spinner.
+    /// Show the Linear button only when this task is already linked to Linear,
+    /// or the project is wired for Linear (app key + project's linearProjectID).
+    /// Hides integration noise on the ~90% of tasks with no sync target (2-8).
+    private var showsLinear: Bool {
+        if linearURL != nil { return true }
+        let project = projects.first { $0.id == item.projectID }
+        return !((AppSettings.shared.linearAPIKey ?? "").isEmpty) && project?.linearProjectID != nil
+    }
+    /// Show the Notion button only when already linked, or Notion is configured
+    /// app-wide (key + action-items database).
+    private var showsNotion: Bool {
+        if item.notionURL != nil { return true }
+        let s = AppSettings.shared
+        return !((s.notionAPIKey ?? "").isEmpty) && s.notionActionItemsDatabaseID != nil
+    }
+
     @ViewBuilder
     private var syncButtons: some View {
         if isPushing {
             ProgressView().controlSize(.small).frame(width: 24)
+        } else if showsLinear || showsNotion {
+            if showsLinear { linearButton }
+            if showsNotion { notionButton }
         } else {
-            linearButton
-            notionButton
+            Color.clear.frame(width: 0)
         }
     }
 
