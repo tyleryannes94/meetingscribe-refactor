@@ -72,6 +72,8 @@ extension ActionItemsView {
                         .foregroundStyle(taskDueTint(t))
                         .contentShape(Rectangle())
                         .onTapGesture { env.selectedTaskID = t.id }
+                        // 6-2: drag a chip to another day to reschedule it.
+                        .draggable(t.id)
                         .contextMenu { TaskQuickMenu(item: t, store: store, onOpen: { env.selectedTaskID = t.id }) }
                 }
                 if tasks.count > 3 {
@@ -83,12 +85,27 @@ extension ActionItemsView {
             .frame(height: 94, alignment: .topLeading)
             .frame(maxWidth: .infinity)
             .background(isToday ? NDS.brand.opacity(0.06) : NDS.fieldBg, in: RoundedRectangle(cornerRadius: 6))
+            .dropDestination(for: String.self) { ids, _ in
+                for id in ids { rescheduleTask(id, to: day) }
+                return true
+            }
         } else {
             Color.clear.frame(height: 94)
         }
     }
 
     // MARK: Data + date helpers
+
+    /// Move a task's due date onto `day`, preserving any existing time-of-day (6-2).
+    private func rescheduleTask(_ id: String, to day: Date) {
+        let existing = store.items.first { $0.id == id }?.dueDate
+        var target = gcal.startOfDay(for: day)
+        if let existing {
+            let c = gcal.dateComponents([.hour, .minute], from: existing)
+            target = gcal.date(bySettingHour: c.hour ?? 9, minute: c.minute ?? 0, second: 0, of: target) ?? target
+        }
+        store.setDueDate(id, dueDate: target)
+    }
 
     private func tasksDue(on day: Date) -> [ActionItem] {
         projectFiltered.filter { i in

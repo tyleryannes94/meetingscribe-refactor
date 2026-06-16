@@ -50,6 +50,8 @@ struct ActionItemsView: View {
     @State var showShortcuts = false
     // ⌘K jump palette (3-1).
     @State var showJumpPalette = false
+    // Sidebar collapse/expand for the NavigationSplitView (6-7).
+    @State var columnVisibility: NavigationSplitViewVisibility = .all
     // Calendar view: the month currently displayed (VD-1).
     @State var calendarMonth = Date()
     // Keyboard navigation cursor for the list (UX-1).
@@ -155,7 +157,7 @@ struct ActionItemsView: View {
         var id: String { rawValue }
     }
     enum GroupBy: String, CaseIterable, Identifiable {
-        case none, meeting, priority, status, dueDate, owner, project, initiative, label
+        case none, meeting, priority, status, dueDate, owner, project, initiative, label, sprint
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -168,74 +170,23 @@ struct ActionItemsView: View {
             case .project: return "Project"
             case .initiative: return "Initiative"
             case .label: return "Label"
+            case .sprint: return "Sprint"
             }
         }
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ProjectRail(store: store,
-                        meetings: manager.pastMeetings)
+        // 6-7: a real NavigationSplitView replaces the manual HStack + drag
+        // divider — sidebar collapse, drag-to-resize, and accessibility come for
+        // free. The persisted `railWidth` seeds the column's ideal width.
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            ProjectRail(store: store, meetings: manager.pastMeetings)
                 .environmentObject(env)
-                .frame(width: CGFloat(railWidth))
-            // Draggable divider — resizes + persists the sidebar width. (TK-8)
-            Divider().overlay(NDS.divider)
-                .background(Color.clear.frame(width: 6).contentShape(Rectangle()))
-                .gesture(
-                    DragGesture()
-                        .onChanged { v in
-                            let start = railDragStart ?? railWidth
-                            if railDragStart == nil { railDragStart = railWidth }
-                            railWidth = min(360, max(180, start + Double(v.translation.width)))
-                        }
-                        .onEnded { _ in railDragStart = nil }
-                )
-                .onHover { inside in
-                    if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                }
-            Group {
-                // A0-2: route on the typed `TasksRoute` projection instead of
-                // sentinel-string comparisons. Guards that fail (a task/initiative
-                // id that no longer exists) fall through to `taskDatabasePane`.
-                switch env.route {
-                case .task(let tid) where store.items.contains(where: { $0.id == tid }):
-                    TaskPageView(store: store, itemID: tid,
-                                 breadcrumb: taskBreadcrumb,
-                                 onClose: { env.selectedTaskID = nil },
-                                 onNavigate: { env.go($0) })
-                case .initiative(let iid) where store.initiative(id: iid) != nil:
-                    initiativeRollup(iid)
-                case .triage:
-                    TriageInboxView(store: store,
-                                    onOpenMeeting: { mid in
-                                        env.selectedMeetingID = mid
-                                        env.selectedProjectID = nil
-                                    },
-                                    onReextract: { manager.backfillActionItemsIfNeeded(force: true) })
-                case .home:
-                    tasksDashboard
-                case .today:
-                    todayPane
-                case .savedView(let vid) where store.savedView(id: vid) != nil:
-                    savedViewPane(vid)
-                case .recurring:
-                    recurringPane
-                case .myTasks:
-                    myTasksPane
-                case .meeting(let mid) where manager.pastMeetings.contains(where: { $0.id == mid }):
-                    // D1-4: one canonical meeting surface. Instead of the parallel
-                    // MeetingNotesPage, route to the Meetings-tab detail.
-                    Color.clear.onAppear {
-                        if let m = manager.pastMeetings.first(where: { $0.id == mid }) {
-                            router.openMeeting(m)
-                        }
-                        env.selectedMeetingID = nil
-                    }
-                default:
-                    taskDatabasePane
-                }
-            }
+                .navigationSplitViewColumnWidth(min: 200, ideal: CGFloat(railWidth), max: 380)
+        } detail: {
+            detailPane
         }
+        .navigationSplitViewStyle(.balanced)
         .background(NDS.bg)
         .onAppear {
             manager.refreshPastMeetings()

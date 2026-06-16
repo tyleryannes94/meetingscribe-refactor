@@ -47,6 +47,28 @@ struct ProjectRail: View {
     @State private var showArchived = false
     /// Pinned projects (3-7), shared with the page-tree nodes via UserDefaults.
     @AppStorage(PinnedProjects.key) private var pinnedCSV = ""
+    /// Keyboard navigation focus for the rail (6-6).
+    @FocusState private var railFocused: Bool
+
+    /// Flat, ordered list of keyboard-navigable rail destinations (6-6).
+    private var navRoutes: [TasksRoute] {
+        var routes: [TasksRoute] = [.home, .today, .myTasks, .triage, .allTasks, .noProject]
+        if store.items.contains(where: { !$0.needsTriage && $0.recurrence != nil }) { routes.append(.recurring) }
+        routes += store.sortedSavedViews().map { .savedView($0.id) }
+        routes += visibleInitiatives.map { .initiative($0.id) }
+        routes += store.standaloneTopProjects().map { .project($0.id) }
+        return routes
+    }
+
+    /// Move the rail selection by `delta` (6-6) — arrows drive the cursor and
+    /// navigate immediately, so the existing selection highlight is the cursor.
+    private func moveRailFocus(_ delta: Int) {
+        let routes = navRoutes
+        guard !routes.isEmpty else { return }
+        let cur = routes.firstIndex(of: env.route) ?? 0
+        let next = min(max(cur + delta, 0), routes.count - 1)
+        env.go(routes[next])
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -179,6 +201,18 @@ struct ProjectRail: View {
                     }
                 }
                 .padding(.horizontal, 6).padding(.bottom, 12)
+            }
+            // Keyboard navigation (6-6): ⌘1 focuses the rail; arrows / j-k move
+            // the selection through the flat destination list.
+            .focusable()
+            .focused($railFocused)
+            .onKeyPress(.downArrow) { moveRailFocus(1); return .handled }
+            .onKeyPress(.upArrow) { moveRailFocus(-1); return .handled }
+            .onKeyPress(KeyEquivalent("j")) { moveRailFocus(1); return .handled }
+            .onKeyPress(KeyEquivalent("k")) { moveRailFocus(-1); return .handled }
+            .background {
+                Button("") { railFocused = true }
+                    .keyboardShortcut("1", modifiers: .command).opacity(0).frame(width: 0, height: 0)
             }
         }
         .background(NDS.sidebarBg)

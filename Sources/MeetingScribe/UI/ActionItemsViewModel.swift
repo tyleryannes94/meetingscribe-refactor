@@ -144,6 +144,7 @@ final class ActionItemsViewModel {
         case .project: return item.projectID ?? "No project"
         case .initiative: return item.projectID ?? "No initiative"
         case .label: return item.labelIDs?.first ?? "No label"
+        case .sprint: return item.sprintID ?? "No sprint"
         case .dueDate:
             guard let d = item.dueDate else { return "No due date" }
             let cal = Calendar.current
