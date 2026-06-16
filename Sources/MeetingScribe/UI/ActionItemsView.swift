@@ -184,10 +184,12 @@ struct ActionItemsView: View {
                 case .initiative(let iid) where store.initiative(id: iid) != nil:
                     initiativeRollup(iid)
                 case .triage:
-                    TriageInboxView(store: store) { mid in
-                        env.selectedMeetingID = mid
-                        env.selectedProjectID = nil
-                    }
+                    TriageInboxView(store: store,
+                                    onOpenMeeting: { mid in
+                                        env.selectedMeetingID = mid
+                                        env.selectedProjectID = nil
+                                    },
+                                    onReextract: { manager.backfillActionItemsIfNeeded(force: true) })
                 case .home:
                     tasksDashboard
                 case .today:

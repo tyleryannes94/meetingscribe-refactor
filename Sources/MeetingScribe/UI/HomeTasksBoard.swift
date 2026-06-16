@@ -164,8 +164,12 @@ struct HomeTasksBoard: View {
                     }
                 }
             }
-            Text(item.title).font(.caption).lineLimit(2)
-                .strikethrough(item.status == .completed)
+            HStack(alignment: .top, spacing: 4) {
+                Text(item.title).font(.caption).lineLimit(2)
+                    .strikethrough(item.status == .completed)
+                Spacer(minLength: 4)
+                TaskSourceBadge(item: item)
+            }
             HStack(spacing: 6) {
                 MSPriorityBadge(priority: item.priority, showLabel: false)
                 if item.dueDate != nil {
