@@ -28,6 +28,11 @@ enum NDS {
     static let radius: CGFloat = 14      // controls/fields (--r-ctl)
     static let cardRadius: CGFloat = 20  // cards, sheets, panels (--r-card)
 
+    /// Permanent top breathing room reserved for every tab/page, applied once at
+    /// the tab host (`MainWindow.tabContent`) so content never sits flush against
+    /// — and gets clipped by — the translucent window toolbar on macOS Tahoe.
+    static let tabTopInset: CGFloat = 14
+
     // MARK: Button dimension tokens
     // Minimum 44pt invisible tap target via .minTap() extension below
     static let buttonPrimaryH:   CGFloat = 34

@@ -50,8 +50,6 @@ struct ActionItemsView: View {
     @State var showShortcuts = false
     // ⌘K jump palette (3-1).
     @State var showJumpPalette = false
-    // Sidebar collapse/expand for the NavigationSplitView (6-7).
-    @State var columnVisibility: NavigationSplitViewVisibility = .all
     // Calendar view: the month currently displayed (VD-1).
     @State var calendarMonth = Date()
     // Keyboard navigation cursor for the list (UX-1).
@@ -176,17 +174,32 @@ struct ActionItemsView: View {
     }
 
     var body: some View {
-        // 6-7: a real NavigationSplitView replaces the manual HStack + drag
-        // divider — sidebar collapse, drag-to-resize, and accessibility come for
-        // free. The persisted `railWidth` seeds the column's ideal width.
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        // The Tasks tab lives inside the app's custom rail + keep-alive tab host
+        // (MainWindow), under a native window toolbar — so it uses a plain
+        // HStack + drag divider, NOT a NavigationSplitView (which fights the
+        // window toolbar's safe area and clipped the content's top). `detailPane`
+        // is extracted to keep this body under SwiftUI's type-check budget.
+        HStack(spacing: 0) {
             ProjectRail(store: store, meetings: manager.pastMeetings)
                 .environmentObject(env)
-                .navigationSplitViewColumnWidth(min: 200, ideal: CGFloat(railWidth), max: 380)
-        } detail: {
+                .frame(width: CGFloat(railWidth))
+            // Draggable divider — resizes + persists the sidebar width.
+            Divider().overlay(NDS.divider)
+                .background(Color.clear.frame(width: 6).contentShape(Rectangle()))
+                .gesture(
+                    DragGesture()
+                        .onChanged { v in
+                            let start = railDragStart ?? railWidth
+                            if railDragStart == nil { railDragStart = railWidth }
+                            railWidth = min(360, max(180, start + Double(v.translation.width)))
+                        }
+                        .onEnded { _ in railDragStart = nil }
+                )
+                .onHover { inside in
+                    if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                }
             detailPane
         }
-        .navigationSplitViewStyle(.balanced)
         .background(NDS.bg)
         .onAppear {
             manager.refreshPastMeetings()
