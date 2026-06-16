@@ -48,6 +48,8 @@ struct ActionItemsView: View {
     @State var showInsights = false
     // Keyboard shortcuts cheat-sheet (UX-22).
     @State var showShortcuts = false
+    // ⌘K jump palette (3-1).
+    @State var showJumpPalette = false
     // Calendar view: the month currently displayed (VD-1).
     @State var calendarMonth = Date()
     // Keyboard navigation cursor for the list (UX-1).
@@ -256,8 +258,19 @@ struct ActionItemsView: View {
             sceneInitiative = v ?? ""
         }
         // Persist Tasks selection across relaunch / new windows (3-10).
-        .onChange(of: env.selectedProjectID) { _, v in sceneProject = v ?? "" }
-        .onChange(of: env.selectedTaskID) { _, v in sceneTask = v ?? "" }
+        .onChange(of: env.selectedProjectID) { _, v in sceneProject = v ?? ""; pushRouterTasksSelection() }
+        .onChange(of: env.selectedTaskID) { _, v in sceneTask = v ?? ""; pushRouterTasksSelection() }
+        .onChange(of: env.selectedMeetingID) { _, _ in pushRouterTasksSelection() }
+        .onChange(of: env.selectedInitiativeID) { _, _ in pushRouterTasksSelection() }
+        // Restore Tasks selection when global back/forward steps to a Tasks state (3-8).
+        .onChange(of: router.tasksRestore) { _, snap in
+            guard let snap else { return }
+            env.selectedProjectID = snap.project
+            env.selectedTaskID = snap.task
+            env.selectedInitiativeID = snap.initiative
+            env.selectedMeetingID = snap.meeting
+            router.consumeTasksRestore()
+        }
         .sheet(isPresented: $showTrash) {
             TaskTrashView(store: store)
         }
@@ -266,6 +279,15 @@ struct ActionItemsView: View {
         }
         .sheet(isPresented: $showShortcuts) {
             TaskShortcutsView()
+        }
+        .sheet(isPresented: $showJumpPalette) {
+            TasksJumpPalette(store: store, isPresented: $showJumpPalette, onSelect: { env.go($0) })
+        }
+        .background {
+            // Invisible ⌘K hotkey (3-1).
+            Button("") { showJumpPalette = true }
+                .keyboardShortcut("k", modifiers: .command)
+                .opacity(0).frame(width: 0, height: 0)
         }
     }
 
@@ -284,6 +306,13 @@ struct ActionItemsView: View {
         if !sceneTask.isEmpty, store.items.contains(where: { $0.id == sceneTask }) {
             env.selectedTaskID = sceneTask
         }
+    }
+
+    /// Mirror the Tasks pane selection into the router so global back/forward
+    /// can restore it (3-8).
+    func pushRouterTasksSelection() {
+        router.setTasksSelection(project: env.selectedProjectID, task: env.selectedTaskID,
+                                 initiative: env.selectedInitiativeID, meeting: env.selectedMeetingID)
     }
 
     func consumePendingTask() {

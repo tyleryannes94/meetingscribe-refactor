@@ -77,12 +77,30 @@ final class WorkspaceRouter: ObservableObject {
     // MARK: - Back / forward navigation history (global, browser-style)
 
     /// A point in the navigation history: which top-level section was showing
-    /// and, for the Meetings tab, which meeting was open.
+    /// and, for the Meetings tab, which meeting was open. (3-8) also captures the
+    /// Tasks pane's internal selection so back/forward restores it.
     private struct NavState: Equatable {
         var section: TopLevelSection
         var meetingID: String?
         var personID: String?
+        var tasks: TasksSelection = .init()
     }
+
+    /// Snapshot of the Tasks pane's selection (3-8). Owned by `TasksEnvironment`;
+    /// the router mirrors the current value so it can be saved into history and
+    /// restored on back/forward via `tasksRestore`.
+    struct TasksSelection: Equatable {
+        var project: String?
+        var task: String?
+        var initiative: String?
+        var meeting: String?
+    }
+
+    /// Router's mirror of the live Tasks selection (updated by `ActionItemsView`).
+    private var currentTasks = TasksSelection()
+    /// One-shot: a Tasks selection to restore after a back/forward step. The
+    /// Tasks view observes this and applies it to `TasksEnvironment`.
+    @Published var tasksRestore: TasksSelection?
 
     private var backStack: [NavState] = []
     private var forwardStack: [NavState] = []
@@ -115,7 +133,8 @@ final class WorkspaceRouter: ObservableObject {
     private func recordHistory() {
         recordScheduled = false
         defer { suppressHistory = false }
-        let new = NavState(section: section, meetingID: selectedMeetingID, personID: selectedPersonID)
+        let new = NavState(section: section, meetingID: selectedMeetingID,
+                           personID: selectedPersonID, tasks: currentTasks)
         guard new != currentState else { return }
         if !suppressHistory {
             backStack.append(currentState)
@@ -134,12 +153,28 @@ final class WorkspaceRouter: ObservableObject {
     private func apply(_ state: NavState) {
         // Set current first so the coalesced record sees no change and no-ops.
         currentState = state
+        currentTasks = state.tasks
         suppressHistory = true
         selectedMeetingID = state.meetingID
         selectedPersonID = state.personID
         section = state.section
+        // Hand the Tasks pane its selection to restore (3-8).
+        tasksRestore = state.tasks
         updateHistoryFlags()
     }
+
+    /// Called by `ActionItemsView` whenever the Tasks pane's internal selection
+    /// changes, so back/forward can restore it (3-8). Coalesced into one history
+    /// entry like section/meeting changes.
+    func setTasksSelection(project: String?, task: String?, initiative: String?, meeting: String?) {
+        let new = TasksSelection(project: project, task: task, initiative: initiative, meeting: meeting)
+        guard new != currentTasks else { return }
+        currentTasks = new
+        scheduleHistoryRecord()
+    }
+
+    /// Clear the restore mailbox once the Tasks view has applied it.
+    func consumeTasksRestore() { tasksRestore = nil }
 
     /// Step back to the previous section/meeting.
     func goBack() {
