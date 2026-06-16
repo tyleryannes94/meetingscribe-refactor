@@ -68,12 +68,13 @@ final class ActionItemsViewModel {
                     let weekOut = cal.date(byAdding: .day, value: 7, to: today) ?? today
                     return due >= today && due <= weekOut
                 case .thisWeek:
-                    guard item.status != .completed else { return false }
+                    // P0-5: "This Week" means due within the current calendar week
+                    // — NOT created this week. A task with no due date is not "this
+                    // week" no matter when it was captured.
+                    guard item.status != .completed, let due = item.dueDate else { return false }
                     let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)) ?? today
                     let endOfWeek = cal.date(byAdding: .day, value: 7, to: startOfWeek) ?? today
-                    let createdThisWeek = item.createdAt >= startOfWeek && item.createdAt < endOfWeek
-                    let dueThisWeek = item.dueDate.map { $0 >= startOfWeek && $0 < endOfWeek } ?? false
-                    return createdThisWeek || dueThisWeek
+                    return due >= startOfWeek && due < endOfWeek
                 case .overdue:
                     guard let due = item.dueDate else { return false }
                     return due < today && item.status != .completed

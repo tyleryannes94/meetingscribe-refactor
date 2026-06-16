@@ -34,6 +34,8 @@ struct TaskPageView: View {
     @State private var noteDraft = ""
     @State private var lastSavedNote = ""
     @State private var newSubtask = ""
+    /// Keeps the "Add subtask" field focused across rapid entries (P0-1).
+    @FocusState private var subtaskFocused: Bool
     @State private var newLabel = ""
     @State private var saveTimer: Timer?
     @State private var dueShown = false
@@ -422,7 +424,9 @@ struct TaskPageView: View {
             HStack(spacing: 8) {
                 Image(systemName: "plus").scaledFont(11).foregroundStyle(NDS.textTertiary)
                 TextField("Add subtask…", text: $newSubtask, onCommit: addSubtask)
-                    .textFieldStyle(.plain).font(NDS.body).onSubmit(addSubtask)
+                    .textFieldStyle(.plain).font(NDS.body)
+                    .focused($subtaskFocused)
+                    .onSubmit(addSubtask)
             }
             .padding(.horizontal, 9).padding(.vertical, 6)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -444,6 +448,8 @@ struct TaskPageView: View {
         guard !t.isEmpty else { return }
         store.addSubtask(itemID, title: t)
         newSubtask = ""
+        // Refocus so several subtasks can be added back-to-back (P0-1).
+        Task { @MainActor in subtaskFocused = true }
     }
 
     private func load(_ item: ActionItem) {

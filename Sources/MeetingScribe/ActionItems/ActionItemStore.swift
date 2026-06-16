@@ -644,12 +644,22 @@ final class ActionItemStore: ObservableObject {
 
     func initiative(id: String) -> Initiative? { initiatives.first { $0.id == id } }
 
-    func sortedInitiatives() -> [Initiative] {
-        initiatives.sorted {
-            let a = $0.sortIndex ?? Double($0.createdAt.timeIntervalSince1970)
-            let b = $1.sortIndex ?? Double($1.createdAt.timeIntervalSince1970)
-            return a < b
-        }
+    /// Initiatives in display order. Archived ones are hidden by default (P0-4)
+    /// so the rail leads with active work; pass `includeArchived: true` for the
+    /// "Show archived" affordance.
+    func sortedInitiatives(includeArchived: Bool = false) -> [Initiative] {
+        initiatives
+            .filter { includeArchived || $0.status == .active }
+            .sorted {
+                let a = $0.sortIndex ?? Double($0.createdAt.timeIntervalSince1970)
+                let b = $1.sortIndex ?? Double($1.createdAt.timeIntervalSince1970)
+                return a < b
+            }
+    }
+
+    /// Archived initiatives only, in display order (P0-4 "Show archived").
+    func archivedInitiatives() -> [Initiative] {
+        sortedInitiatives(includeArchived: true).filter { $0.status == .archived }
     }
 
     @discardableResult
@@ -682,9 +692,17 @@ final class ActionItemStore: ObservableObject {
     func projects(forInitiative initiativeID: String) -> [Project] {
         childProjects(of: nil).filter { $0.initiativeID == initiativeID }
     }
-    /// Top-level projects with no initiative.
-    func standaloneTopProjects() -> [Project] {
-        childProjects(of: nil).filter { $0.initiativeID == nil }
+    /// Top-level projects with no initiative. Archived pages are hidden by
+    /// default (P0-4); pass `includeArchived: true` for "Show archived".
+    func standaloneTopProjects(includeArchived: Bool = false) -> [Project] {
+        childProjects(of: nil).filter {
+            $0.initiativeID == nil && (includeArchived || $0.status == .active)
+        }
+    }
+
+    /// Archived top-level standalone pages only (P0-4 "Show archived").
+    func archivedTopProjects() -> [Project] {
+        standaloneTopProjects(includeArchived: true).filter { $0.status == .archived }
     }
     func setProjectInitiative(_ id: String, initiativeID: String?) {
         updateProject(id) { $0.initiativeID = initiativeID }

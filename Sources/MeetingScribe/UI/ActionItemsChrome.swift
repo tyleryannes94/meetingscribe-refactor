@@ -453,7 +453,9 @@ extension ActionItemsView {
                 .textFieldStyle(.plain)
                 .font(NDS.body)
                 .frame(width: 320)
+                .focused($quickAddFocused)
                 .onSubmit { commitQuickAdd() }
+                .onAppear { quickAddFocused = true }
             Text("Type a task — add !priority, #label, or a date like “tomorrow”.")
                 .font(NDS.small).foregroundStyle(NDS.textTertiary)
         }
@@ -472,7 +474,9 @@ extension ActionItemsView {
         quickAddText = ""
         if vm.viewMode == .table || vm.viewMode == .board { vm.viewMode = .list }
         if vm.filter == .completed { vm.filter = .all }
-        // Popover stays open + cleared for rapid multi-entry; Esc closes it.
+        // Popover stays open + cleared for rapid multi-entry; refocus the field
+        // so the next task can be typed without a mouse click (P0-1). Esc closes.
+        Task { @MainActor in quickAddFocused = true }
     }
 
     func exportTasksCSV() {

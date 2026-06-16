@@ -34,6 +34,8 @@ struct ActionItemsView: View {
     // Natural-language quick-add popover (P3-2).
     @State var quickAdding = false
     @State var quickAddText = ""
+    // Keeps the quick-add field focused across rapid back-to-back entries (P0-1).
+    @FocusState var quickAddFocused: Bool
     // Insights sheet (PM-12).
     @State var showInsights = false
     // Keyboard shortcuts cheat-sheet (UX-22).

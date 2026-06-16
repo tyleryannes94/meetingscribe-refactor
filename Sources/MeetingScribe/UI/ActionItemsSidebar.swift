@@ -25,6 +25,8 @@ struct ProjectRail: View {
     /// Meeting notes are collapsed by default so the rail leads with the user's
     /// initiatives / projects / tasks rather than a long dump of every meeting.
     @State private var meetingNotesExpanded = false
+    /// Archived initiatives/pages are hidden until the user opts in (P0-4).
+    @State private var showArchived = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -111,6 +113,8 @@ struct ProjectRail: View {
                             .padding(.horizontal, 8).padding(.top, 6)
                     }
 
+                    archivedSection
+
                     // Collapsible "Meeting notes" — collapsed by default so the
                     // rail isn't dominated by every past meeting. Expand to browse.
                     meetingNotesHeader
@@ -139,6 +143,45 @@ struct ProjectRail: View {
         NotionEyebrow(text: s)
             .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 3)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// "Show archived" affordance (P0-4): a low-key toggle, shown only when
+    /// something is actually archived, that reveals archived initiatives and
+    /// standalone pages beneath the active workspace tree.
+    @ViewBuilder
+    private var archivedSection: some View {
+        let archInitiatives = store.archivedInitiatives()
+        let archProjects = store.archivedTopProjects()
+        if !archInitiatives.isEmpty || !archProjects.isEmpty {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { showArchived.toggle() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "archivebox")
+                        .scaledFont(10).foregroundStyle(NDS.textTertiary)
+                    Text(showArchived ? "Hide archived" : "Show archived")
+                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                    Spacer(minLength: 4)
+                    Text("\(archInitiatives.count + archProjects.count)")
+                        .font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary)
+                }
+                .padding(.horizontal, 10).padding(.top, 12).padding(.bottom, 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if showArchived {
+                ForEach(archInitiatives) { ini in
+                    InitiativeNode(store: store, initiative: ini,
+                                   expandedInitiatives: $expandedInitiatives,
+                                   expandedPages: $expandedPages)
+                }
+                ForEach(archProjects) { p in
+                    PageTreeNode(store: store, project: p, depth: 0,
+                                 expanded: $expandedPages)
+                }
+            }
+        }
     }
 
     /// Tappable header for the collapsible Meeting notes section.
