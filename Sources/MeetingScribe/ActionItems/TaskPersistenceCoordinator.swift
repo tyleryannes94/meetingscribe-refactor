@@ -84,9 +84,19 @@ final class TaskPersistenceCoordinator: @unchecked Sendable {
     /// The single atomic write, with directory creation. Called only on `queue`.
     private func writeNow(_ data: Data, to url: URL) {
         do {
-            try FileManager.default.createDirectory(
+            let fm = FileManager.default
+            try fm.createDirectory(
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true)
+            // Write-ahead backup (6-4): snapshot the last-good file to `.bak`
+            // before overwriting, so a crash or a bad encode can't leave the user
+            // with no recoverable copy. `.atomic` already prevents torn writes;
+            // this adds a one-version rollback point.
+            if fm.fileExists(atPath: url.path) {
+                let backup = url.appendingPathExtension("bak")
+                try? fm.removeItem(at: backup)
+                try? fm.copyItem(at: url, to: backup)
+            }
             try data.write(to: url, options: [.atomic])
         } catch {
             log.error("task persist write failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
