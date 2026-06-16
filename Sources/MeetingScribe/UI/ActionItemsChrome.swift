@@ -29,7 +29,7 @@ extension ActionItemsView {
                     }
                     QuickActionCard("Board", subtitle: "Kanban view",
                                     systemImage: "rectangle.split.3x1", tint: NDS.selectColor("orange")) {
-                        viewMode = .board; selectedTaskID = nil; selectedMeetingID = nil; selectedProjectID = nil
+                        vm.viewMode = .board; selectedTaskID = nil; selectedMeetingID = nil; selectedProjectID = nil
                     }
                 }
 
@@ -219,7 +219,7 @@ extension ActionItemsView {
 
     func enableDatabase(_ project: Project, view: ViewMode) {
         store.setProjectDatabaseEnabled(project.id, true)
-        viewMode = view
+        vm.viewMode = view
     }
 
     var taskDatabasePane: some View {
@@ -233,7 +233,7 @@ extension ActionItemsView {
                 Divider().overlay(NDS.divider)
                 content
             }
-            if let err = lastError {
+            if let err = vm.lastError {
                 errorBanner(err)
             }
         }
@@ -251,7 +251,7 @@ extension ActionItemsView {
             Button("Cancel", role: .cancel) { renameSectionID = nil }
         }
         .onChange(of: manager.lastTaskSyncError) { _, v in
-            if let v { lastError = v }
+            if let v { vm.lastError = v }
         }
     }
 
@@ -312,23 +312,23 @@ extension ActionItemsView {
             Divider().frame(height: 16).overlay(NDS.divider)
             // One-click saved-slice chips (P2-2 / UX-10) — the daily views that
             // were previously buried in the filter menu.
-            quickViewChip("All", active: filter == .all && priorityFilter == .any && ownerScope == .anyone) {
-                filter = .all; priorityFilter = .any; ownerScope = .anyone
+            quickViewChip("All", active: vm.filter == .all && vm.priorityFilter == .any && vm.ownerScope == .anyone) {
+                vm.filter = .all; vm.priorityFilter = .any; vm.ownerScope = .anyone
             }
-            quickViewChip("My open", active: ownerScope == .mine && filter == .open) {
-                ownerScope = .mine; filter = .open; priorityFilter = .any
+            quickViewChip("My open", active: vm.ownerScope == .mine && vm.filter == .open) {
+                vm.ownerScope = .mine; vm.filter = .open; vm.priorityFilter = .any
             }
-            quickViewChip("This week", active: filter == .thisWeek) { filter = .thisWeek }
-            quickViewChip("Overdue", active: filter == .overdue) { filter = .overdue }
+            quickViewChip("This week", active: vm.filter == .thisWeek) { vm.filter = .thisWeek }
+            quickViewChip("Overdue", active: vm.filter == .overdue) { vm.filter = .overdue }
             if store.items.contains(where: { $0.delegated == true }) {
-                quickViewChip("Delegated", active: ownerScope == .delegated) {
-                    ownerScope = ownerScope == .delegated ? .anyone : .delegated
+                quickViewChip("Delegated", active: vm.ownerScope == .delegated) {
+                    vm.ownerScope = vm.ownerScope == .delegated ? .anyone : .delegated
                 }
             }
             Spacer()
             // Active-filter pill (only when filtering)
-            if filter != .all || priorityFilter != .any {
-                Button { filter = .all; priorityFilter = .any } label: {
+            if vm.filter != .all || vm.priorityFilter != .any {
+                Button { vm.filter = .all; vm.priorityFilter = .any } label: {
                     HStack(spacing: 4) {
                         Text(filterSummary).font(NDS.small)
                         Image(systemName: "xmark").scaledFont(9, weight: .bold)
@@ -341,14 +341,14 @@ extension ActionItemsView {
             }
             // Filter + sort menu
             Menu {
-                Picker("Status", selection: $filter) {
+                Picker("Status", selection: $vm.filter) {
                     ForEach(Filter.allCases) { Text($0.label).tag($0) }
                 }
-                Picker("Priority", selection: $priorityFilter) {
+                Picker("Priority", selection: $vm.priorityFilter) {
                     ForEach(PriorityFilter.allCases) { Text($0.label).tag($0) }
                 }
-                if viewMode == .list {
-                    Picker("Group by", selection: $groupBy) {
+                if vm.viewMode == .list {
+                    Picker("Group by", selection: $vm.groupBy) {
                         ForEach(GroupBy.allCases) { Text($0.label).tag($0) }
                     }
                 }
@@ -361,7 +361,7 @@ extension ActionItemsView {
             // Search (icon-style compact field)
             HStack(spacing: 4) {
                 Image(systemName: "magnifyingglass").font(.caption).foregroundStyle(NDS.textTertiary)
-                TextField("Search", text: $search).textFieldStyle(.plain).frame(width: 130)
+                TextField("Search", text: $vm.search).textFieldStyle(.plain).frame(width: 130)
             }
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 7))
@@ -411,8 +411,8 @@ extension ActionItemsView {
     }
 
     func viewTab(_ m: ViewMode) -> some View {
-        let selected = viewMode == m
-        return Button { viewMode = m } label: {
+        let selected = vm.viewMode == m
+        return Button { vm.viewMode = m } label: {
             HStack(spacing: 5) {
                 Image(systemName: m.systemImage).scaledFont(11)
                 Text(m.label).scaledFont(12.5, weight: selected ? .semibold : .regular)
@@ -439,8 +439,8 @@ extension ActionItemsView {
 
     var filterSummary: String {
         var parts: [String] = []
-        if filter != .all { parts.append(filter.label) }
-        if priorityFilter != .any { parts.append(priorityFilter.label) }
+        if vm.filter != .all { parts.append(vm.filter.label) }
+        if vm.priorityFilter != .any { parts.append(vm.priorityFilter.label) }
         return parts.joined(separator: " · ")
     }
 
@@ -470,8 +470,8 @@ extension ActionItemsView {
         }
         _ = store.createTask(parsing: raw, projectID: pid)
         quickAddText = ""
-        if viewMode == .table || viewMode == .board { viewMode = .list }
-        if filter == .completed { filter = .all }
+        if vm.viewMode == .table || vm.viewMode == .board { vm.viewMode = .list }
+        if vm.filter == .completed { vm.filter = .all }
         // Popover stays open + cleared for rapid multi-entry; Esc closes it.
     }
 
@@ -512,8 +512,8 @@ extension ActionItemsView {
             store.setProjectDatabaseEnabled(pid, true)
         }
         let t = store.createTask(title: "New task", projectID: pid)
-        viewMode = .list
-        if filter == .completed { filter = .all }
+        vm.viewMode = .list
+        if vm.filter == .completed { vm.filter = .all }
         selectedTaskID = t.id
     }
 
@@ -556,7 +556,7 @@ extension ActionItemsView {
             Text(err).font(.caption).textSelection(.enabled)
             Spacer()
             Button {
-                lastError = nil
+                vm.lastError = nil
             } label: {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
             }
@@ -569,8 +569,8 @@ extension ActionItemsView {
     // MARK: - Notion push
 
     func pushToNotion(_ item: ActionItem) {
-        pushingIDs.insert(item.id)
-        lastError = nil
+        vm.pushingIDs.insert(item.id)
+        vm.lastError = nil
         Task {
             do {
                 if item.notionPageID != nil {
@@ -580,9 +580,9 @@ extension ActionItemsView {
                     store.setNotion(item.id, pageID: result.id, url: result.url)
                 }
             } catch {
-                lastError = error.localizedDescription
+                vm.lastError = error.localizedDescription
             }
-            pushingIDs.remove(item.id)
+            vm.pushingIDs.remove(item.id)
         }
     }
 
@@ -593,8 +593,8 @@ extension ActionItemsView {
     /// button flips to "Open in Linear". The backend (`createLinearIssue`)
     /// already existed and was only reachable through chat before this.
     func pushToLinear(_ item: ActionItem) {
-        pushingIDs.insert(item.id)
-        lastError = nil
+        vm.pushingIDs.insert(item.id)
+        vm.lastError = nil
         Task {
             do {
                 let settings = AppSettings.shared
@@ -610,9 +610,9 @@ extension ActionItemsView {
                     description: item.notes, projectID: projectID)
                 store.setLinear(item.id, issueID: result.id, url: result.url)
             } catch {
-                lastError = error.localizedDescription
+                vm.lastError = error.localizedDescription
             }
-            pushingIDs.remove(item.id)
+            vm.pushingIDs.remove(item.id)
         }
     }
 }

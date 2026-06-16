@@ -33,10 +33,10 @@ extension ActionItemsView {
 
     /// `projectFiltered` ordered by the clicked column.
     var tableSorted: [ActionItem] {
-        let asc = tableSortAscending
+        let asc = vm.tableSortAscending
         func cmp<T: Comparable>(_ a: T, _ b: T) -> Bool { asc ? a < b : a > b }
         return projectFiltered.sorted { a, b in
-            switch tableSort {
+            switch vm.tableSort {
             case .task:    return cmp(a.title.lowercased(), b.title.lowercased())
             case .project:
                 return cmp(store.project(for: a)?.name.lowercased() ?? "~",
@@ -67,13 +67,13 @@ extension ActionItemsView {
 
     func sortHeader(_ label: String, _ col: TableSort) -> some View {
         Button {
-            if tableSort == col { tableSortAscending.toggle() }
-            else { tableSort = col; tableSortAscending = (col == .task || col == .owner || col == .project) }
+            if vm.tableSort == col { vm.tableSortAscending.toggle() }
+            else { vm.tableSort = col; vm.tableSortAscending = (col == .task || col == .owner || col == .project) }
         } label: {
             HStack(spacing: 3) {
                 Text(label)
-                if tableSort == col {
-                    Image(systemName: tableSortAscending ? "chevron.up" : "chevron.down")
+                if vm.tableSort == col {
+                    Image(systemName: vm.tableSortAscending ? "chevron.up" : "chevron.down")
                         .scaledFont(7, weight: .bold)
                 }
             }

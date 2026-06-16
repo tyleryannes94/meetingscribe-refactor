@@ -55,7 +55,7 @@ extension ActionItemsView {
                         items: columnItems(status),
                         store: store,
                         selectedTaskID: $selectedTaskID,
-                        viewMode: $viewMode)
+                        viewMode: $vm.viewMode)
     }
 
     /// Moves `id` into `status` and reorders it just before `beforeID` (or to

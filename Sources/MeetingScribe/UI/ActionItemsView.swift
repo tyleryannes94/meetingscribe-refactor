@@ -10,16 +10,10 @@ struct ActionItemsView: View {
     @EnvironmentObject var router: WorkspaceRouter
     @ObservedObject var store: ActionItemStore
 
-    @State var filter: Filter = .all
-    @State var priorityFilter: PriorityFilter = .any
-    /// Whether to show everyone's tasks or just the current user's (P2-2).
-    @State var ownerScope: OwnerScope = .anyone
-    @State var search: String = ""
-    @State var pushingIDs: Set<String> = []
-    @State var lastError: String?
-    @State var editingID: String?
-    @State var groupBy: GroupBy = .none
-    @State var viewMode: ViewMode = .list
+    /// Single owner of filter / sort / view / group state and the canonical
+    /// filter implementation (A0-1). Replaces ~11 parallel `@State` vars and a
+    /// diverged dead copy of the filter logic.
+    @State var vm = ActionItemsViewModel()
     /// "__home__" = dashboard; nil = All tasks; "__none__" = No project; else a project id.
     // Default to nil (All Tasks) so the first click into Tasks shows every
     // open item immediately, not the dashboard. Dashboard is one click away.
@@ -35,10 +29,6 @@ struct ActionItemsView: View {
     @State var newSectionName = ""
     @State var renameSectionID: String?
     @State var renameSectionDraft = ""
-    /// Table sort state.
-    @State var tableSort: TableSort = .priority
-    @State var tableSortAscending = false
-
     // Multi-select + bulk actions (TK-3/TK-4).
     @State var taskSelectMode = false
     @State var taskSelection: Set<String> = []
@@ -214,10 +204,10 @@ struct ActionItemsView: View {
             if let pid = realSelectedProjectID,
                let saved = AppSettings.shared.savedTaskViewMode(forProject: pid),
                let mode = ViewMode(rawValue: saved) {
-                viewMode = mode
+                vm.viewMode = mode
             }
         }
-        .onChange(of: viewMode) { _, mode in
+        .onChange(of: vm.viewMode) { _, mode in
             if let pid = realSelectedProjectID {
                 AppSettings.shared.setSavedTaskViewMode(mode.rawValue, forProject: pid)
             }
@@ -263,7 +253,7 @@ struct ActionItemsView: View {
 
     @ViewBuilder
     var content: some View {
-        switch viewMode {
+        switch vm.viewMode {
         case .list:
             if let pid = realSelectedProjectID {
                 sectionedListBody(projectID: pid)

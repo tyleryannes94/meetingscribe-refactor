@@ -109,7 +109,7 @@ extension ActionItemsView {
             taskSelectToolbar
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    switch groupBy {
+                    switch vm.groupBy {
                     case .none:
                         ForEach(projectFiltered) { item in
                             selectableRow(item)
@@ -257,83 +257,20 @@ extension ActionItemsView {
 
     // MARK: - Filtered data
 
+    /// Live tasks narrowed by the toolbar facets, via the single canonical
+    /// implementation on `ActionItemsViewModel` (A0-1).
     var filtered: [ActionItem] {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        return store.items
-            // Meeting-extracted action items wait in the Triage inbox until the
-            // user accepts them — they are NOT auto-added to the task database.
-            // `needsTriage` = from a meeting, unconfirmed, not done, not trashed.
-            .filter { !$0.needsTriage }
-            .filter { item in
-                switch filter {
-                case .all: return true
-                case .open: return item.status == .open
-                case .inProgress: return item.status == .inProgress
-                case .completed: return item.status == .completed
-                case .upcoming:
-                    guard let due = item.dueDate, item.status != .completed else { return false }
-                    let weekOut = cal.date(byAdding: .day, value: 7, to: today) ?? today
-                    return due >= today && due <= weekOut
-                case .thisWeek:
-                    guard item.status != .completed else { return false }
-                    let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)) ?? today
-                    let endOfWeek = cal.date(byAdding: .day, value: 7, to: startOfWeek) ?? today
-                    let createdThisWeek = item.createdAt >= startOfWeek && item.createdAt < endOfWeek
-                    let dueThisWeek = item.dueDate.map { $0 >= startOfWeek && $0 < endOfWeek } ?? false
-                    return createdThisWeek || dueThisWeek
-                case .overdue:
-                    guard let due = item.dueDate else { return false }
-                    return due < today && item.status != .completed
-                }
-            }
-            .filter { item in
-                switch priorityFilter {
-                case .any: return true
-                case .low: return item.priority == .low
-                case .medium: return item.priority == .medium
-                case .high: return item.priority == .high
-                case .urgent: return item.priority == .urgent
-                }
-            }
-            .filter { item in
-                switch ownerScope {
-                case .anyone: return true
-                case .mine: return isMine(item)
-                case .delegated: return item.delegated == true
-                }
-            }
-            .filter { item in
-                guard !search.isEmpty else { return true }
-                let q = search.lowercased()
-                return item.title.lowercased().contains(q)
-                    || (item.owner ?? "").lowercased().contains(q)
-                    || item.meetingTitle.lowercased().contains(q)
-            }
-            .sorted(by: sort)
+        vm.filtered(store.items, myNameAliases: Set(AppSettings.shared.myNameAliases))
     }
 
     /// A task counts as "mine" when its owner matches one of my name aliases, or
     /// it's unassigned (my own captured task). Drives the "My open" quick view.
     func isMine(_ item: ActionItem) -> Bool {
-        let owner = (item.owner ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if owner.isEmpty { return true }
-        return AppSettings.shared.myNameAliases.contains(owner.lowercased())
+        ActionItemsViewModel.isMine(item, myNameAliases: Set(AppSettings.shared.myNameAliases))
     }
 
     func sort(_ a: ActionItem, _ b: ActionItem) -> Bool {
-        if a.status == .completed && b.status != .completed { return false }
-        if b.status == .completed && a.status != .completed { return true }
-        switch (a.dueDate, b.dueDate) {
-        case (let x?, let y?): if x != y { return x < y }
-        case (nil, _?): return false
-        case (_?, nil): return true
-        default: break
-        }
-        if a.priority.weight != b.priority.weight {
-            return a.priority.weight > b.priority.weight
-        }
-        return a.meetingDate > b.meetingDate
+        ActionItemsViewModel.defaultSort(a, b)
     }
 
     // MARK: - Grouping
@@ -359,39 +296,15 @@ extension ActionItemsView {
     }
 
     var grouped: [String: [ActionItem]] {
-        Dictionary(grouping: projectFiltered, by: { groupKey(for: $0) })
+        vm.grouped(projectFiltered)
     }
 
     var groupedKeys: [String] {
-        let keys = Array(grouped.keys)
-        switch groupBy {
-        case .priority:
-            let order = ["Urgent", "High", "Medium", "Low"]
-            return order.filter { keys.contains($0) }
-        case .status:
-            let order = ["In Progress", "Open", "Completed"]
-            return order.filter { keys.contains($0) }
-        default:
-            return keys.sorted()
-        }
+        vm.groupedKeys(projectFiltered)
     }
 
     func groupKey(for item: ActionItem) -> String {
-        switch groupBy {
-        case .none: return ""
-        case .meeting: return item.meetingTitle
-        case .priority: return item.priority.label
-        case .status: return item.status.label
-        case .dueDate:
-            guard let d = item.dueDate else { return "No due date" }
-            let cal = Calendar.current
-            if cal.isDateInToday(d) { return "Today" }
-            if cal.isDateInTomorrow(d) { return "Tomorrow" }
-            if cal.isDateInYesterday(d) { return "Yesterday" }
-            if d < Date() { return "Overdue" }
-            let f = DateFormatter(); f.dateFormat = "EEE, MMM d"
-            return f.string(from: d)
-        }
+        vm.groupKey(for: item)
     }
 
     @ViewBuilder
@@ -422,8 +335,8 @@ extension ActionItemsView {
             projectName: store.project(for: item)?.name,
             allLabels: store.labels,
             assignedLabels: store.labels(for: item),
-            isPushing: pushingIDs.contains(item.id),
-            isExpanded: editingID == item.id,
+            isPushing: vm.pushingIDs.contains(item.id),
+            isExpanded: vm.editingID == item.id,
             onToggleExpand: {
                 selectedTaskID = item.id
             },
