@@ -31,6 +31,19 @@ final class TasksEnvironment: ObservableObject {
         self.selectedProjectID = selectedProjectID
     }
 
+    /// Navigate to a typed route (3-6 breadcrumbs, 3-8 history). Clears the
+    /// other selection fields so the route is unambiguous.
+    func go(_ route: TasksRoute) {
+        selectedTaskID = nil; selectedMeetingID = nil
+        selectedInitiativeID = nil; selectedProjectID = nil
+        switch route {
+        case .task(let id): selectedTaskID = id
+        case .initiative(let id): selectedInitiativeID = id
+        case .meeting(let id): selectedMeetingID = id
+        default: selectedProjectID = route.projectSelection
+        }
+    }
+
     /// Typed projection of the current selection (A0-2). The router and later
     /// phases switch over this instead of comparing sentinel strings.
     var route: TasksRoute {

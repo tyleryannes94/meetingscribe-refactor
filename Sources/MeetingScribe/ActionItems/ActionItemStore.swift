@@ -204,7 +204,14 @@ final class ActionItemStore: ObservableObject {
     /// read path that views, badges, saved views (Phase 2), and the agent API
     /// (Phase 6) converge on, replacing scattered bespoke filter/sort chains.
     func tasks(matching query: TaskQuery, now: Date = Date()) -> [ActionItem] {
-        TaskQueryEngine.evaluate(query, over: items, now: now)
+        var q = query
+        // Resolve the initiative scope to its projects here (3-3) so the engine
+        // stays pure and store-free.
+        if case .initiative(let id) = query.scope {
+            let pids = Set(projects.filter { $0.initiativeID == id }.map { $0.id })
+            q.scope = .anyProjects(pids)
+        }
+        return TaskQueryEngine.evaluate(q, over: items, now: now)
     }
 
     private func defaultSort(_ a: ActionItem, _ b: ActionItem) -> Bool {

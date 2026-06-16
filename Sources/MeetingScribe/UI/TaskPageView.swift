@@ -12,6 +12,8 @@ struct TaskPageView: View {
     let itemID: String
     var breadcrumb: String = "Tasks"
     let onClose: () -> Void
+    /// Routes a breadcrumb segment tap up the hierarchy (3-6).
+    var onNavigate: (TasksRoute) -> Void = { _ in }
 
     /// Recent contacts surfaced first for the assignee→person link menu.
     private var personPickerList: [Person] {
@@ -78,16 +80,31 @@ struct TaskPageView: View {
 
     // MARK: Header
 
+    /// Context › Initiative › Project trail (3-6), each segment routing up.
+    private func crumbItems(_ item: ActionItem) -> [BreadcrumbItem] {
+        var crumbs: [BreadcrumbItem] = [
+            BreadcrumbItem(label: breadcrumb, systemImage: "chevron.left", action: onClose)
+        ]
+        let project = item.projectID.flatMap { pid in store.projects.first { $0.id == pid } }
+        let initiative = project?.initiativeID.flatMap { iid in store.initiative(id: iid) }
+        if let cid = store.effectiveContextID(for: item), let ctx = store.context(id: cid) {
+            crumbs.append(BreadcrumbItem(label: ctx.name, color: store.contextColor(id: cid),
+                                         action: nil))
+        }
+        if let initiative {
+            crumbs.append(BreadcrumbItem(label: initiative.name, systemImage: initiative.icon ?? "flag.fill",
+                                         action: { onNavigate(.initiative(initiative.id)) }))
+        }
+        if let project {
+            crumbs.append(BreadcrumbItem(label: project.name, systemImage: project.icon ?? "doc.text",
+                                         action: { onNavigate(.project(project.id)) }))
+        }
+        return crumbs
+    }
+
     private func breadcrumbBar(_ item: ActionItem) -> some View {
         HStack(spacing: 6) {
-            Button(action: onClose) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left").scaledFont(11, weight: .semibold)
-                    Text(breadcrumb).font(NDS.small)
-                }
-                .foregroundStyle(NDS.textSecondary)
-            }
-            .buttonStyle(.plain)
+            BreadcrumbBar(items: crumbItems(item))
             Spacer()
             if let url = item.externalURL, let u = URL(string: url) {
                 Button { NSWorkspace.shared.open(u) } label: {

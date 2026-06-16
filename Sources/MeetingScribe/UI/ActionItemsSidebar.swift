@@ -1,6 +1,24 @@
 import SwiftUI
 import AppKit
 
+/// Pinned-projects storage (3-7): up to 5 project ids kept as a CSV string in
+/// `@AppStorage` so the rail and every tree node stay reactively in sync (an
+/// `[String]` isn't `@AppStorage`-able; project ids are UUIDs → comma-safe).
+enum PinnedProjects {
+    static let key = "tasks.pinnedProjectsCSV"
+    static let max = 5
+    static func ids(_ csv: String) -> [String] {
+        csv.split(separator: ",").map(String.init)
+    }
+    static func isPinned(_ id: String, _ csv: String) -> Bool { ids(csv).contains(id) }
+    static func toggle(_ id: String, in csv: inout String) {
+        var arr = ids(csv)
+        if let i = arr.firstIndex(of: id) { arr.remove(at: i) }
+        else if arr.count < max { arr.append(id) }
+        csv = arr.joined(separator: ",")
+    }
+}
+
 // MARK: - Project rail (left sidebar)
 
 @available(macOS 14.0, *)
@@ -27,6 +45,8 @@ struct ProjectRail: View {
     @State private var meetingNotesExpanded = false
     /// Archived initiatives/pages are hidden until the user opts in (P0-4).
     @State private var showArchived = false
+    /// Pinned projects (3-7), shared with the page-tree nodes via UserDefaults.
+    @AppStorage(PinnedProjects.key) private var pinnedCSV = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -55,6 +75,8 @@ struct ProjectRail: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     contextSwitcher
+                    pinnedSection
+                    zoneLabel("Smart views")
                     railItem(title: "Home", icon: "house.fill", count: 0,
                              id: ActionItemsView.homeSentinel)
                     // Today smart view — default landing (1-3).
@@ -75,6 +97,10 @@ struct ProjectRail: View {
                     // People facet (P2-2) + Waiting-on lifecycle (P2-6).
                     peopleSection
                     waitingSection
+
+                    // Zone 2: the user's own structured workspace (3-4).
+                    Divider().overlay(NDS.divider).padding(.horizontal, 10).padding(.top, 8)
+                    zoneLabel("My work")
 
                     // Initiatives (top tier) — each expands to its projects.
                     HStack {
@@ -149,6 +175,42 @@ struct ProjectRail: View {
     private func sectionLabel(_ s: String) -> some View {
         NotionEyebrow(text: s)
             .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Pinned-projects shortcuts at the very top of the rail (3-7).
+    @ViewBuilder
+    private var pinnedSection: some View {
+        let pinned = PinnedProjects.ids(pinnedCSV).compactMap { store.project(id: $0) }
+        if !pinned.isEmpty {
+            zoneLabel("Pinned")
+            ForEach(pinned) { p in
+                let selected = env.selectedProjectID == p.id && env.selectedInitiativeID == nil && env.selectedMeetingID == nil
+                SidebarRow(selected: selected) {
+                    env.selectedMeetingID = nil; env.selectedInitiativeID = nil; env.selectedProjectID = p.id
+                } content: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "pin.fill").scaledFont(11)
+                            .foregroundStyle(NDS.brand).frame(width: 16)
+                        Text(p.name).lineLimit(1).font(NDS.body)
+                        Spacer()
+                    }
+                }
+                .contextMenu {
+                    Button("Unpin") { PinnedProjects.toggle(p.id, in: &pinnedCSV) }
+                }
+            }
+        }
+    }
+
+    /// Zone heading (3-4): "Smart views" vs "My work". Heavier than a section
+    /// eyebrow so the two halves of the rail read as distinct.
+    private func zoneLabel(_ s: String) -> some View {
+        Text(s.uppercased())
+            .font(NDS.tiny.weight(.semibold))
+            .foregroundStyle(NDS.textTertiary)
+            .tracking(0.8)
+            .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 3)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -589,6 +651,8 @@ struct PageTreeNode: View {
     @State private var hovering = false
     @State private var addingChild = false
     @State private var childName = ""
+    /// Shared pinned-projects storage (3-7).
+    @AppStorage(PinnedProjects.key) private var pinnedCSV = ""
 
     private var isSelected: Bool { env.selectedMeetingID == nil && env.selectedInitiativeID == nil && env.selectedProjectID == project.id }
     private var children: [Project] { store.childProjects(of: project.id) }
@@ -656,6 +720,11 @@ struct PageTreeNode: View {
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Add sub-page") { addingChild = true; expanded.insert(project.id) }
+            let pinned = PinnedProjects.isPinned(project.id, pinnedCSV)
+            Button(pinned ? "Unpin" : "Pin to top") {
+                PinnedProjects.toggle(project.id, in: &pinnedCSV)
+            }
+            .disabled(!pinned && PinnedProjects.ids(pinnedCSV).count >= PinnedProjects.max)
             Button(role: .destructive) {
                 if env.selectedProjectID == project.id { env.selectedProjectID = nil }
                 let name = project.name
@@ -687,6 +756,17 @@ struct InitiativeNode: View {
     @Binding var expandedInitiatives: Set<String>
     @Binding var expandedPages: Set<String>
     @State private var hovering = false
+    // Inline rename + icon picker (3-5).
+    @State private var renaming = false
+    @State private var nameDraft = ""
+    @State private var showIconPicker = false
+
+    /// A small palette of common initiative glyphs for the icon picker (3-5).
+    private static let iconChoices = [
+        "flag.fill", "target", "rocket", "star.fill", "bolt.fill", "leaf.fill",
+        "briefcase.fill", "chart.line.uptrend.xyaxis", "lightbulb.fill", "hammer.fill",
+        "person.2.fill", "building.2.fill", "globe", "heart.fill", "gearshape.fill", "calendar"
+    ]
 
     private var isOpen: Bool { expandedInitiatives.contains(initiative.id) }
     private var isSelected: Bool { env.selectedInitiativeID == initiative.id }
@@ -705,10 +785,20 @@ struct InitiativeNode: View {
                 }
                 .buttonStyle(.plain).opacity(projects.isEmpty ? 0.3 : 1)
 
-                Image(systemName: initiative.icon ?? "flag.fill")
-                    .scaledFont(12).foregroundStyle(NDS.brand).frame(width: 15)
-                Text(initiative.name).font(NDS.body.weight(.medium)).lineLimit(1)
-                    .foregroundStyle(isSelected ? NDS.textPrimary : NDS.textSecondary)
+                Button { showIconPicker = true } label: {
+                    Image(systemName: initiative.icon ?? "flag.fill")
+                        .scaledFont(12).foregroundStyle(NDS.brand).frame(width: 15)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showIconPicker, arrowEdge: .bottom) { iconPicker }
+                if renaming {
+                    TextField("Name", text: $nameDraft, onCommit: commitRename)
+                        .textFieldStyle(.roundedBorder).font(NDS.body).frame(maxWidth: 150)
+                        .onSubmit(commitRename)
+                } else {
+                    Text(initiative.name).font(NDS.body.weight(.medium)).lineLimit(1)
+                        .foregroundStyle(isSelected ? NDS.textPrimary : NDS.textSecondary)
+                }
                 Spacer(minLength: 4)
                 if hovering {
                     Button {
@@ -737,8 +827,14 @@ struct InitiativeNode: View {
             }
             .onHover { hovering = $0 }
             .contextMenu {
+                Button("Rename") { nameDraft = initiative.name; renaming = true }
+                Button("Change icon…") { showIconPicker = true }
+                Button(initiative.status == .archived ? "Unarchive" : "Archive") {
+                    store.setInitiativeStatus(initiative.id,
+                        status: initiative.status == .archived ? .active : .archived)
+                }
                 // Assign this initiative (and its tasks, by inheritance) to a
-                // workspace context (1-2). Full menu expansion lands in 3-5.
+                // workspace context (1-2 / 3-5).
                 Menu("Context") {
                     Button {
                         store.setInitiativeContext(initiative.id, contextID: nil)
@@ -776,5 +872,34 @@ struct InitiativeNode: View {
                 }
             }
         }
+    }
+
+    private func commitRename() {
+        let n = nameDraft.trimmingCharacters(in: .whitespaces)
+        renaming = false
+        guard !n.isEmpty, n != initiative.name else { return }
+        store.renameInitiative(initiative.id, name: n)
+    }
+
+    /// SF Symbol grid for the initiative icon (3-5).
+    private var iconPicker: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(30)), count: 6), spacing: 8) {
+            ForEach(Self.iconChoices, id: \.self) { sym in
+                Button {
+                    store.setInitiativeIcon(initiative.id, icon: sym)
+                    showIconPicker = false
+                } label: {
+                    Image(systemName: sym)
+                        .scaledFont(14)
+                        .frame(width: 28, height: 28)
+                        .foregroundStyle(initiative.icon == sym ? NDS.brand : NDS.textSecondary)
+                        .background(initiative.icon == sym ? NDS.brand.opacity(0.14) : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .frame(width: 230)
     }
 }
