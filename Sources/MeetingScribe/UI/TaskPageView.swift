@@ -9,6 +9,7 @@ struct TaskPageView: View {
     @ObservedObject var store: ActionItemStore
     @EnvironmentObject var people: PeopleStore
     @EnvironmentObject var router: WorkspaceRouter
+    @EnvironmentObject var manager: MeetingManager
     let itemID: String
     var breadcrumb: String = "Tasks"
     let onClose: () -> Void
@@ -42,6 +43,8 @@ struct TaskPageView: View {
     @State private var saveTimer: Timer?
     @State private var dueShown = false
     @State private var startShown = false
+    /// Inline source-meeting peek popover (4-4).
+    @State private var meetingPeekShown = false
 
     private var item: ActionItem? { store.items.first { $0.id == itemID } }
 
@@ -52,6 +55,9 @@ struct TaskPageView: View {
                     breadcrumbBar(item)
                     titleRow(item)
                         .padding(.top, 10)
+                    if !item.isManual {
+                        provenanceStrip(item).padding(.top, 12)
+                    }
                     properties(item)
                         .padding(.top, 14)
                     Divider().overlay(NDS.divider).padding(.vertical, 18)
@@ -320,18 +326,17 @@ struct TaskPageView: View {
                     if item.meetingID.isEmpty {
                         Text(item.meetingTitle).font(NDS.body).foregroundStyle(NDS.textSecondary).lineLimit(1)
                     } else {
-                        // Clickable → opens the source meeting (was dead text). (A3/UX4-1)
-                        Button {
-                            NotificationCenter.default.post(
-                                name: .meetingScribeOpenEntity, object: nil,
-                                userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: item.meetingID).absoluteString])
-                        } label: {
+                        // 4-4: peek at the meeting inline instead of jumping tabs.
+                        Button { meetingPeekShown = true } label: {
                             HStack(spacing: 4) {
                                 Text(item.meetingTitle).font(NDS.body).foregroundStyle(NDS.brand).lineLimit(1)
-                                Image(systemName: "arrow.up.right").font(.caption2).foregroundStyle(NDS.brand)
+                                Image(systemName: "chevron.down").font(.caption2).foregroundStyle(NDS.brand)
                             }
                         }
                         .buttonStyle(.plain)
+                        .popover(isPresented: $meetingPeekShown, arrowEdge: .bottom) {
+                            MeetingPeekPanel(meetingID: item.meetingID, onOpenFull: { openSourceMeeting(item) })
+                        }
                     }
                 }
             }
@@ -446,10 +451,62 @@ struct TaskPageView: View {
 
     private var bodyEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            NotionEyebrow(text: "Notes")
+            HStack {
+                NotionEyebrow(text: "Notes")
+                Spacer()
+                // 4-3: pull the source meeting's summary into the task notes.
+                if let item, !item.isManual {
+                    Button { insertMeetingContext(item) } label: {
+                        Label("Insert meeting notes", systemImage: "calendar.badge.plus")
+                            .font(NDS.small)
+                    }
+                    .buttonStyle(.borderless).foregroundStyle(NDS.brand)
+                }
+            }
             RichMarkdownEditor(text: $noteDraft, placeholder: "Type / for blocks, or just start writing…")
                 .frame(minHeight: 240, maxHeight: 520)
         }
+    }
+
+    /// Meeting provenance banner (4-5): a brand-accented card linking the task
+    /// back to the call it came from.
+    private func provenanceStrip(_ item: ActionItem) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar").foregroundStyle(NDS.brand)
+            Text("From \(item.meetingTitle)").font(NDS.small).foregroundStyle(NDS.textSecondary).lineLimit(1)
+            Spacer()
+            Button("View") { meetingPeekShown = true }
+                .font(NDS.small).buttonStyle(.plain).foregroundStyle(NDS.brand)
+        }
+        .padding(10)
+        .background(NDS.brand.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1.5).fill(NDS.brand).frame(width: 3).padding(.vertical, 4)
+        }
+    }
+
+    /// Opens the full source meeting in the Meetings tab (4-4 "Open full meeting").
+    private func openSourceMeeting(_ item: ActionItem) {
+        meetingPeekShown = false
+        if let m = manager.meeting(id: item.meetingID) {
+            router.openMeeting(m)
+        } else {
+            NotificationCenter.default.post(
+                name: .meetingScribeOpenEntity, object: nil,
+                userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: item.meetingID).absoluteString])
+        }
+    }
+
+    /// Appends the source meeting's summary excerpt to the task notes (4-3).
+    private func insertMeetingContext(_ item: ActionItem) {
+        guard let summary = manager.summaryText(forMeetingID: item.meetingID), !summary.isEmpty else {
+            ToastCenter.shared.show("No summary found for that meeting yet")
+            return
+        }
+        let block = "\n\n---\n**From:** \(item.meetingTitle)\n\n\(summary.prefix(2000))"
+        noteDraft += block
+        scheduleSave()
+        ToastCenter.shared.show("Inserted meeting notes")
     }
 
     // MARK: Helpers

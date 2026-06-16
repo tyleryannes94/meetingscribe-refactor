@@ -624,6 +624,18 @@ final class MeetingManager: ObservableObject {
         return updated
     }
 
+    /// The loaded meeting with this id, if any (Phase 4 task↔meeting links).
+    func meeting(id: String) -> Meeting? { pastMeetings.first { $0.id == id } }
+
+    /// Reads a meeting's `summary.md` off disk (4-3 / 4-4). Returns nil when the
+    /// meeting isn't loaded or has no summary yet.
+    func summaryText(forMeetingID id: String) -> String? {
+        guard let m = meeting(id: id) else { return nil }
+        let dir = store.directory(for: m, primaryTag: tagStore.primaryTag(for: m))
+        let url = dir.appendingPathComponent("summary.md")
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
     /// Pure, disk-free attendee-dedup helper (testable). Case-insensitive on the
     /// whole attendee string; returns nil when blank or already present.
     nonisolated static func meeting(_ meeting: Meeting, addingAttendee attendee: String) -> Meeting? {

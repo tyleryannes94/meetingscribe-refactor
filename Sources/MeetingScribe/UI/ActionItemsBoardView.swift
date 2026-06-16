@@ -108,8 +108,12 @@ extension ActionItemsView {
                         }
                     }
                 }
-                Text(item.title).font(.caption).lineLimit(3)
-                    .strikethrough(item.status == .completed)
+                HStack(alignment: .top, spacing: 4) {
+                    Text(item.title).font(.caption).lineLimit(3)
+                        .strikethrough(item.status == .completed)
+                    Spacer(minLength: 4)
+                    TaskSourceBadge(item: item)
+                }
                 if item.subtaskProgress.total > 0 {
                     Label("\(item.subtaskProgress.done)/\(item.subtaskProgress.total)", systemImage: "checklist")
                         .font(.caption2).foregroundStyle(.secondary)
