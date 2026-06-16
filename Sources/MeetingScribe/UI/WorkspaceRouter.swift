@@ -64,6 +64,17 @@ final class WorkspaceRouter: ObservableObject {
     /// which selects the task and clears this. Mirrors the `pendingRoute` pattern.
     @Published var pendingTaskID: String?
 
+    /// One-shot: a Tasks-pane rail sentinel to land on (4-7) — e.g. the triage
+    /// inbox. Set by surfaces outside Tasks (the meeting summary); consumed by
+    /// `ActionItemsView` which applies it to `TasksEnvironment` and clears it.
+    @Published var pendingTasksRoute: String?
+
+    /// Deep-link into the Tasks tab at a specific rail sentinel (4-7).
+    func openTasks(route sentinel: String) {
+        pendingTasksRoute = sentinel
+        section = .actions
+    }
+
     /// Clear the mailbox once a destination view has acted on it.
     func consume(_ route: PendingRoute) {
         if pendingRoute == route { pendingRoute = nil }
