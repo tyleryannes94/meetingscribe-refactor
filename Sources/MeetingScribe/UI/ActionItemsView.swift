@@ -30,6 +30,12 @@ struct ActionItemsView: View {
     @State var lastSelectedTaskID: String?
     // Resizable, persisted Tasks sidebar width (TK-8 — was a fixed 230).
     @AppStorage("tasks.railWidth") var railWidth: Double = 230
+    // Persisted Tasks selection across relaunches / multiple windows (3-10).
+    // Empty string = nil; only restored when something was actually saved.
+    @SceneStorage("tasks.sel.project") var sceneProject: String = ""
+    @SceneStorage("tasks.sel.task") var sceneTask: String = ""
+    @SceneStorage("tasks.sel.initiative") var sceneInitiative: String = ""
+    @State var didRestoreScene = false
     @State var railDragStart: Double?
     // Trash sheet (P0-3): restore or permanently remove soft-deleted tasks.
     @State var showTrash = false
@@ -50,6 +56,9 @@ struct ActionItemsView: View {
     @State var kbEditID: String?
     @State var kbEditKind: KbEdit?
     enum KbEdit { case date, estimate, move }
+    // Initiative roll-up quick-add (3-2).
+    @State var initiativeAddText = ""
+    @State var initiativeAddProjectID: String?
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board, calendar, gallery
@@ -170,12 +179,10 @@ struct ActionItemsView: View {
                 case .task(let tid) where store.items.contains(where: { $0.id == tid }):
                     TaskPageView(store: store, itemID: tid,
                                  breadcrumb: taskBreadcrumb,
-                                 onClose: { env.selectedTaskID = nil })
+                                 onClose: { env.selectedTaskID = nil },
+                                 onNavigate: { env.go($0) })
                 case .initiative(let iid) where store.initiative(id: iid) != nil:
-                    InitiativePage(store: store, initiativeID: iid,
-                                   onOpenProject: { pid in
-                                       env.selectedInitiativeID = nil; env.selectedProjectID = pid
-                                   })
+                    initiativeRollup(iid)
                 case .triage:
                     TriageInboxView(store: store) { mid in
                         env.selectedMeetingID = mid
@@ -203,6 +210,7 @@ struct ActionItemsView: View {
         .onAppear {
             manager.refreshPastMeetings()
             manager.backfillActionItemsIfNeeded()
+            restoreSceneSelection()
             consumePendingTask()
         }
         .onChange(of: router.pendingTaskID) { _, _ in consumePendingTask() }
@@ -223,7 +231,11 @@ struct ActionItemsView: View {
         .onChange(of: env.selectedMeetingID) { _, _ in env.selectedTaskID = nil }
         .onChange(of: env.selectedInitiativeID) { _, v in
             if v != nil { env.selectedTaskID = nil; env.selectedMeetingID = nil }
+            sceneInitiative = v ?? ""
         }
+        // Persist Tasks selection across relaunch / new windows (3-10).
+        .onChange(of: env.selectedProjectID) { _, v in sceneProject = v ?? "" }
+        .onChange(of: env.selectedTaskID) { _, v in sceneTask = v ?? "" }
         .sheet(isPresented: $showTrash) {
             TaskTrashView(store: store)
         }
@@ -238,6 +250,20 @@ struct ActionItemsView: View {
     /// Opens a task deep-linked from outside the Tasks tab (e.g. the home-page
     /// Kanban). Shows "All tasks" so the item is in scope, selects it, and clears
     /// the one-shot channel.
+    /// Restores the Tasks selection saved by `@SceneStorage` (3-10), once per
+    /// view lifetime, only when something was actually persisted (so a fresh
+    /// scene still lands on the Today default).
+    func restoreSceneSelection() {
+        guard !didRestoreScene else { return }
+        didRestoreScene = true
+        guard !sceneProject.isEmpty || !sceneTask.isEmpty || !sceneInitiative.isEmpty else { return }
+        if !sceneProject.isEmpty { env.selectedProjectID = sceneProject }
+        if !sceneInitiative.isEmpty { env.selectedInitiativeID = sceneInitiative }
+        if !sceneTask.isEmpty, store.items.contains(where: { $0.id == sceneTask }) {
+            env.selectedTaskID = sceneTask
+        }
+    }
+
     func consumePendingTask() {
         guard let tid = router.pendingTaskID, store.items.contains(where: { $0.id == tid }) else { return }
         env.selectedProjectID = nil

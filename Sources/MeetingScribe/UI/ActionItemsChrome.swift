@@ -128,10 +128,32 @@ extension ActionItemsView {
 
     // MARK: - Project page (Notion-style: header → sub-pages → database/add)
 
+    /// Context › Initiative › Project trail above a project pane (3-6).
+    @ViewBuilder
+    func projectCrumbBar(_ project: Project) -> some View {
+        let initiative = project.initiativeID.flatMap { store.initiative(id: $0) }
+        var crumbs: [BreadcrumbItem] {
+            var c: [BreadcrumbItem] = [BreadcrumbItem(label: "Tasks", systemImage: "chevron.left",
+                                                      action: { env.selectedProjectID = nil })]
+            if let cid = initiative?.contextID, let ctx = store.context(id: cid) {
+                c.append(BreadcrumbItem(label: ctx.name, color: store.contextColor(id: cid), action: nil))
+            }
+            if let initiative {
+                c.append(BreadcrumbItem(label: initiative.name, systemImage: initiative.icon ?? "flag.fill",
+                                        action: { env.go(.initiative(initiative.id)) }))
+            }
+            c.append(BreadcrumbItem(label: project.name, systemImage: project.icon ?? "doc.text", action: nil))
+            return c
+        }
+        BreadcrumbBar(items: crumbs)
+            .padding(.horizontal, 32).padding(.top, 14).padding(.bottom, 2)
+    }
+
     @ViewBuilder
     func projectPane(_ project: Project) -> some View {
         let kids = store.childProjects(of: project.id)
         if store.pageHasDatabase(project) {
+            projectCrumbBar(project)
             ProjectPageHeader(store: store, project: project, bodyFills: false,
                               onOpenInitiative: { env.selectedInitiativeID = $0 },
                               onOpenProject: { env.selectedProjectID = $0 })
@@ -144,6 +166,7 @@ extension ActionItemsView {
             // Free-form page: the markdown editor IS the page. Sections are
             // headings, to-dos are checkboxes — all authored inline. A
             // database is the one thing you add as a separate block.
+            projectCrumbBar(project)
             ProjectPageHeader(store: store, project: project, bodyFills: true,
                               onOpenInitiative: { env.selectedInitiativeID = $0 },
                               onOpenProject: { env.selectedProjectID = $0 })

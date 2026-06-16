@@ -20,6 +20,10 @@ struct TaskQuery: Codable, Hashable, Sendable {
         /// Tasks across an explicit set of project ids (e.g. an initiative's
         /// projects — the caller resolves membership so the engine stays pure).
         case anyProjects(Set<String>)
+        /// All tasks under an initiative (3-3). `ActionItemStore.tasks(matching:)`
+        /// pre-resolves this to `.anyProjects(initiative's projects)` before the
+        /// engine runs, so the engine itself stays pure.
+        case initiative(String)
         case person(String)
         case meeting(String)
         /// Tasks whose effective workspace context is this one (1-1). The store
@@ -136,6 +140,11 @@ enum TaskQueryEngine {
         case .person(let id): if item.ownerPersonID != id { return false }
         case .meeting(let id): if item.meetingID != id { return false }
         case .context(let id): if item.contextID != id { return false }
+        case .initiative:
+            // Pre-resolved to `.anyProjects` by ActionItemStore.tasks(matching:);
+            // if it ever reaches the pure engine unresolved, match nothing rather
+            // than silently returning everything.
+            return false
         }
 
         let f = query.filters
