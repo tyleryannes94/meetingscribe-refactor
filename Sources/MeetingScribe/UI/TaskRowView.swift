@@ -12,7 +12,10 @@ struct ActionItemRow: View {
     let assignedLabels: [TaskLabel]
     let isPushing: Bool
     let isExpanded: Bool
+    /// Single-tap: toggles the inline detail editor (P0-2).
     let onToggleExpand: () -> Void
+    /// Double-click / "Open as page": opens the full task page (P0-2).
+    let onOpenPage: () -> Void
     let onStatus: (ActionItem.Status) -> Void
     let onPriority: (ActionItem.Priority) -> Void
     let onDue: (Date?) -> Void
@@ -177,6 +180,7 @@ struct ActionItemRow: View {
             syncButtons
             Menu {
                 Button("Edit details") { onToggleExpand() }
+                Button("Open as page") { onOpenPage() }
                 Menu("Move to project") {
                     Button("No project") { onProject(nil) }
                     Divider()
@@ -207,6 +211,9 @@ struct ActionItemRow: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .contentShape(Rectangle())
+        // Double-click opens the full page; single-tap expands inline (P0-2).
+        // The 2-count gesture must precede the 1-count so SwiftUI can disambiguate.
+        .onTapGesture(count: 2) { onOpenPage() }
         .onTapGesture { onToggleExpand() }
     }
 

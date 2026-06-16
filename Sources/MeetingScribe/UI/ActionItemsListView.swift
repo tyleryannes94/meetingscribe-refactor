@@ -338,6 +338,11 @@ extension ActionItemsView {
             isPushing: vm.pushingIDs.contains(item.id),
             isExpanded: vm.editingID == item.id,
             onToggleExpand: {
+                // P0-2: single tap expands the inline detail editor in place.
+                vm.editingID = (vm.editingID == item.id) ? nil : item.id
+            },
+            onOpenPage: {
+                // Double-click (or ⏎ on the keyboard cursor) opens the full page.
                 env.selectedTaskID = item.id
             },
             onStatus: { store.setStatus(item.id, status: $0) },
