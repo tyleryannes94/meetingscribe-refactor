@@ -128,8 +128,8 @@ extension ActionItemsView {
         }
         .padding(.vertical, 7)
         .contentShape(Rectangle())
-        .onTapGesture { selectedTaskID = item.id }
-        .contextMenu { TaskQuickMenu(item: item, store: store, onOpen: { selectedTaskID = item.id }) }
+        .onTapGesture { env.selectedTaskID = item.id }
+        .contextMenu { TaskQuickMenu(item: item, store: store, onOpen: { env.selectedTaskID = item.id }) }
     }
 
     @ViewBuilder

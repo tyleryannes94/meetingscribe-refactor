@@ -71,8 +71,8 @@ extension ActionItemsView {
                         .background(taskDueTint(t).opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
                         .foregroundStyle(taskDueTint(t))
                         .contentShape(Rectangle())
-                        .onTapGesture { selectedTaskID = t.id }
-                        .contextMenu { TaskQuickMenu(item: t, store: store, onOpen: { selectedTaskID = t.id }) }
+                        .onTapGesture { env.selectedTaskID = t.id }
+                        .contextMenu { TaskQuickMenu(item: t, store: store, onOpen: { env.selectedTaskID = t.id }) }
                 }
                 if tasks.count > 3 {
                     Text("+\(tasks.count - 3) more").scaledFont(8).foregroundStyle(NDS.textTertiary)

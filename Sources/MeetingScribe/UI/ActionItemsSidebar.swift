@@ -10,9 +10,8 @@ struct ProjectRail: View {
     /// records change. Defaulted so the call site needs no new plumbing.
     @ObservedObject private var peopleStore = PeopleStore.shared
     let meetings: [Meeting]
-    @Binding var selectedProjectID: String?
-    @Binding var selectedMeetingID: String?
-    @Binding var selectedInitiativeID: String?
+    /// Shared Tasks selection (A0-3) — replaces three threaded `@Binding`s.
+    @EnvironmentObject var env: TasksEnvironment
     /// Collapsible state for the People facet section.
     @State private var peopleExpanded = true
     /// Collapsible state for the Waiting-on (delegated) section.
@@ -83,9 +82,6 @@ struct ProjectRail: View {
                     }
                     ForEach(store.sortedInitiatives()) { ini in
                         InitiativeNode(store: store, initiative: ini,
-                                       selectedProjectID: $selectedProjectID,
-                                       selectedMeetingID: $selectedMeetingID,
-                                       selectedInitiativeID: $selectedInitiativeID,
                                        expandedInitiatives: $expandedInitiatives,
                                        expandedPages: $expandedPages)
                     }
@@ -107,9 +103,6 @@ struct ProjectRail: View {
                     }
                     ForEach(store.standaloneTopProjects()) { p in
                         PageTreeNode(store: store, project: p, depth: 0,
-                                     selectedProjectID: $selectedProjectID,
-                                     selectedMeetingID: $selectedMeetingID,
-                                     selectedInitiativeID: $selectedInitiativeID,
                                      expanded: $expandedPages)
                     }
                     if creating {
@@ -178,9 +171,9 @@ struct ProjectRail: View {
         newName = ""
         guard !n.isEmpty else { return }
         let p = store.createProject(name: n)
-        selectedMeetingID = nil
-        selectedInitiativeID = nil
-        selectedProjectID = p.id
+        env.selectedMeetingID = nil
+        env.selectedInitiativeID = nil
+        env.selectedProjectID = p.id
     }
 
     private func commitInitiative() {
@@ -189,18 +182,18 @@ struct ProjectRail: View {
         newInitiativeName = ""
         guard !n.isEmpty else { return }
         let i = store.createInitiative(name: n)
-        selectedProjectID = nil
-        selectedMeetingID = nil
-        selectedInitiativeID = i.id
+        env.selectedProjectID = nil
+        env.selectedMeetingID = nil
+        env.selectedInitiativeID = i.id
     }
 
     private func meetingItem(_ m: Meeting) -> some View {
-        let selected = selectedMeetingID == m.id
+        let selected = env.selectedMeetingID == m.id
         let openTasks = store.items(for: m.id).filter { $0.status != .completed }.count
         return SidebarRow(selected: selected) {
-            selectedProjectID = nil
-            selectedInitiativeID = nil
-            selectedMeetingID = m.id
+            env.selectedProjectID = nil
+            env.selectedInitiativeID = nil
+            env.selectedMeetingID = m.id
         } content: {
             HStack(spacing: 8) {
                 Image(systemName: "doc.text")
@@ -226,11 +219,11 @@ struct ProjectRail: View {
     }
 
     private func railItem(title: String, icon: String, count: Int, id: String?) -> some View {
-        let selected = selectedMeetingID == nil && selectedInitiativeID == nil && selectedProjectID == id
+        let selected = env.selectedMeetingID == nil && env.selectedInitiativeID == nil && env.selectedProjectID == id
         return SidebarRow(selected: selected) {
-            selectedMeetingID = nil
-            selectedInitiativeID = nil
-            selectedProjectID = id
+            env.selectedMeetingID = nil
+            env.selectedInitiativeID = nil
+            env.selectedProjectID = id
         } content: {
             HStack(spacing: 8) {
                 Image(systemName: icon)
@@ -248,7 +241,7 @@ struct ProjectRail: View {
         .contextMenu {
             if let id, id != ActionItemsView.noProjectSentinel {
                 Button(role: .destructive) {
-                    if selectedProjectID == id { selectedProjectID = nil }
+                    if env.selectedProjectID == id { env.selectedProjectID = nil }
                     let name = store.project(id: id)?.name ?? "project"
                     if let undo = store.deleteProjectWithUndo(id) {
                         ToastCenter.shared.show("Deleted “\(name)”", undoTitle: "Undo", undo: undo)
@@ -295,11 +288,11 @@ struct ProjectRail: View {
 
     private func personRow(_ person: Person, open: Int) -> some View {
         let sentinel = ActionItemsView.personSentinel(person.id)
-        let selected = selectedMeetingID == nil && selectedInitiativeID == nil && selectedProjectID == sentinel
+        let selected = env.selectedMeetingID == nil && env.selectedInitiativeID == nil && env.selectedProjectID == sentinel
         return SidebarRow(selected: selected) {
-            selectedMeetingID = nil
-            selectedInitiativeID = nil
-            selectedProjectID = sentinel
+            env.selectedMeetingID = nil
+            env.selectedInitiativeID = nil
+            env.selectedProjectID = sentinel
         } content: {
             HStack(spacing: 8) {
                 Image(systemName: "person.crop.circle.fill")
@@ -340,8 +333,8 @@ struct ProjectRail: View {
     }
 
     private func waitingHeader(count: Int) -> some View {
-        let selected = selectedProjectID == ActionItemsView.waitingSentinel
-            && selectedMeetingID == nil && selectedInitiativeID == nil
+        let selected = env.selectedProjectID == ActionItemsView.waitingSentinel
+            && env.selectedMeetingID == nil && env.selectedInitiativeID == nil
         return HStack(spacing: 3) {
             Button {
                 withAnimation(.easeOut(duration: 0.15)) { waitingExpanded.toggle() }
@@ -368,9 +361,9 @@ struct ProjectRail: View {
                     in: RoundedRectangle(cornerRadius: NDS.rowRadius))
         .contentShape(Rectangle())
         .onTapGesture {
-            selectedMeetingID = nil
-            selectedInitiativeID = nil
-            selectedProjectID = ActionItemsView.waitingSentinel
+            env.selectedMeetingID = nil
+            env.selectedInitiativeID = nil
+            env.selectedProjectID = ActionItemsView.waitingSentinel
         }
         .padding(.top, 6)
     }
@@ -486,15 +479,13 @@ struct PageTreeNode: View {
     @ObservedObject var store: ActionItemStore
     let project: Project
     let depth: Int
-    @Binding var selectedProjectID: String?
-    @Binding var selectedMeetingID: String?
-    @Binding var selectedInitiativeID: String?
+    @EnvironmentObject var env: TasksEnvironment
     @Binding var expanded: Set<String>
     @State private var hovering = false
     @State private var addingChild = false
     @State private var childName = ""
 
-    private var isSelected: Bool { selectedMeetingID == nil && selectedInitiativeID == nil && selectedProjectID == project.id }
+    private var isSelected: Bool { env.selectedMeetingID == nil && env.selectedInitiativeID == nil && env.selectedProjectID == project.id }
     private var children: [Project] { store.childProjects(of: project.id) }
     private var isOpen: Bool { expanded.contains(project.id) }
 
@@ -504,9 +495,6 @@ struct PageTreeNode: View {
             if isOpen {
                 ForEach(children) { c in
                     PageTreeNode(store: store, project: c, depth: depth + 1,
-                                 selectedProjectID: $selectedProjectID,
-                                 selectedMeetingID: $selectedMeetingID,
-                                 selectedInitiativeID: $selectedInitiativeID,
                                  expanded: $expanded)
                 }
                 if addingChild {
@@ -559,12 +547,12 @@ struct PageTreeNode: View {
         .background(isSelected ? NDS.rowSelected : (hovering ? NDS.rowHover : .clear),
                     in: RoundedRectangle(cornerRadius: NDS.rowRadius))
         .contentShape(Rectangle())
-        .onTapGesture { selectedMeetingID = nil; selectedInitiativeID = nil; selectedProjectID = project.id }
+        .onTapGesture { env.selectedMeetingID = nil; env.selectedInitiativeID = nil; env.selectedProjectID = project.id }
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Add sub-page") { addingChild = true; expanded.insert(project.id) }
             Button(role: .destructive) {
-                if selectedProjectID == project.id { selectedProjectID = nil }
+                if env.selectedProjectID == project.id { env.selectedProjectID = nil }
                 let name = project.name
                 if let undo = store.deleteProjectKeepingChildrenWithUndo(project.id) {
                     ToastCenter.shared.show("Deleted “\(name)”", undoTitle: "Undo", undo: undo)
@@ -578,9 +566,9 @@ struct PageTreeNode: View {
         addingChild = false; childName = ""
         guard !n.isEmpty else { return }
         let p = store.createProject(name: n, parentID: project.id)
-        selectedMeetingID = nil
-        selectedInitiativeID = nil
-        selectedProjectID = p.id
+        env.selectedMeetingID = nil
+        env.selectedInitiativeID = nil
+        env.selectedProjectID = p.id
     }
 }
 
@@ -590,15 +578,13 @@ struct PageTreeNode: View {
 struct InitiativeNode: View {
     @ObservedObject var store: ActionItemStore
     let initiative: Initiative
-    @Binding var selectedProjectID: String?
-    @Binding var selectedMeetingID: String?
-    @Binding var selectedInitiativeID: String?
+    @EnvironmentObject var env: TasksEnvironment
     @Binding var expandedInitiatives: Set<String>
     @Binding var expandedPages: Set<String>
     @State private var hovering = false
 
     private var isOpen: Bool { expandedInitiatives.contains(initiative.id) }
-    private var isSelected: Bool { selectedInitiativeID == initiative.id }
+    private var isSelected: Bool { env.selectedInitiativeID == initiative.id }
     private var projects: [Project] { store.projects(forInitiative: initiative.id) }
 
     var body: some View {
@@ -624,7 +610,7 @@ struct InitiativeNode: View {
                         let p = store.createProject(name: "Untitled")
                         store.setProjectInitiative(p.id, initiativeID: initiative.id)
                         expandedInitiatives.insert(initiative.id)
-                        selectedInitiativeID = nil; selectedMeetingID = nil; selectedProjectID = p.id
+                        env.selectedInitiativeID = nil; env.selectedMeetingID = nil; env.selectedProjectID = p.id
                     } label: {
                         Image(systemName: "plus").scaledFont(10, weight: .bold).foregroundStyle(NDS.textTertiary)
                     }
@@ -641,13 +627,13 @@ struct InitiativeNode: View {
             .contentShape(Rectangle())
             // Single tap selects AND auto-expands children — no separate chevron needed.
             .onTapGesture {
-                selectedMeetingID = nil; selectedProjectID = nil; selectedInitiativeID = initiative.id
+                env.selectedMeetingID = nil; env.selectedProjectID = nil; env.selectedInitiativeID = initiative.id
                 if !isOpen { expandedInitiatives.insert(initiative.id) }
             }
             .onHover { hovering = $0 }
             .contextMenu {
                 Button(role: .destructive) {
-                    if selectedInitiativeID == initiative.id { selectedInitiativeID = nil }
+                    if env.selectedInitiativeID == initiative.id { env.selectedInitiativeID = nil }
                     let name = initiative.name
                     if let undo = store.deleteInitiativeWithUndo(initiative.id) {
                         ToastCenter.shared.show("Deleted “\(name)”", undoTitle: "Undo", undo: undo)
@@ -658,9 +644,6 @@ struct InitiativeNode: View {
             if isOpen {
                 ForEach(projects) { p in
                     PageTreeNode(store: store, project: p, depth: 1,
-                                 selectedProjectID: $selectedProjectID,
-                                 selectedMeetingID: $selectedMeetingID,
-                                 selectedInitiativeID: $selectedInitiativeID,
                                  expanded: $expandedPages)
                 }
                 if projects.isEmpty {

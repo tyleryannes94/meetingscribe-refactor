@@ -40,7 +40,7 @@ extension ActionItemsView {
                 Spacer()
                 Button {
                     let t = store.createTask(title: "New task", projectID: pid, sectionID: sectionID)
-                    selectedTaskID = t.id
+                    env.selectedTaskID = t.id
                 } label: { Image(systemName: "plus") }
                 .buttonStyle(.borderless).help("Add a task to this section")
                 .accessibilityLabel("Add a task to this section")
@@ -152,7 +152,7 @@ extension ActionItemsView {
         }
     }
     func openFocused() {
-        if let id = focusedTaskID { selectedTaskID = id }
+        if let id = focusedTaskID { env.selectedTaskID = id }
     }
     func toggleFocusedDone() {
         guard let id = focusedTaskID, let item = store.items.first(where: { $0.id == id }) else { return }
@@ -288,7 +288,7 @@ extension ActionItemsView {
             return filtered.filter { $0.delegated == true }
                 .sorted { $0.createdAt < $1.createdAt }
         }
-        guard let pid = selectedProjectID else { return filtered }
+        guard let pid = env.selectedProjectID else { return filtered }
         if pid == Self.noProjectSentinel {
             return filtered.filter { $0.projectID == nil }
         }
@@ -338,7 +338,7 @@ extension ActionItemsView {
             isPushing: vm.pushingIDs.contains(item.id),
             isExpanded: vm.editingID == item.id,
             onToggleExpand: {
-                selectedTaskID = item.id
+                env.selectedTaskID = item.id
             },
             onStatus: { store.setStatus(item.id, status: $0) },
             onPriority: { store.setPriority(item.id, priority: $0) },

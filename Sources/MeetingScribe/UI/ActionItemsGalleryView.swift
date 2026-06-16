@@ -55,7 +55,7 @@ extension ActionItemsView {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(NDS.divider, lineWidth: 0.5))
         .opacity(item.status == .completed ? 0.6 : 1)
         .contentShape(Rectangle())
-        .onTapGesture { selectedTaskID = item.id }
-        .contextMenu { TaskQuickMenu(item: item, store: store, onOpen: { selectedTaskID = item.id }) }
+        .onTapGesture { env.selectedTaskID = item.id }
+        .contextMenu { TaskQuickMenu(item: item, store: store, onOpen: { env.selectedTaskID = item.id }) }
     }
 }

@@ -17,19 +17,19 @@ extension ActionItemsView {
                           alignment: .leading, spacing: 10) {
                     QuickActionCard("New task", subtitle: "Add a task", systemImage: "plus",
                                     tint: NDS.selectColor("green")) {
-                        let t = store.createTask(title: "New task"); selectedProjectID = nil; selectedTaskID = t.id
+                        let t = store.createTask(title: "New task"); env.selectedProjectID = nil; env.selectedTaskID = t.id
                     }
                     QuickActionCard("New page", subtitle: "Add to your workspace",
                                     systemImage: "doc.badge.plus", tint: NDS.brand) {
-                        let p = store.createProject(name: "Untitled"); selectedTaskID = nil; selectedProjectID = p.id
+                        let p = store.createProject(name: "Untitled"); env.selectedTaskID = nil; env.selectedProjectID = p.id
                     }
                     QuickActionCard("All tasks", subtitle: "\(store.openItems().count) open",
                                     systemImage: "tray.full", tint: NDS.selectColor("blue")) {
-                        selectedTaskID = nil; selectedMeetingID = nil; selectedProjectID = nil
+                        env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = nil
                     }
                     QuickActionCard("Board", subtitle: "Kanban view",
                                     systemImage: "rectangle.split.3x1", tint: NDS.selectColor("orange")) {
-                        vm.viewMode = .board; selectedTaskID = nil; selectedMeetingID = nil; selectedProjectID = nil
+                        vm.viewMode = .board; env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = nil
                     }
                 }
 
@@ -39,7 +39,7 @@ extension ActionItemsView {
                         dashEmpty("No open tasks. Nice.")
                     } else {
                         ForEach(items) { item in
-                            Button { selectedProjectID = nil; selectedTaskID = item.id } label: {
+                            Button { env.selectedProjectID = nil; env.selectedTaskID = item.id } label: {
                                 HStack(spacing: 9) {
                                     Image(systemName: item.status.systemImage)
                                         .foregroundStyle(item.status == .inProgress ? NDS.selectColor("orange") : NDS.selectColor("blue"))
@@ -63,7 +63,7 @@ extension ActionItemsView {
                     if pages.isEmpty { dashEmpty("No pages yet — create one above.") }
                     else {
                         ForEach(pages) { p in
-                            Button { selectedTaskID = nil; selectedMeetingID = nil; selectedProjectID = p.id } label: {
+                            Button { env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = p.id } label: {
                                 HStack(spacing: 9) {
                                     Image(systemName: p.icon ?? "doc.text").foregroundStyle(NDS.selectColor(p.name))
                                     Text(p.name).font(NDS.body).lineLimit(1)
@@ -84,7 +84,7 @@ extension ActionItemsView {
                     if recent.isEmpty { dashEmpty("No meetings yet.") }
                     else {
                         ForEach(recent) { m in
-                            Button { selectedTaskID = nil; selectedProjectID = nil; selectedMeetingID = m.id } label: {
+                            Button { env.selectedTaskID = nil; env.selectedProjectID = nil; env.selectedMeetingID = m.id } label: {
                                 HStack(spacing: 9) {
                                     Image(systemName: "doc.text").foregroundStyle(NDS.textSecondary)
                                     Text(m.displayTitle).font(NDS.body).lineLimit(1)
@@ -133,8 +133,8 @@ extension ActionItemsView {
         let kids = store.childProjects(of: project.id)
         if store.pageHasDatabase(project) {
             ProjectPageHeader(store: store, project: project, bodyFills: false,
-                              onOpenInitiative: { selectedInitiativeID = $0 },
-                              onOpenProject: { selectedProjectID = $0 })
+                              onOpenInitiative: { env.selectedInitiativeID = $0 },
+                              onOpenProject: { env.selectedProjectID = $0 })
             if !kids.isEmpty { subPagesSection(project, kids: kids) }
             Divider().overlay(NDS.divider)
             toolbar
@@ -145,8 +145,8 @@ extension ActionItemsView {
             // headings, to-dos are checkboxes — all authored inline. A
             // database is the one thing you add as a separate block.
             ProjectPageHeader(store: store, project: project, bodyFills: true,
-                              onOpenInitiative: { selectedInitiativeID = $0 },
-                              onOpenProject: { selectedProjectID = $0 })
+                              onOpenInitiative: { env.selectedInitiativeID = $0 },
+                              onOpenProject: { env.selectedProjectID = $0 })
             docFooter(project, kids: kids)
         }
     }
@@ -168,7 +168,7 @@ extension ActionItemsView {
 
                 Button {
                     let p = store.createProject(name: "Untitled", parentID: project.id)
-                    selectedProjectID = p.id
+                    env.selectedProjectID = p.id
                 } label: {
                     Label("Add sub-page", systemImage: "doc.badge.plus").font(NDS.small)
                 }
@@ -179,7 +179,7 @@ extension ActionItemsView {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(kids) { k in
-                                Button { selectedMeetingID = nil; selectedTaskID = nil; selectedProjectID = k.id } label: {
+                                Button { env.selectedMeetingID = nil; env.selectedTaskID = nil; env.selectedProjectID = k.id } label: {
                                     NotionChip(k.name, color: NDS.selectColor(k.name), systemImage: k.icon ?? "doc.text")
                                 }
                                 .buttonStyle(.plain)
@@ -199,7 +199,7 @@ extension ActionItemsView {
                 .padding(.bottom, 2)
             ForEach(kids) { k in
                 Button {
-                    selectedMeetingID = nil; selectedTaskID = nil; selectedProjectID = k.id
+                    env.selectedMeetingID = nil; env.selectedTaskID = nil; env.selectedProjectID = k.id
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: k.icon ?? "doc.text").scaledFont(13)
@@ -506,7 +506,7 @@ extension ActionItemsView {
     }
 
     func addTask() {
-        let pid = (selectedProjectID == Self.noProjectSentinel) ? nil : selectedProjectID
+        let pid = (env.selectedProjectID == Self.noProjectSentinel) ? nil : env.selectedProjectID
         // Adding a task to a doc-only page turns its database on.
         if let pid, let p = store.project(id: pid), !store.pageHasDatabase(p) {
             store.setProjectDatabaseEnabled(pid, true)
@@ -514,7 +514,7 @@ extension ActionItemsView {
         let t = store.createTask(title: "New task", projectID: pid)
         vm.viewMode = .list
         if vm.filter == .completed { vm.filter = .all }
-        selectedTaskID = t.id
+        env.selectedTaskID = t.id
     }
 
     var emptyState: some View {

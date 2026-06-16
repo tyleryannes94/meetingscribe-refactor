@@ -9,9 +9,9 @@ extension ActionItemsView {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Button {
-                    let pid = (selectedProjectID == Self.noProjectSentinel) ? nil : selectedProjectID
+                    let pid = (env.selectedProjectID == Self.noProjectSentinel) ? nil : env.selectedProjectID
                     let t = store.createTask(title: "New task", projectID: pid, status: .open)
-                    selectedTaskID = t.id
+                    env.selectedTaskID = t.id
                 } label: {
                     Label("Add task", systemImage: "plus")
                 }
@@ -54,7 +54,7 @@ extension ActionItemsView {
                         status: status,
                         items: columnItems(status),
                         store: store,
-                        selectedTaskID: $selectedTaskID,
+                        selectedTaskID: $env.selectedTaskID,
                         viewMode: $vm.viewMode)
     }
 
@@ -237,8 +237,8 @@ private struct BoardColumnView: View {
                 .foregroundStyle(.tertiary)
             Spacer()
             Button {
-                let pid = (parent.selectedProjectID == ActionItemsView.noProjectSentinel)
-                    ? nil : parent.selectedProjectID
+                let pid = (parent.env.selectedProjectID == ActionItemsView.noProjectSentinel)
+                    ? nil : parent.env.selectedProjectID
                 let t = store.createTask(title: "New task", projectID: pid, status: status)
                 selectedTaskID = t.id
             } label: { Image(systemName: "plus") }
