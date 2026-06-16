@@ -429,6 +429,8 @@ extension ActionItemsView {
             return name
         case .label:
             return store.labels(for: item).first?.name ?? "No label"
+        case .sprint:
+            return store.sprintName(for: item) ?? "No sprint"
         default:
             return vm.groupKey(for: item)
         }
@@ -463,10 +465,12 @@ extension ActionItemsView {
             allLabels: store.labels,
             assignedLabels: store.labels(for: item),
             isPushing: vm.pushingIDs.contains(item.id),
-            isExpanded: vm.editingID == item.id,
+            // 6-3: the editor now lives in a right-side drawer, not inline, so the
+            // row never expands in place.
+            isExpanded: false,
             contextColor: store.contextColor(for: item),
             onToggleExpand: {
-                // P0-2: single tap expands the inline detail editor in place.
+                // Single tap toggles the property drawer (6-3) for this task.
                 vm.editingID = (vm.editingID == item.id) ? nil : item.id
             },
             onOpenPage: {

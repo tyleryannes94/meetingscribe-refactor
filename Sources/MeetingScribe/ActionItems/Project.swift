@@ -33,6 +33,8 @@ struct Project: Identifiable, Codable, Hashable {
     /// Optional target / due date for the project (PM-3). Drives the "due in N
     /// days" header chip. Optional so existing projects.json still decodes.
     var targetDate: Date?
+    /// Time-boxed cycles within this project (6-1). Additive + defaulted.
+    var sprints: [Sprint]? = nil
     /// User-defined database columns for this project's tasks (NP-1). Optional
     /// so existing projects.json still decodes.
     var propertyDefs: [PropertyDefinition]?

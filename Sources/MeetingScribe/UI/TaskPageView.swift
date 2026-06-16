@@ -325,6 +325,30 @@ struct TaskPageView: View {
                 }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
+            if let pid = item.projectID {
+                // Sprint / cycle (6-1).
+                NotionPropertyRow(icon: "circle.dashed", label: "Sprint") {
+                    Menu {
+                        Button("No sprint") { store.setTaskSprint(itemID, sprintID: nil) }
+                        Divider()
+                        ForEach(store.sprints(forProject: pid)) { s in
+                            Button(s.name) { store.setTaskSprint(itemID, sprintID: s.id) }
+                        }
+                        Divider()
+                        Button("New sprint…") {
+                            let s = store.createSprint(forProject: pid, name: "Sprint \((store.sprints(forProject: pid).count) + 1)")
+                            store.setTaskSprint(itemID, sprintID: s.id)
+                        }
+                    } label: {
+                        if let sid = item.sprintID, let s = store.sprint(sid, inProject: pid) {
+                            NotionChip(s.name, color: NDS.brand, systemImage: "circle.dashed")
+                        } else {
+                            Text("Empty").font(NDS.body).foregroundStyle(NDS.textTertiary)
+                        }
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                }
+            }
             if let pid = item.projectID, !store.sections(forProject: pid).isEmpty {
                 NotionPropertyRow(icon: "rectangle.split.1x2", label: "Section") {
                     Menu {

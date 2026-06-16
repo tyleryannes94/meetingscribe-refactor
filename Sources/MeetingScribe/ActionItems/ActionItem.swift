@@ -41,6 +41,9 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// directly for an unfiled task. Optional + defaulted so old JSON decodes.
     var contextID: String? = nil
 
+    /// Sprint/cycle this task belongs to within its project (6-1).
+    var sprintID: String? = nil
+
     // MARK: - Phase 5 task-tracker fields (all optional → old JSON still decodes)
 
     /// When work should begin (Asana/Linear style start date).

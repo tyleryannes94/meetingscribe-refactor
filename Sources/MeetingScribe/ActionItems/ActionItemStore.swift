@@ -152,7 +152,21 @@ final class ActionItemStore: ObservableObject {
         _ url: URL, version: Int,
         migrate: ((_ payload: [T], _ from: Int, _ to: Int) -> [T])? = nil
     ) -> [T] {
-        guard let data = try? Data(contentsOf: url) else { return [] }
+        if let arr: [T] = decodeOne(url, version: version, migrate: migrate) { return arr }
+        // 6-4 recovery: the main file is missing or corrupt — fall back to the
+        // last-good write-ahead backup before giving up (returning []).
+        let backup = url.appendingPathExtension("bak")
+        if let arr: [T] = decodeOne(backup, version: version, migrate: migrate) { return arr }
+        return []
+    }
+
+    /// Decode one file, returning nil (rather than []) so the caller can tell a
+    /// genuine decode failure (→ try `.bak`) from a successfully-empty file.
+    nonisolated private static func decodeOne<T: Codable>(
+        _ url: URL, version: Int,
+        migrate: ((_ payload: [T], _ from: Int, _ to: Int) -> [T])?
+    ) -> [T]? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
         let wrapped: (([T], Int, Int) -> [T])? = migrate.map { m in
             { payload, from, to in
                 TaskSchemaMigrations.backupBeforeMigration(url, from: from, to: to)
@@ -164,7 +178,7 @@ final class ActionItemStore: ObservableObject {
             currentVersion: version,
             decoder: SharedCoders.decoder(),
             migrate: wrapped)
-        else { return [] }
+        else { return nil }
         return arr
     }
 
@@ -1459,6 +1473,36 @@ final class ActionItemStore: ObservableObject {
     func setProjectIcon(_ id: String, icon: String?) { updateProject(id) { $0.icon = icon } }
     func setProjectStatus(_ id: String, status: Project.Status) { updateProject(id) { $0.status = status } }
     func setProjectTargetDate(_ id: String, _ date: Date?) { updateProject(id) { $0.targetDate = date } }
+
+    // MARK: - Sprints / cycles (6-1)
+
+    func sprints(forProject id: String) -> [Sprint] {
+        (projects.first { $0.id == id }?.sprints ?? []).sorted { $0.startDate < $1.startDate }
+    }
+    func sprint(_ sprintID: String, inProject projectID: String) -> Sprint? {
+        projects.first { $0.id == projectID }?.sprints?.first { $0.id == sprintID }
+    }
+    @discardableResult
+    func createSprint(forProject projectID: String, name: String) -> Sprint {
+        let s = Sprint.twoWeek(name: name)
+        updateProject(projectID) { $0.sprints = ($0.sprints ?? []) + [s] }
+        return s
+    }
+    func deleteSprint(_ sprintID: String, fromProject projectID: String) {
+        updateProject(projectID) { $0.sprints = ($0.sprints ?? []).filter { $0.id != sprintID } }
+        var changed = false
+        for i in items.indices where items[i].sprintID == sprintID {
+            items[i].sprintID = nil; items[i].updatedAt = Date(); changed = true
+        }
+        if changed { save() }
+    }
+    func setTaskSprint(_ id: String, sprintID: String?) { update(id) { $0.sprintID = sprintID } }
+
+    /// Resolve a task's sprint name (for grouping / display), if any (6-1).
+    func sprintName(for item: ActionItem) -> String? {
+        guard let sid = item.sprintID, let pid = item.projectID else { return nil }
+        return sprint(sid, inProject: pid)?.name
+    }
 
     // MARK: - Custom database properties (NP-1)
 
