@@ -418,6 +418,9 @@ extension ActionItemsView {
 
             // Overflow
             Menu {
+                Button { showJumpPalette = true } label: {
+                    Label("Jump to… (⌘K)", systemImage: "magnifyingglass")
+                }
                 Button { store.undoLastChange() } label: {
                     Label("Undo last change", systemImage: "arrow.uturn.backward")
                 }
