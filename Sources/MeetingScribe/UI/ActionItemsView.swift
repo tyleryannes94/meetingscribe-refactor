@@ -10,35 +10,19 @@ struct ActionItemsView: View {
     @EnvironmentObject var router: WorkspaceRouter
     @ObservedObject var store: ActionItemStore
 
-    @State var filter: Filter = .all
-    @State var priorityFilter: PriorityFilter = .any
-    /// Whether to show everyone's tasks or just the current user's (P2-2).
-    @State var ownerScope: OwnerScope = .anyone
-    @State var search: String = ""
-    @State var pushingIDs: Set<String> = []
-    @State var lastError: String?
-    @State var editingID: String?
-    @State var groupBy: GroupBy = .none
-    @State var viewMode: ViewMode = .list
-    /// "__home__" = dashboard; nil = All tasks; "__none__" = No project; else a project id.
-    // Default to nil (All Tasks) so the first click into Tasks shows every
-    // open item immediately, not the dashboard. Dashboard is one click away.
-    @State var selectedProjectID: String? = nil
-    /// When set, the right pane shows that meeting's notes page instead of
-    /// the task database.
-    @State var selectedMeetingID: String?
-    /// When set, the right pane shows that task as a full Notion-style page.
-    @State var selectedTaskID: String?
-    /// When set, the right pane shows that initiative's page.
-    @State var selectedInitiativeID: String?
+    /// Single owner of filter / sort / view / group state and the canonical
+    /// filter implementation (A0-1). Replaces ~11 parallel `@State` vars and a
+    /// diverged dead copy of the filter logic.
+    @State var vm = ActionItemsViewModel()
+    /// Shared selection state (A0-3): project / meeting / initiative / task. Was
+    /// four `@State` optionals threaded as bindings through the sidebar; now a
+    /// single environment object so `ProjectRail` & nodes drop their prop
+    /// drilling. `env.route` (A0-2) is the typed projection the router uses.
+    @StateObject var env = TasksEnvironment()
     @State var addingSection = false
     @State var newSectionName = ""
     @State var renameSectionID: String?
     @State var renameSectionDraft = ""
-    /// Table sort state.
-    @State var tableSort: TableSort = .priority
-    @State var tableSortAscending = false
-
     // Multi-select + bulk actions (TK-3/TK-4).
     @State var taskSelectMode = false
     @State var taskSelection: Set<String> = []
@@ -76,9 +60,9 @@ struct ActionItemsView: View {
     static let noProjectSentinel = "__none__"
     static let homeSentinel = "__home__"
     static let triageSentinel = "__triage__"
-    /// People facet (P2-2): a person scope is encoded into `selectedProjectID`
+    /// People facet (P2-2): a person scope is encoded into `env.selectedProjectID`
     /// as `"__person__<personID>"` so it shares the single left-column
-    /// selection model — any other rail tap that sets `selectedProjectID`
+    /// selection model — any other rail tap that sets `env.selectedProjectID`
     /// naturally clears the person scope.
     static let personSentinelPrefix = "__person__"
     static func personSentinel(_ id: String) -> String { personSentinelPrefix + id }
@@ -87,13 +71,13 @@ struct ActionItemsView: View {
     static let waitingSentinel = "__waiting__"
 
     /// The person id currently scoping the task list, if a People-facet row is
-    /// selected in the rail (P2-2). Decoded from `selectedProjectID`.
+    /// selected in the rail (P2-2). Decoded from `env.selectedProjectID`.
     var selectedPersonID: String? {
-        guard let pid = selectedProjectID, pid.hasPrefix(Self.personSentinelPrefix) else { return nil }
+        guard let pid = env.selectedProjectID, pid.hasPrefix(Self.personSentinelPrefix) else { return nil }
         return String(pid.dropFirst(Self.personSentinelPrefix.count))
     }
     /// True when the rail's "Waiting on" bucket is selected (P2-6).
-    var isWaitingScope: Bool { selectedProjectID == Self.waitingSentinel }
+    var isWaitingScope: Bool { env.selectedProjectID == Self.waitingSentinel }
 
     enum Filter: String, CaseIterable, Identifiable {
         case all, thisWeek, open, inProgress, completed, upcoming, overdue
@@ -151,10 +135,8 @@ struct ActionItemsView: View {
     var body: some View {
         HStack(spacing: 0) {
             ProjectRail(store: store,
-                        meetings: manager.pastMeetings,
-                        selectedProjectID: $selectedProjectID,
-                        selectedMeetingID: $selectedMeetingID,
-                        selectedInitiativeID: $selectedInitiativeID)
+                        meetings: manager.pastMeetings)
+                .environmentObject(env)
                 .frame(width: CGFloat(railWidth))
             // Draggable divider — resizes + persists the sidebar width. (TK-8)
             Divider().overlay(NDS.divider)
@@ -172,31 +154,36 @@ struct ActionItemsView: View {
                     if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
                 }
             Group {
-                if let tid = selectedTaskID, store.items.contains(where: { $0.id == tid }) {
+                // A0-2: route on the typed `TasksRoute` projection instead of
+                // sentinel-string comparisons. Guards that fail (a task/initiative
+                // id that no longer exists) fall through to `taskDatabasePane`.
+                switch env.route {
+                case .task(let tid) where store.items.contains(where: { $0.id == tid }):
                     TaskPageView(store: store, itemID: tid,
                                  breadcrumb: taskBreadcrumb,
-                                 onClose: { selectedTaskID = nil })
-                } else if let iid = selectedInitiativeID, store.initiative(id: iid) != nil {
+                                 onClose: { env.selectedTaskID = nil })
+                case .initiative(let iid) where store.initiative(id: iid) != nil:
                     InitiativePage(store: store, initiativeID: iid,
                                    onOpenProject: { pid in
-                                       selectedInitiativeID = nil; selectedProjectID = pid
+                                       env.selectedInitiativeID = nil; env.selectedProjectID = pid
                                    })
-                } else if selectedProjectID == Self.triageSentinel && selectedMeetingID == nil {
+                case .triage:
                     TriageInboxView(store: store) { mid in
-                        selectedMeetingID = mid
-                        selectedProjectID = nil
+                        env.selectedMeetingID = mid
+                        env.selectedProjectID = nil
                     }
-                } else if selectedProjectID == Self.homeSentinel && selectedMeetingID == nil {
+                case .home:
                     tasksDashboard
-                } else if let mid = selectedMeetingID,
-                   let m = manager.pastMeetings.first(where: { $0.id == mid }) {
+                case .meeting(let mid) where manager.pastMeetings.contains(where: { $0.id == mid }):
                     // D1-4: one canonical meeting surface. Instead of the parallel
                     // MeetingNotesPage, route to the Meetings-tab detail.
                     Color.clear.onAppear {
-                        router.openMeeting(m)
-                        selectedMeetingID = nil
+                        if let m = manager.pastMeetings.first(where: { $0.id == mid }) {
+                            router.openMeeting(m)
+                        }
+                        env.selectedMeetingID = nil
                     }
-                } else {
+                default:
                     taskDatabasePane
                 }
             }
@@ -208,23 +195,23 @@ struct ActionItemsView: View {
             consumePendingTask()
         }
         .onChange(of: router.pendingTaskID) { _, _ in consumePendingTask() }
-        .onChange(of: selectedProjectID) { _, _ in
-            selectedTaskID = nil
+        .onChange(of: env.selectedProjectID) { _, _ in
+            env.selectedTaskID = nil
             // Restore the project's last-used view (NP-3).
             if let pid = realSelectedProjectID,
                let saved = AppSettings.shared.savedTaskViewMode(forProject: pid),
                let mode = ViewMode(rawValue: saved) {
-                viewMode = mode
+                vm.viewMode = mode
             }
         }
-        .onChange(of: viewMode) { _, mode in
+        .onChange(of: vm.viewMode) { _, mode in
             if let pid = realSelectedProjectID {
                 AppSettings.shared.setSavedTaskViewMode(mode.rawValue, forProject: pid)
             }
         }
-        .onChange(of: selectedMeetingID) { _, _ in selectedTaskID = nil }
-        .onChange(of: selectedInitiativeID) { _, v in
-            if v != nil { selectedTaskID = nil; selectedMeetingID = nil }
+        .onChange(of: env.selectedMeetingID) { _, _ in env.selectedTaskID = nil }
+        .onChange(of: env.selectedInitiativeID) { _, v in
+            if v != nil { env.selectedTaskID = nil; env.selectedMeetingID = nil }
         }
         .sheet(isPresented: $showTrash) {
             TaskTrashView(store: store)
@@ -242,10 +229,10 @@ struct ActionItemsView: View {
     /// the one-shot channel.
     func consumePendingTask() {
         guard let tid = router.pendingTaskID, store.items.contains(where: { $0.id == tid }) else { return }
-        selectedProjectID = nil
-        selectedMeetingID = nil
-        selectedInitiativeID = nil
-        selectedTaskID = tid
+        env.selectedProjectID = nil
+        env.selectedMeetingID = nil
+        env.selectedInitiativeID = nil
+        env.selectedTaskID = tid
         router.pendingTaskID = nil
     }
 
@@ -256,14 +243,14 @@ struct ActionItemsView: View {
     /// The selected project id, but only when it's a real, existing project
     /// (not "All tasks" or the "No project" sentinel).
     var realSelectedProjectID: String? {
-        guard let pid = selectedProjectID, pid != Self.noProjectSentinel,
+        guard let pid = env.selectedProjectID, pid != Self.noProjectSentinel,
               store.project(id: pid) != nil else { return nil }
         return pid
     }
 
     @ViewBuilder
     var content: some View {
-        switch viewMode {
+        switch vm.viewMode {
         case .list:
             if let pid = realSelectedProjectID {
                 sectionedListBody(projectID: pid)

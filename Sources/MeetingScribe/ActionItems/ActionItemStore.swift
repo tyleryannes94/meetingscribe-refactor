@@ -11,7 +11,22 @@ final class ActionItemStore: ObservableObject {
 
     /// Live tasks (deletedAt == nil). Every existing consumer binds to this and
     /// continues to see only non-deleted items.
-    @Published private(set) var items: [ActionItem] = []
+    @Published private(set) var items: [ActionItem] = [] {
+        didSet { rebuildItemIndex() }
+    }
+
+    /// O(1) `id → index` map into `items`, rebuilt whenever `items` changes
+    /// (A0-4 / E1-2). Replaces the O(n) `items.firstIndex(where:)` scans that
+    /// ran on every single-task mutation. Maintained via `items.didSet` so it
+    /// can never drift out of sync with the array, no matter which mutation
+    /// path (append, subscript-set, remove, wholesale assignment) ran.
+    private var itemIndex: [String: Int] = [:]
+
+    private func rebuildItemIndex() {
+        itemIndex.removeAll(keepingCapacity: true)
+        itemIndex.reserveCapacity(items.count)
+        for (i, it) in items.enumerated() { itemIndex[it.id] = i }
+    }
     /// Soft-deleted tasks awaiting restore or purge (P0-3). Persisted in the
     /// same action_items.json so Trash survives relaunch; partitioned off
     /// `items` by `deletedAt` on load.
@@ -201,7 +216,7 @@ final class ActionItemStore: ObservableObject {
     func upsert(_ item: ActionItem) {
         var updated = item
         updated.updatedAt = Date()
-        if let idx = items.firstIndex(where: { $0.id == item.id }) {
+        if let idx = itemIndex[item.id] {
             items[idx] = updated
         } else {
             items.append(updated)
@@ -850,7 +865,7 @@ final class ActionItemStore: ObservableObject {
     }
 
     func setStatus(_ id: String, status: ActionItem.Status) {
-        let wasCompleted = items.first(where: { $0.id == id })?.status == .completed
+        let wasCompleted = itemIndex[id].map { items[$0].status } == .completed
         update(id) {
             let was = $0.status == .completed
             $0.status = status
@@ -865,7 +880,7 @@ final class ActionItemStore: ObservableObject {
         }
         // Spawn the next occurrence of a recurring task on first completion (P2-5).
         if status == .completed, !wasCompleted,
-           let done = items.first(where: { $0.id == id }), let rule = done.recurrence {
+           let done = itemIndex[id].map({ items[$0] }), let rule = done.recurrence {
             spawnNextOccurrence(of: done, rule: rule)
         }
     }
@@ -956,7 +971,7 @@ final class ActionItemStore: ObservableObject {
     /// cycles (won't add an edge that would make the blocked-by graph circular).
     func toggleBlocker(_ id: String, blockerID: String) {
         guard id != blockerID else { return }
-        let alreadyLinked = (items.first { $0.id == id }?.blockedByIDs ?? []).contains(blockerID)
+        let alreadyLinked = (itemIndex[id].flatMap { items[$0].blockedByIDs } ?? []).contains(blockerID)
         // Only run the cycle guard when adding a new edge.
         if !alreadyLinked && reachableViaBlockers(from: blockerID, target: id) { return }
         update(id) {
@@ -971,13 +986,13 @@ final class ActionItemStore: ObservableObject {
     func isBlocked(_ item: ActionItem) -> Bool {
         guard let ids = item.blockedByIDs, !ids.isEmpty else { return false }
         return ids.contains { bid in
-            items.first { $0.id == bid }.map { $0.status != .completed } ?? false
+            itemIndex[bid].map { items[$0].status != .completed } ?? false
         }
     }
 
     /// The live blocker tasks for an item, in declared order.
     func blockers(for item: ActionItem) -> [ActionItem] {
-        (item.blockedByIDs ?? []).compactMap { bid in items.first { $0.id == bid } }
+        (item.blockedByIDs ?? []).compactMap { bid in itemIndex[bid].map { items[$0] } }
     }
 
     /// True if `target` is reachable by following `start`'s blockedBy chain.
@@ -987,13 +1002,13 @@ final class ActionItemStore: ObservableObject {
         while let cur = stack.popLast() {
             if cur == target { return true }
             guard visited.insert(cur).inserted else { continue }
-            if let t = items.first(where: { $0.id == cur }) { stack.append(contentsOf: t.blockedByIDs ?? []) }
+            if let i = itemIndex[cur] { stack.append(contentsOf: items[i].blockedByIDs ?? []) }
         }
         return false
     }
 
     private func update(_ id: String, mutate: (inout ActionItem) -> Void) {
-        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
+        guard let idx = itemIndex[id] else { return }
         var copy = items[idx]
         mutate(&copy)
         copy.updatedAt = Date()

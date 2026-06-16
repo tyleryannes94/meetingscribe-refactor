@@ -2,89 +2,38 @@ import Foundation
 import Observation
 
 /// Owns the **view state** of the Tasks tab — filter, sort, search, grouping,
-/// edit cursor, push-in-flight set, etc. Extracted from `ActionItemsView`
-/// (2,518 lines) in Batch 7 (audit 6.1).
+/// edit cursor, push-in-flight set — and the single canonical filter / sort /
+/// group implementation that every view mode (list, table, board, calendar,
+/// gallery) reads from.
 ///
-/// The big view file becomes a thin renderer over an `@StateObject` of this
-/// class: filters/sorts move out of `@State`, group-by switching is a single
-/// derived property rather than an inline closure, and any future split into
-/// per-view files (table / board / list) consumes the same source of truth.
+/// A0-1 (audit E2-1): previously this class was dead code — a *second*,
+/// diverged copy of the filter logic and enums that lived alongside the live
+/// implementation inside `ActionItemsView`'s extensions. The migration adopts
+/// the live logic here (it is the richer one — it honors `ownerScope` and the
+/// triage exclusion), deletes the duplicate, and wires `ActionItemsView` to a
+/// single `@State` instance of this type. The enums stay defined on
+/// `ActionItemsView` (they are referenced externally as `ActionItemsView.X`
+/// and carry the full case set); this class references them by typealias so
+/// there is exactly one definition of each.
 @available(macOS 14.0, *)
 @MainActor
 @Observable
 final class ActionItemsViewModel {
 
-    // MARK: - Enums (lift out the inline types so per-view files can share)
+    // MARK: - Enums (single definition lives on ActionItemsView)
 
-    enum Filter: String, CaseIterable, Identifiable, Hashable {
-        case all, thisWeek, open, inProgress, completed, upcoming, overdue
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .all:        return "All"
-            case .thisWeek:   return "This Week"
-            case .open:       return "Open"
-            case .inProgress: return "In Progress"
-            case .completed:  return "Done"
-            case .upcoming:   return "Upcoming"
-            case .overdue:    return "Overdue"
-            }
-        }
-    }
+    typealias Filter = ActionItemsView.Filter
+    typealias PriorityFilter = ActionItemsView.PriorityFilter
+    typealias OwnerScope = ActionItemsView.OwnerScope
+    typealias GroupBy = ActionItemsView.GroupBy
+    typealias ViewMode = ActionItemsView.ViewMode
+    typealias TableSort = ActionItemsView.TableSort
 
-    enum PriorityFilter: String, CaseIterable, Identifiable, Hashable {
-        case any, low, medium, high, urgent
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .any: return "Any"
-            case .low: return "Low"
-            case .medium: return "Medium"
-            case .high: return "High"
-            case .urgent: return "Urgent"
-            }
-        }
-    }
-
-    enum GroupBy: String, CaseIterable, Identifiable, Hashable {
-        case none, project, owner, priority, dueDay
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .none: return "None"
-            case .project: return "Project"
-            case .owner: return "Owner"
-            case .priority: return "Priority"
-            case .dueDay: return "Due day"
-            }
-        }
-    }
-
-    enum ViewMode: String, CaseIterable, Identifiable, Hashable {
-        case list, table, board
-        var id: String { rawValue }
-        var label: String { rawValue.capitalized }
-        var systemImage: String {
-            switch self {
-            case .list: return "list.bullet"
-            case .table: return "tablecells"
-            case .board: return "rectangle.split.3x1"
-            }
-        }
-    }
-
-    enum TableSort: String, CaseIterable, Identifiable, Hashable {
-        case priority, due, status, owner, meeting
-        var id: String { rawValue }
-    }
-
-    static let noProjectSentinel = "__none__"
-    static let homeSentinel = "__home__"
-
-    // MARK: - Published view state
+    // MARK: - View state (was ~11 @State vars on ActionItemsView)
 
     var filter: Filter = .all
     var priorityFilter: PriorityFilter = .any
+    var ownerScope: OwnerScope = .anyone
     var search: String = ""
     var groupBy: GroupBy = .none
     var viewMode: ViewMode = .list
@@ -95,117 +44,76 @@ final class ActionItemsViewModel {
     var lastError: String?
     var editingID: String?
 
-    /// "__home__" = dashboard; nil = All tasks; "__none__" = No project; else a project id.
-    var selectedProjectID: String? = ActionItemsViewModel.homeSentinel
-    var selectedMeetingID: String?
-    var selectedTaskID: String?
-    var selectedInitiativeID: String?
-    var addingSection: Bool = false
-    var newSectionName: String = ""
-    var renameSectionID: String?
-    var renameSectionDraft: String = ""
+    // MARK: - Filtering (canonical implementation — A0-1)
 
-    // MARK: - Filtering / sorting (pure functions over store state)
-
-    /// Returns the `items` filtered + sorted according to the current view
-    /// state. Views should call this from `body` over the live items list
-    /// supplied by `ActionItemStore`.
-    func filteredSorted(items: [ActionItem], now: Date = Date()) -> [ActionItem] {
-        var working = items
-
-        // Search
-        let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !q.isEmpty {
-            working = working.filter { item in
-                item.title.lowercased().contains(q) ||
-                (item.owner?.lowercased().contains(q) ?? false) ||
-                item.meetingTitle.lowercased().contains(q) ||
-                (item.notes?.lowercased().contains(q) ?? false)
-            }
-        }
-
-        // Status filter
+    /// Live tasks narrowed by the status / priority / owner / search facets,
+    /// then sorted. The single source of truth for "what tasks are visible",
+    /// consumed by every view mode through `ActionItemsView`. `myNameAliases`
+    /// is injected so the "mine" owner scope stays a pure function.
+    func filtered(_ items: [ActionItem], myNameAliases: Set<String>, now: Date = Date()) -> [ActionItem] {
         let cal = Calendar.current
-        let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-        let endOfWeek = cal.date(byAdding: .day, value: 7, to: startOfWeek) ?? now
-        let endOfToday = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now
-        switch filter {
-        case .all: break
-        case .thisWeek:
-            // Items created this week OR due this week (and not completed).
-            working = working.filter { item in
-                guard item.status != .completed else { return false }
-                let createdThisWeek = item.createdAt >= startOfWeek && item.createdAt < endOfWeek
-                let dueThisWeek = item.dueDate.map { $0 >= startOfWeek && $0 < endOfWeek } ?? false
-                return createdThisWeek || dueThisWeek
+        let today = cal.startOfDay(for: now)
+        return items
+            // Meeting-extracted action items wait in the Triage inbox until the
+            // user accepts them — they are NOT auto-added to the task database.
+            .filter { !$0.needsTriage }
+            .filter { item in
+                switch filter {
+                case .all: return true
+                case .open: return item.status == .open
+                case .inProgress: return item.status == .inProgress
+                case .completed: return item.status == .completed
+                case .upcoming:
+                    guard let due = item.dueDate, item.status != .completed else { return false }
+                    let weekOut = cal.date(byAdding: .day, value: 7, to: today) ?? today
+                    return due >= today && due <= weekOut
+                case .thisWeek:
+                    guard item.status != .completed else { return false }
+                    let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)) ?? today
+                    let endOfWeek = cal.date(byAdding: .day, value: 7, to: startOfWeek) ?? today
+                    let createdThisWeek = item.createdAt >= startOfWeek && item.createdAt < endOfWeek
+                    let dueThisWeek = item.dueDate.map { $0 >= startOfWeek && $0 < endOfWeek } ?? false
+                    return createdThisWeek || dueThisWeek
+                case .overdue:
+                    guard let due = item.dueDate else { return false }
+                    return due < today && item.status != .completed
+                }
             }
-        case .open: working = working.filter { $0.status == .open }
-        case .inProgress: working = working.filter { $0.status == .inProgress }
-        case .completed: working = working.filter { $0.status == .completed }
-        case .upcoming: working = working.filter {
-            ($0.dueDate ?? .distantPast) > now &&
-            ($0.dueDate ?? .distantPast) <= endOfToday.addingTimeInterval(7 * 86400)
-        }
-        case .overdue: working = working.filter {
-            ($0.dueDate ?? .distantFuture) < now && $0.status != .completed
-        }
-        }
-
-        // Priority filter
-        if priorityFilter != .any {
-            let p: ActionItem.Priority
-            switch priorityFilter {
-            case .low: p = .low
-            case .medium: p = .medium
-            case .high: p = .high
-            case .urgent: p = .urgent
-            case .any: p = .medium // unreachable
+            .filter { item in
+                switch priorityFilter {
+                case .any: return true
+                case .low: return item.priority == .low
+                case .medium: return item.priority == .medium
+                case .high: return item.priority == .high
+                case .urgent: return item.priority == .urgent
+                }
             }
-            working = working.filter { $0.priority == p }
-        }
-
-        // Sort (table mode honors explicit choice; everything else uses default)
-        if viewMode == .table {
-            working = applyTableSort(working)
-        } else {
-            working.sort(by: defaultSort)
-        }
-        return working
+            .filter { item in
+                switch ownerScope {
+                case .anyone: return true
+                case .mine: return Self.isMine(item, myNameAliases: myNameAliases)
+                case .delegated: return item.delegated == true
+                }
+            }
+            .filter { item in
+                guard !search.isEmpty else { return true }
+                let q = search.lowercased()
+                return item.title.lowercased().contains(q)
+                    || (item.owner ?? "").lowercased().contains(q)
+                    || item.meetingTitle.lowercased().contains(q)
+            }
+            .sorted(by: Self.defaultSort)
     }
 
-    private func applyTableSort(_ items: [ActionItem]) -> [ActionItem] {
-        let asc = tableSortAscending
-        switch tableSort {
-        case .priority:
-            return items.sorted { a, b in
-                asc ? a.priority.weight < b.priority.weight
-                    : a.priority.weight > b.priority.weight
-            }
-        case .due:
-            return items.sorted { a, b in
-                let ad = a.dueDate ?? .distantFuture
-                let bd = b.dueDate ?? .distantFuture
-                return asc ? ad < bd : ad > bd
-            }
-        case .status:
-            return items.sorted { a, b in
-                asc ? a.status.rawValue < b.status.rawValue
-                    : a.status.rawValue > b.status.rawValue
-            }
-        case .owner:
-            return items.sorted { a, b in
-                let ao = a.owner ?? ""
-                let bo = b.owner ?? ""
-                return asc ? ao < bo : ao > bo
-            }
-        case .meeting:
-            return items.sorted { a, b in
-                asc ? a.meetingTitle < b.meetingTitle : a.meetingTitle > b.meetingTitle
-            }
-        }
+    /// A task counts as "mine" when its owner matches one of my name aliases, or
+    /// it's unassigned (my own captured task). Drives the "My open" quick view.
+    static func isMine(_ item: ActionItem, myNameAliases: Set<String>) -> Bool {
+        let owner = (item.owner ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if owner.isEmpty { return true }
+        return myNameAliases.contains(owner.lowercased())
     }
 
-    private func defaultSort(_ a: ActionItem, _ b: ActionItem) -> Bool {
+    static func defaultSort(_ a: ActionItem, _ b: ActionItem) -> Bool {
         if a.status == .completed && b.status != .completed { return false }
         if b.status == .completed && a.status != .completed { return true }
         switch (a.dueDate, b.dueDate) {
@@ -217,61 +125,47 @@ final class ActionItemsViewModel {
         if a.priority.weight != b.priority.weight {
             return a.priority.weight > b.priority.weight
         }
-        return a.createdAt > b.createdAt
+        return a.meetingDate > b.meetingDate
     }
 
-    // MARK: - Grouping
+    // MARK: - Grouping (canonical implementation — A0-1)
 
-    struct Group: Identifiable {
-        let id: String
-        let title: String
-        let items: [ActionItem]
-    }
-
-    /// Groups the supplied list according to `groupBy`. `none` returns a single
-    /// untitled group; other modes produce named buckets sorted by group label.
-    func groupItems(_ items: [ActionItem]) -> [Group] {
+    /// String key an item groups under for the current `groupBy` mode.
+    func groupKey(for item: ActionItem, now: Date = Date()) -> String {
         switch groupBy {
-        case .none:
-            return [Group(id: "all", title: "", items: items)]
-        case .project:
-            // Caller supplies the project name → id mapping via `projectName`.
-            return bucket(items, by: { $0.projectID ?? Self.noProjectSentinel }) { key, value in
-                // UI layer can swap in the friendly project name from
-                // ActionItemStore.project(id:) — we use the id as the title here.
-                Group(id: key, title: key, items: value)
-            }
-        case .owner:
-            return bucket(items, by: { $0.owner ?? "Unassigned" }) { key, value in
-                Group(id: key, title: key, items: value)
-            }
-        case .priority:
-            return bucket(items, by: { $0.priority.rawValue }) { key, value in
-                Group(id: key, title: key.capitalized, items: value)
-            }
-        case .dueDay:
-            let f = DateFormatter()
-            f.dateStyle = .medium
-            return bucket(items, by: { item -> String in
-                guard let d = item.dueDate else { return "No date" }
-                return f.string(from: d)
-            }) { key, value in
-                Group(id: key, title: key, items: value)
-            }
+        case .none: return ""
+        case .meeting: return item.meetingTitle
+        case .priority: return item.priority.label
+        case .status: return item.status.label
+        case .dueDate:
+            guard let d = item.dueDate else { return "No due date" }
+            let cal = Calendar.current
+            if cal.isDateInToday(d) { return "Today" }
+            if cal.isDateInTomorrow(d) { return "Tomorrow" }
+            if cal.isDateInYesterday(d) { return "Yesterday" }
+            if d < now { return "Overdue" }
+            let f = DateFormatter(); f.dateFormat = "EEE, MMM d"
+            return f.string(from: d)
         }
     }
 
-    /// Group `items` by a key extractor, then build one `Group` per bucket
-    /// in sorted-key order. Straightforward replacement for the previous
-    /// over-engineered curried helper.
-    private func bucket<Key: Hashable & Comparable>(
-        _ items: [ActionItem],
-        by extract: (ActionItem) -> Key,
-        build: (Key, [ActionItem]) -> Group
-    ) -> [Group] {
-        let dict = Dictionary(grouping: items, by: extract)
-        return dict.keys.sorted().map { key in
-            build(key, dict[key] ?? [])
+    /// Buckets `items` by `groupKey`.
+    func grouped(_ items: [ActionItem]) -> [String: [ActionItem]] {
+        Dictionary(grouping: items, by: { groupKey(for: $0) })
+    }
+
+    /// Ordered group keys for `items` — fixed priority/status order, otherwise alphabetical.
+    func groupedKeys(_ items: [ActionItem]) -> [String] {
+        let keys = Array(grouped(items).keys)
+        switch groupBy {
+        case .priority:
+            let order = ["Urgent", "High", "Medium", "Low"]
+            return order.filter { keys.contains($0) }
+        case .status:
+            let order = ["In Progress", "Open", "Completed"]
+            return order.filter { keys.contains($0) }
+        default:
+            return keys.sorted()
         }
     }
 
