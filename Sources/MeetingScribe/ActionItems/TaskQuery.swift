@@ -22,6 +22,10 @@ struct TaskQuery: Codable, Hashable, Sendable {
         case anyProjects(Set<String>)
         case person(String)
         case meeting(String)
+        /// Tasks whose effective workspace context is this one (1-1). The store
+        /// denormalizes each task's `contextID` (from its project's initiative)
+        /// so the engine stays a pure match.
+        case context(String)
     }
 
     /// Field-level predicates. `nil` = "don't constrain on this field".
@@ -131,6 +135,7 @@ enum TaskQueryEngine {
             guard let pid = item.projectID, ids.contains(pid) else { return false }
         case .person(let id): if item.ownerPersonID != id { return false }
         case .meeting(let id): if item.meetingID != id { return false }
+        case .context(let id): if item.contextID != id { return false }
         }
 
         let f = query.filters

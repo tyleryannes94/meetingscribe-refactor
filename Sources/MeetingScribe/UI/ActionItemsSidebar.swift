@@ -54,8 +54,13 @@ struct ProjectRail: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
+                    contextSwitcher
                     railItem(title: "Home", icon: "house.fill", count: 0,
                              id: ActionItemsView.homeSentinel)
+                    // Today smart view — default landing (1-3).
+                    railItem(title: "Today", icon: "sun.max.fill",
+                             count: todayBadgeCount,
+                             id: ActionItemsView.todaySentinel)
                     // Triage inbox — meeting-extracted items awaiting review (§5B).
                     railItem(title: "Triage inbox", icon: "tray.and.arrow.down.fill",
                              count: store.pendingTriage.count,
@@ -78,11 +83,13 @@ struct ProjectRail: View {
                         NotionIconButton(systemName: "plus", help: "New initiative") { creatingInitiative = true }
                             .padding(.trailing, 6)
                     }
-                    if store.initiatives.isEmpty && !creatingInitiative {
-                        Text("Group projects into initiatives").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                    if visibleInitiatives.isEmpty && !creatingInitiative {
+                        Text(env.activeContextID == nil ? "Group projects into initiatives"
+                                                        : "No initiatives in this context")
+                            .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                             .padding(.horizontal, 12).padding(.vertical, 2)
                     }
-                    ForEach(store.sortedInitiatives()) { ini in
+                    ForEach(visibleInitiatives) { ini in
                         InitiativeNode(store: store, initiative: ini,
                                        expandedInitiatives: $expandedInitiatives,
                                        expandedPages: $expandedPages)
@@ -143,6 +150,61 @@ struct ProjectRail: View {
         NotionEyebrow(text: s)
             .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 3)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Context switcher (1-2)
+
+    /// Initiatives visible under the active context filter (1-2). "All" shows
+    /// every active initiative; a context shows only its own.
+    private var visibleInitiatives: [Initiative] {
+        store.sortedInitiatives().filter {
+            env.activeContextID == nil || $0.contextID == env.activeContextID
+        }
+    }
+
+    /// Overdue + due-today across the active context — the "Today" rail badge (1-3).
+    private var todayBadgeCount: Int {
+        let inScope: (ActionItem) -> Bool = { item in
+            env.activeContextID == nil || store.effectiveContextID(for: item) == env.activeContextID
+        }
+        return store.overdueTasks.filter(inScope).count + store.myDayTasks.filter(inScope).count
+    }
+
+    /// Compact `All | Work | Personal | …` pill row that scopes the whole rail
+    /// and the main task list to one life context (1-2).
+    @ViewBuilder
+    private var contextSwitcher: some View {
+        let ctxs = store.sortedContexts()
+        if !ctxs.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    contextPill(title: "All", color: nil, active: env.activeContextID == nil) {
+                        env.activeContextID = nil
+                    }
+                    ForEach(ctxs) { c in
+                        contextPill(title: c.name, color: store.contextColor(id: c.id),
+                                    active: env.activeContextID == c.id) {
+                            env.activeContextID = (env.activeContextID == c.id) ? nil : c.id
+                        }
+                    }
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+            }
+        }
+    }
+
+    private func contextPill(title: String, color: Color?, active: Bool,
+                             _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(NDS.tiny.weight(active ? .semibold : .regular))
+                .lineLimit(1)
+                .padding(.horizontal, 9).padding(.vertical, 4)
+                .background(active ? (color ?? NDS.brand).opacity(0.18) : NDS.fieldBg, in: Capsule())
+                .foregroundStyle(active ? (color ?? NDS.brand) : NDS.textSecondary)
+                .overlay(Capsule().strokeBorder(active ? (color ?? NDS.brand).opacity(0.5) : .clear, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     /// "Show archived" affordance (P0-4): a low-key toggle, shown only when
@@ -675,6 +737,25 @@ struct InitiativeNode: View {
             }
             .onHover { hovering = $0 }
             .contextMenu {
+                // Assign this initiative (and its tasks, by inheritance) to a
+                // workspace context (1-2). Full menu expansion lands in 3-5.
+                Menu("Context") {
+                    Button {
+                        store.setInitiativeContext(initiative.id, contextID: nil)
+                    } label: {
+                        if initiative.contextID == nil { Label("None", systemImage: "checkmark") }
+                        else { Text("None") }
+                    }
+                    Divider()
+                    ForEach(store.sortedContexts()) { c in
+                        Button {
+                            store.setInitiativeContext(initiative.id, contextID: c.id)
+                        } label: {
+                            if initiative.contextID == c.id { Label(c.name, systemImage: "checkmark") }
+                            else { Text(c.name) }
+                        }
+                    }
+                }
                 Button(role: .destructive) {
                     if env.selectedInitiativeID == initiative.id { env.selectedInitiativeID = nil }
                     let name = initiative.name

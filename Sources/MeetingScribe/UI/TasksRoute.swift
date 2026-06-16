@@ -35,7 +35,8 @@ enum TasksRoute: Hashable {
         case .waitingOn:   return ActionItemsView.waitingSentinel
         case .person(let id): return ActionItemsView.personSentinel(id)
         case .project(let id): return id
-        case .allTasks, .today, .initiative, .meeting, .task: return nil
+        case .today:       return ActionItemsView.todaySentinel
+        case .allTasks, .initiative, .meeting, .task: return nil
         }
     }
 }

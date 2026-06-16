@@ -12,6 +12,8 @@ struct ActionItemRow: View {
     let assignedLabels: [TaskLabel]
     let isPushing: Bool
     let isExpanded: Bool
+    /// Color of the task's workspace context, for the left accent bar (1-5).
+    var contextColor: Color? = nil
     /// Single-tap: toggles the inline detail editor (P0-2).
     let onToggleExpand: () -> Void
     /// Double-click / "Open as page": opens the full task page (P0-2).
@@ -114,6 +116,14 @@ struct ActionItemRow: View {
     @ViewBuilder
     private var mainRow: some View {
         HStack(spacing: 10) {
+            // Workspace-context accent bar (1-5): a slim colored rail keying the
+            // task to Work / Personal / … . Omitted when uncontextualized.
+            if let contextColor {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(contextColor)
+                    .frame(width: 3)
+                    .frame(maxHeight: .infinity)
+            }
             statusButton
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)

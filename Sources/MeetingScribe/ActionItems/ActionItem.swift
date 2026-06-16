@@ -36,6 +36,11 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// synthesized Codable uses decodeIfPresent for optionals.
     var projectID: String?
 
+    /// Workspace context (Work / Personal / …) this task belongs to (1-1).
+    /// Usually resolved via project → initiative → context, but can be set
+    /// directly for an unfiled task. Optional + defaulted so old JSON decodes.
+    var contextID: String? = nil
+
     // MARK: - Phase 5 task-tracker fields (all optional → old JSON still decodes)
 
     /// When work should begin (Asana/Linear style start date).

@@ -95,6 +95,10 @@ extension ActionItemsView {
                 .frame(width: 3)
                 .opacity(item.priority == .low ? 0 : 1)
             VStack(alignment: .leading, spacing: 6) {
+                // Workspace-context stripe (1-5).
+                if let cColor = store.contextColor(for: item) {
+                    RoundedRectangle(cornerRadius: 1.5).fill(cColor).frame(height: 3)
+                }
                 let itemLabels = store.labels(for: item)
                 if !itemLabels.isEmpty {
                     HStack(spacing: 4) {
