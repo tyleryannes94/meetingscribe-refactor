@@ -836,6 +836,7 @@ struct InitiativeNode: View {
                     }
                     .buttonStyle(.plain).help("Add project to initiative")
                 } else {
+                    completionRing
                     let open = store.openCount(forInitiative: initiative.id)
                     if open > 0 { Text("\(open)").font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary) }
                 }
@@ -904,6 +905,24 @@ struct InitiativeNode: View {
         renaming = false
         guard !n.isEmpty, n != initiative.name else { return }
         store.renameInitiative(initiative.id, name: n)
+    }
+
+    /// A tiny completion arc for the initiative (6-5), using the store's
+    /// already-computed done/total. Hidden when the initiative has no tasks.
+    @ViewBuilder
+    private var completionRing: some View {
+        let (done, total) = store.completion(forInitiative: initiative.id)
+        if total > 0 {
+            let frac = Double(done) / Double(total)
+            ZStack {
+                Circle().stroke(NDS.fieldBg, lineWidth: 2)
+                Circle().trim(from: 0, to: frac)
+                    .stroke(NDS.brand, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 13, height: 13)
+            .help("\(done)/\(total) tasks complete")
+        }
     }
 
     /// SF Symbol grid for the initiative icon (3-5).
