@@ -386,6 +386,16 @@ final class AppSettings {
         defaults.set(d, forKey: "tasks.projectViews")
     }
 
+    /// Per-route group-by, so each Tasks surface remembers how it was grouped (5-5).
+    func taskGroupBy(forRoute key: String) -> String? {
+        (defaults.dictionary(forKey: "tasks.groupBy") as? [String: String])?[key]
+    }
+    func setTaskGroupBy(_ raw: String, forRoute key: String) {
+        var d = (defaults.dictionary(forKey: "tasks.groupBy") as? [String: String]) ?? [:]
+        d[key] = raw
+        defaults.set(d, forKey: "tasks.groupBy")
+    }
+
     var detectZoomImpromptu: Bool {
         get { defaults.object(forKey: Keys.detectZoomImpromptu) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.detectZoomImpromptu) }

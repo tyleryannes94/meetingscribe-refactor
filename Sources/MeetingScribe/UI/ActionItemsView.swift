@@ -64,6 +64,12 @@ struct ActionItemsView: View {
     // Save-current-filter-as-view popover (5-1).
     @State var savingView = false
     @State var newViewName = ""
+    // Table view (5-8): hidden columns (CSV persisted) + inline title editing.
+    @AppStorage("tasks.table.hiddenColumns") var tableHiddenColumnsCSV = ""
+    @State var tableEditingTitleID: String?
+    @State var tableTitleDraft = ""
+    // Tasks pinned into "Today" regardless of due date (5-2).
+    @AppStorage(PinnedToday.key) var pinnedTodayCSV = ""
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board, calendar, gallery
@@ -242,17 +248,22 @@ struct ActionItemsView: View {
         .onChange(of: router.pendingTasksRoute) { _, _ in consumePendingTasksRoute() }
         .onChange(of: env.selectedProjectID) { _, _ in
             env.selectedTaskID = nil
-            // Restore the project's last-used view (NP-3).
+            // Restore the project's last-used view (NP-3) + group-by (5-5).
             if let pid = realSelectedProjectID,
                let saved = AppSettings.shared.savedTaskViewMode(forProject: pid),
                let mode = ViewMode(rawValue: saved) {
                 vm.viewMode = mode
             }
+            if let raw = AppSettings.shared.taskGroupBy(forRoute: groupByRouteKey),
+               let g = GroupBy(rawValue: raw) { vm.groupBy = g }
         }
         .onChange(of: vm.viewMode) { _, mode in
             if let pid = realSelectedProjectID {
                 AppSettings.shared.setSavedTaskViewMode(mode.rawValue, forProject: pid)
             }
+        }
+        .onChange(of: vm.groupBy) { _, g in
+            AppSettings.shared.setTaskGroupBy(g.rawValue, forRoute: groupByRouteKey)
         }
         .onChange(of: env.selectedMeetingID) { _, _ in env.selectedTaskID = nil }
         .onChange(of: env.selectedInitiativeID) { _, v in
@@ -312,6 +323,9 @@ struct ActionItemsView: View {
 
     /// Mirror the Tasks pane selection into the router so global back/forward
     /// can restore it (3-8).
+    /// Per-route key for remembering group-by (5-5).
+    var groupByRouteKey: String { env.selectedProjectID ?? "all" }
+
     func pushRouterTasksSelection() {
         router.setTasksSelection(project: env.selectedProjectID, task: env.selectedTaskID,
                                  initiative: env.selectedInitiativeID, meeting: env.selectedMeetingID)

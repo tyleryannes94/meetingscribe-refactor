@@ -52,6 +52,8 @@ struct ActionItemRow: View {
     @State private var startPickerShown = false
     @State private var newSubtask: String = ""
     @State private var newLabelName: String = ""
+    /// Pinned-to-Today storage, shared with the My Tasks pane (5-2).
+    @AppStorage(PinnedToday.key) private var pinnedTodayCSV = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -196,6 +198,9 @@ struct ActionItemRow: View {
             Menu {
                 Button("Edit details") { onToggleExpand() }
                 Button("Open as page") { onOpenPage() }
+                Button(PinnedToday.isPinned(item.id, pinnedTodayCSV) ? "Unpin from Today" : "Pin to Today") {
+                    PinnedToday.toggle(item.id, in: &pinnedTodayCSV)
+                }
                 Menu("Move to project") {
                     Button("No project") { onProject(nil) }
                     Divider()

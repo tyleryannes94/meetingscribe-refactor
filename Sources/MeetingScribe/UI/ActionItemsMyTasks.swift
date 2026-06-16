@@ -1,5 +1,18 @@
 import SwiftUI
 
+/// Tasks the user pinned into "Today" regardless of due date (5-2). Stored as a
+/// CSV in `@AppStorage` so the row menu and the My Tasks pane stay in sync.
+enum PinnedToday {
+    static let key = "tasks.pinnedToToday"
+    static func ids(_ csv: String) -> Set<String> { Set(csv.split(separator: ",").map(String.init)) }
+    static func isPinned(_ id: String, _ csv: String) -> Bool { ids(csv).contains(id) }
+    static func toggle(_ id: String, in csv: inout String) {
+        var set = ids(csv)
+        if set.contains(id) { set.remove(id) } else { set.insert(id) }
+        csv = set.sorted().joined(separator: ",")
+    }
+}
+
 @available(macOS 14.0, *)
 extension ActionItemsView {
     // MARK: - My Tasks (5-2)
@@ -20,7 +33,10 @@ extension ActionItemsView {
 
         let recentlyAssigned = mine.filter { $0.createdAt >= weekAgo }
             .sorted { $0.createdAt > $1.createdAt }
-        let dueToday = mine.filter { $0.dueDate.map { cal.isDateInToday($0) } ?? false }
+        let pinned = PinnedToday.ids(pinnedTodayCSV)
+        let dueToday = mine.filter {
+            (($0.dueDate.map { cal.isDateInToday($0) }) ?? false) || pinned.contains($0.id)
+        }
         let upcoming = mine.filter {
             guard let d = $0.dueDate else { return false }
             return d > today && d <= in14 && !cal.isDateInToday(d)
