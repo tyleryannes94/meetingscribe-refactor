@@ -345,6 +345,21 @@ extension UnifiedMeetingDetail {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                // 4-7: bridge to the Tasks triage inbox — review pending items,
+                // or confirm everything is filed.
+                let triageCount = items.filter { $0.needsTriage }.count
+                if triageCount > 0 {
+                    Button {
+                        router.openTasks(route: ActionItemsView.triageSentinel)
+                    } label: {
+                        Text("\(triageCount) in Tasks inbox — review →")
+                            .font(.caption).foregroundStyle(NDS.brand)
+                    }
+                    .buttonStyle(.borderless)
+                } else if !items.isEmpty {
+                    Label("All in Tasks ✓", systemImage: "checkmark.circle.fill")
+                        .labelStyle(.titleAndIcon).font(.caption).foregroundStyle(.green)
+                }
                 // Confirm this meeting's unreviewed action items out of the
                 // Triage inbox and into the Tasks workspace (redesign §3D).
                 let unconfirmed = items.filter { $0.needsTriage }

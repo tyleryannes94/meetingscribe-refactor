@@ -236,8 +236,10 @@ struct ActionItemsView: View {
             manager.backfillActionItemsIfNeeded()
             restoreSceneSelection()
             consumePendingTask()
+            consumePendingTasksRoute()
         }
         .onChange(of: router.pendingTaskID) { _, _ in consumePendingTask() }
+        .onChange(of: router.pendingTasksRoute) { _, _ in consumePendingTasksRoute() }
         .onChange(of: env.selectedProjectID) { _, _ in
             env.selectedTaskID = nil
             // Restore the project's last-used view (NP-3).
@@ -313,6 +315,16 @@ struct ActionItemsView: View {
     func pushRouterTasksSelection() {
         router.setTasksSelection(project: env.selectedProjectID, task: env.selectedTaskID,
                                  initiative: env.selectedInitiativeID, meeting: env.selectedMeetingID)
+    }
+
+    /// Lands the Tasks pane on a deep-linked rail sentinel (4-7), e.g. triage.
+    func consumePendingTasksRoute() {
+        guard let sentinel = router.pendingTasksRoute else { return }
+        env.selectedTaskID = nil
+        env.selectedMeetingID = nil
+        env.selectedInitiativeID = nil
+        env.selectedProjectID = sentinel
+        router.pendingTasksRoute = nil
     }
 
     func consumePendingTask() {
