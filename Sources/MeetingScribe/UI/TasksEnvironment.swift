@@ -57,9 +57,14 @@ final class TasksEnvironment: ObservableObject {
         case ActionItemsView.triageSentinel:    return .triage
         case ActionItemsView.noProjectSentinel: return .noProject
         case ActionItemsView.waitingSentinel:   return .waitingOn
+        case ActionItemsView.recurringSentinel: return .recurring
+        case ActionItemsView.myTasksSentinel:   return .myTasks
         default:
             if pid.hasPrefix(ActionItemsView.personSentinelPrefix) {
                 return .person(String(pid.dropFirst(ActionItemsView.personSentinelPrefix.count)))
+            }
+            if pid.hasPrefix(ActionItemsView.savedViewSentinelPrefix) {
+                return .savedView(String(pid.dropFirst(ActionItemsView.savedViewSentinelPrefix.count)))
             }
             return .project(pid)
         }

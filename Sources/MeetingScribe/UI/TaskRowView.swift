@@ -173,6 +173,11 @@ struct ActionItemRow: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                    if item.recurrence != nil {
+                        // Recurring-series marker (5-3).
+                        Image(systemName: "repeat").font(.caption2).foregroundStyle(NDS.brand)
+                            .help(item.recurrence?.label ?? "Repeats")
+                    }
                     if item.externalURL != nil, let src = item.source {
                         Text(src.capitalized).font(.caption2)
                             .padding(.horizontal, 5).padding(.vertical, 1)

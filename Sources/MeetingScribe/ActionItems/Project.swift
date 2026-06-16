@@ -40,9 +40,16 @@ struct Project: Identifiable, Codable, Hashable {
     var updatedAt: Date
 
     enum Status: String, Codable, CaseIterable, Identifiable {
-        case active, archived
+        case active, onHold, completed, archived
         var id: String { rawValue }
-        var label: String { self == .active ? "Active" : "Archived" }
+        var label: String {
+            switch self {
+            case .active: return "Active"
+            case .onHold: return "On hold"
+            case .completed: return "Completed"
+            case .archived: return "Archived"
+            }
+        }
     }
 
     init(id: String = UUID().uuidString,

@@ -172,6 +172,26 @@ struct ActionItem: Identifiable, Codable, Hashable {
         }
     }
 
+    /// First changed field between two versions of a task, as `(field, old, new)`
+    /// string values, for the change log + undo (5-7). Covers the user-editable
+    /// scalar fields; returns nil when none of them changed.
+    static func fieldDiff(_ before: ActionItem, _ after: ActionItem) -> (field: String, old: String?, new: String?)? {
+        func ds(_ d: Date?) -> String? { d.map { String($0.timeIntervalSinceReferenceDate) } }
+        let fields: [(String, String?, String?)] = [
+            ("title", before.title, after.title),
+            ("status", before.status.rawValue, after.status.rawValue),
+            ("priority", before.priority.rawValue, after.priority.rawValue),
+            ("dueDate", ds(before.dueDate), ds(after.dueDate)),
+            ("startDate", ds(before.startDate), ds(after.startDate)),
+            ("owner", before.owner, after.owner),
+            ("notes", before.notes, after.notes),
+            ("projectID", before.projectID, after.projectID),
+            ("estimate", before.estimate.map { String($0) }, after.estimate.map { String($0) }),
+        ]
+        for (f, o, n) in fields where o != n { return (f, o, n) }
+        return nil
+    }
+
     /// A stable hash of the meeting + title used for dedup when re-extracting.
     /// Two extracted lines that share the same meeting + normalized title
     /// are treated as the same action item — preserving user edits across

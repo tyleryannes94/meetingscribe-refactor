@@ -25,6 +25,11 @@ struct TaskChangeEvent: Codable, Identifiable, Hashable, Sendable {
     /// distinguishable once sync exists.
     var deviceID: String
     var timestamp: Date = Date()
+    // Field-level diff for undo (5-7). nil for non-field events (create/delete/…).
+    var field: String? = nil
+    var oldValue: String? = nil
+    var newValue: String? = nil
+    var undone: Bool = false
 }
 
 /// In-memory + on-disk journal of task mutations. Keeps a bounded tail in
@@ -92,15 +97,29 @@ final class TaskChangeLog: ObservableObject {
     /// and persists off-main. Returns the recorded event (useful for tests).
     @discardableResult
     func record(_ op: TaskChangeEvent.Op, entity: TaskChangeEvent.Entity,
-                id: String, summary: String) -> TaskChangeEvent {
+                id: String, summary: String,
+                field: String? = nil, oldValue: String? = nil, newValue: String? = nil) -> TaskChangeEvent {
         lamport += 1
         UserDefaults.standard.set(lamport, forKey: "tasks.lamport")
         let event = TaskChangeEvent(entity: entity, entityID: id, op: op,
-                                    summary: summary, lamport: lamport, deviceID: deviceID)
+                                    summary: summary, lamport: lamport, deviceID: deviceID,
+                                    field: field, oldValue: oldValue, newValue: newValue)
         recent.append(event)
         if recent.count > cap { recent.removeFirst(recent.count - cap) }
         persist()
         return event
+    }
+
+    /// The most recent field-level change that hasn't been undone (5-7).
+    var lastUndoableField: TaskChangeEvent? {
+        recent.last { $0.field != nil && !$0.undone }
+    }
+
+    /// Flag an event as undone so a subsequent undo skips it.
+    func markUndone(_ eventID: String) {
+        guard let i = recent.firstIndex(where: { $0.id == eventID }) else { return }
+        recent[i].undone = true
+        persist()
     }
 
     private func persist() {

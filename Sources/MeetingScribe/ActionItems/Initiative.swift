@@ -16,6 +16,8 @@ struct Initiative: Identifiable, Codable, Hashable {
     /// defaulted so old initiatives.json decodes.
     var contextID: String? = nil
     var status: Status = .active
+    /// Optional target / due date for the initiative (5-6). Additive + defaulted.
+    var targetDate: Date? = nil
     var sortIndex: Double?
     var createdAt: Date = Date()
     var updatedAt: Date = Date()

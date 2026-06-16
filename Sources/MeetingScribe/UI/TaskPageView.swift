@@ -125,6 +125,14 @@ struct TaskPageView: View {
                 .buttonStyle(.plain)
             }
             Menu {
+                // Save this task's shape as a reusable template (5-4).
+                Button {
+                    let t = store.createTemplate(name: item.title, from: item)
+                    ToastCenter.shared.show("Saved “\(t.name)” as a template")
+                } label: {
+                    Label("Save as template", systemImage: "doc.on.doc")
+                }
+                Divider()
                 Button(role: .destructive) {
                     let title = item.title
                     store.delete(itemID)
@@ -188,6 +196,21 @@ struct TaskPageView: View {
                     Divider()
                     ForEach(RecurrenceRule.Frequency.allCases) { f in
                         Button(f.label) { store.setRecurrence(itemID, RecurrenceRule(frequency: f)) }
+                    }
+                    // Custom intervals (5-3d).
+                    Menu("Custom interval") {
+                        Button("Every 2 days") { store.setRecurrence(itemID, RecurrenceRule(frequency: .daily, interval: 2)) }
+                        Button("Every 2 weeks") { store.setRecurrence(itemID, RecurrenceRule(frequency: .weekly, interval: 2)) }
+                        Button("Every 3 weeks") { store.setRecurrence(itemID, RecurrenceRule(frequency: .weekly, interval: 3)) }
+                        Button("Every 2 months") { store.setRecurrence(itemID, RecurrenceRule(frequency: .monthly, interval: 2)) }
+                        Button("Every quarter") { store.setRecurrence(itemID, RecurrenceRule(frequency: .monthly, interval: 3)) }
+                    }
+                    // Series-wide change (5-3c): only meaningful once part of a series.
+                    if item.seriesID != nil, let r = item.recurrence {
+                        Divider()
+                        Button("Apply “\(r.label)” to this & all future") {
+                            store.setRecurrenceForSeries(itemID, r)
+                        }
                     }
                 } label: {
                     NotionChip(item.recurrence?.label ?? "None",
