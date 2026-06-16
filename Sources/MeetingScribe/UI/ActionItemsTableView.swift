@@ -18,16 +18,19 @@ extension ActionItemsView {
     // MARK: - Table view
 
     var tableBody: some View {
-        ScrollView([.vertical]) {
-            VStack(spacing: 0) {
-                tableHeaderRow
-                Divider()
-                ForEach(tableSorted) { item in
-                    tableRow(item)
-                    Divider().opacity(0.4)
+        VStack(spacing: 0) {
+            if !taskSelection.isEmpty { taskSelectToolbar }
+            ScrollView([.vertical]) {
+                VStack(spacing: 0) {
+                    tableHeaderRow
+                    Divider()
+                    ForEach(tableSorted) { item in
+                        tableRow(item)
+                        Divider().opacity(0.4)
+                    }
                 }
+                .padding(.horizontal, 16).padding(.vertical, 8)
             }
-            .padding(.horizontal, 16).padding(.vertical, 8)
         }
     }
 
@@ -49,15 +52,44 @@ extension ActionItemsView {
         }
     }
 
+    // MARK: - Column visibility (5-8)
+
+    /// Toggleable data columns (Task is always shown).
+    static let tableColumns: [(key: String, label: String)] = [
+        ("project", "Project"), ("owner", "Owner"),
+        ("priority", "Priority"), ("due", "Due"), ("meeting", "Meeting"),
+    ]
+    func tableColHidden(_ key: String) -> Bool {
+        tableHiddenColumnsCSV.split(separator: ",").contains(Substring(key))
+    }
+    func toggleTableCol(_ key: String) {
+        var set = Set(tableHiddenColumnsCSV.split(separator: ",").map(String.init))
+        if set.contains(key) { set.remove(key) } else { set.insert(key) }
+        tableHiddenColumnsCSV = set.sorted().joined(separator: ",")
+    }
+
     var tableHeaderRow: some View {
         HStack(spacing: 10) {
             Text("").frame(width: Col.check)
             sortHeader("Task", .task).frame(maxWidth: .infinity, alignment: .leading)
-            sortHeader("Project", .project).frame(width: Col.project, alignment: .leading)
-            sortHeader("Owner", .owner).frame(width: Col.owner, alignment: .leading)
-            sortHeader("Priority", .priority).frame(width: Col.priority, alignment: .leading)
-            sortHeader("Due", .due).frame(width: Col.due, alignment: .leading)
-            Text("Meeting").frame(width: Col.meeting, alignment: .leading)
+            if !tableColHidden("project") { sortHeader("Project", .project).frame(width: Col.project, alignment: .leading) }
+            if !tableColHidden("owner") { sortHeader("Owner", .owner).frame(width: Col.owner, alignment: .leading) }
+            if !tableColHidden("priority") { sortHeader("Priority", .priority).frame(width: Col.priority, alignment: .leading) }
+            if !tableColHidden("due") { sortHeader("Due", .due).frame(width: Col.due, alignment: .leading) }
+            if !tableColHidden("meeting") { Text("Meeting").frame(width: Col.meeting, alignment: .leading) }
+            // Column picker (5-8).
+            Menu {
+                ForEach(Self.tableColumns, id: \.key) { col in
+                    Button {
+                        toggleTableCol(col.key)
+                    } label: {
+                        if !tableColHidden(col.key) { Label(col.label, systemImage: "checkmark") }
+                        else { Text(col.label) }
+                    }
+                }
+            } label: { Image(systemName: "slider.horizontal.3") }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .frame(width: 24)
         }
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
@@ -86,50 +118,95 @@ extension ActionItemsView {
             Button {
                 store.setStatus(item.id, status: item.status == .completed ? .open : .completed)
             } label: {
-                Image(systemName: item.status.systemImage)
-                    .foregroundStyle(item.status == .completed ? .green
+                Image(systemName: taskSelection.contains(item.id) ? "checkmark.circle.fill"
+                                  : item.status.systemImage)
+                    .foregroundStyle(taskSelection.contains(item.id) ? NDS.brand
+                                     : item.status == .completed ? .green
                                      : item.status == .inProgress ? .orange : .blue)
             }
             .buttonStyle(.plain).frame(width: Col.check)
-            Text(item.title)
-                .font(.callout)
-                .strikethrough(item.status == .completed)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            projectCell(item).frame(width: Col.project, alignment: .leading)
-            // Owner cell — adopts the shared `TaskOwnerLabel` (D4-3), the same
-            // primitive `TaskMetaCluster` composes.
-            TaskOwnerLabel(owner: item.owner)
-                .frame(width: Col.owner, alignment: .leading)
-            Menu {
-                ForEach(ActionItem.Priority.allCases) { p in
-                    Button(p.label) { store.setPriority(item.id, priority: p) }
-                }
-            } label: {
-                MSPriorityBadge(priority: item.priority)
+            // Inline-editable title (5-8): double-click to edit.
+            if tableEditingTitleID == item.id {
+                TextField("Title", text: $tableTitleDraft, onCommit: commitTableTitle)
+                    .textFieldStyle(.plain).font(.callout)
+                    .onSubmit(commitTableTitle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(item.title)
+                    .font(.callout)
+                    .strikethrough(item.status == .completed)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { tableEditingTitleID = item.id; tableTitleDraft = item.title }
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden)
-            .frame(width: Col.priority, alignment: .leading)
-            Menu {
-                Button("Today") { store.setDueDate(item.id, dueDate: Self.startOfToday()) }
-                Button("Tomorrow") { store.setDueDate(item.id, dueDate: Self.daysFromToday(1)) }
-                Button("Next week") { store.setDueDate(item.id, dueDate: Self.daysFromToday(7)) }
-                if item.dueDate != nil {
-                    Divider()
-                    Button("Clear due date") { store.setDueDate(item.id, dueDate: nil) }
-                }
-            } label: {
-                DueChip(date: item.dueDate, status: item.status, style: .plain)
+            if !tableColHidden("project") { projectCell(item).frame(width: Col.project, alignment: .leading) }
+            if !tableColHidden("owner") {
+                TaskOwnerLabel(owner: item.owner).frame(width: Col.owner, alignment: .leading)
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden)
-            .frame(width: Col.due, alignment: .leading)
-            Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary)
-                .lineLimit(1).frame(width: Col.meeting, alignment: .leading)
+            if !tableColHidden("priority") {
+                Menu {
+                    ForEach(ActionItem.Priority.allCases) { p in
+                        Button(p.label) { store.setPriority(item.id, priority: p) }
+                    }
+                } label: {
+                    MSPriorityBadge(priority: item.priority)
+                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                .frame(width: Col.priority, alignment: .leading)
+            }
+            if !tableColHidden("due") {
+                Menu {
+                    Button("Today") { store.setDueDate(item.id, dueDate: Self.startOfToday()) }
+                    Button("Tomorrow") { store.setDueDate(item.id, dueDate: Self.daysFromToday(1)) }
+                    Button("Next week") { store.setDueDate(item.id, dueDate: Self.daysFromToday(7)) }
+                    if item.dueDate != nil {
+                        Divider()
+                        Button("Clear due date") { store.setDueDate(item.id, dueDate: nil) }
+                    }
+                } label: {
+                    DueChip(date: item.dueDate, status: item.status, style: .plain)
+                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                .frame(width: Col.due, alignment: .leading)
+            }
+            if !tableColHidden("meeting") {
+                Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary)
+                    .lineLimit(1).frame(width: Col.meeting, alignment: .leading)
+            }
+            Color.clear.frame(width: 24)
         }
         .padding(.vertical, 7)
+        .background(taskSelection.contains(item.id) ? NDS.brand.opacity(0.08) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture { env.selectedTaskID = item.id }
+        // ⌘/⇧-click multi-select in the table (5-8).
+        .highPriorityGesture(TapGesture().modifiers(.command).onEnded {
+            toggleTaskSelection(item.id); lastSelectedTaskID = item.id
+        })
+        .highPriorityGesture(TapGesture().modifiers(.shift).onEnded {
+            tableRangeSelect(to: item.id)
+        })
         .contextMenu { TaskQuickMenu(item: item, store: store, onOpen: { env.selectedTaskID = item.id }) }
+    }
+
+    /// Shift-click range select using the table's current sort order (5-8).
+    func tableRangeSelect(to id: String) {
+        let order = tableSorted.map(\.id)
+        guard let anchor = lastSelectedTaskID ?? taskSelection.first,
+              let a = order.firstIndex(of: anchor), let b = order.firstIndex(of: id) else {
+            toggleTaskSelection(id); lastSelectedTaskID = id; return
+        }
+        for i in (min(a, b)...max(a, b)) { taskSelection.insert(order[i]) }
+        lastSelectedTaskID = id
+    }
+
+    func commitTableTitle() {
+        if let id = tableEditingTitleID {
+            let t = tableTitleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { store.setTitle(id, title: t) }
+        }
+        tableEditingTitleID = nil
     }
 
     @ViewBuilder
