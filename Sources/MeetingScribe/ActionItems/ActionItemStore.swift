@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import VaultKit
 import OSLog
 
@@ -35,6 +36,9 @@ final class ActionItemStore: ObservableObject {
     @Published private(set) var labels: [TaskLabel] = []
     @Published private(set) var sections: [ProjectSection] = []
     @Published private(set) var initiatives: [Initiative] = []
+    /// Top-level life contexts (Work / Personal / …) — the #1 workspace
+    /// partition (1-1). Seeded with two defaults on first launch.
+    @Published private(set) var contexts: [WorkspaceContext] = []
 
     /// How long a soft-deleted task lingers in Trash before automatic purge.
     static let trashRetention: TimeInterval = 30 * 24 * 60 * 60
@@ -58,6 +62,9 @@ final class ActionItemStore: ObservableObject {
     private var initiativesURL: URL {
         AppSettings.shared.storageDir.appendingPathComponent("initiatives.json")
     }
+    private var contextsURL: URL {
+        AppSettings.shared.storageDir.appendingPathComponent("contexts.json")
+    }
 
     init() {
         // Load OFF the main thread. Each `Data(contentsOf:)` below blocks, and
@@ -65,7 +72,7 @@ final class ActionItemStore: ObservableObject {
         // stalled app launch ("failing to open"). Read + decode on a background
         // task, then publish the arrays back on the main actor.
         let itemsURL = fileURL, projURL = projectsURL, lblURL = labelsURL
-        let secURL = sectionsURL, initURL = initiativesURL
+        let secURL = sectionsURL, initURL = initiativesURL, ctxURL = contextsURL
         loadTask = Task.detached(priority: .userInitiated) { [weak self] in
             let allItems: [ActionItem]     = Self.decodeArray(itemsURL, version: Self.actionItemSchemaVersion,
                                                               migrate: TaskSchemaMigrations.actionItems)
@@ -77,6 +84,8 @@ final class ActionItemStore: ObservableObject {
                                                               migrate: TaskSchemaMigrations.sections)
             let initiatives: [Initiative]  = Self.decodeArray(initURL, version: Self.initiativeSchemaVersion,
                                                               migrate: TaskSchemaMigrations.initiatives)
+            let fileExists = (try? ctxURL.checkResourceIsReachable()) ?? false
+            let contexts: [WorkspaceContext] = Self.decodeArray(ctxURL, version: Self.contextSchemaVersion)
             // Partition tasks into live vs. trashed by the soft-delete tombstone.
             let live    = allItems.filter { $0.deletedAt == nil }
             let trashed = allItems.filter { $0.deletedAt != nil }
@@ -88,6 +97,13 @@ final class ActionItemStore: ObservableObject {
                 self.labels = labels
                 self.sections = sections
                 self.initiatives = initiatives
+                // First launch (no contexts.json yet) seeds Work + Personal (1-1).
+                if !fileExists && contexts.isEmpty {
+                    self.contexts = WorkspaceContext.seedDefaults()
+                    self.saveContexts()
+                } else {
+                    self.contexts = contexts
+                }
                 // Bound the Trash on launch (drops items past the retention
                 // window; only writes if something was actually purged).
                 self.purgeExpiredTrash()
@@ -713,6 +729,88 @@ final class ActionItemStore: ObservableObject {
         return items.filter { ($0.projectID.map { projectIDs.contains($0) } ?? false) && $0.status != .completed }.count
     }
 
+    // MARK: - Workspace contexts (Work / Personal / …) — 1-1
+
+    func context(id: String) -> WorkspaceContext? { contexts.first { $0.id == id } }
+
+    /// Contexts in display order (by sortIndex, then creation).
+    func sortedContexts() -> [WorkspaceContext] {
+        contexts.sorted {
+            let a = $0.sortIndex ?? Double($0.createdAt.timeIntervalSince1970)
+            let b = $1.sortIndex ?? Double($1.createdAt.timeIntervalSince1970)
+            return a < b
+        }
+    }
+
+    @discardableResult
+    func createContext(name: String, colorHex: String? = nil) -> WorkspaceContext {
+        let next = (sortedContexts().last?.sortIndex ?? 0) + 1
+        let palette = ["#4F8DFD", "#34C759", "#FF9500", "#AF52DE", "#FF2D55", "#5AC8FA"]
+        let c = WorkspaceContext(name: name.isEmpty ? "New context" : name,
+                                 colorHex: colorHex ?? palette[contexts.count % palette.count],
+                                 sortIndex: next)
+        contexts.append(c)
+        saveContexts()
+        return c
+    }
+
+    func renameContext(_ id: String, name: String) {
+        guard let i = contexts.firstIndex(where: { $0.id == id }) else { return }
+        contexts[i].name = name; saveContexts()
+    }
+    func setContextColor(_ id: String, colorHex: String) {
+        guard let i = contexts.firstIndex(where: { $0.id == id }) else { return }
+        contexts[i].colorHex = colorHex; saveContexts()
+    }
+
+    /// Removes a context and detaches everything that pointed at it (initiatives
+    /// and any directly-tagged tasks) so nothing references a dead id.
+    func deleteContext(_ id: String) {
+        contexts.removeAll { $0.id == id }
+        var changedInit = false
+        for i in initiatives.indices where initiatives[i].contextID == id {
+            initiatives[i].contextID = nil; initiatives[i].updatedAt = Date(); changedInit = true
+        }
+        var changedItems = false
+        for i in items.indices where items[i].contextID == id {
+            items[i].contextID = nil; items[i].updatedAt = Date(); changedItems = true
+        }
+        saveContexts()
+        if changedInit { saveInitiatives() }
+        if changedItems { save() }
+    }
+
+    /// Set (or clear) a task's direct context override.
+    func setContext(_ itemID: String, contextID: String?) {
+        update(itemID) { $0.contextID = contextID }
+    }
+    /// Set (or clear) an initiative's context — tasks inherit it via their project.
+    func setInitiativeContext(_ initiativeID: String, contextID: String?) {
+        updateInitiative(initiativeID) { $0.contextID = contextID }
+    }
+
+    /// The context a task effectively belongs to: its own override if set, else
+    /// inherited from its project's initiative (1-1 / 1-5).
+    func effectiveContextID(for item: ActionItem) -> String? {
+        if let direct = item.contextID { return direct }
+        guard let pid = item.projectID,
+              let iid = projects.first(where: { $0.id == pid })?.initiativeID else { return nil }
+        return initiatives.first { $0.id == iid }?.contextID
+    }
+
+    /// SwiftUI color for a task's effective context, or nil when uncontextualized
+    /// — drives the row left-bar and Kanban card stripe (1-5).
+    func contextColor(for item: ActionItem) -> Color? {
+        guard let cid = effectiveContextID(for: item),
+              let hex = context(id: cid)?.colorHex else { return nil }
+        return Color(hex: hex)
+    }
+    /// SwiftUI color for a context id (used by the sidebar switcher pills).
+    func contextColor(id: String) -> Color? {
+        guard let hex = context(id: id)?.colorHex else { return nil }
+        return Color(hex: hex)
+    }
+
     // MARK: - Project ↔ meeting links
 
     func meetingIDs(forProject id: String) -> [String] {
@@ -1256,6 +1354,7 @@ final class ActionItemStore: ObservableObject {
     private static let labelSchemaVersion = 1
     private static let sectionSchemaVersion = 1
     private static let initiativeSchemaVersion = 1
+    private static let contextSchemaVersion = 1
 
     private func load() {
         guard let data = try? Data(contentsOf: fileURL) else { return }
@@ -1344,6 +1443,11 @@ final class ActionItemStore: ObservableObject {
         writeEnvelope(initiatives, to: initiativesURL,
                       version: Self.initiativeSchemaVersion,
                       tag: "ActionItemStore.saveInitiatives")
+    }
+    private func saveContexts() {
+        writeEnvelope(contexts, to: contextsURL,
+                      version: Self.contextSchemaVersion,
+                      tag: "ActionItemStore.saveContexts")
     }
 
     /// One helper to rule them all — every persisted store routes through

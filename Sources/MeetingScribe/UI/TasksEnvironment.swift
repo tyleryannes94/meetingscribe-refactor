@@ -21,8 +21,13 @@ final class TasksEnvironment: ObservableObject {
     @Published var selectedInitiativeID: String?
     /// When set, the right pane shows that task as a full page (overlay).
     @Published var selectedTaskID: String?
+    /// Active workspace context filter (1-2). nil = "All" (span every context).
+    /// Scopes the sidebar initiative tree and the main task list live.
+    @Published var activeContextID: String?
 
-    init(selectedProjectID: String? = nil) {
+    /// Default landing is the Today smart view (1-3) — not the old aimless
+    /// "All tasks" — so opening Tasks leads with what's due now.
+    init(selectedProjectID: String? = ActionItemsView.todaySentinel) {
         self.selectedProjectID = selectedProjectID
     }
 
@@ -35,6 +40,7 @@ final class TasksEnvironment: ObservableObject {
         guard let pid = selectedProjectID else { return .allTasks }
         switch pid {
         case ActionItemsView.homeSentinel:      return .home
+        case ActionItemsView.todaySentinel:     return .today
         case ActionItemsView.triageSentinel:    return .triage
         case ActionItemsView.noProjectSentinel: return .noProject
         case ActionItemsView.waitingSentinel:   return .waitingOn

@@ -14,9 +14,42 @@ struct HomeTasksBoard: View {
     /// Active work plus a Done column so cards have somewhere to land.
     private let columns: [ActionItem.Status] = [.open, .inProgress, .completed]
 
+    /// Focus filter (1-4): time horizon + workspace context.
+    @State private var timeScope: TimeScope = .all
+    @State private var activeContextID: String?
+
+    enum TimeScope: String, CaseIterable, Identifiable {
+        case today, thisWeek, all
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .today: return "Today"
+            case .thisWeek: return "This Week"
+            case .all: return "All"
+            }
+        }
+    }
+
+    private func matchesScope(_ item: ActionItem) -> Bool {
+        // Context filter (1-4): resolve via the task's project → initiative.
+        if let cid = activeContextID, store.effectiveContextID(for: item) != cid { return false }
+        // Time filter (1-4). In-progress always shows so active work isn't hidden.
+        switch timeScope {
+        case .all: return true
+        case .today:
+            if item.status == .inProgress { return true }
+            return item.dueDate.map { Calendar.current.isDateInToday($0) } ?? false
+        case .thisWeek:
+            if item.status == .inProgress { return true }
+            guard let due = item.dueDate else { return false }
+            let horizon = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+            return due >= Calendar.current.startOfDay(for: Date()) && due <= horizon
+        }
+    }
+
     private func items(_ status: ActionItem.Status) -> [ActionItem] {
         store.items
-            .filter { !$0.needsTriage && $0.status == status }
+            .filter { !$0.needsTriage && $0.status == status && matchesScope($0) }
             .sorted { a, b in
                 let sa = a.sortIndex ?? .greatestFiniteMagnitude
                 let sb = b.sortIndex ?? .greatestFiniteMagnitude
@@ -46,6 +79,7 @@ struct HomeTasksBoard: View {
                 }
                 .buttonStyle(.borderedProminent).controlSize(.small)
             }
+            filterBar
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(columns) { column($0) }
@@ -55,6 +89,36 @@ struct HomeTasksBoard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+    }
+
+    /// Time + context focus pills (1-4).
+    private var filterBar: some View {
+        HStack(spacing: 6) {
+            ForEach(TimeScope.allCases) { ts in
+                pill(ts.label, active: timeScope == ts) { timeScope = ts }
+            }
+            if !store.contexts.isEmpty {
+                Divider().frame(height: 14).overlay(NDS.divider)
+                pill("All", active: activeContextID == nil) { activeContextID = nil }
+                ForEach(store.sortedContexts()) { c in
+                    pill(c.name, active: activeContextID == c.id, color: store.contextColor(id: c.id)) {
+                        activeContextID = (activeContextID == c.id) ? nil : c.id
+                    }
+                }
+            }
+            Spacer()
+        }
+    }
+
+    private func pill(_ title: String, active: Bool, color: Color? = nil,
+                      _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.caption2.weight(active ? .semibold : .regular))
+                .padding(.horizontal, 9).padding(.vertical, 3)
+                .background(active ? (color ?? NDS.brand).opacity(0.16) : NDS.columnBg, in: Capsule())
+                .foregroundStyle(active ? (color ?? NDS.brand) : NDS.textSecondary)
+        }
+        .buttonStyle(.plain)
     }
 
     private func column(_ status: ActionItem.Status) -> some View {
@@ -73,10 +137,12 @@ struct HomeTasksBoard: View {
                 Text("Nothing here").font(.caption2).foregroundStyle(.tertiary)
                     .padding(.vertical, 8)
             } else {
-                ForEach(list.prefix(8)) { card($0) }
-                if list.count > 8 {
-                    Text("+\(list.count - 8) more").font(.caption2).foregroundStyle(.secondary)
+                // Scroll the whole column (1-4) instead of capping at 8 with a
+                // dead "+N more" label.
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 6) { ForEach(list) { card($0) } }
                 }
+                .frame(maxHeight: 400)
             }
         }
         .padding(10)
@@ -87,6 +153,10 @@ struct HomeTasksBoard: View {
     private func card(_ item: ActionItem) -> some View {
         let labels = store.labels(for: item)
         return VStack(alignment: .leading, spacing: 4) {
+            // Workspace-context stripe (1-5).
+            if let cColor = store.contextColor(for: item) {
+                RoundedRectangle(cornerRadius: 1.5).fill(cColor).frame(height: 3)
+            }
             if !labels.isEmpty {
                 HStack(spacing: 4) {
                     ForEach(labels.prefix(5)) { l in

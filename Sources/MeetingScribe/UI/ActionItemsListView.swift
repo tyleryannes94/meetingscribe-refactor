@@ -288,9 +288,11 @@ extension ActionItemsView {
             return filtered.filter { $0.delegated == true }
                 .sorted { $0.createdAt < $1.createdAt }
         }
-        guard let pid = env.selectedProjectID else { return filtered }
+        // "All tasks" and "Unsorted" honor the active context switcher (1-2);
+        // an explicitly-opened project/person/waiting bucket spans contexts.
+        guard let pid = env.selectedProjectID else { return contextFiltered(filtered) }
         if pid == Self.noProjectSentinel {
-            return filtered.filter { $0.projectID == nil }
+            return contextFiltered(filtered.filter { $0.projectID == nil })
         }
         return filtered.filter { $0.projectID == pid }
     }
@@ -337,6 +339,7 @@ extension ActionItemsView {
             assignedLabels: store.labels(for: item),
             isPushing: vm.pushingIDs.contains(item.id),
             isExpanded: vm.editingID == item.id,
+            contextColor: store.contextColor(for: item),
             onToggleExpand: {
                 // P0-2: single tap expands the inline detail editor in place.
                 vm.editingID = (vm.editingID == item.id) ? nil : item.id

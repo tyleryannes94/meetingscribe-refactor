@@ -61,6 +61,7 @@ struct ActionItemsView: View {
     }
     static let noProjectSentinel = "__none__"
     static let homeSentinel = "__home__"
+    static let todaySentinel = "__today__"
     static let triageSentinel = "__triage__"
     /// People facet (P2-2): a person scope is encoded into `env.selectedProjectID`
     /// as `"__person__<personID>"` so it shares the single left-column
@@ -176,6 +177,8 @@ struct ActionItemsView: View {
                     }
                 case .home:
                     tasksDashboard
+                case .today:
+                    todayPane
                 case .meeting(let mid) where manager.pastMeetings.contains(where: { $0.id == mid }):
                     // D1-4: one canonical meeting surface. Instead of the parallel
                     // MeetingNotesPage, route to the Meetings-tab detail.
