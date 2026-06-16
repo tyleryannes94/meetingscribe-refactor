@@ -362,6 +362,25 @@ extension ActionItemsView {
                 }
                 .buttonStyle(.plain)
             }
+            // Save the active filter as a reusable view (5-1).
+            if hasActiveFilter {
+                Button { savingView = true } label: {
+                    Label("Save view", systemImage: "bookmark").font(NDS.small)
+                }
+                .buttonStyle(.plain).foregroundStyle(NDS.brand)
+                .popover(isPresented: $savingView, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Save current filter as a view").font(NDS.small).foregroundStyle(NDS.textSecondary)
+                        TextField("View name", text: $newViewName, onCommit: commitSaveView)
+                            .textFieldStyle(.roundedBorder).frame(width: 220).onSubmit(commitSaveView)
+                        HStack {
+                            Spacer()
+                            Button("Save") { commitSaveView() }.keyboardShortcut(.defaultAction)
+                        }
+                    }
+                    .padding(12)
+                }
+            }
             // Filter + sort menu
             Menu {
                 Picker("Status", selection: $vm.filter) {
@@ -399,6 +418,24 @@ extension ActionItemsView {
 
             // Overflow
             Menu {
+                Button { store.undoLastChange() } label: {
+                    Label("Undo last change", systemImage: "arrow.uturn.backward")
+                }
+                .keyboardShortcut("z", modifiers: .command)
+                Divider()
+                // New task from a saved template (5-4).
+                if !store.taskTemplates.isEmpty {
+                    Menu("New task from template…") {
+                        ForEach(store.taskTemplates) { t in
+                            Button(t.name) {
+                                let task = store.createTask(fromTemplate: t, projectID: realSelectedProjectID)
+                                vm.viewMode = .list
+                                env.selectedTaskID = task.id
+                            }
+                        }
+                    }
+                    Divider()
+                }
                 Button {
                     Task { await manager.syncExternalTasks() }
                 } label: { Label("Sync from Linear / Notion", systemImage: "arrow.triangle.2.circlepath") }

@@ -30,6 +30,7 @@ extension ActionItemsView {
     private func initiativeProgress(_ id: String) -> some View {
         let (done, total) = store.completion(forInitiative: id)
         let frac = total == 0 ? 0 : Double(done) / Double(total)
+        let target = store.initiative(id: id)?.targetDate
         return HStack(spacing: 10) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -40,8 +41,30 @@ extension ActionItemsView {
             .frame(height: 6)
             Text("\(done)/\(total)")
                 .font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textSecondary)
+            // Target date (5-6): displayed when set, quick-settable via a menu.
+            Menu {
+                Button("Today") { store.setInitiativeTargetDate(id, Calendar.current.startOfDay(for: Date())) }
+                Button("In 1 week") { store.setInitiativeTargetDate(id, Calendar.current.date(byAdding: .day, value: 7, to: Date())) }
+                Button("In 1 month") { store.setInitiativeTargetDate(id, Calendar.current.date(byAdding: .month, value: 1, to: Date())) }
+                if target != nil {
+                    Divider()
+                    Button("Clear target") { store.setInitiativeTargetDate(id, nil) }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "target").scaledFont(10)
+                    Text(target.map { Self.targetString($0) } ?? "Set target")
+                        .font(NDS.tiny)
+                }
+                .foregroundStyle(target == nil ? NDS.textTertiary : NDS.brand)
+            }
+            .menuStyle(.borderlessButton).fixedSize()
         }
         .padding(.horizontal, 32).padding(.vertical, 10)
+    }
+
+    private static func targetString(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "MMM d, yyyy"; return f.string(from: d)
     }
 
     @ViewBuilder

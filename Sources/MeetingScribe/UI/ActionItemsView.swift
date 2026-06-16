@@ -59,6 +59,9 @@ struct ActionItemsView: View {
     // Initiative roll-up quick-add (3-2).
     @State var initiativeAddText = ""
     @State var initiativeAddProjectID: String?
+    // Save-current-filter-as-view popover (5-1).
+    @State var savingView = false
+    @State var newViewName = ""
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board, calendar, gallery
@@ -84,9 +87,16 @@ struct ActionItemsView: View {
     /// naturally clears the person scope.
     static let personSentinelPrefix = "__person__"
     static func personSentinel(_ id: String) -> String { personSentinelPrefix + id }
+    /// Saved-view scope (5-1), encoded into the single rail selection like People.
+    static let savedViewSentinelPrefix = "__savedview__"
+    static func savedViewSentinel(_ id: String) -> String { savedViewSentinelPrefix + id }
     /// Waiting-on lifecycle (P2-6): scopes the list to delegated tasks
     /// (commitments you're waiting on others for).
     static let waitingSentinel = "__waiting__"
+    /// Recurring smart list (5-3): tasks that carry a repeat rule.
+    static let recurringSentinel = "__recurring__"
+    /// My Tasks (5-2): the current user's tasks bucketed by date.
+    static let myTasksSentinel = "__mytasks__"
 
     /// The person id currently scoping the task list, if a People-facet row is
     /// selected in the rail (P2-2). Decoded from `env.selectedProjectID`.
@@ -137,7 +147,7 @@ struct ActionItemsView: View {
         var id: String { rawValue }
     }
     enum GroupBy: String, CaseIterable, Identifiable {
-        case none, meeting, priority, status, dueDate
+        case none, meeting, priority, status, dueDate, owner, project, initiative, label
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -146,6 +156,10 @@ struct ActionItemsView: View {
             case .priority: return "Priority"
             case .status: return "Status"
             case .dueDate: return "Due date"
+            case .owner: return "Owner"
+            case .project: return "Project"
+            case .initiative: return "Initiative"
+            case .label: return "Label"
             }
         }
     }
@@ -194,6 +208,12 @@ struct ActionItemsView: View {
                     tasksDashboard
                 case .today:
                     todayPane
+                case .savedView(let vid) where store.savedView(id: vid) != nil:
+                    savedViewPane(vid)
+                case .recurring:
+                    recurringPane
+                case .myTasks:
+                    myTasksPane
                 case .meeting(let mid) where manager.pastMeetings.contains(where: { $0.id == mid }):
                     // D1-4: one canonical meeting surface. Instead of the parallel
                     // MeetingNotesPage, route to the Meetings-tab detail.

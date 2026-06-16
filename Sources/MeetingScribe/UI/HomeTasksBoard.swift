@@ -175,6 +175,9 @@ struct HomeTasksBoard: View {
                 if item.dueDate != nil {
                     DueChip(date: item.dueDate, status: item.status, style: .plain)
                 }
+                if item.recurrence != nil {
+                    Image(systemName: "repeat").font(.caption2).foregroundStyle(NDS.brand)
+                }
                 Spacer(minLength: 0)
                 if let owner = item.owner, !owner.isEmpty {
                     TaskOwnerAvatar(name: owner, size: 16)

@@ -39,6 +39,11 @@ final class ActionItemStore: ObservableObject {
     /// Top-level life contexts (Work / Personal / …) — the #1 workspace
     /// partition (1-1). Seeded with two defaults on first launch.
     @Published private(set) var contexts: [WorkspaceContext] = []
+    /// Named, persisted `TaskQuery`s shown as sidebar entries (5-1). Includes
+    /// three non-deletable built-ins.
+    @Published private(set) var savedTaskViews: [SavedTaskView] = []
+    /// Reusable task blueprints (5-4).
+    @Published private(set) var taskTemplates: [TaskTemplate] = []
 
     /// How long a soft-deleted task lingers in Trash before automatic purge.
     static let trashRetention: TimeInterval = 30 * 24 * 60 * 60
@@ -65,6 +70,12 @@ final class ActionItemStore: ObservableObject {
     private var contextsURL: URL {
         AppSettings.shared.storageDir.appendingPathComponent("contexts.json")
     }
+    private var savedViewsURL: URL {
+        AppSettings.shared.storageDir.appendingPathComponent("saved_task_views.json")
+    }
+    private var templatesURL: URL {
+        AppSettings.shared.storageDir.appendingPathComponent("task_templates.json")
+    }
 
     init() {
         // Load OFF the main thread. Each `Data(contentsOf:)` below blocks, and
@@ -72,7 +83,7 @@ final class ActionItemStore: ObservableObject {
         // stalled app launch ("failing to open"). Read + decode on a background
         // task, then publish the arrays back on the main actor.
         let itemsURL = fileURL, projURL = projectsURL, lblURL = labelsURL
-        let secURL = sectionsURL, initURL = initiativesURL, ctxURL = contextsURL
+        let secURL = sectionsURL, initURL = initiativesURL, ctxURL = contextsURL, svURL = savedViewsURL, tplURL = templatesURL
         loadTask = Task.detached(priority: .userInitiated) { [weak self] in
             let allItems: [ActionItem]     = Self.decodeArray(itemsURL, version: Self.actionItemSchemaVersion,
                                                               migrate: TaskSchemaMigrations.actionItems)
@@ -86,6 +97,8 @@ final class ActionItemStore: ObservableObject {
                                                               migrate: TaskSchemaMigrations.initiatives)
             let fileExists = (try? ctxURL.checkResourceIsReachable()) ?? false
             let contexts: [WorkspaceContext] = Self.decodeArray(ctxURL, version: Self.contextSchemaVersion)
+            let savedViews: [SavedTaskView] = Self.decodeArray(svURL, version: Self.savedViewSchemaVersion)
+            let templates: [TaskTemplate] = Self.decodeArray(tplURL, version: Self.templateSchemaVersion)
             // Partition tasks into live vs. trashed by the soft-delete tombstone.
             let live    = allItems.filter { $0.deletedAt == nil }
             let trashed = allItems.filter { $0.deletedAt != nil }
@@ -104,6 +117,18 @@ final class ActionItemStore: ObservableObject {
                 } else {
                     self.contexts = contexts
                 }
+                // Saved views: keep user views, guarantee the built-ins exist (5-1).
+                var views = savedViews
+                let haveIDs = Set(views.map(\.id))
+                let missing = SavedTaskView.seedBuiltIns().filter { !haveIDs.contains($0.id) }
+                if !missing.isEmpty {
+                    views.append(contentsOf: missing)
+                    self.savedTaskViews = views
+                    self.saveSavedViews()
+                } else {
+                    self.savedTaskViews = views
+                }
+                self.taskTemplates = templates
                 // Bound the Trash on launch (drops items past the retention
                 // window; only writes if something was actually purged).
                 self.purgeExpiredTrash()
@@ -712,6 +737,7 @@ final class ActionItemStore: ObservableObject {
     func setInitiativeIcon(_ id: String, icon: String?) { updateInitiative(id) { $0.icon = icon } }
     func setInitiativeBody(_ id: String, body: String) { updateInitiative(id) { $0.body = body } }
     func setInitiativeStatus(_ id: String, status: Initiative.Status) { updateInitiative(id) { $0.status = status } }
+    func setInitiativeTargetDate(_ id: String, _ date: Date?) { updateInitiative(id) { $0.targetDate = date } }
     func deleteInitiative(_ id: String) {
         initiatives.removeAll { $0.id == id }
         for i in projects.indices where projects[i].initiativeID == id {
@@ -733,8 +759,10 @@ final class ActionItemStore: ObservableObject {
     /// Top-level projects with no initiative. Archived pages are hidden by
     /// default (P0-4); pass `includeArchived: true` for "Show archived".
     func standaloneTopProjects(includeArchived: Bool = false) -> [Project] {
+        // Only archived pages are hidden by default; on-hold/completed still show
+        // (5-6 expanded the status set).
         childProjects(of: nil).filter {
-            $0.initiativeID == nil && (includeArchived || $0.status == .active)
+            $0.initiativeID == nil && (includeArchived || $0.status != .archived)
         }
     }
 
@@ -749,6 +777,82 @@ final class ActionItemStore: ObservableObject {
     func openCount(forInitiative initiativeID: String) -> Int {
         let projectIDs = Set(projects.filter { $0.initiativeID == initiativeID }.map { $0.id })
         return items.filter { ($0.projectID.map { projectIDs.contains($0) } ?? false) && $0.status != .completed }.count
+    }
+
+    // MARK: - Task templates (5-4)
+
+    @discardableResult
+    func createTemplate(name: String, from item: ActionItem? = nil) -> TaskTemplate {
+        var t = TaskTemplate(name: name.isEmpty ? "Untitled template" : name)
+        if let item {
+            t.defaultTitle = item.title
+            t.defaultPriority = item.priority
+            t.defaultLabelIDs = item.labelIDs ?? []
+            t.defaultEstimate = item.estimate
+            t.defaultSubtasks = (item.subtasks ?? []).map { $0.title }
+            t.defaultRecurrence = item.recurrence
+            t.contextID = item.contextID
+            t.projectID = item.projectID
+        }
+        taskTemplates.append(t)
+        saveTemplates()
+        return t
+    }
+
+    func deleteTemplate(_ id: String) {
+        taskTemplates.removeAll { $0.id == id }
+        saveTemplates()
+    }
+
+    /// Spawn a fresh task from a template (5-4), applying all of its defaults.
+    @discardableResult
+    func createTask(fromTemplate t: TaskTemplate, projectID: String? = nil) -> ActionItem {
+        let pid = projectID ?? t.projectID
+        let created = createTask(title: t.defaultTitle.isEmpty ? t.name : t.defaultTitle,
+                                 projectID: pid, priority: t.defaultPriority)
+        update(created.id) {
+            if !t.defaultLabelIDs.isEmpty { $0.labelIDs = t.defaultLabelIDs }
+            $0.estimate = t.defaultEstimate
+            if !t.defaultSubtasks.isEmpty { $0.subtasks = t.defaultSubtasks.map { Subtask(title: $0) } }
+            $0.recurrence = t.defaultRecurrence
+            $0.contextID = t.contextID
+        }
+        return items.first { $0.id == created.id } ?? created
+    }
+
+    // MARK: - Saved task views (5-1)
+
+    func savedView(id: String) -> SavedTaskView? { savedTaskViews.first { $0.id == id } }
+
+    func sortedSavedViews() -> [SavedTaskView] {
+        savedTaskViews.sorted {
+            let a = $0.sortIndex ?? Double($0.name.hashValue)
+            let b = $1.sortIndex ?? Double($1.name.hashValue)
+            return a == b ? $0.name < $1.name : a < b
+        }
+    }
+
+    @discardableResult
+    func createSavedTaskView(name: String, icon: String? = nil, query: TaskQuery) -> SavedTaskView {
+        let next = (savedTaskViews.compactMap { $0.sortIndex }.max() ?? 0) + 1
+        let v = SavedTaskView(name: name.isEmpty ? "Untitled view" : name, icon: icon,
+                              query: query, sortIndex: next)
+        savedTaskViews.append(v)
+        saveSavedViews()
+        return v
+    }
+
+    func updateSavedTaskView(_ view: SavedTaskView) {
+        guard let i = savedTaskViews.firstIndex(where: { $0.id == view.id }) else { return }
+        savedTaskViews[i] = view
+        saveSavedViews()
+    }
+
+    func deleteSavedTaskView(_ id: String) {
+        // Built-ins are not deletable.
+        guard savedView(id: id)?.isBuiltIn != true else { return }
+        savedTaskViews.removeAll { $0.id == id }
+        saveSavedViews()
     }
 
     // MARK: - Workspace contexts (Work / Personal / …) — 1-1
@@ -1028,6 +1132,21 @@ final class ActionItemStore: ObservableObject {
         update(id) { $0.recurrence = rule }
     }
 
+    /// Apply a repeat rule to this task and every future instance in its series
+    /// (5-3 "this and all future"). Past completed instances keep their history.
+    func setRecurrenceForSeries(_ id: String, _ rule: RecurrenceRule?) {
+        guard let base = itemIndex[id].map({ items[$0] }) else { return }
+        let series = base.seriesID ?? id
+        var changed = false
+        for i in items.indices
+        where (items[i].seriesID ?? items[i].id) == series && items[i].createdAt >= base.createdAt {
+            items[i].recurrence = rule
+            items[i].updatedAt = Date()
+            changed = true
+        }
+        if changed { save() }
+    }
+
     /// Creates the next instance of a recurring task when the current one is
     /// completed: a fresh open copy with the due (and start) dates rolled
     /// forward, subtasks reset, and external links cleared. The completed
@@ -1147,13 +1266,45 @@ final class ActionItemStore: ObservableObject {
 
     private func update(_ id: String, mutate: (inout ActionItem) -> Void) {
         guard let idx = itemIndex[id] else { return }
+        let before = items[idx]
         var copy = items[idx]
         mutate(&copy)
         copy.updatedAt = Date()
         items[idx] = copy
         save()
-        TaskChangeLog.shared.record(.update, entity: .task, id: id,
-                                    summary: "Updated “\(copy.title)”")
+        // Record a field-level event so the change is undoable (5-7).
+        if let diff = ActionItem.fieldDiff(before, copy) {
+            TaskChangeLog.shared.record(.update, entity: .task, id: id,
+                                        summary: "\(diff.field) changed",
+                                        field: diff.field, oldValue: diff.old, newValue: diff.new)
+        } else {
+            TaskChangeLog.shared.record(.update, entity: .task, id: id,
+                                        summary: "Updated “\(copy.title)”")
+        }
+    }
+
+    /// Undo the most recent field-level change (5-7 / ⌘Z). Restores the field's
+    /// previous value via its setter and marks the event undone.
+    func undoLastChange() {
+        guard let ev = TaskChangeLog.shared.lastUndoableField, let field = ev.field else { return }
+        applyFieldRestore(ev.entityID, field: field, value: ev.oldValue)
+        TaskChangeLog.shared.markUndone(ev.id)
+    }
+
+    private func applyFieldRestore(_ id: String, field: String, value: String?) {
+        func date(_ s: String?) -> Date? { s.flatMap { Double($0) }.map { Date(timeIntervalSinceReferenceDate: $0) } }
+        switch field {
+        case "title": setTitle(id, title: value ?? "")
+        case "status": if let s = value.flatMap(ActionItem.Status.init(rawValue:)) { setStatus(id, status: s) }
+        case "priority": if let p = value.flatMap(ActionItem.Priority.init(rawValue:)) { setPriority(id, priority: p) }
+        case "dueDate": setDueDate(id, dueDate: date(value))
+        case "startDate": setStartDate(id, startDate: date(value))
+        case "owner": setOwner(id, owner: value)
+        case "notes": setNotes(id, notes: value)
+        case "projectID": setProject(id, projectID: value)
+        case "estimate": setEstimate(id, value.flatMap { Double($0) })
+        default: break
+        }
     }
 
     // MARK: - Projects
@@ -1377,6 +1528,8 @@ final class ActionItemStore: ObservableObject {
     private static let sectionSchemaVersion = 1
     private static let initiativeSchemaVersion = 1
     private static let contextSchemaVersion = 1
+    private static let savedViewSchemaVersion = 1
+    private static let templateSchemaVersion = 1
 
     private func load() {
         guard let data = try? Data(contentsOf: fileURL) else { return }
@@ -1470,6 +1623,16 @@ final class ActionItemStore: ObservableObject {
         writeEnvelope(contexts, to: contextsURL,
                       version: Self.contextSchemaVersion,
                       tag: "ActionItemStore.saveContexts")
+    }
+    private func saveSavedViews() {
+        writeEnvelope(savedTaskViews, to: savedViewsURL,
+                      version: Self.savedViewSchemaVersion,
+                      tag: "ActionItemStore.saveSavedViews")
+    }
+    private func saveTemplates() {
+        writeEnvelope(taskTemplates, to: templatesURL,
+                      version: Self.templateSchemaVersion,
+                      tag: "ActionItemStore.saveTemplates")
     }
 
     /// One helper to rule them all — every persisted store routes through

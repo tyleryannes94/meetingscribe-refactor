@@ -395,15 +395,43 @@ extension ActionItemsView {
     }
 
     var grouped: [String: [ActionItem]] {
-        vm.grouped(projectFiltered)
+        Dictionary(grouping: projectFiltered, by: { groupKey(for: $0) })
     }
 
     var groupedKeys: [String] {
-        vm.groupedKeys(projectFiltered)
+        let keys = Array(grouped.keys)
+        switch vm.groupBy {
+        case .priority:
+            return ["Urgent", "High", "Medium", "Low"].filter { keys.contains($0) }
+        case .status:
+            return ["In Progress", "Open", "Completed"].filter { keys.contains($0) }
+        default:
+            // Push the "none/unassigned" bucket to the end, rest alphabetical.
+            return keys.sorted { a, b in
+                let aEmpty = a.hasPrefix("No ") || a == "Unassigned"
+                let bEmpty = b.hasPrefix("No ") || b == "Unassigned"
+                if aEmpty != bEmpty { return !aEmpty }
+                return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+            }
+        }
     }
 
+    /// Store-aware grouping key (5-5): resolves project / initiative / label
+    /// names; delegates the store-free modes to the view model.
     func groupKey(for item: ActionItem) -> String {
-        vm.groupKey(for: item)
+        switch vm.groupBy {
+        case .project:
+            return item.projectID.flatMap { store.project(id: $0)?.name } ?? "No project"
+        case .initiative:
+            guard let pid = item.projectID,
+                  let iid = store.project(id: pid)?.initiativeID,
+                  let name = store.initiative(id: iid)?.name else { return "No initiative" }
+            return name
+        case .label:
+            return store.labels(for: item).first?.name ?? "No label"
+        default:
+            return vm.groupKey(for: item)
+        }
     }
 
     @ViewBuilder

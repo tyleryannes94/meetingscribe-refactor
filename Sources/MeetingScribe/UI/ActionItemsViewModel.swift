@@ -131,13 +131,19 @@ final class ActionItemsViewModel {
 
     // MARK: - Grouping (canonical implementation — A0-1)
 
-    /// String key an item groups under for the current `groupBy` mode.
+    /// String key an item groups under for the current `groupBy` mode. Covers
+    /// the store-free modes; `ActionItemsView.groupKey(for:)` overrides the
+    /// project/initiative/label modes that need name resolution (5-5).
     func groupKey(for item: ActionItem, now: Date = Date()) -> String {
         switch groupBy {
         case .none: return ""
         case .meeting: return item.meetingTitle
         case .priority: return item.priority.label
         case .status: return item.status.label
+        case .owner: return item.owner?.isEmpty == false ? item.owner! : "Unassigned"
+        case .project: return item.projectID ?? "No project"
+        case .initiative: return item.projectID ?? "No initiative"
+        case .label: return item.labelIDs?.first ?? "No label"
         case .dueDate:
             guard let d = item.dueDate else { return "No due date" }
             let cal = Calendar.current

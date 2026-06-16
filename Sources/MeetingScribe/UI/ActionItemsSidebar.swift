@@ -83,6 +83,9 @@ struct ProjectRail: View {
                     railItem(title: "Today", icon: "sun.max.fill",
                              count: todayBadgeCount,
                              id: ActionItemsView.todaySentinel)
+                    // My Tasks (5-2).
+                    railItem(title: "My Tasks", icon: "person.fill", count: 0,
+                             id: ActionItemsView.myTasksSentinel)
                     // Triage inbox — meeting-extracted items awaiting review (§5B).
                     railItem(title: "Triage inbox", icon: "tray.and.arrow.down.fill",
                              count: store.pendingTriage.count,
@@ -93,10 +96,19 @@ struct ProjectRail: View {
                     railItem(title: "Unsorted tasks", icon: "tray",
                              count: store.items.filter { $0.projectID == nil && $0.status != .completed }.count,
                              id: ActionItemsView.noProjectSentinel)
+                    // Recurring smart list (5-3).
+                    let recurringCount = store.items.filter { !$0.needsTriage && $0.recurrence != nil }.count
+                    if recurringCount > 0 {
+                        railItem(title: "Recurring", icon: "repeat",
+                                 count: recurringCount, id: ActionItemsView.recurringSentinel)
+                    }
 
                     // People facet (P2-2) + Waiting-on lifecycle (P2-6).
                     peopleSection
                     waitingSection
+
+                    // Saved views (5-1).
+                    savedViewsSection
 
                     // Zone 2: the user's own structured workspace (3-4).
                     Divider().overlay(NDS.divider).padding(.horizontal, 10).padding(.top, 8)
@@ -212,6 +224,19 @@ struct ProjectRail: View {
             .tracking(0.8)
             .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 3)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Saved-view rail entries (5-1), shown under Smart Views.
+    @ViewBuilder
+    private var savedViewsSection: some View {
+        let views = store.sortedSavedViews()
+        if !views.isEmpty {
+            zoneLabel("Views")
+            ForEach(views) { v in
+                railItem(title: v.name, icon: v.icon ?? "line.3.horizontal.decrease.circle",
+                         count: 0, id: ActionItemsView.savedViewSentinel(v.id))
+            }
+        }
     }
 
     // MARK: - Context switcher (1-2)
