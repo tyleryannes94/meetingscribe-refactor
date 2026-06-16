@@ -385,15 +385,9 @@ struct TaskPageView: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: show) {
-            VStack(alignment: .leading, spacing: 10) {
-                DatePicker("", selection: Binding(get: { date ?? Date() }, set: { set($0) }), displayedComponents: [.date])
-                    .datePickerStyle(.graphical).labelsHidden()
-                HStack {
-                    Button("Clear", role: .destructive) { set(nil); show.wrappedValue = false }
-                    Spacer()
-                    Button("Done") { show.wrappedValue = false }.keyboardShortcut(.defaultAction)
-                }
-            }.padding(14).frame(width: 280)
+            // 2-5: type-ahead date entry with a graphical calendar fallback.
+            DateTypeAheadField(date: Binding(get: { date }, set: { set($0) }),
+                               onCommit: { show.wrappedValue = false })
         }
     }
 

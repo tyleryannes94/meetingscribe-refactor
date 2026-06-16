@@ -119,6 +119,10 @@ extension ActionItemsView {
                                         RoundedRectangle(cornerRadius: 1).fill(NDS.brand).frame(width: 2.5)
                                     }
                                 }
+                                .popover(isPresented: Binding(
+                                    get: { kbEditID == item.id },
+                                    set: { if !$0 { kbEditID = nil; kbEditKind = nil } }
+                                )) { kbEditPopover(item) }
                         }
                     default:
                         ForEach(groupedKeys, id: \.self) { key in
@@ -138,6 +142,73 @@ extension ActionItemsView {
         .onKeyPress(KeyEquivalent("k")) { moveFocus(-1); return .handled }
         .onKeyPress(.return) { openFocused(); return .handled }
         .onKeyPress(.space) { toggleFocusedDone(); return .handled }
+        // Property shortcuts on the focused row (2-4).
+        .onKeyPress(KeyEquivalent("p")) { cyclePriorityFocused(); return .handled }
+        .onKeyPress(KeyEquivalent("d")) { kbEdit(.date); return .handled }
+        .onKeyPress(KeyEquivalent("e")) { kbEdit(.estimate); return .handled }
+        .onKeyPress(KeyEquivalent("m")) { kbEdit(.move); return .handled }
+    }
+
+    // MARK: - Keyboard property shortcuts (2-4)
+
+    /// `p` cycles the focused task's priority low → medium → high → urgent → low.
+    func cyclePriorityFocused() {
+        guard let id = focusedTaskID, let item = store.items.first(where: { $0.id == id }) else { return }
+        let order: [ActionItem.Priority] = [.low, .medium, .high, .urgent]
+        let next = order[((order.firstIndex(of: item.priority) ?? -1) + 1) % order.count]
+        store.setPriority(id, priority: next)
+    }
+
+    /// Opens the quick-edit popover (date / estimate / move) on the focused row.
+    func kbEdit(_ kind: KbEdit) {
+        guard let id = focusedTaskID else { return }
+        kbEditID = id
+        kbEditKind = kind
+    }
+
+    @ViewBuilder
+    func kbEditPopover(_ item: ActionItem) -> some View {
+        switch kbEditKind {
+        case .date:
+            DateTypeAheadField(
+                date: Binding(get: { store.items.first { $0.id == item.id }?.dueDate },
+                              set: { store.setDueDate(item.id, dueDate: $0) }),
+                onCommit: { kbEditID = nil; kbEditKind = nil })
+        case .estimate:
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Estimate (points)").font(NDS.small).foregroundStyle(NDS.textSecondary)
+                HStack(spacing: 6) {
+                    ForEach([1.0, 2.0, 3.0, 5.0, 8.0, 13.0], id: \.self) { v in
+                        Button("\(Int(v))") {
+                            store.setEstimate(item.id, v); kbEditID = nil; kbEditKind = nil
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    Button("Clear") { store.setEstimate(item.id, nil); kbEditID = nil; kbEditKind = nil }
+                        .buttonStyle(.borderless).foregroundStyle(NDS.selectColor("red"))
+                }
+            }
+            .padding(12)
+        case .move:
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Move to project").font(NDS.small).foregroundStyle(NDS.textSecondary).padding(.bottom, 2)
+                Button("No project") { store.setProject(item.id, projectID: nil); kbEditID = nil; kbEditKind = nil }
+                    .buttonStyle(.plain)
+                Divider()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(store.projects) { p in
+                            Button(p.name) { store.setProject(item.id, projectID: p.id); kbEditID = nil; kbEditKind = nil }
+                                .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+            }
+            .frame(width: 220).padding(12)
+        case .none:
+            EmptyView()
+        }
     }
 
     // MARK: - Keyboard navigation (UX-1)
@@ -159,22 +230,44 @@ extension ActionItemsView {
         store.setStatus(id, status: item.status == .completed ? .open : .completed)
     }
 
-    /// Wraps a row with a selection checkbox in multi-select mode. (TK-3)
+    /// Wraps a row with a selection checkbox and ⌘/⇧-click multi-select (TK-3 /
+    /// 2-6). The checkbox appears in explicit Select mode OR as soon as a
+    /// ⌘/⇧-click has started a selection — no mode toggle required. The modifier
+    /// taps are high-priority so a ⌘-click selects without also expanding the row.
     @ViewBuilder
     func selectableRow(_ item: ActionItem) -> some View {
-        if taskSelectMode {
-            HStack(spacing: 8) {
-                Button { toggleTaskSelection(item.id) } label: {
+        let selecting = taskSelectMode || !taskSelection.isEmpty
+        HStack(spacing: 8) {
+            if selecting {
+                Button { toggleTaskSelection(item.id); lastSelectedTaskID = item.id } label: {
                     Image(systemName: taskSelection.contains(item.id) ? "checkmark.circle.fill" : "circle")
                         .scaledFont(16)
                         .foregroundStyle(taskSelection.contains(item.id) ? NDS.brand : NDS.textTertiary)
                 }
                 .buttonStyle(.borderless)
-                row(for: item)
             }
-        } else {
             row(for: item)
+                .background(taskSelection.contains(item.id) ? NDS.brand.opacity(0.08) : Color.clear)
         }
+        .highPriorityGesture(TapGesture().modifiers(.command).onEnded {
+            toggleTaskSelection(item.id); lastSelectedTaskID = item.id
+        })
+        .highPriorityGesture(TapGesture().modifiers(.shift).onEnded {
+            rangeSelect(to: item.id)
+        })
+    }
+
+    /// Shift-click range select (2-6): selects every row between the anchor
+    /// (last ⌘/⇧-click) and `id`, inclusive, in the current visible order.
+    func rangeSelect(to id: String) {
+        let order = projectFiltered.map(\.id)
+        guard let anchor = lastSelectedTaskID ?? taskSelection.first,
+              let a = order.firstIndex(of: anchor),
+              let b = order.firstIndex(of: id) else {
+            toggleTaskSelection(id); lastSelectedTaskID = id; return
+        }
+        for i in (min(a, b)...max(a, b)) { taskSelection.insert(order[i]) }
+        lastSelectedTaskID = id
     }
 
     /// Select toggle + bulk action bar (TK-3/TK-4): set status/priority/delete.
@@ -186,9 +279,13 @@ extension ActionItemsView {
                 if !taskSelectMode { taskSelection = [] }
             }
             .font(NDS.small)
-            if taskSelectMode && !taskSelection.isEmpty {
+            if !taskSelection.isEmpty {
                 Text("\(taskSelection.count) selected")
                     .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                Button { taskSelection = []; lastSelectedTaskID = nil } label: {
+                    Label("Clear", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.borderless).font(NDS.small)
                 Spacer()
                 Menu {
                     ForEach(ActionItem.Status.allCases) { s in

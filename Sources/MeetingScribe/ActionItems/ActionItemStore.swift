@@ -449,7 +449,10 @@ final class ActionItemStore: ObservableObject {
         let parsed = TaskQuickAddParser.parse(raw, now: now)
         let fallback = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = parsed.title.isEmpty ? fallback : parsed.title
-        let created = createTask(title: title, projectID: projectID, sectionID: sectionID,
+        // +Project (2-3): when the caller didn't pin a project, fuzzy-match the
+        // typed name against existing projects so the task self-routes.
+        let resolvedProjectID = projectID ?? parsed.projectQuery.flatMap { fuzzyProjectID(matching: $0) }
+        let created = createTask(title: title, projectID: resolvedProjectID, sectionID: sectionID,
                                  priority: parsed.priority ?? .medium)
         if let due = parsed.dueDate { setDueDate(created.id, dueDate: due) }
         for name in parsed.labelNames {
@@ -528,6 +531,18 @@ final class ActionItemStore: ObservableObject {
                                         summary: "Imported \(created) new task(s) from \(source)")
         }
         return created
+    }
+
+    /// Fuzzy-resolves a typed `+Project` token to an existing project id (2-3):
+    /// exact (case-insensitive) → prefix → substring. Returns nil if nothing
+    /// reasonable matches (the task just stays unfiled).
+    func fuzzyProjectID(matching query: String) -> String? {
+        let q = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return nil }
+        if let exact = projects.first(where: { $0.name.lowercased() == q }) { return exact.id }
+        if let prefix = projects.first(where: { $0.name.lowercased().hasPrefix(q) }) { return prefix.id }
+        if let contains = projects.first(where: { $0.name.lowercased().contains(q) }) { return contains.id }
+        return nil
     }
 
     /// Finds a project by exact name, creating one if needed (no extra save —

@@ -26,6 +26,8 @@ struct ActionItemsView: View {
     // Multi-select + bulk actions (TK-3/TK-4).
     @State var taskSelectMode = false
     @State var taskSelection: Set<String> = []
+    // Anchor for shift-click range selection (2-6).
+    @State var lastSelectedTaskID: String?
     // Resizable, persisted Tasks sidebar width (TK-8 — was a fixed 230).
     @AppStorage("tasks.railWidth") var railWidth: Double = 230
     @State var railDragStart: Double?
@@ -44,6 +46,10 @@ struct ActionItemsView: View {
     @State var calendarMonth = Date()
     // Keyboard navigation cursor for the list (UX-1).
     @State var focusedTaskID: String?
+    // Keyboard quick-edit popover anchored on the focused row (2-4): d/e/m.
+    @State var kbEditID: String?
+    @State var kbEditKind: KbEdit?
+    enum KbEdit { case date, estimate, move }
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board, calendar, gallery
