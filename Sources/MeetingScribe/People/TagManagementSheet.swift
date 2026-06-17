@@ -34,7 +34,7 @@ struct TagManagementSheet: View {
                 }
             }
         }
-        .frame(width: 440, minHeight: 480)
+        .frame(minWidth: 440, maxWidth: 440, minHeight: 480)
     }
 
     private func row(_ tag: MeetingTag) -> some View {

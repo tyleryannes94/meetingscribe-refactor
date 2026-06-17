@@ -29,7 +29,7 @@ extension View {
             RadialGradient(
                 colors: [NDS.accent.opacity(0.10), .clear],
                 center: .center, startRadius: 0, endRadius: 210)
-                .frame(width: 420, minHeight: 320)
+                .frame(minWidth: 420, maxWidth: 420, minHeight: 320)
                 .offset(x: 80, y: -120)
                 .blur(radius: 20)
                 .allowsHitTesting(false)

@@ -154,7 +154,7 @@ struct MeetingScribeApp: App {
                 .environmentObject(manager)
                 .environmentObject(manager.tagStore)
                 .environmentObject(updater)
-                .frame(width: 560, minHeight: 580)
+                .frame(minWidth: 560, maxWidth: 560, minHeight: 580)
         }
     }
 

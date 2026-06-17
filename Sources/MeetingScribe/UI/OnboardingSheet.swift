@@ -46,7 +46,7 @@ struct OnboardingSheet: View {
                 permissionStepBody
             }
         }
-        .frame(width: 480, minHeight: 520)
+        .frame(minWidth: 480, maxWidth: 480, minHeight: 520)
         .task { await refreshAllStatuses() }
     }
 

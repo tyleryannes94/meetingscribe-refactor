@@ -54,7 +54,7 @@ struct WeeklyReviewView: View {
                 .padding(18).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(width: 540, minHeight: 640)
+        .frame(minWidth: 540, maxWidth: 540, minHeight: 640)
         .onAppear { vm.generate(summary: metrics.promptSummary) }
     }
 
