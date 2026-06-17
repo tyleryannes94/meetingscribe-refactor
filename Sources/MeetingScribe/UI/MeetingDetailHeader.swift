@@ -31,29 +31,20 @@ extension UnifiedMeetingDetail {
                             AttendeeChip(attendee: a) { connectingAttendee = $0 }
                         }
                         if m.attendees.count > 8 {
-                            // P1-6: expander instead of a dead "+N" label, so a big
-                            // roster collapses but is one click from full.
-                            Button {
+                            // P1-6 / B1: consistent inline action (was a .plain capsule).
+                            MSInlineButton(showAllAttendees
+                                           ? "Show fewer"
+                                           : "View all attendees (\(m.attendees.count))") {
                                 withAnimation(.easeInOut(duration: 0.15)) { showAllAttendees.toggle() }
-                            } label: {
-                                Text(showAllAttendees
-                                     ? "Show fewer"
-                                     : "View all attendees (\(m.attendees.count))")
-                                    .scaledFont(11)
-                                    .foregroundStyle(NDS.brand)
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(NDS.fieldBg, in: Capsule())
                             }
-                            .buttonStyle(.plain)
                         }
                         // One-click add every attendee not yet in People. (TM-9)
                         if unaddedAttendeeCount(m) > 0 {
-                            Button { addAllAttendeesToPeople(m) } label: {
-                                Label("Add \(unaddedAttendeeCount(m)) to People",
-                                      systemImage: "person.crop.circle.badge.plus")
-                                    .scaledFont(11)
+                            // B1: consistent inline action (was .borderless).
+                            MSInlineButton("Add \(unaddedAttendeeCount(m)) to People",
+                                           systemImage: "person.crop.circle.badge.plus") {
+                                addAllAttendeesToPeople(m)
                             }
-                            .buttonStyle(.borderless)
                         }
                     }
                     .padding(.horizontal, 20)
@@ -405,14 +396,13 @@ extension UnifiedMeetingDetail {
             // Labeled so it reads as a real "options / settings" affordance
             // instead of a bare ⋯ icon people miss. (Edit, Re-transcribe,
             // Recover, Export, Reveal all live in here.)
+            // B1: shared menu chrome so the radius/height match the adjacent
+            // primary CTA (was a hand-built radius-8 frame).
             HStack(spacing: 5) {
                 Image(systemName: "slider.horizontal.3").scaledFont(12, weight: .medium)
                 Text("Options").scaledFont(12, weight: .medium)
             }
-            .padding(.horizontal, 11)
-            .frame(height: NDS.buttonSecondaryH)
-            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(NDS.hairline, lineWidth: 1))
+            .msMenuButtonChrome()
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
