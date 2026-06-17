@@ -16,10 +16,10 @@ var chatBody: some View {
             // per-message contextPrefix on a throwaway session. Messages persist.
             .onAppear {
                 attachChatIfNeeded()
-                chatSession.setContext(chatContext(for: m))
+                chatSession.setContext(chatContext(for: m), label: m.displayTitle)
             }
             .onChange(of: m.id) { _, _ in
-                chatSession.setContext(chatContext(for: m))
+                chatSession.setContext(chatContext(for: m), label: m.displayTitle)
             }
         } else {
             placeholder(systemImage: "sparkles",

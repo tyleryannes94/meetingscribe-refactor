@@ -2694,7 +2694,8 @@ struct PersonDetailView: View {
             p.primaryPhone.isEmpty ? "" : "Phone: \(p.primaryPhone).",
             "When the user asks anything ambiguous, default to this person — use the id above as the `id` argument to get_person / get_person_messages / list_person_meetings / attach_note_to_person."
         ]
-        chatSession.setContext(bits.filter { !$0.isEmpty }.joined(separator: " "))
+        chatSession.setContext(bits.filter { !$0.isEmpty }.joined(separator: " "),
+                               label: p.displayName)
     }
 
     /// Run a briefing prompt in the embedded chat column, grounded on this person.
