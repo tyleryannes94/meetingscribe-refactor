@@ -465,7 +465,7 @@ struct PersonDetailView: View {
                 }
             }
         }
-        .frame(width: 420, height: 460)
+        .frame(width: 420, minHeight: 460)
         .background(NDS.bg)
     }
 
@@ -2097,7 +2097,7 @@ struct PersonDetailView: View {
                 .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 .padding(.horizontal, 14).padding(.bottom, 12)
         }
-        .frame(width: 460, height: 360)
+        .frame(width: 460, minHeight: 360)
         .background(NDS.bg)
     }
 
@@ -2180,7 +2180,7 @@ struct PersonDetailView: View {
             Divider()
             ScrollView { Text(text).font(NDS.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(14) }
         }
-        .frame(width: 520, height: 560)
+        .frame(width: 520, minHeight: 560)
     }
 
     /// Deterministic 6-month evidence pack (U1-4) — meetings, decisions,
@@ -2936,7 +2936,7 @@ private struct AddRelationshipSheet: View {
             }
             .padding(12)
         }
-        .frame(width: 420, height: 420)
+        .frame(width: 420, minHeight: 420)
     }
 
     private func save() {
