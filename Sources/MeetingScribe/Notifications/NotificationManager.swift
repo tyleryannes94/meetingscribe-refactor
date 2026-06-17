@@ -313,6 +313,26 @@ final class NotificationManager: NSObject, ObservableObject {
         center.add(UNNotificationRequest(identifier: "weekly-review", content: content, trigger: trigger))
     }
 
+    /// Weekly relationship digest: a Sunday-evening nudge naming the people most
+    /// overdue for a check-in, so drifting relationships surface proactively.
+    /// Body is computed at schedule time (repeating triggers can't recompute),
+    /// so it's rescheduled on launch.
+    func scheduleRelationshipDigest(overdueNames: [String]) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["relationship-digest"])
+        guard AppSettings.shared.dailyBriefEnabled, !overdueNames.isEmpty else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "People you're drifting from"
+        let shown = overdueNames.prefix(3).joined(separator: ", ")
+        let extra = overdueNames.count > 3 ? " and \(overdueNames.count - 3) more" : ""
+        content.body = "\(shown)\(extra) — overdue for a check-in. A quick hello keeps it warm."
+        content.sound = .default
+        content.userInfo[deepLinkKey] = "meetingscribe://people"
+        var when = DateComponents(); when.weekday = 1; when.hour = 18; when.minute = 0   // Sun 6pm
+        let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: true)
+        center.add(UNNotificationRequest(identifier: "relationship-digest", content: content, trigger: trigger))
+    }
+
     /// Posts an immediate notification when an impromptu meeting is detected.
     func notifyImpromptuDetected(source: String) {
         let content = UNMutableNotificationContent()

@@ -223,6 +223,7 @@ struct MeetingScribeApp: App {
         Task { await notifications.requestAuthorization() }
         scheduleEnrichedDailyBrief()         // 3-B: morning brief w/ live counts
         notifications.scheduleWeeklyReview() // 3-F: Friday ritual nudge
+        notifications.scheduleRelationshipDigest(overdueNames: PeopleStore.shared.overdueCheckInNames())
         // Schedule person check-in reminders on launch — without this the first
         // nudge only fires after the user manually logs an encounter, so most
         // users never see it.
