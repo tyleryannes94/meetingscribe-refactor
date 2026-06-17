@@ -10,13 +10,14 @@ extension View {
     /// Standard card surface: `fieldBg` fill, hairline border, card-radius.
     /// `accentBorder` paints the border in a soft coral tint (Bloom hero cards
     /// like "Up Next" use this in place of the neutral hairline).
-    func msCard(padding: CGFloat = 14, accentBorder: Bool = false) -> some View {
+    func msCard(padding: CGFloat = 12, accentBorder: Bool = false) -> some View {
         self
             .padding(padding)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
-                    .strokeBorder(accentBorder ? NDS.accent.opacity(0.45) : NDS.hairline, lineWidth: 1)
+                    .strokeBorder(accentBorder ? NDS.accent.opacity(0.4) : NDS.hairline,
+                                  lineWidth: accentBorder ? 1 : 0.5)
             )
     }
 
