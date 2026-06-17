@@ -80,11 +80,11 @@ struct UnifiedMeetingDetail: View {
     /// The persistent "Who's here" people rail (P1-2). On by default; toggle ⌥⌘P.
     @AppStorage("meetingPeopleRailVisible") var peopleRailVisible = true
 
-    /// M1: opt-in scaffold for the de-tabbed canvas (`docs/ux-audit-2026-06b/01`).
-    /// Flag-off path is byte-for-byte today's tabbed UI; enabling this flag
-    /// today swaps to a stub canvas that just hosts the existing sections in a
-    /// scrolling column. The flag stays opt-in until the M2–M9 sections land.
-    @AppStorage("meetingCanvasV2") var canvasV2 = false
+    /// M9 cutover: the de-tabbed canvas is now the default. Flip back via
+    /// `defaults write com.tyleryannes.MeetingScribe meetingCanvasV2 -bool false`
+    /// if a regression appears; the legacy `tabbedBody` path remains compiled
+    /// until M10's cleanup deletes it.
+    @AppStorage("meetingCanvasV2") var canvasV2 = true
     /// Query carried from a search hit into the transcript find bar (U2-2).
     @State var transcriptSearchSeed: String?
 
@@ -308,6 +308,7 @@ struct UnifiedMeetingDetail: View {
                         notesSection
                         transcriptSection
                             .id(SectionAnchor.transcript)
+                        chatSection
                     }
                     .padding(.horizontal, NDS.spaceXL)
                     .padding(.vertical, NDS.spaceXL)
@@ -316,6 +317,24 @@ struct UnifiedMeetingDetail: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// M8 / 01 §6 Step 8 — Ask AI section. Lazy-mounted via MSSection
+    /// collapse state — defaults collapsed so opening a meeting doesn't
+    /// spin up the chat panel. Bounded height keeps the chat view from
+    /// fighting the outer scroll.
+    @ViewBuilder var chatSection: some View {
+        if meeting != nil {
+            MSSection("Ask AI", systemImage: "bubble.left.and.sparkles",
+                      persistenceKey: "meeting.chat",
+                      defaultExpanded: false) {
+                GeometryReader { geo in
+                    chatBody
+                        .frame(height: max(360, geo.size.height * 0.55))
+                }
+                .frame(minHeight: 400)
+            }
         }
     }
 
