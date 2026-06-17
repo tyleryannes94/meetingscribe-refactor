@@ -37,40 +37,36 @@ enum SyncIndex {
         "_recent.json",              // rebuildable iPhone Shortcut stub
         "accounts.json",             // per-vault auth state — local-only
         "sync-peers.json",           // peer config — local-only
-        ".processed_ids.json",       // iCloud inbox ledger — local-only
+    ]
+
+    /// Basenames that are never synced regardless of where they live in the
+    /// tree. The iCloud inbox ledger (`.processed_ids.json`) lives under
+    /// `_inbox/processed/`, not at the vault root — but it's still purely
+    /// per-device state, so it has to be matched by basename, not prefix.
+    static let excludedBasenames: Set<String> = [
+        ".processed_ids.json",
     ]
 
     /// Enumerate every syncable file under `vaultRoot`, optionally filtering
     /// by `since` (only files with `mtime > since`). Returns relative paths.
     static func entries(under vaultRoot: URL, since: Date? = nil) -> [Entry] {
         let fm = FileManager.default
-        guard let it = fm.enumerator(at: vaultRoot,
-                                     includingPropertiesForKeys: [.contentModificationDateKey,
-                                                                  .isRegularFileKey,
-                                                                  .fileSizeKey],
-                                     options: [.skipsHiddenFiles, .skipsPackageDescendants],
-                                     errorHandler: nil) else { return [] }
+        // `enumerator(atPath:)` hands back POSIX-style relative paths directly,
+        // which avoids the URL-path-prefix dance that the URL-based enumerator
+        // forces on macOS (where the kernel rewrites `/var/…` → `/private/var/…`
+        // mid-flight but `URL.standardized` does not).
+        guard let it = fm.enumerator(atPath: vaultRoot.path) else { return [] }
         var out: [Entry] = []
-        // Resolve symlinks on both sides — on macOS the FileManager enumerator
-        // returns URLs whose paths the kernel has already resolved (e.g.
-        // `/var/folders/…` → `/private/var/folders/…`), but `URL.standardized`
-        // only collapses `.`/`..`. Without resolving symlinks the prefix match
-        // drops every file when the vault lives under a symlinked tree
-        // (notably `temporaryDirectory` in tests).
-        let rootPath = vaultRoot.resolvingSymlinksInPath().path
-        while let url = it.nextObject() as? URL {
-            // Compute the relative path early so we can prefix-skip whole subtrees.
-            let abs = url.resolvingSymlinksInPath().path
-            guard abs.hasPrefix(rootPath) else { continue }
-            var rel = String(abs.dropFirst(rootPath.count))
-            while rel.hasPrefix("/") { rel.removeFirst() }
+        while let next = it.nextObject() {
+            guard let rel = next as? String else { continue }
             if isExcluded(rel) {
                 it.skipDescendants()
                 continue
             }
+            let url = vaultRoot.appendingPathComponent(rel)
             guard let vals = try? url.resourceValues(forKeys: [.isRegularFileKey,
-                                                                .contentModificationDateKey,
-                                                                .fileSizeKey]),
+                                                               .contentModificationDateKey,
+                                                               .fileSizeKey]),
                   vals.isRegularFile == true,
                   let mtime = vals.contentModificationDate else { continue }
             if let since, mtime <= since { continue }
@@ -92,6 +88,8 @@ enum SyncIndex {
             if p == prefix { return true }
             if p.hasPrefix(prefix) { return true }
         }
+        let basename = (p as NSString).lastPathComponent
+        if excludedBasenames.contains(basename) { return true }
         return false
     }
 
