@@ -141,9 +141,9 @@ struct MeetingCard: View {
                 if meeting.isLive && variant == .upcoming {
                     Text("LIVE")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(NDS.recording)
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.red.opacity(0.12), in: Capsule())
+                        .background(NDS.recording.opacity(0.12), in: Capsule())
                 }
                 if meeting.seriesID?.isEmpty == false {
                     Image(systemName: "repeat")

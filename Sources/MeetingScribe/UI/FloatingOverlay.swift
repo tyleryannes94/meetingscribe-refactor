@@ -510,15 +510,15 @@ private struct PulsingDot: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         ZStack {
-            Circle().fill(Color.red.opacity(0.18))
+            Circle().fill(NDS.recording.opacity(0.18))
                 .frame(width: 28, height: 28)
                 .scaleEffect(1 + CGFloat(glow))
                 .opacity(1 - glow)
             Circle()
-                .fill(Color.red)
+                .fill(NDS.recording)
                 .frame(width: 12, height: 12)
                 .scaleEffect(scale)
-                .shadow(color: .red.opacity(0.5), radius: 4)
+                .shadow(color: NDS.recording.opacity(0.5), radius: 4)
         }
         .onAppear {
             // Reduce Motion: keep the dot static (no perpetual pulse/glow).
