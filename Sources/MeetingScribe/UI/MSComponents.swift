@@ -337,19 +337,27 @@ struct MSSearchField: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").foregroundStyle(NDS.textTertiary)
+            Image(systemName: "magnifyingglass")
+                .scaledFont(11)
+                .foregroundStyle(NDS.textTertiary)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
+                .font(.callout)
                 .focused($focused)
                 .onExitCommand { text = "" }
             if !text.isEmpty {
-                Button { text = "" } label: { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
-                    .accessibilityLabel("Clear search")
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .scaledFont(11)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(NDS.textTertiary)
+                .accessibilityLabel("Clear search")
             }
         }
-        .padding(.horizontal, 10).padding(.vertical, 7)
-        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+        .padding(.horizontal, 9).padding(.vertical, 5)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(NDS.hairline, lineWidth: 1))
         .onAppear { if autoFocus { focused = true } }
     }
 }
