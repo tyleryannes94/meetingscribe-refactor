@@ -501,6 +501,7 @@ struct PersonDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 identityPanel
+                proactiveInsightCard
                 tagsEditSection
                 contactRows
                 relationshipsSection
@@ -512,6 +513,37 @@ struct PersonDetailView: View {
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// 5-E / C2-3: a pinned, deterministic relationship insight at the top of the
+    /// profile — the "why" behind the health, computed instantly from cadence +
+    /// last-contact (no AI round-trip). Self-hides for untyped contacts.
+    @ViewBuilder
+    private var proactiveInsightCard: some View {
+        if let insight = relationshipInsight {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "lightbulb.fill").foregroundStyle(NDS.brand).scaledFont(12)
+                Text(insight).font(NDS.small).foregroundStyle(NDS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .background(NDS.brand.opacity(0.07), in: RoundedRectangle(cornerRadius: NDS.radius))
+        }
+    }
+
+    private var relationshipInsight: String? {
+        let p = current
+        guard p.relationshipType != .unset else { return nil }
+        let cadence = p.effectiveCheckInDays
+        guard let last = p.lastInteractionAt else {
+            return "No contact logged yet with \(firstName). Log a check-in to start tracking this relationship."
+        }
+        let days = Int(Date().timeIntervalSince(last) / 86400)
+        if days > cadence {
+            return "It's been \(days) days since you connected with \(firstName) — overdue by \(days - cadence) on your \(cadence)-day cadence. A quick hello keeps it warm."
+        }
+        return "Last connected \(days) day\(days == 1 ? "" : "s") ago — on track for your \(cadence)-day cadence with \(firstName)."
     }
 
     /// Right pane: pill tab bar (§4B) + the selected tab's content.
