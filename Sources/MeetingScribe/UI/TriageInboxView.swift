@@ -35,7 +35,7 @@ struct TriageInboxView: View {
                         Button { onReextract() } label: {
                             Label("Re-extract from past meetings", systemImage: "arrow.clockwise")
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(MSSecondaryButtonStyle())
                     }
                     .frame(minHeight: 300)
                 } else {

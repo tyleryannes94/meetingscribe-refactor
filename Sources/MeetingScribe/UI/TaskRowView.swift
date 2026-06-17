@@ -525,7 +525,7 @@ struct ActionItemRow: View {
                     Label(dateLabel(item.startDate, placeholder: "Set start"), systemImage: "calendar.badge.clock")
                         .font(.caption)
                 }
-                .buttonStyle(.bordered).controlSize(.small)
+                .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small)
                 .popover(isPresented: $startPickerShown) {
                     datePopover(current: item.startDate, onSet: onStart, onClose: { startPickerShown = false })
                 }
@@ -538,7 +538,7 @@ struct ActionItemRow: View {
                     Label(dateLabel(item.dueDate, placeholder: "Set due"), systemImage: "calendar")
                         .font(.caption)
                 }
-                .buttonStyle(.bordered).controlSize(.small)
+                .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small)
                 .popover(isPresented: $datePickerShown) {
                     datePopover(current: item.dueDate, onSet: onDue, onClose: { datePickerShown = false })
                 }

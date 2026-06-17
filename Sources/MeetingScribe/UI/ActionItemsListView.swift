@@ -182,7 +182,7 @@ extension ActionItemsView {
                         Button("\(Int(v))") {
                             store.setEstimate(item.id, v); kbEditID = nil; kbEditKind = nil
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(MSSecondaryButtonStyle())
                     }
                     Button("Clear") { store.setEstimate(item.id, nil); kbEditID = nil; kbEditKind = nil }
                         .buttonStyle(.borderless).foregroundStyle(NDS.selectColor("red"))
