@@ -52,6 +52,12 @@ struct PeopleListView: View {
     /// Active relationship-type filter; nil = show all types.
     @State private var relationshipTypeFilter: RelationshipType? = nil
 
+    /// L5: triage mode — promotes the "who needs attention" signal into the
+    /// live list instead of only the no-selection dashboard.
+    @State private var triage: PeopleTriage = .all
+    /// L4: collapsed grouping sections (Overdue / This week / Everyone else).
+    @State private var collapsedSections: Set<String> = []
+
     private var filtered: [Person] {
         // The store filters by a single tag; apply the remaining AND-tags and the
         // chosen sort here. Search relevance order is preserved while querying.
@@ -64,8 +70,39 @@ struct PeopleListView: View {
         } else {
             typeFiltered = tagged
         }
-        guard debouncedQuery.isEmpty else { return typeFiltered }
-        return sorted(typeFiltered)
+        // L5: triage mode narrows to needs-attention / has-open-tasks.
+        let triaged: [Person]
+        switch triage {
+        case .all:       triaged = typeFiltered
+        case .attention: triaged = typeFiltered.filter { people.isOverdueForCheckIn($0) }
+        case .tasks:     triaged = typeFiltered.filter { (taskCounts[$0.id]?.open ?? 0) > 0 }
+        }
+        guard debouncedQuery.isEmpty else { return triaged }
+        return sorted(triaged)
+    }
+
+    /// L5: counts for the triage segmented control labels.
+    private var attentionCount: Int { people.people.filter { people.isOverdueForCheckIn($0) }.count }
+    private var hasTaskCount: Int { taskCounts.values.filter { $0.open > 0 }.count }
+
+    /// L4: whether to show the Overdue/This-week/Everyone grouping (only in the
+    /// default, unfiltered, non-search view).
+    private var showsGrouping: Bool {
+        debouncedQuery.isEmpty && relationshipTypeFilter == nil && tagFilters.isEmpty && triage == .all
+    }
+
+    /// L4: bucket the list into Overdue / This week / Everyone else.
+    private func groupedSections(_ list: [Person]) -> [(title: String, rows: [Person])] {
+        let now = Date()
+        var overdue: [Person] = [], thisWeek: [Person] = [], rest: [Person] = []
+        for p in list {
+            if people.isOverdueForCheckIn(p) { overdue.append(p); continue }
+            if let last = p.lastInteractionAt, now.timeIntervalSince(last) <= 7 * 86400 {
+                thisWeek.append(p)
+            } else { rest.append(p) }
+        }
+        return [("Overdue", overdue), ("This week", thisWeek), ("Everyone else", rest)]
+            .filter { !$0.rows.isEmpty }
     }
 
     /// Which relationship types actually appear in the current people list (for chip visibility).
@@ -306,6 +343,18 @@ struct PeopleListView: View {
             MSSearchField(placeholder: "Search name, company, role…", text: $query)
                 .padding(.horizontal).padding(.bottom, 8)
 
+            // L5: triage — All / Needs attention / Has tasks, with live counts.
+            if !people.people.isEmpty {
+                Picker("", selection: $triage) {
+                    Text("All").tag(PeopleTriage.all)
+                    Text(attentionCount > 0 ? "Attention \(attentionCount)" : "Attention").tag(PeopleTriage.attention)
+                    Text(hasTaskCount > 0 ? "Tasks \(hasTaskCount)" : "Tasks").tag(PeopleTriage.tasks)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal).padding(.bottom, 8)
+            }
+
             tagChips
 
             // Relationship-type filter chips (only shown when multiple types are in use).
@@ -340,18 +389,33 @@ struct PeopleListView: View {
                 bulkBar
             } else {
                 List(selection: $selection) {
-                    ForEach(filtered) { person in
-                        PersonRow(person: person,
-                                  overdueDays: people.isOverdueForCheckIn(person) ? people.daysOverdue(person) : 0,
-                                  taskCounts: taskCounts[person.id] ?? (0, 0))
-                            .tag(person.id)
-                            .contextMenu { personRowMenu(person) }   // right-click (SC-7)
+                    if showsGrouping {
+                        // L4: Overdue / This week / Everyone else.
+                        ForEach(groupedSections(filtered), id: \.title) { section in
+                            Section(header: Text("\(section.title.uppercased()) · \(section.rows.count)")
+                                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)) {
+                                ForEach(section.rows) { person in personListRow(person) }
+                            }
+                        }
+                    } else {
+                        ForEach(filtered) { person in personListRow(person) }
                     }
                 }
                 .listStyle(.inset)
                 ghostFooter
             }
         }
+    }
+
+    /// One selectable person row + its context menu (shared by the grouped and
+    /// flat list paths).
+    @ViewBuilder
+    private func personListRow(_ person: Person) -> some View {
+        PersonRow(person: person,
+                  overdueDays: people.isOverdueForCheckIn(person) ? people.daysOverdue(person) : 0,
+                  taskCounts: taskCounts[person.id] ?? (0, 0))
+            .tag(person.id)
+            .contextMenu { personRowMenu(person) }   // right-click (SC-7)
     }
 
     /// Right-click actions on a person row.
@@ -582,6 +646,19 @@ struct PeopleListView: View {
             // most-active). Selecting a card row opens that person.
             PeopleInsightsView(onOpen: { selection = $0 })
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+/// L5: triage modes for the People list.
+enum PeopleTriage: String, CaseIterable, Identifiable {
+    case all, attention, tasks
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all:       return "All"
+        case .attention: return "Needs attention"
+        case .tasks:     return "Has tasks"
         }
     }
 }
