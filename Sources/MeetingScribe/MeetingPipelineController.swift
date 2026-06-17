@@ -27,10 +27,51 @@ final class MeetingPipelineController: ObservableObject {
     /// written (success or failure).
     @Published private(set) var liveSummaryByID: [String: String] = [:]
 
+    /// IDs whose post-meeting summary is actively being generated (including
+    /// auto-retries). Drives the meeting canvas's "Generating summary…" state so
+    /// a slow / briefly-unreachable engine reads as in-progress, not "no summary"
+    /// (P0-3). Distinct from `liveSummaryByID`, which only fills once tokens flow.
+    @Published private(set) var summaryGeneratingIDs: Set<String> = []
+
     private func appendLiveSummary(_ id: String, _ piece: String) {
         liveSummaryByID[id, default: ""] += piece
     }
     private func clearLiveSummary(_ id: String) { liveSummaryByID[id] = nil }
+
+    private struct SummaryUnavailable: Error {}
+
+    /// P0-3: generate the summary with bounded auto-retry. The on-device engine
+    /// can be momentarily unreachable (just launched, model still loading); rather
+    /// than fail silently to a "_Summary unavailable_" placeholder on the first
+    /// miss, retry up to `maxAttempts` with a short backoff. Publishes
+    /// `summaryGeneratingIDs` for the whole window so the UI shows progress even
+    /// before the first token streams. Throws only after every attempt fails.
+    private func generateSummary(meeting: Meeting, transcript: String,
+                                 summaryGuidance: String?,
+                                 maxAttempts: Int = 3) async throws -> String {
+        let liveID = meeting.id
+        summaryGeneratingIDs.insert(liveID)
+        defer { summaryGeneratingIDs.remove(liveID) }
+        var lastError: Error?
+        for attempt in 1...maxAttempts {
+            do {
+                return try await summarizer.summarize(
+                    meeting: meeting, transcript: transcript,
+                    summaryGuidance: summaryGuidance,
+                    onToken: { [weak self] piece in
+                        Task { @MainActor in self?.appendLiveSummary(liveID, piece) }
+                    })
+            } catch {
+                lastError = error
+                log.error("Summary attempt \(attempt, privacy: .public)/\(maxAttempts, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                if attempt < maxAttempts {
+                    liveSummaryByID[liveID] = ""   // drop partial tokens before the retry
+                    try? await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)  // 2s, 4s
+                }
+            }
+        }
+        throw lastError ?? SummaryUnavailable()
+    }
     /// Directory of the most recently finalized meeting — so the UI can
     /// auto-select it after stop.
     @Published private(set) var lastCompletedDir: URL?
@@ -205,12 +246,9 @@ final class MeetingPipelineController: ObservableObject {
         let liveID = workingMeeting.id
         liveSummaryByID[liveID] = ""
         do {
-            summary = try await summarizer.summarize(
+            summary = try await generateSummary(
                 meeting: workingMeeting, transcript: transcript,
-                summaryGuidance: primary?.summaryTemplate,
-                onToken: { [weak self] piece in
-                    Task { @MainActor in self?.appendLiveSummary(liveID, piece) }
-                })
+                summaryGuidance: primary?.summaryTemplate)
         } catch {
             log.error("Summary failed: \(error.localizedDescription, privacy: .public)")
             ErrorReporter.shared.report(error, category: .summary,
@@ -390,12 +428,9 @@ final class MeetingPipelineController: ObservableObject {
             let liveID = meeting.id
             await MainActor.run { self.liveSummaryByID[liveID] = "" }
             do {
-                let summary = try await summarizer.summarize(
+                let summary = try await generateSummary(
                     meeting: meeting, transcript: transcript,
-                    summaryGuidance: primary?.summaryTemplate,
-                    onToken: { [weak self] piece in
-                        Task { @MainActor in self?.appendLiveSummary(liveID, piece) }
-                    })
+                    summaryGuidance: primary?.summaryTemplate)
                 await MainActor.run {
                     try? store.writeSummary(summary, for: meeting, primaryTag: primary)
                     var extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
