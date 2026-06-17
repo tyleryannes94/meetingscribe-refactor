@@ -22,7 +22,11 @@ final class ToolbarModelTests: XCTestCase {
     }
 
     func testPrimaryStyleOnTheLeadingActionButton() {
-        for section in TopLevelSection.allCases {
+        // Decisions and Integrations are read-only landing pages — only a Search
+        // button, no primary CTA. The "exactly one primary" rule applies to the
+        // action-driving sections.
+        let sectionsWithPrimary: [TopLevelSection] = [.today, .meetings, .people, .actions, .notes]
+        for section in sectionsWithPrimary {
             let buttons = ToolbarModel.items(for: section).compactMap {
                 item -> ToolbarModel.Button? in
                 if case .button(let b) = item { return b } else { return nil }
