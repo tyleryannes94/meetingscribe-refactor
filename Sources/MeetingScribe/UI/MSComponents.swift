@@ -443,19 +443,18 @@ struct MSFilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Text(label).font(NDS.tiny)
+            HStack(spacing: 4) {
+                Text(label).font(NDS.tiny.weight(.medium))
                 if let count {
                     Text("\(count)")
                         .font(NDS.tiny.monospacedDigit())
                         .foregroundStyle(active ? NDS.brand : NDS.textTertiary)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(active ? NDS.brand.opacity(0.18) : NDS.surface2, in: Capsule())
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(active ? NDS.brand.opacity(0.18) : NDS.fieldBg, in: Capsule())
-            .overlay(Capsule().strokeBorder(active ? NDS.brand.opacity(0.5) : NDS.hairline, lineWidth: 1))
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(active ? NDS.brand.opacity(0.14) : Color.clear, in: Capsule())
+            .overlay(Capsule().strokeBorder(active ? NDS.brand.opacity(0.4) : NDS.hairline,
+                                            lineWidth: active ? 1 : 0.5))
             .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
         }
         .buttonStyle(.plain)
