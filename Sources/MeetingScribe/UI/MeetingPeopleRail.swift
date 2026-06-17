@@ -20,10 +20,10 @@ struct MeetingPeopleRail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: "person.2.fill").scaledFont(11).foregroundStyle(NDS.textTertiary)
-                Text("Who's here").scaledFont(12, weight: .semibold).foregroundStyle(NDS.textSecondary)
+                Image(systemName: "person.2.fill").scaledFont(10).foregroundStyle(NDS.textTertiary)
+                Text("Who's here").scaledFont(11, weight: .semibold).foregroundStyle(NDS.textSecondary)
+                Text("\(meeting.attendees.count)").scaledFont(10).foregroundStyle(NDS.textTertiary)
                 Spacer()
-                Text("\(meeting.attendees.count)").scaledFont(11).foregroundStyle(NDS.textTertiary)
                 if let onHide {
                     Button(action: onHide) {
                         Image(systemName: "sidebar.right").scaledFont(11).foregroundStyle(NDS.textTertiary)
@@ -32,7 +32,7 @@ struct MeetingPeopleRail: View {
                     .help("Hide people rail (⌥⌘P)")
                 }
             }
-            .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 8)
+            .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
             Divider().overlay(NDS.divider)
 
             ScrollView {
