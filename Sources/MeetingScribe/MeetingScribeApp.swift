@@ -223,6 +223,12 @@ struct MeetingScribeApp: App {
         Task { await notifications.requestAuthorization() }
         scheduleEnrichedDailyBrief()         // 3-B: morning brief w/ live counts
         notifications.scheduleWeeklyReview() // 3-F: Friday ritual nudge
+        // Schedule person check-in reminders on launch — without this the first
+        // nudge only fires after the user manually logs an encounter, so most
+        // users never see it.
+        Task { @MainActor in
+            await RelationshipNotificationManager.shared.syncPersonReminders(people: PeopleStore.shared.people)
+        }
         Task.detached(priority: .utility) { [manager] in
             await manager.ensureOllamaRunning()
         }

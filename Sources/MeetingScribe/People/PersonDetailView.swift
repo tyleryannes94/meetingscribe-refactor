@@ -1779,6 +1779,27 @@ struct PersonDetailView: View {
                     .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
                 }
             }
+            weeklyRelationshipPrompt
+        }
+    }
+
+    /// Phase 3 (relationship-coach): a rotating, type-aware connection prompt
+    /// drawn from `RelationshipPromptLibrary`. Only shows for the close personal
+    /// relationship types that have curated prompts.
+    @ViewBuilder
+    private var weeklyRelationshipPrompt: some View {
+        if let prompt = RelationshipPromptLibrary.weeklyPrompt(for: current.relationshipType) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "lightbulb.fill")
+                        .scaledFont(11, weight: .semibold).foregroundStyle(NDS.brand)
+                    Text("This week's prompt")
+                        .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                }
+                Text(prompt).font(NDS.small).foregroundStyle(NDS.textPrimary)
+            }
+            .padding(10)
+            .background(NDS.brand.opacity(0.08), in: RoundedRectangle(cornerRadius: NDS.radius))
         }
     }
 
