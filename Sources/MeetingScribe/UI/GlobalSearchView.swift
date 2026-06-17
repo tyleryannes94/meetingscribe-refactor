@@ -452,8 +452,8 @@ struct GlobalSearchView: View {
                 NotificationCenter.default.post(name: .meetingScribeAddPerson, object: nil)
             },
             PaletteCommand(title: "Go to Today", icon: "sun.max", keywords: ["today", "home"]) { nav(.today) },
-            PaletteCommand(title: "Go to Meetings", icon: "person.2.fill", keywords: ["meetings"]) { nav(.meetings) },
-            PaletteCommand(title: "Go to People", icon: "person.2", keywords: ["people", "contacts"]) { nav(.people) },
+            PaletteCommand(title: "Go to Meetings", icon: "bubble.left.and.bubble.right.fill", keywords: ["meetings"]) { nav(.meetings) },
+            PaletteCommand(title: "Go to People", icon: "person.2.fill", keywords: ["people", "contacts"]) { nav(.people) },
             PaletteCommand(title: "Go to Tasks", icon: "checklist", keywords: ["tasks", "todos"]) { nav(.actions) },
             PaletteCommand(title: "Go to Voice Notes", icon: "waveform", keywords: ["voice", "notes"]) { nav(.notes) },
             PaletteCommand(title: "Generate weekly review", icon: "calendar.badge.clock", keywords: ["weekly", "review", "recap"]) {
