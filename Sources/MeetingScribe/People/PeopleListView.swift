@@ -9,7 +9,13 @@ struct PeopleListView: View {
     @EnvironmentObject var peopleTags: PeopleTagStore
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var router: WorkspaceRouter
+    @EnvironmentObject var actionItems: ActionItemStore
     @StateObject private var importer = PeopleImportController()
+
+    /// L2: memoized per-person open/overdue task counts, recomputed when the
+    /// task list changes (NOT per row — `items(forPerson:)` is O(n), so a
+    /// per-row call would be O(n·rows)). Mirrors PeopleStore's encounter index.
+    @State private var taskCounts: [String: (open: Int, overdue: Int)] = [:]
 
     @State private var query = ""
     /// Debounced mirror of `query` — the filter/FTS pipeline runs off this so it
@@ -85,6 +91,20 @@ struct PeopleListView: View {
         people.encounterCount(for: p.id) + p.meetingMentions.count
     }
 
+    /// L2: rebuild the per-person open/overdue task index in one pass.
+    private func recomputeTaskCounts() {
+        var m: [String: (open: Int, overdue: Int)] = [:]
+        let now = Date()
+        for t in actionItems.items where t.status != .completed {
+            guard let pid = t.ownerPersonID else { continue }
+            var c = m[pid] ?? (0, 0)
+            c.open += 1
+            if let d = t.dueDate, d < now { c.overdue += 1 }
+            m[pid] = c
+        }
+        taskCounts = m
+    }
+
     var body: some View {
         Group {
             if boardMode {
@@ -116,6 +136,7 @@ struct PeopleListView: View {
             }
         }
         .task { people.rebuildIndexIfNeeded() }   // builds the FTS5 index for search
+        .task(id: actionItems.items.count) { recomputeTaskCounts() }   // L2
         .onChange(of: query) { _, new in
             // Clearing is instant; typing settles for 180ms before the pipeline runs.
             if new.isEmpty { debouncedQuery = ""; return }
@@ -309,7 +330,9 @@ struct PeopleListView: View {
             } else if selectMode {
                 List(selection: $multiSelection) {
                     ForEach(filtered) { person in
-                        PersonRow(person: person)
+                        PersonRow(person: person,
+                                  overdueDays: people.isOverdueForCheckIn(person) ? people.daysOverdue(person) : 0,
+                                  taskCounts: taskCounts[person.id] ?? (0, 0))
                             .tag(person.id)
                     }
                 }
@@ -318,7 +341,9 @@ struct PeopleListView: View {
             } else {
                 List(selection: $selection) {
                     ForEach(filtered) { person in
-                        PersonRow(person: person)
+                        PersonRow(person: person,
+                                  overdueDays: people.isOverdueForCheckIn(person) ? people.daysOverdue(person) : 0,
+                                  taskCounts: taskCounts[person.id] ?? (0, 0))
                             .tag(person.id)
                             .contextMenu { personRowMenu(person) }   // right-click (SC-7)
                     }
@@ -614,6 +639,10 @@ private struct SnapshotPersonRow: View {
 @available(macOS 14.0, *)
 private struct PersonRow: View {
     let person: Person
+    /// L3: days overdue (0 = on track) + open/overdue task counts, supplied by
+    /// the list so the row stays O(1).
+    var overdueDays: Int = 0
+    var taskCounts: (open: Int, overdue: Int) = (0, 0)
     @EnvironmentObject var people: PeopleStore
 
     private var subtitle: String {
@@ -637,11 +666,26 @@ private struct PersonRow: View {
                 }
             }
             Spacer(minLength: 0)
-            // Last-interaction recency so "who have I gone cold on?" is visible
-            // without opening each person. (UX3-2)
-            if let last = person.lastInteractionAt {
-                Text(Self.relative.localizedString(for: last, relativeTo: Date()))
-                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            VStack(alignment: .trailing, spacing: 3) {
+                // L3: overdue pill replaces the plain date when overdue, so
+                // "who have I gone cold on?" jumps out.
+                if overdueDays > 0 {
+                    Text("\(overdueDays)d overdue")
+                        .font(NDS.tiny.weight(.semibold)).foregroundStyle(NDS.danger)
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(NDS.danger.opacity(0.12), in: Capsule())
+                } else if let last = person.lastInteractionAt {
+                    Text(Self.relative.localizedString(for: last, relativeTo: Date()))
+                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                }
+                // L3: open-task chip (reddened when any are overdue), hidden when 0.
+                if taskCounts.open > 0 {
+                    HStack(spacing: 3) {
+                        Image(systemName: "checklist").scaledFont(9)
+                        Text("\(taskCounts.open)").font(NDS.tiny.monospacedDigit())
+                    }
+                    .foregroundStyle(taskCounts.overdue > 0 ? NDS.danger : NDS.textTertiary)
+                }
             }
         }
         .padding(.vertical, 3)

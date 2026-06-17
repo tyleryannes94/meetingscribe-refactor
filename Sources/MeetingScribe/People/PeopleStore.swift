@@ -1361,28 +1361,36 @@ final class PeopleStore: ObservableObject {
         if refreshed > 0 { log.info("iMessage health signal refreshed for \(refreshed, privacy: .public) person(s)") }
     }
 
-    /// How many typed relationships are overdue for a check-in (last interaction
-    /// + cadence is in the past). Mirrors the Today drift strip's triage; drives
-    /// the People nav-rail badge (D1-1). Untyped one-off imports don't count.
+    /// L1: single source of truth for "this typed person is overdue for a
+    /// check-in" (last interaction + cadence is in the past). The People-list
+    /// section grouping, the row badge, the nav-rail count, and the digest all
+    /// route through this so they can never disagree. Untyped imports don't count.
+    func isOverdueForCheckIn(_ p: Person) -> Bool {
+        guard p.relationshipType != .unset else { return false }
+        let last = p.lastInteractionAt ?? p.createdAt
+        let daysSince = Int(Date().timeIntervalSince(last) / 86400)
+        return daysSince > p.effectiveCheckInDays
+    }
+
+    /// Days a typed person is overdue (negative/zero = not overdue). Drives the
+    /// "Nd overdue" pill on the People-list row.
+    func daysOverdue(_ p: Person) -> Int {
+        guard p.relationshipType != .unset else { return 0 }
+        let last = p.lastInteractionAt ?? p.createdAt
+        return Int(Date().timeIntervalSince(last) / 86400) - p.effectiveCheckInDays
+    }
+
+    /// How many typed relationships are overdue for a check-in. Drives the
+    /// People nav-rail badge (D1-1).
     var overdueCheckInCount: Int {
-        let now = Date()
-        return people.reduce(into: 0) { acc, p in
-            guard p.relationshipType != .unset else { return }
-            let last = p.lastInteractionAt ?? p.createdAt
-            let daysSince = Int(now.timeIntervalSince(last) / 86400)
-            if daysSince > p.effectiveCheckInDays { acc += 1 }
-        }
+        people.reduce(into: 0) { acc, p in if isOverdueForCheckIn(p) { acc += 1 } }
     }
 
     /// Names of typed people most overdue for a check-in (most-overdue first).
     /// Drives the weekly relationship digest notification.
     func overdueCheckInNames(limit: Int = 10) -> [String] {
-        let now = Date()
-        return people.compactMap { p -> (name: String, days: Int)? in
-            guard p.relationshipType != .unset else { return nil }
-            let last = p.lastInteractionAt ?? p.createdAt
-            let daysSince = Int(now.timeIntervalSince(last) / 86400)
-            return daysSince > p.effectiveCheckInDays ? (p.displayName, daysSince) : nil
+        people.compactMap { p -> (name: String, days: Int)? in
+            isOverdueForCheckIn(p) ? (p.displayName, daysOverdue(p)) : nil
         }
         .sorted { $0.days > $1.days }
         .prefix(limit)
