@@ -351,6 +351,7 @@ struct MeetingScribeApp: App {
                                                     notifications: notifications)
         InsightEngine.shared.start(actionItems: manager.actionItems,
                                    decisions: manager.decisions)
+        WebhookService.shared.start()   // 6-F: outbound webhooks on EventBus events
         manager.pipelineController.onComplete = { [weak notifications, weak manager] meeting, summaryFailed in
             // U4-4: if the summary failed, the capture promise is half-kept —
             // say so instead of staying silent, and point at the in-app retry.
