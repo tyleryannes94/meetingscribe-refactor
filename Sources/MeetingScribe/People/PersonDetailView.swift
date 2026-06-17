@@ -367,19 +367,14 @@ struct PersonDetailView: View {
     }
 
     var body: some View {
-        // One scrollable page of sections (no tabs) on the left so everything is
-        // visible at once, with the AI chat embedded as a persistent right column
-        // instead of a toggled rail.
-        HSplitView {
-            // Two-pane detail (§4): fixed identity/contact pane + tabbed work area.
-            detailPane
-                .frame(minWidth: 480, idealWidth: 720)
-                .background(NDS.bg)
-                .background(keyboardVerbs)   // N / L / T
-
-            personChatColumn
-                .frame(minWidth: 300, idealWidth: 360, maxWidth: 460)
-        }
+        // One scrolling canvas. The chat used to live in a dedicated right
+        // column (`personChatColumn`) — that's now gone because the global
+        // right-side `ChatSidebar` is the one chat surface, scoped to this
+        // person via `updateChatContext()`. No more duplicate chat panels.
+        detailPane
+            .frame(maxWidth: .infinity)
+            .background(NDS.bg)
+            .background(keyboardVerbs)   // N / L / T
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { updateChatContext() }
         .onChange(of: current.id) { _, _ in updateChatContext() }
