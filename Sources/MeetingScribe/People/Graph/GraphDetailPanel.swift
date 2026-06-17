@@ -137,7 +137,7 @@ struct GraphDetailPanel: View {
                 Label("View Profile", systemImage: "person.crop.circle")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(MSPrimaryButtonStyle())
 
             Menu {
                 if viewModel.pathNodeIDs.count > 1 {
