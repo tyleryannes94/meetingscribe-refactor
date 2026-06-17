@@ -188,7 +188,7 @@ struct TodayView: View {
     /// Default-collapsed; remembers its open/closed state across launches.
     @ViewBuilder
     private var moreSection: some View {
-        VStack(alignment: .leading, spacing: 30) {   // P1-2: calmer section rhythm (was 22)
+        VStack(alignment: .leading, spacing: 16) {   // Was 30, matched the outer feed.
             Button {
                 withAnimation(NDS.motion(.easeInOut(duration: 0.2), reduce: reduceMotion)) {
                     moreExpanded.toggle()
@@ -744,26 +744,24 @@ struct TodayView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(todayLong())
-                    .scaledFont(30, weight: .heavy, relativeTo: .largeTitle, kind: .display)
-                    .tracking(-0.8)
+                    .scaledFont(26, weight: .heavy, relativeTo: .title, kind: .display)
+                    .tracking(-0.6)
                     .foregroundStyle(.primary)
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Text(subtitleString())
-                        .font(.callout)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    // 5-K: privacy positioning — everything stays on-device.
                     Label("100% Local", systemImage: "lock.fill")
                         .scaledFont(10, weight: .semibold)
                         .foregroundStyle(NDS.textTertiary)
                         .help("Recordings, transcripts, and AI all run on your Mac — nothing is uploaded.")
-                    // 5-D: compounding-value streak.
                     if streaks.currentStreak > 0 {
-                        Label("\(streaks.currentStreak) day streak", systemImage: "flame.fill")
+                        Label("\(streaks.currentStreak)", systemImage: "flame.fill")
                             .scaledFont(10, weight: .semibold)
                             .foregroundStyle(NDS.gold)
-                            .help("Consecutive days you opened MeetingScribe and captured something.")
+                            .help("\(streaks.currentStreak) day streak — consecutive days you captured something.")
                     }
                 }
             }
