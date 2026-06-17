@@ -111,12 +111,12 @@ struct MeetingsView: View {
             // Title row + search packed onto two lines instead of three. The
             // upcoming/past counts now sit beside the title as a muted suffix.
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Meetings").font(NDS.title)
+                Text("Meetings").scaledFont(22, weight: .bold, kind: .display)
                 Text("\(upcoming.count) upcoming · \(past.count) past")
                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 Spacer()
             }
-            .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 4)
+            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 4)
 
             // Search bar — always visible (not hidden behind ⌘K)
             HStack(spacing: 8) {
