@@ -129,12 +129,14 @@ struct ChatPanel: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.up.right.circle").font(.caption2)
+                    .foregroundStyle(NDS.textTertiary)
                 Text(text).font(.caption).multilineTextAlignment(.leading)
+                    .foregroundStyle(NDS.textSecondary)
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5))
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radiusSmall))
+            .overlay(RoundedRectangle(cornerRadius: NDS.radiusSmall)
+                .strokeBorder(NDS.hairline, lineWidth: 0.5))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
