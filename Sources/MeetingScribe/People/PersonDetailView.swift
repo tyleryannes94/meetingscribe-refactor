@@ -286,10 +286,11 @@ struct PersonDetailView: View {
     // Two-pane work area (§4B): which tab is showing in the right pane.
     @State private var personTab: PersonTab = .overview
     enum PersonTab: String, CaseIterable, Hashable {
-        case overview, meetings, tasks, messages, notes
+        case overview, story, meetings, tasks, messages, notes
         var label: String {
             switch self {
             case .overview: return "Overview"
+            case .story:    return "Story"
             case .meetings: return "Meetings"
             case .tasks:    return "Tasks"
             case .messages: return "Messages"
@@ -586,6 +587,77 @@ struct PersonDetailView: View {
         .background(NDS.bg)
     }
 
+    // MARK: - Story (C2-1): one chronological stream of everything with this
+    // person — encounters, meetings, notes, and decisions — so the profile
+    // reads as a single relationship history instead of siloed tabs.
+    private struct StoryItem: Identifiable {
+        let id = UUID()
+        let date: Date
+        let icon: String
+        let kind: String
+        let title: String
+        let detail: String?
+    }
+
+    private var storyItems: [StoryItem] {
+        var items: [StoryItem] = []
+        for e in people.encounters(for: current.id) {
+            items.append(.init(date: e.date, icon: "checkmark.circle.fill", kind: "Encounter",
+                               title: e.eventName, detail: e.notes.isEmpty ? nil : e.notes))
+        }
+        for m in current.meetingMentionRecords {
+            items.append(.init(date: m.date, icon: "bubble.left.and.bubble.right.fill", kind: "Meeting",
+                               title: m.meetingTitle, detail: m.excerpt))
+        }
+        for mem in current.memories {
+            items.append(.init(date: mem.occurredOn ?? mem.createdAt, icon: "note.text", kind: "Note",
+                               title: mem.text, detail: nil))
+        }
+        for d in manager.decisions.decisions where d.personIDs.contains(current.id) {
+            items.append(.init(date: d.date, icon: "checkmark.seal.fill", kind: "Decision",
+                               title: d.text, detail: d.rationale))
+        }
+        return items.sorted { $0.date > $1.date }
+    }
+
+    @ViewBuilder
+    private var storySection: some View {
+        let items = storyItems
+        if items.isEmpty {
+            Text("No history yet. Meetings, encounters, notes, and decisions with \(firstName) collect here as one story.")
+                .font(NDS.small).foregroundStyle(NDS.textTertiary).padding(.vertical, 12)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(items) { item in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: item.icon).scaledFont(12).foregroundStyle(NDS.brand)
+                            .frame(width: 24, height: 24)
+                            .background(NDS.brand.opacity(0.12), in: Circle())
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(item.kind.uppercased())
+                                    .scaledFont(10, weight: .bold).foregroundStyle(NDS.textTertiary).tracking(0.5)
+                                Text(item.date.formatted(date: .abbreviated, time: .omitted))
+                                    .scaledFont(10).foregroundStyle(NDS.textTertiary)
+                            }
+                            Text(item.title).font(NDS.small).foregroundStyle(NDS.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if let d = item.detail, !d.isEmpty {
+                                Text(d).scaledFont(11).foregroundStyle(NDS.textSecondary)
+                                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 8)
+                    if item.id != items.last?.id {
+                        Divider().overlay(NDS.divider.opacity(0.5))
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var workContent: some View {
         switch personTab {
@@ -596,6 +668,8 @@ struct PersonDetailView: View {
             favoritesEditSection
             aiSuggestionsSection
             provenanceFooter
+        case .story:
+            storySection
         case .meetings:
             Button { showAddToMeeting = true } label: {
                 Label("Add \(firstName) to a meeting", systemImage: "calendar.badge.plus")
