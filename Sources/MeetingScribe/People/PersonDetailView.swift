@@ -1365,12 +1365,13 @@ struct PersonDetailView: View {
     private var personChatColumn: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkles").foregroundStyle(NDS.brand)
-                // P0-2: the assistant already knows who it's scoped to (context
-                // is set via updateChatContext); a plain "Chat" header matches
-                // the one app-wide assistant instead of a per-page label.
-                Text("Chat")
+                Image(systemName: "sparkles")
                     .scaledFont(13, weight: .semibold)
+                    .foregroundStyle(NDS.brand)
+                Text("Ask about \(firstName)")
+                    .scaledFont(13, weight: .semibold)
+                    .foregroundStyle(NDS.textPrimary)
+                    .lineLimit(1)
                 Spacer()
                 if !chatSession.messages.isEmpty {
                     NotionIconButton(systemName: "arrow.counterclockwise", help: "Clear conversation") {
