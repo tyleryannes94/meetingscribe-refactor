@@ -26,15 +26,25 @@ extension UnifiedMeetingDetail {
             if let m = meeting, !m.attendees.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        ForEach(m.attendees.prefix(12), id: \.self) { a in
+                        let shown = showAllAttendees ? m.attendees.count : 8
+                        ForEach(m.attendees.prefix(shown), id: \.self) { a in
                             AttendeeChip(attendee: a) { connectingAttendee = $0 }
                         }
-                        if m.attendees.count > 12 {
-                            Text("+\(m.attendees.count - 12)")
-                                .scaledFont(11)
-                                .foregroundStyle(NDS.textTertiary)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(NDS.fieldBg, in: Capsule())
+                        if m.attendees.count > 8 {
+                            // P1-6: expander instead of a dead "+N" label, so a big
+                            // roster collapses but is one click from full.
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) { showAllAttendees.toggle() }
+                            } label: {
+                                Text(showAllAttendees
+                                     ? "Show fewer"
+                                     : "View all attendees (\(m.attendees.count))")
+                                    .scaledFont(11)
+                                    .foregroundStyle(NDS.brand)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(NDS.fieldBg, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
                         }
                         // One-click add every attendee not yet in People. (TM-9)
                         if unaddedAttendeeCount(m) > 0 {
@@ -76,14 +86,8 @@ extension UnifiedMeetingDetail {
                 .padding(.bottom, 8)
             }
 
-            // Source picker — user-editable. Lets the user correctly tag an
-            // impromptu recording, or override the URL guess on a calendar
-            // event whose link is hidden in the body.
-            if let m = meeting {
-                sourcePickerRow(for: m)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-            }
+            // P1-6: the source picker moved into the Options menu (it's a rarely-
+            // changed override) to de-clutter the header.
 
             // Tags
             if let m = meeting {
@@ -272,6 +276,15 @@ extension UnifiedMeetingDetail {
                 Label("Edit title…", systemImage: "pencil")
             }
 
+            // P1-6: meeting source — moved out of the header into Options.
+            if let m = meeting {
+                Menu {
+                    sourceMenuContent(for: m)
+                } label: {
+                    Label("Meeting source", systemImage: m.effectiveSource?.systemImage ?? "questionmark.circle")
+                }
+            }
+
             if case .past(let m) = mode {
                 Divider()
 
@@ -408,50 +421,28 @@ extension UnifiedMeetingDetail {
 
     // MARK: - Source picker
 
+    /// P1-6: source options, rendered inside the Options menu's "Meeting source"
+    /// submenu (previously a standalone header row). A checkmark marks the
+    /// active source; "Clear" returns to auto-detect.
     @ViewBuilder
-    func sourcePickerRow(for m: Meeting) -> some View {
+    func sourceMenuContent(for m: Meeting) -> some View {
         let current = m.effectiveSource
-        let isAutoDetected = m.userSource == nil && current != nil
-        HStack(spacing: 6) {
-            Image(systemName: current?.systemImage ?? "questionmark.circle")
-                .scaledFont(11)
-                .foregroundStyle(NDS.textSecondary)
-            Menu {
-                ForEach(MeetingSource.allCases, id: \.self) { src in
-                    Button {
-                        manager.updateMeeting(m, source: .some(src))
-                    } label: {
-                        if src == current {
-                            Label(src.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(src.displayName)
-                        }
-                    }
-                }
-                if m.userSource != nil {
-                    Divider()
-                    Button("Clear (auto-detect)") {
-                        manager.updateMeeting(m, source: .some(nil))
-                    }
-                }
+        ForEach(MeetingSource.allCases, id: \.self) { src in
+            Button {
+                manager.updateMeeting(m, source: .some(src))
             } label: {
-                HStack(spacing: 4) {
-                    Text(current?.displayName ?? "Set source")
-                        .scaledFont(12)
-                        .foregroundStyle(current == nil ? NDS.textTertiary : NDS.textSecondary)
-                    if isAutoDetected {
-                        Text("· auto")
-                            .scaledFont(11)
-                            .foregroundStyle(NDS.textTertiary)
-                    }
-                    Image(systemName: "chevron.down")
-                        .scaledFont(9)
-                        .foregroundStyle(NDS.textTertiary)
+                if src == current {
+                    Label(src.displayName, systemImage: "checkmark")
+                } else {
+                    Text(src.displayName)
                 }
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Where this meeting is happening — used to match auto-record against the call you've actually joined.")
+        }
+        if m.userSource != nil {
+            Divider()
+            Button("Clear (auto-detect)") {
+                manager.updateMeeting(m, source: .some(nil))
+            }
         }
     }
 
@@ -615,7 +606,7 @@ extension UnifiedMeetingDetail {
                     }
                 } label: {
                     Text("Occurrence \(idx) of \(allOccurrences.count)")
-                        .scaledFont(11, weight: .medium).foregroundStyle(NDS.textSecondary)
+                        .scaledFont(12, weight: .medium).foregroundStyle(NDS.textSecondary)
                 }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
 
