@@ -299,6 +299,17 @@ struct GlobalSearchView: View {
     /// Maps an FTS row to a workspace entity for display/opening. Returns nil
     /// for kinds we don't render directly here.
     private func ftsEntity(_ r: VaultSearchResult) -> WorkspaceEntity? {
+        // 5-B: surface decisions in ⌘K by routing each to its source meeting, so
+        // searching the vault finds decisions (previously dropped here) and a tap
+        // opens where the decision was made — no new entity kind / destination.
+        if r.entityKind == "decision" {
+            guard let dec = manager.decisions.decisions.first(where: { $0.id == r.entityID }),
+                  let m = manager.meeting(forEntityID: dec.meetingID) else { return nil }
+            return WorkspaceEntity(kind: .meeting, rawID: m.id,
+                                   title: "Decision: " + (r.title ?? dec.text),
+                                   subtitle: MeetingManager.entityDateString(m.startDate),
+                                   date: m.startDate, snippet: nil)
+        }
         let kind: WorkspaceEntityKind
         switch r.entityKind {
         case "meeting":    kind = .meeting
