@@ -7,10 +7,10 @@ extension UnifiedMeetingDetail {
 
     var header: some View {
         VStack(alignment: .leading, spacing: 0) {
-            seriesSpine   // D1-6: recurring-series prev/next thread
-            // Main title row
+            seriesSpine   // recurring-series prev/next thread
+            // Main title row — tightened: 12 top / 8 bottom (was 18 / 12).
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     titleAndDescription
                     metaLine
                     chipRow
@@ -19,90 +19,97 @@ extension UnifiedMeetingDetail {
                 actionButtons
             }
             .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
 
-            // Attendees line — full width, below title
-            if let m = meeting, !m.attendees.isEmpty {
+            // Attendees + shared-history + conference URL packed onto ONE
+            // horizontal scroll row so the header doesn't stack 4–5 rows of
+            // chrome on top of the canvas. Each is a chip; the row wraps
+            // gracefully on narrow widths.
+            if hasContextChips {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        let shown = showAllAttendees ? m.attendees.count : 8
-                        ForEach(m.attendees.prefix(shown), id: \.self) { a in
-                            AttendeeChip(attendee: a) { connectingAttendee = $0 }
-                        }
-                        if m.attendees.count > 8 {
-                            // P1-6 / B1: consistent inline action (was a .plain capsule).
-                            MSInlineButton(showAllAttendees
-                                           ? "Show fewer"
-                                           : "View all attendees (\(m.attendees.count))") {
-                                withAnimation(.easeInOut(duration: 0.15)) { showAllAttendees.toggle() }
+                        if let m = meeting {
+                            let shown = showAllAttendees ? m.attendees.count : 6
+                            ForEach(m.attendees.prefix(shown), id: \.self) { a in
+                                AttendeeChip(attendee: a) { connectingAttendee = $0 }
+                            }
+                            if m.attendees.count > 6 {
+                                MSInlineButton(showAllAttendees
+                                               ? "Fewer"
+                                               : "+\(m.attendees.count - 6)") {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        showAllAttendees.toggle()
+                                    }
+                                }
+                            }
+                            if unaddedAttendeeCount(m) > 0 {
+                                MSInlineButton("Add \(unaddedAttendeeCount(m)) to People",
+                                               systemImage: "person.crop.circle.badge.plus") {
+                                    addAllAttendeesToPeople(m)
+                                }
                             }
                         }
-                        // One-click add every attendee not yet in People. (TM-9)
-                        if unaddedAttendeeCount(m) > 0 {
-                            // B1: consistent inline action (was .borderless).
-                            MSInlineButton("Add \(unaddedAttendeeCount(m)) to People",
-                                           systemImage: "person.crop.circle.badge.plus") {
-                                addAllAttendeesToPeople(m)
+                        if let url = meeting?.conferenceURL, let u = URL(string: url) {
+                            Link(destination: u) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "video.fill")
+                                        .scaledFont(10).foregroundStyle(NDS.brand)
+                                    Text("Join call").scaledFont(11).foregroundStyle(NDS.brand)
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(NDS.brand.opacity(0.08), in: Capsule())
                             }
+                        }
+                        if let strip = sharedHistoryLine(for: meeting) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .scaledFont(9).foregroundStyle(NDS.textTertiary)
+                                Text(strip).scaledFont(11)
+                                    .foregroundStyle(NDS.textSecondary).lineLimit(1)
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(NDS.fieldBg, in: Capsule())
                         }
                     }
                     .padding(.horizontal, 20)
                 }
-                .padding(.bottom, 8)
+                .padding(.bottom, 6)
             }
-
-            // P1-5: shared-history strip — continuity at a glance, where the
-            // "second brain" should brag that it remembers.
-            if let strip = sharedHistoryLine(for: meeting) {
-                HStack(spacing: 6) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .scaledFont(10).foregroundStyle(NDS.textTertiary)
-                    Text(strip).scaledFont(11.5).foregroundStyle(NDS.textSecondary).lineLimit(1)
-                }
-                .padding(.horizontal, 20).padding(.bottom, 8)
-            }
-
-            // Conference URL — prominent, tappable
-            if let url = meeting?.conferenceURL, let u = URL(string: url) {
-                HStack(spacing: 6) {
-                    Image(systemName: "video.fill")
-                        .scaledFont(11)
-                        .foregroundStyle(NDS.brand)
-                    Link(url, destination: u)
-                        .scaledFont(12)
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-            }
-
-            // P1-6: the source picker moved into the Options menu (it's a rarely-
-            // changed override) to de-clutter the header.
 
             // Tags
             if let m = meeting {
                 TagPicker(meeting: m, propagateToSeries: m.seriesID != nil)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 6)
             }
 
-            // Upcoming action bar
+            // Upcoming action bar — only meaningful for upcoming meetings.
             if case .upcoming = mode, let m = meeting {
                 upcomingActionRow(m)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 10)
+                    .padding(.bottom, 8)
             }
 
-            // Status/warning banner
+            // Status / warning banner
             if showStatusBanner {
                 statusBanner
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 10)
+                    .padding(.bottom, 8)
             }
 
             Divider().overlay(NDS.divider)
         }
+    }
+
+    /// True when at least one of the trailing context chips would render — so
+    /// we can omit the whole row (and its bottom padding) when there's nothing
+    /// to show. Keeps the header from reserving a dead 32pt strip.
+    private var hasContextChips: Bool {
+        if let m = meeting, !m.attendees.isEmpty { return true }
+        if let url = meeting?.conferenceURL, URL(string: url) != nil { return true }
+        if sharedHistoryLine(for: meeting) != nil { return true }
+        return false
     }
 
     // MARK: - Title + description
