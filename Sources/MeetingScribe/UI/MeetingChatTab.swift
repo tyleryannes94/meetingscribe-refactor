@@ -3,55 +3,12 @@ import AppKit
 
 @available(macOS 14.0, *)
 extension UnifiedMeetingDetail {
-    @ViewBuilder
-var chatBody: some View {
-        if let m = meeting {
-            ChatPanel(
-                session: chatSession,
-                density: .compact,
-                capabilitySections: Self.meetingCapabilitySections
-            )
-            // P0-2: scope the shared assistant to this meeting on the session's
-            // pageContext (same mechanism Today/People use) instead of a
-            // per-message contextPrefix on a throwaway session. Messages persist.
-            .onAppear {
-                attachChatIfNeeded()
-                chatSession.setContext(chatContext(for: m), label: m.displayTitle)
-            }
-            .onChange(of: m.id) { _, _ in
-                chatSession.setContext(chatContext(for: m), label: m.displayTitle)
-            }
-        } else {
-            placeholder(systemImage: "sparkles",
-                        title: "No meeting context",
-                        message: "Open a meeting to chat about it.")
-        }
-    }
-
-    /// Meeting-scoped capability groups so discovery matches the Today sidebar's
-    /// categorized "What can I ask?" instead of a flat prompt list (P0-2).
-    static var meetingCapabilitySections: [ChatPanel.CapabilitySection] {
-        [
-            .init(label: "This meeting", prompts: [
-                "Summarize the key decisions from this meeting.",
-                "Pull the action items and who owns each.",
-                "What questions were left unanswered?"
-            ]),
-            .init(label: "Follow-up", prompts: [
-                "Draft a follow-up email recapping this call.",
-                "What should I send each attendee afterward?"
-            ]),
-            .init(label: "Analysis", prompts: [
-                "What did the attendees seem to disagree on?",
-                "How does this connect to our earlier meetings?"
-            ])
-        ]
-    }
-
     /// Per-meeting context the AI sees alongside every user message.
-    /// Keeps the conversation scoped to this call without the user having
-    /// to repeat themselves.
-func chatContext(for m: Meeting) -> String {
+    /// Pushed into `chatSession.pageContext` on every meeting open so the
+    /// global right-side `ChatSidebar` is grounded on the call without the
+    /// user having to repeat themselves. (The in-canvas chat tab was retired
+    /// in M10 — the sidebar is now the single chat surface.)
+    func chatContext(for m: Meeting) -> String {
         // Make this meeting resolvable by the chat tools even if it isn't a
         // finalized past meeting yet (calendar/today meeting). Fixes Ask AI's
         // "meeting not found". Plain (non-published) var — no view invalidation.
@@ -93,7 +50,7 @@ func chatContext(for m: Meeting) -> String {
         return lines.joined(separator: "\n")
     }
 
-func attachChatIfNeeded() {
+    func attachChatIfNeeded() {
         guard !chatAttached else { return }
         chatSession.attach(manager: manager)
         chatAttached = true

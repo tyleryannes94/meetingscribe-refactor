@@ -6,7 +6,7 @@ extension UnifiedMeetingDetail {
     // MARK: - Audio
 
     @ViewBuilder
-var audioBar: some View {
+    var audioBar: some View {
         if !audioURLs.isEmpty {
             AudioPlayerBar(title: audioURLs.count > 1 ? "Audio (mic + system)" : "Audio",
                            controller: audioController)
@@ -15,53 +15,21 @@ var audioBar: some View {
         }
     }
 
-    @ViewBuilder
-var transcriptBody: some View {
-        switch mode {
-        case .live:
-            LiveTranscriptScroll(transcriber: manager.liveTranscriber,
-                                 recordingStartedAt: liveStartedAt)
-        case .upcoming(let m):
-            // Pre-meeting brief: prior meetings with same attendees + open
-            // action items from those meetings. Far more useful than the
-            // old "No transcript yet" placeholder.
-            PreMeetingBriefView(meeting: m)
-                .environmentObject(manager)
-        case .past:
-            if transcript.isEmpty {
-                if bodyLoaded {
-                    placeholder(systemImage: "waveform",
-                                title: "No transcript",
-                                message: "This meeting didn't capture audio, or transcription failed.")
-                } else {
-                    MSSkeleton(lines: 8).padding(24)   // loading, not empty (PP-1)
-                }
-            } else {
-                // Use the navigable sync view when transcript has structured
-                // speaker/timestamp data. Falls back gracefully if format is plain prose.
-                // Pass the shared controller (C1-3) so tapping a timestamp seeks
-                // the same audio the transport bar plays — only when audio exists.
-                TranscriptSyncView(rawTranscript: transcript,
-                                   audioController: audioURLs.isEmpty ? nil : audioController,
-                                   initialSearch: transcriptSearchSeed,
-                                   meetingID: meeting?.id,
-                                   attendees: meeting?.attendees ?? [])
-            }
-        }
-    }
-
-    /// U2-2: pull a search query carried from a search hit, switch to the
-    /// transcript tab, and clear the router channel.
+    /// U2-2: pull a search query carried from a search hit, seed the
+    /// transcript find bar, and scroll the canvas to the transcript section.
+    /// (Pre-M10 this also set `tab = .transcript`; the canvas now shows
+    /// every section in one scroll column, so a `scrollTo` does the same
+    /// job without dropping the user's place in the rest of the meeting.)
     func consumeTranscriptQuery() {
         guard let q = router.pendingTranscriptQuery, !q.isEmpty else { return }
         transcriptSearchSeed = q
-        tab = .transcript
+        pendingScrollAnchor = .transcript
         router.pendingTranscriptQuery = nil
     }
 
     /// When recording started (used by the live transcript pane to count down
     /// to the next 5-minute chunk).
-var liveStartedAt: Date? {
+    var liveStartedAt: Date? {
         if case .recording(_, let at) = manager.state { return at }
         return nil
     }
@@ -165,32 +133,7 @@ struct LiveTranscriptScroll: View {
     }
 }
 
-/// Enhanced Notes canvas (V5 CN-1): the Summary and My Notes tabs are merged
-/// into one "Notes" canvas (summary up top, your editable notes below) so you
-/// read the recap and write notes without tab-switching. Transcript stays its
-/// own tab (long + navigable), Ask AI stays interactive.
-enum DetailTab: String, CaseIterable, Identifiable {
-    case notes, actions, transcript, chat
-    var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .notes:      return "Meeting"
-        case .actions:    return "Actions"
-        case .transcript: return "Transcript"
-        case .chat:       return "Ask AI"
-        }
-    }
-    var systemImage: String {
-        switch self {
-        case .notes:      return "doc.text"
-        case .actions:    return "checklist"
-        case .transcript: return "text.alignleft"
-        case .chat:       return "bubble.left.and.sparkles"
-        }
-    }
-}
-
-/// Renders markdown for the transcript/summary tabs.
+/// Renders markdown for the transcript/summary panes.
 /// Uses MarkdownEditor in read-only mode so block-level constructs
 /// (## headings, --- dividers, indented lists) render correctly.
 /// For long transcripts this is significantly more performant than

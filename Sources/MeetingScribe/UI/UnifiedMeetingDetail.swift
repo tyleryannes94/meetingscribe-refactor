@@ -29,20 +29,12 @@ struct UnifiedMeetingDetail: View {
     /// meeting and elsewhere instead of being wiped by a per-view session.
     @EnvironmentObject var chatSession: ChatSession
 
-    @State var tab: DetailTab = .notes
     /// Summary disclosure state within the combined Notes canvas (CN-1).
     @State var summaryExpanded = true
-    /// Whether we've applied the smart tab default for this meeting yet.
-    /// Prevents tab from jumping when the user has already made a selection.
-    @State private var hasAppliedTabDefault = false
     @State var chatAttached = false
     /// P1-6: when a meeting has many attendees, collapse past 8 behind a
     /// "View all" expander so the header doesn't sprawl into a long chip rail.
     @State var showAllAttendees = false
-    /// In the My Notes tab for a recurring series: which occurrence's notes are
-    /// shown. nil = the current call (editable); otherwise a prior meeting id
-    /// (read-only).
-    @State var selectedOccurrenceID: String?
     @State var noteDraft: String = ""
     @State var lastSavedDraft: String = ""
     @State var saveTimer: Timer?
@@ -79,14 +71,15 @@ struct UnifiedMeetingDetail: View {
     @State var connectingAttendee: String?
     /// The persistent "Who's here" people rail (P1-2). On by default; toggle ⌥⌘P.
     @AppStorage("meetingPeopleRailVisible") var peopleRailVisible = true
-
-    /// M9 cutover: the de-tabbed canvas is now the default. Flip back via
-    /// `defaults write com.tyleryannes.MeetingScribe meetingCanvasV2 -bool false`
-    /// if a regression appears; the legacy `tabbedBody` path remains compiled
-    /// until M10's cleanup deletes it.
-    @AppStorage("meetingCanvasV2") var canvasV2 = true
     /// Query carried from a search hit into the transcript find bar (U2-2).
     @State var transcriptSearchSeed: String?
+    /// M10: in-canvas scroll target. Setting this to a section anchor scrolls
+    /// the canvas there; the canvas's `.onChange` clears it back to nil. Used
+    /// by the highlights chip, the post-meeting review banner, and
+    /// `consumeTranscriptQuery` (in MeetingTranscriptTab.swift) to jump to
+    /// the relevant section instead of teleporting between tabs. Cross-file
+    /// callers need at least internal access, so this is not `private`.
+    @State var pendingScrollAnchor: SectionAnchor? = nil
 
     var meeting: Meeting? {
         switch mode {
@@ -142,7 +135,7 @@ struct UnifiedMeetingDetail: View {
             let decCount = manager.decisions.decisions.filter { $0.meetingID == m.id }.count
             PostMeetingReviewBanner(meeting: m, actionItemCount: aiCount,
                                     decisionCount: decCount,
-                                    onReviewTasks: { tab = .actions })
+                                    onReviewTasks: { pendingScrollAnchor = .outcomes })
         }
     }
 
@@ -164,9 +157,15 @@ struct UnifiedMeetingDetail: View {
         .onAppear {
             reload()
             attachChatIfNeeded()
+            if let m = meeting {
+                chatSession.setContext(chatContext(for: m), label: m.displayTitle)
+            }
         }
         .onChange(of: meeting?.id) { _, _ in
             reload()
+            if let m = meeting {
+                chatSession.setContext(chatContext(for: m), label: m.displayTitle)
+            }
         }
         .onChange(of: audioURLs) { _, urls in audioController.reload(urls: urls) }
         .onAppear { consumeTranscriptQuery() }
@@ -237,53 +236,29 @@ struct UnifiedMeetingDetail: View {
         // Switching meetings closes any open connect panel.
         .onChange(of: meeting?.id) { _, _ in connectingAttendee = nil }
     }
-    // MARK: - Body branches (M1 flag-gated)
+    // MARK: - Canvas body
 
-    /// Today's path: pill tab picker + one mode-multiplexed body. Stays byte-
-    /// for-byte unchanged while `canvasV2` is off.
-    @ViewBuilder var tabbedBody: some View {
-        tabPicker
-        Group {
-            switch tab {
-            case .notes:      combinedNotesBody
-            case .actions:    actionsBody
-            case .transcript: transcriptBody
-            case .chat:       chatBody
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// M2 / 01 §4.1 — section anchors for the upper `ScrollView`'s
-    /// `ScrollViewReader`. The highlights chip / transcript deep-link rewire
-    /// in M8 will `scrollTo(.outcomes / .summary / .transcript)` instead of
-    /// `tab = …`, closing P4 (lost-scroll teleports).
+    /// Section anchors for the canvas's `ScrollViewReader`. The highlights chip
+    /// and the post-meeting review banner set `pendingScrollAnchor` to one of
+    /// these to jump in-canvas instead of teleporting between tabs (was M8's
+    /// goal; landed in M10 with the rest of the tab cleanup).
     enum SectionAnchor: Hashable { case outcomes, summary, transcript }
 
-    /// Detail reading measure for the canvas column (01 §5.1). Matches the
-    /// existing `actionsBody` 760pt clamp.
+    /// Detail reading measure for the canvas column (01 §5.1).
     static let canvasContentMaxWidth: CGFloat = 760
 
-    /// M2 scaffold: chrome split between the short, intrinsically-sized
-    /// sections (Outcomes / Highlights / Summary / Related) which scroll
-    /// together up top, and the bounded-height long sections (Notes /
-    /// Transcript / Ask AI) which sit below outside any outer ScrollView so
-    /// they can clip-and-scroll internally without violating C-A.
-    /// M3-M9 fill in the actual sections; today the top group hosts
-    /// `combinedNotesBody` so the editor proves the bounded-height shape.
+    /// Single-column meeting canvas — mode-aware section ordering, MSSection
+    /// per block. Notes and Brief come first for upcoming/live (prep/recording
+    /// job), Outcomes and Summary first for past. Each section self-hides
+    /// when it has nothing to show. Persistence keys are mode-suffixed so
+    /// toggling collapse on a past meeting doesn't bury Brief on an upcoming
+    /// one. The chat panel that used to live as a tab is now the global
+    /// right-side `ChatSidebar`, scoped to this meeting via
+    /// `chatSession.setContext` in the live body's `.onAppear`.
     @ViewBuilder var canvasBody: some View {
-        // One scroll column, mode-aware section ordering — Notes and Brief
-        // come FIRST for upcoming/live (the prep/recording job), Outcomes
-        // and Summary first for past. Each section self-hides when it has
-        // nothing to show. Persistence keys are mode-suffixed so toggling
-        // collapse on a past meeting doesn't bury Brief on an upcoming one.
-        ScrollViewReader { _ in
+        ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    // The Ask-AI section that used to live inside the canvas
-                    // is gone — the global right-side `ChatSidebar` is the one
-                    // chat surface, and it's already scoped to this meeting via
-                    // `chatSession.setContext`. No duplicate.
                     switch mode {
                     case .past:
                         outcomesSection.id(SectionAnchor.outcomes)
@@ -307,6 +282,13 @@ struct UnifiedMeetingDetail: View {
                 .frame(maxWidth: Self.canvasContentMaxWidth)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
+            .onChange(of: pendingScrollAnchor) { _, anchor in
+                guard let anchor else { return }
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo(anchor, anchor: .top)
+                }
+                pendingScrollAnchor = nil
+            }
         }
     }
 
@@ -320,23 +302,6 @@ struct UnifiedMeetingDetail: View {
         }
     }
 
-    /// M8 / 01 §6 Step 8 — Ask AI section. Lazy-mounted via MSSection
-    /// collapse state — defaults collapsed so opening a meeting doesn't
-    /// spin up the chat panel. Bounded height keeps the chat view from
-    /// fighting the outer scroll.
-    @ViewBuilder var chatSection: some View {
-        if meeting != nil {
-            MSSection("Ask AI", systemImage: "bubble.left.and.sparkles",
-                      persistenceKey: "meeting.chat.v2.\(modeKey)",
-                      defaultExpanded: false) {
-                GeometryReader { geo in
-                    chatBody
-                        .frame(height: max(360, geo.size.height * 0.55))
-                }
-                .frame(minHeight: 400)
-            }
-        }
-    }
 
     /// M7 / 01 §6 Step 7 — Transcript section. Lazy-mounted via the
     /// `MSSection`'s collapse state (C-B): the heavy `TranscriptSyncView`
@@ -475,8 +440,9 @@ struct UnifiedMeetingDetail: View {
     /// M6 / 01 §6 Step 6 — Summary section. Past-only. Branch order matches
     /// the spec: real summary → editor + edit-by-asking + feedback; else
     /// generating → banner; else loaded-with-transcript → engine-off retry;
-    /// else cold → skeleton; else omitted. Replaces `summaryDisclosure` /
-    /// `pastSummaryBody` / `emptySummaryView` (M10 will delete them).
+    /// else cold → skeleton; else omitted. Single source of truth — the
+    /// per-tab `summaryDisclosure` / `pastSummaryBody` / `emptySummaryView`
+    /// duplicates were retired in M10.
     @ViewBuilder var summarySection: some View {
         if case .past = mode, let m = meeting {
             let showSection = hasRealSummary || isSummaryGenerating
@@ -526,8 +492,7 @@ struct UnifiedMeetingDetail: View {
     }
 
     /// M4 / 01 §6 Step 4 — Highlights section. Each `MeetingMark` is a
-    /// timestamped chip; M8 will rewire the tap target to scroll-to-transcript
-    /// + seed the search instead of teleporting `tab = .transcript`.
+    /// timestamped chip that scrolls the canvas to the transcript section.
     @ViewBuilder var highlightsSection: some View {
         if let m = meeting {
             let marks = MeetingMarks.load(m.id)
@@ -537,7 +502,7 @@ struct UnifiedMeetingDetail: View {
                           persistenceKey: "meeting.highlights.v2") {
                     FlowLayout(spacing: NDS.spaceSM) {
                         ForEach(marks) { mark in
-                            Button { tab = .transcript } label: {
+                            Button { pendingScrollAnchor = .transcript } label: {
                                 HStack(spacing: 5) {
                                     Text(mark.timestamp)
                                         .scaledFont(11, weight: .semibold).monospacedDigit()
@@ -560,10 +525,10 @@ struct UnifiedMeetingDetail: View {
         }
     }
 
-    /// M3 / 01 §6 Step 3 — Outcomes section. The §P2 merge: full-CRUD
-    /// `MeetingActionRow`s + decisions + add. Replaces `outcomesStrip`'s
-    /// read-only preview, `actionsBody`'s standalone tab, and the legacy
-    /// `actionItemsSection`'s third render.
+    /// M3 / 01 §6 Step 3 — Outcomes section. Full-CRUD `MeetingActionRow`s +
+    /// decisions + add — the canvas's single source of truth for this
+    /// meeting's action items (the read-only preview, standalone Actions tab,
+    /// and inline `actionItemsSection` were all retired in M10).
     @ViewBuilder var outcomesSection: some View {
         if let m = meeting {
             let items = manager.actionItems.items(for: m.id)
@@ -616,82 +581,6 @@ struct UnifiedMeetingDetail: View {
         }
     }
 
-    // MARK: - Tabs
-
-    /// Count of this meeting's action items still awaiting review (Triage) —
-    /// shown as a badge on the Actions tab (§3B).
-    var unconfirmedActionCount: Int {
-        guard let m = meeting else { return 0 }
-        return manager.actionItems.items(for: m.id).filter { $0.needsTriage }.count
-    }
-
-    var tabPicker: some View {
-        HStack {
-            MSPillTabs(tabs: DetailTab.allCases.map { t in
-                // C1-1: for an upcoming meeting the "Transcript" tab IS the
-                // pre-meeting brief — label it so prep greets you, not a misnomer.
-                let label: String
-                if t == .actions && unconfirmedActionCount > 0 {
-                    label = "Actions \(unconfirmedActionCount)"
-                } else if t == .transcript, case .upcoming = mode {
-                    label = "Brief"
-                } else {
-                    label = t.label
-                }
-                return (t, label)
-            }, selection: $tab)
-            Spacer(minLength: 0)
-        }
-        .padding([.horizontal, .top], 10)
-        .padding(.bottom, 4)
-    }
-
-    /// Dedicated Actions tab (§3D): this meeting's action items with confirm /
-    /// push-to-Tasks controls and inline add.
-    @ViewBuilder
-    var actionsBody: some View {
-        if let m = meeting {
-            let items = manager.actionItems.items(for: m.id)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        NotionEyebrow(text: "Actions from this meeting", count: items.count)
-                        Spacer()
-                        let unconfirmed = items.filter { $0.needsTriage }
-                        if !unconfirmed.isEmpty {
-                            Button {
-                                manager.actionItems.confirm(ids: unconfirmed.map(\.id))
-                            } label: {
-                                Label("Add all \(unconfirmed.count) → Tasks", systemImage: "checkmark.circle.fill")
-                            }
-                            .buttonStyle(MSPrimaryButtonStyle())
-                        }
-                    }
-                    if items.isEmpty {
-                        MSEmptyState(systemImage: "checklist",
-                                     title: "No action items",
-                                     message: "Items appear here after summarization, or add one below.")
-                            .frame(minHeight: 200)
-                    } else {
-                        ForEach(items) { item in
-                            MeetingActionRow(item: item, store: manager.actionItems, meeting: m)
-                        }
-                    }
-                    Button {
-                        var t = manager.actionItems.createTask(title: "New action item")
-                        t.meetingID = m.id; t.meetingTitle = m.displayTitle; t.meetingDate = m.startDate
-                        manager.actionItems.upsert(t)
-                    } label: {
-                        Label("Add action item", systemImage: "plus")
-                    }
-                    .buttonStyle(MSSecondaryButtonStyle())
-                }
-                .padding(20)
-                .frame(maxWidth: 760, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
     func placeholder(systemImage: String, title: String, message: String) -> some View {
         VStack(spacing: 8) {
             Image(systemName: systemImage).scaledFont(36).foregroundStyle(.secondary)
@@ -729,7 +618,6 @@ struct UnifiedMeetingDetail: View {
         titleDraft = m.userTitle ?? m.title
         descriptionDraft = m.userDescription ?? ""
         previousPrimaryTagID = manager.tagStore.primaryTag(for: m)?.id
-        selectedOccurrenceID = nil
 
         // Audio URLs are cheap (fileExists on a known set) but still off-main.
         // Stale audioURLs from a prior meeting will be replaced when the
@@ -793,29 +681,6 @@ struct UnifiedMeetingDetail: View {
 
     // (Backlinks are now loaded inside `reload()`'s body refresh task so
     // they cancel along with the rest when the user switches meetings.)
-
-    /// For past meetings that already have a summary, default to the Summary
-    /// tab instead of My Notes — that's what users want to see first.
-    /// Runs once per meeting switch; tab jumps back to Notes for live meetings
-    /// so users can type while recording.
-    func applySmartTabDefault() {
-        guard !hasAppliedTabDefault else { return }
-        hasAppliedTabDefault = true
-        switch mode {
-        case .past:
-            // The Notes canvas already shows the summary up top, so it's the
-            // right default; expand the summary when one exists.
-            tab = .notes
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 300_000_000)
-                summaryExpanded = !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
-        case .live:
-            tab = .notes  // Notes while recording so you can type alongside the transcript.
-        case .upcoming:
-            tab = .transcript  // Transcript placeholder for upcoming — no notes to show yet.
-        }
-    }
 
     func reloadIfLiveFinished() {
         if case .idle = manager.state, case .live = mode { reload() }
