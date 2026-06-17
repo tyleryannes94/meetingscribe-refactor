@@ -285,8 +285,12 @@ struct UnifiedMeetingDetail: View {
                 ScrollViewReader { _ in
                     ScrollView {
                         VStack(alignment: .leading, spacing: NDS.spaceXL) {
-                            combinedNotesBody   // placeholder until M3-M6 land
+                            outcomesSection
+                                .id(SectionAnchor.outcomes)
+                            // Highlights / Summary / Related land in M4-M6/M9.
                         }
+                        .padding(.horizontal, NDS.spaceXL)
+                        .padding(.vertical, NDS.spaceXL)
                         .frame(maxWidth: Self.canvasContentMaxWidth)
                         .frame(maxWidth: .infinity, alignment: .center)
                     }
@@ -299,6 +303,62 @@ struct UnifiedMeetingDetail: View {
                 VStack(spacing: 0) { EmptyView() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// M3 / 01 §6 Step 3 — Outcomes section. The §P2 merge: full-CRUD
+    /// `MeetingActionRow`s + decisions + add. Replaces `outcomesStrip`'s
+    /// read-only preview, `actionsBody`'s standalone tab, and the legacy
+    /// `actionItemsSection`'s third render.
+    @ViewBuilder var outcomesSection: some View {
+        if let m = meeting {
+            let items = manager.actionItems.items(for: m.id)
+            let unconfirmed = items.filter { $0.needsTriage }
+            let decs = manager.decisions.decisions.filter { $0.meetingID == m.id }
+            let isUpcoming: Bool = { if case .upcoming = mode { return true } else { return false } }()
+            if !isUpcoming {
+                MSSection("Outcomes", systemImage: "checklist",
+                          count: items.count,
+                          persistenceKey: "meeting.outcomes",
+                          defaultExpanded: !items.isEmpty || !decs.isEmpty,
+                          trailing: {
+                              if !unconfirmed.isEmpty {
+                                  MSInlineButton("Add all \(unconfirmed.count) → Tasks",
+                                                 systemImage: "checkmark.circle.fill") {
+                                      manager.actionItems.confirm(ids: unconfirmed.map(\.id))
+                                  }
+                              }
+                          }) {
+                    VStack(alignment: .leading, spacing: NDS.spaceMD) {
+                        if items.isEmpty && decs.isEmpty {
+                            MSEmptyState(systemImage: "checklist",
+                                         title: "No action items",
+                                         message: "Items appear here after summarization, or add one below.")
+                                .frame(minHeight: 140)
+                        } else {
+                            ForEach(items) { item in
+                                MeetingActionRow(item: item, store: manager.actionItems, meeting: m)
+                            }
+                            ForEach(decs.prefix(5)) { d in
+                                HStack(spacing: 8) {
+                                    Image(systemName: "checkmark.seal").scaledFont(12)
+                                        .foregroundStyle(NDS.brand.opacity(0.7))
+                                    Text(d.text).font(NDS.small)
+                                        .foregroundStyle(NDS.textSecondary).lineLimit(2)
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        }
+                        MSInlineButton("Add action item", systemImage: "plus") {
+                            var t = manager.actionItems.createTask(title: "New action item")
+                            t.meetingID = m.id
+                            t.meetingTitle = m.displayTitle
+                            t.meetingDate = m.startDate
+                            manager.actionItems.upsert(t)
+                        }
+                    }
+                }
+            }
         }
     }
 
