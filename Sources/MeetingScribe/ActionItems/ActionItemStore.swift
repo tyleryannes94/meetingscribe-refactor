@@ -1259,6 +1259,27 @@ final class ActionItemStore: ObservableObject {
     func items(forPerson personID: String) -> [ActionItem] {
         items.filter { $0.ownerPersonID == personID }
     }
+
+    /// T4: open task count for a person (drives the People-list row badge +
+    /// the person profile's Tasks section header).
+    func openCount(forPerson personID: String) -> Int {
+        items.filter { $0.ownerPersonID == personID && $0.status != .completed }.count
+    }
+
+    /// T4: open-and-past-due task count for a person.
+    func overdueCount(forPerson personID: String) -> Int {
+        let now = Date()
+        return items.filter {
+            $0.ownerPersonID == personID && $0.status != .completed
+                && ($0.dueDate.map { $0 < now } ?? false)
+        }.count
+    }
+
+    /// T4: tasks that name an owner but aren't linked to a Person record yet —
+    /// the backlog the "Unassigned owners" review surface (T7) works through.
+    func unassignedOwnerTasks() -> [ActionItem] {
+        items.filter { ($0.owner?.isEmpty == false) && $0.ownerPersonID == nil && $0.status != .completed }
+    }
     func setNotion(_ id: String, pageID: String?, url: String?) {
         update(id) {
             $0.notionPageID = pageID
