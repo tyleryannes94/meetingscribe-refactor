@@ -119,7 +119,7 @@ extension UnifiedMeetingDetail {
         if editingHeader {
             VStack(alignment: .leading, spacing: 6) {
                 TextField("Title", text: $titleDraft)
-                    .scaledFont(22, weight: .bold)
+                    .scaledFont(22, weight: .bold, kind: .display)
                     .textFieldStyle(.plain)
                     .padding(6)
                     .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 6))
@@ -141,7 +141,7 @@ extension UnifiedMeetingDetail {
         } else {
             // Title — large, prominent
             Text(meeting?.displayTitle ?? "Untitled")
-                .scaledFont(24, weight: .bold)
+                .scaledFont(22, weight: .bold, kind: .display)
                 .foregroundStyle(NDS.textPrimary)
                 .textSelection(.enabled)
             if let d = meeting?.userDescription, !d.isEmpty {
