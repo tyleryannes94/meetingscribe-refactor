@@ -30,17 +30,19 @@ struct PreMeetingBriefView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                headerSection
+            VStack(alignment: .leading, spacing: 14) {
+                // headerSection (a second "Pre-meeting brief" eyebrow) used
+                // to live here. The outer MSSection's title already says
+                // "Pre-meeting brief" — showing it twice was duplicate chrome.
                 synthesizedSection
                 if !seriesRecap.isEmpty { seriesRecapSection }   // recurring only
-                talkingPointsSection   // U1-5: "discuss next time" per attendee
-                relationshipSummarySection   // 2-G: who these people are
+                talkingPointsSection
+                relationshipSummarySection
                 if !openItems.isEmpty   { openItemsSection }
                 if !priorMeetings.isEmpty { priorMeetingsSection }
                 if priorMeetings.isEmpty && openItems.isEmpty { emptyState }
             }
-            .padding()
+            .padding(.vertical, 4)
         }
         .onAppear { computeBrief() }
         .onChange(of: meeting.id) { _, _ in computeBrief() }
