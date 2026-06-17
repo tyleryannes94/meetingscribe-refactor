@@ -76,7 +76,7 @@ final class OllamaChatClient {
     func send(messages startMessages: [AnthropicClient.Message],
               system: String?,
               tools: [AnthropicClient.Tool],
-              maxIterations: Int = 6,
+              maxIterations: Int = 9,   // 4-G: deeper multi-hop (person→decisions→meetings)
               progress: @MainActor (AnthropicClient.Message) -> Void = { _ in },
               runTool: @escaping (_ name: String, _ input: [String: JSONValue]) async -> Result<String, Error>
     ) async throws -> [AnthropicClient.Message] {
