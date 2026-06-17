@@ -119,16 +119,17 @@ struct DecisionLedgerView: View {
         Button {
             if let m = manager.meeting(forEntityID: d.meetingID) { router.openMeeting(m) }
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(d.text).font(NDS.body.weight(.medium)).foregroundStyle(NDS.textPrimary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(d.text).font(.callout.weight(.medium)).foregroundStyle(NDS.textPrimary)
                     .multilineTextAlignment(.leading)
                 if let r = d.rationale, !r.isEmpty {
                     Text(r).font(NDS.small).foregroundStyle(NDS.textSecondary)
                         .multilineTextAlignment(.leading)
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     statusBadge(d.status)
-                    Text(d.meetingTitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1).help(d.meetingTitle)
+                    Text(d.meetingTitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                        .lineLimit(1).help(d.meetingTitle)
                     Spacer()
                     ForEach(d.personIDs.prefix(3), id: \.self) { pid in
                         if let p = people.person(by: pid) {
@@ -138,9 +139,8 @@ struct DecisionLedgerView: View {
                     }
                 }
             }
-            .padding(12)
+            .padding(.vertical, 6).padding(.horizontal, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
