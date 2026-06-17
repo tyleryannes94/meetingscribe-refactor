@@ -156,16 +156,25 @@ struct ChatPanel: View {
     private var inputBar: some View {
         VStack(alignment: .leading, spacing: 6) {
             // P2: context breadcrumb — shows what the assistant is scoped to
-            // (a meeting / person) without a heavy header.
+            // (a meeting / person) without a heavy header. The anchor persists
+            // across top-level navigation; the trailing × lets the user clear
+            // it without resetting the whole conversation.
             if !session.contextLabel.isEmpty {
                 HStack(spacing: 5) {
                     Image(systemName: "scope").scaledFont(10).foregroundStyle(NDS.textTertiary)
                     Text("About: \(session.contextLabel)")
                         .scaledFont(11).foregroundStyle(NDS.textSecondary).lineLimit(1)
+                    Button { session.clearAnchor() } label: {
+                        Image(systemName: "xmark")
+                            .scaledFont(9, weight: .semibold)
+                            .foregroundStyle(NDS.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Unpin chat from \(session.contextLabel)")
                 }
                 .padding(.horizontal, 9).padding(.vertical, 3)
                 .background(NDS.fieldBg, in: Capsule())
-                .help("The assistant is grounded on \(session.contextLabel)")
+                .help("The assistant is grounded on \(session.contextLabel) — stays anchored as you navigate.")
             }
             inputRow
         }
