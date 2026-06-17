@@ -833,21 +833,16 @@ struct PersonDetailView: View {
                 // or waiting for a section to appear. (UX3-4/A8) Wrapped so the
                 // three text buttons don't overflow the 300pt column.
                 FlowLayout(spacing: 6) {
-                    Button { showAddEncounter = true } label: {
-                        Label("Log encounter", systemImage: "calendar.badge.plus")
+                    MSInlineButton("Log encounter", systemImage: "calendar.badge.plus") {
+                        showAddEncounter = true
                     }
-                    .buttonStyle(.borderless).font(NDS.small)
                     .help("Record an in-person or call check-in")
-                    Button { showAddRelationship = true } label: {
-                        Label("Relationship", systemImage: "person.2.badge.plus")
+                    MSInlineButton("Relationship", systemImage: "person.2.badge.plus") {
+                        showAddRelationship = true
                     }
-                    .buttonStyle(.borderless).font(NDS.small)
                     // Open the chat rail grounded on this person — the page context
                     // is already set via updateChatContext(). (cross-tab)
-                    Button { askAIAboutPerson() } label: {
-                        Label("Ask AI", systemImage: "sparkles")
-                    }
-                    .buttonStyle(.borderless).font(NDS.small)
+                    MSInlineButton("Ask AI", systemImage: "sparkles") { askAIAboutPerson() }
                 }
                 .padding(.top, 2)
             }
@@ -1218,7 +1213,7 @@ struct PersonDetailView: View {
             }
             Spacer(minLength: 0)
             if let actionLabel {
-                Button(actionLabel, action: accept).font(NDS.small)
+                MSInlineButton(actionLabel) { accept() }
             } else if let disabledNote {
                 Text(disabledNote).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
             }
@@ -1479,10 +1474,7 @@ struct PersonDetailView: View {
 
     /// Inline "+ Add email" (§4A) — appends a deduped email via the store service.
     private var addEmailControl: some View {
-        Button { showAddEmail = true } label: {
-            Label("Add email", systemImage: "plus").font(NDS.tiny)
-        }
-        .buttonStyle(.borderless).foregroundStyle(NDS.accent)
+        MSInlineButton("Add email", systemImage: "plus") { showAddEmail = true }
         .popover(isPresented: $showAddEmail, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Add email").scaledFont(13, weight: .bold, relativeTo: .headline)
@@ -1492,6 +1484,7 @@ struct PersonDetailView: View {
                 HStack {
                     Spacer()
                     Button("Cancel") { showAddEmail = false; newEmailDraft = "" }
+                        .buttonStyle(MSSecondaryButtonStyle())
                     Button("Add") { commitAddEmail() }
                         .buttonStyle(MSPrimaryButtonStyle())
                         .disabled(newEmailDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -1518,8 +1511,7 @@ struct PersonDetailView: View {
             HStack {
                 Text("Photos").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                 Spacer()
-                Button { attachPhotos() } label: { Label("Add", systemImage: "photo.badge.plus") }
-                    .buttonStyle(.borderless).font(NDS.small)
+                MSInlineButton("Add", systemImage: "photo.badge.plus") { attachPhotos() }
             }
             if current.photoRelativePaths.isEmpty {
                 Text("No photos yet. Add pictures exported from Apple Photos, Google Photos, or any file.")
@@ -1700,7 +1692,7 @@ struct PersonDetailView: View {
                     .textFieldStyle(.plain)
                     .onSubmit { addTaskForPerson() }
                 if !newTaskTitle.isEmpty {
-                    Button("Add") { addTaskForPerson() }.font(NDS.small)
+                    MSInlineButton("Add") { addTaskForPerson() }
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
@@ -1808,8 +1800,7 @@ struct PersonDetailView: View {
             HStack {
                 Text("Relationships").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                 Spacer()
-                Button { showAddRelationship = true } label: { Label("Add", systemImage: "plus") }
-                    .buttonStyle(.borderless).font(NDS.small)
+                MSInlineButton("Add", systemImage: "plus") { showAddRelationship = true }
                     .disabled(people.people.count < 2)
             }
             if current.relationships.isEmpty {
@@ -2226,7 +2217,7 @@ struct PersonDetailView: View {
                 TextField("Add a talking point to raise next time…", text: $newTalkingPoint)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(addTalkingPoint)
-                Button("Add", action: addTalkingPoint)
+                MSInlineButton("Add") { addTalkingPoint() }
                     .disabled(newTalkingPoint.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             ForEach(Array(current.talkingPoints.enumerated()), id: \.offset) { idx, point in
@@ -2272,7 +2263,7 @@ struct PersonDetailView: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($memoryFieldFocused)
                     .onSubmit(addMemory)
-                Button("Add", action: addMemory)
+                MSInlineButton("Add") { addMemory() }
                     .disabled(newMemory.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             ForEach(current.memories) { m in
@@ -2346,11 +2337,8 @@ struct PersonDetailView: View {
     /// can rerun deliberately.
     private var analysisPresetMenu: some View {
         HStack(spacing: 6) {
-            Button { showAnalyzePopover = true } label: {
-                Label("Analyze…", systemImage: "sparkles")
-            }
-            .buttonStyle(.borderless).font(NDS.small)
-            .popover(isPresented: $showAnalyzePopover, arrowEdge: .bottom) { analyzePopover }
+            MSInlineButton("Analyze…", systemImage: "sparkles") { showAnalyzePopover = true }
+                .popover(isPresented: $showAnalyzePopover, arrowEdge: .bottom) { analyzePopover }
             if let running = analysisRunning {
                 ProgressView().controlSize(.small)
                 Text("Running: \(running.label)…")
@@ -2439,10 +2427,9 @@ struct PersonDetailView: View {
                     Text(output.preset.label.uppercased())
                         .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                     Spacer()
-                    Button {
+                    MSInlineButton("Save to notes", systemImage: "square.and.arrow.down") {
                         saveAnalysisToNotes(output)
-                    } label: { Label("Save to notes", systemImage: "square.and.arrow.down") }
-                        .buttonStyle(.borderless).font(NDS.tiny)
+                    }
                     Button {
                         analysisOutput = nil
                     } label: { Image(systemName: "xmark") }
@@ -2477,10 +2464,12 @@ struct PersonDetailView: View {
             HStack {
                 Spacer()
                 Button("Cancel") { showCustomPrompt = false }
+                    .buttonStyle(MSSecondaryButtonStyle())
                 Button("Run") {
                     showCustomPrompt = false
                     runAnalysis(.custom)
                 }
+                .buttonStyle(MSPrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
                 .disabled(customPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -2745,8 +2734,7 @@ struct PersonDetailView: View {
             if deepRunning {
                 ProgressView().controlSize(.small)
             } else {
-                Button(deepNote == nil ? "Run" : "Refresh") { runDeepMessageAnalysis() }
-                    .font(NDS.small)
+                MSInlineButton(deepNote == nil ? "Run" : "Refresh") { runDeepMessageAnalysis() }
             }
         }
     }
