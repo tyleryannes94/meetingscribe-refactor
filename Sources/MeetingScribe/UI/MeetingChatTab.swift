@@ -65,6 +65,7 @@ func chatContext(for m: Meeting) -> String {
             lines.append(contentsOf: blocks)
         }
         lines.append("If you need the transcript, notes, or summary, call get_transcript / get_notes / get_summary with the \"id\" \(m.id).")
+        lines.append("Answer from this meeting's transcript / notes / summary and the people data above. Do NOT use the file or Chat-folder tools (list_files, search_files, etc.) unless the user explicitly asks about files on disk — a meeting is not a folder.")
         return lines.joined(separator: "\n")
     }
 
