@@ -58,7 +58,9 @@ final class MeetingManager: ObservableObject {
 
     /// Voice-notes state + behavior. Views that only render quick notes
     /// can observe this directly for scoped invalidation.
-    let quickNotesController = QuickNotesController()
+    // 3-D: pass the task store so finished voice notes auto-extract action
+    // items. `lazy` because an inline default can't reference `actionItems`.
+    lazy var quickNotesController = QuickNotesController(actionItemStore: actionItems)
 
     /// Post-stop + Transcribe-Now pipeline state.
     lazy var pipelineController = MeetingPipelineController(

@@ -39,6 +39,16 @@ final class QuickNotesController: ObservableObject {
     private let promptRewriter = PromptRewriter()
     private var pendingNote: QuickNote?
 
+    /// 3-D: injected so a finished voice note can auto-extract action items into
+    /// the task store, the same way meetings do. Optional so the controller can
+    /// still be built without it (extraction is then skipped).
+    private let actionItems: ActionItemStore?
+    private let ollama = OllamaService()
+
+    init(actionItemStore: ActionItemStore? = nil) {
+        self.actionItems = actionItemStore
+    }
+
     /// Hook called after a new dictation note finishes transcribing. Lets
     /// MeetingScribeApp / FloatingOverlay reuse the same dictation pipeline.
     var onDictationNoteFinalized: ((QuickNote) -> Void)?
@@ -226,11 +236,37 @@ final class QuickNotesController: ObservableObject {
         do {
             let polished = try await polisher.polish(raw)
             try? store.writePolished(polished, for: note)
+            await autoExtractActionItems(from: polished, note: note)
         } catch {
             log.error("polish failed: \(error.localizedDescription, privacy: .public)")
             ErrorReporter.shared.report(error, category: .integration,
                                         context: ["service": "ollama", "phase": "polish", "note": note.id])
             setError(note.id, "Polishing failed: \(error.localizedDescription). The raw transcript is still saved.")
+        }
+    }
+
+    /// 3-D: best-effort auto-extraction of action items from a finished voice
+    /// note into the task store (same parser meetings use). Never blocks the
+    /// note or surfaces an error to the user — the transcript is already saved.
+    private func autoExtractActionItems(from polished: String, note: QuickNote) async {
+        guard let store = actionItems else { return }
+        do {
+            let md = try await ollama.extractActionItems(from: polished)
+            var items = ActionItemExtractor.extract(from: md, sourceID: note.id,
+                                                     sourceTitle: note.title, sourceDate: note.createdAt)
+            guard !items.isEmpty else { return }
+            let known = PeopleStore.shared.people
+            for i in items.indices {
+                items[i].source = "voice_note"
+                if items[i].ownerPersonID == nil {
+                    items[i].ownerPersonID = PersonResolver.resolveOwner(items[i].owner, in: known)
+                }
+            }
+            store.reconcileExtracted(items, for: note.id)
+            AppLog.info("VoiceNote", "Auto-extracted action items",
+                        ["note": note.id, "items": "\(items.count)"])
+        } catch {
+            log.error("voice-note action extraction failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

@@ -22,6 +22,15 @@ import Foundation
 enum ActionItemExtractor {
 
     static func extract(from summary: String, meeting: Meeting) -> [ActionItem] {
+        extract(from: summary, sourceID: meeting.id,
+                sourceTitle: meeting.displayTitle, sourceDate: meeting.startDate)
+    }
+
+    /// Source-agnostic extraction (3-D): voice notes reuse this with the note's
+    /// id/title/date so extracted tasks link back to their source the same way
+    /// meeting tasks link to their meeting.
+    static func extract(from summary: String, sourceID: String,
+                        sourceTitle: String, sourceDate: Date) -> [ActionItem] {
         guard let actionSection = isolateActionItemsSection(in: summary) else { return [] }
         let lines = actionSection.components(separatedBy: .newlines)
         var items: [ActionItem] = []
@@ -38,9 +47,9 @@ enum ActionItemExtractor {
             if !mine && !AppSettings.shared.captureDelegatedTasks { continue }
             let item = ActionItem(
                 id: UUID().uuidString,
-                meetingID: meeting.id,
-                meetingTitle: meeting.displayTitle,
-                meetingDate: meeting.startDate,
+                meetingID: sourceID,
+                meetingTitle: sourceTitle,
+                meetingDate: sourceDate,
                 title: parsed.text,
                 owner: parsed.owner,
                 notes: nil,
