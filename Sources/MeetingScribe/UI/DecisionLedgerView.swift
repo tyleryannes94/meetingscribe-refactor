@@ -16,6 +16,14 @@ struct DecisionLedgerView: View {
 
     @State private var query = ""
     @State private var statusFilter: DecisionStatus?
+    @State private var groupMode: GroupMode = .byMonth
+    @State private var topicGroups: [(key: String, items: [Decision])] = []
+
+    enum GroupMode: String, CaseIterable, Identifiable {
+        case byMonth, byTopic
+        var id: String { rawValue }
+        var label: String { self == .byMonth ? "Month" : "Topic" }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +57,9 @@ struct DecisionLedgerView: View {
         }
         .frame(minWidth: asSheet ? 620 : nil, minHeight: asSheet ? 640 : nil)
         .background(NDS.bg)
+        .task(id: "\(groupMode.rawValue)|\(query)|\(statusFilter?.rawValue ?? "")") {
+            if groupMode == .byTopic { recomputeTopicGroups() }
+        }
     }
 
     private var filterBar: some View {
@@ -60,6 +71,11 @@ struct DecisionLedgerView: View {
                 ForEach(DecisionStatus.allCases, id: \.self) { Text($0.rawValue.capitalized).tag(DecisionStatus?.some($0)) }
             }
             .labelsHidden().fixedSize()
+            Picker("", selection: $groupMode) {
+                ForEach(GroupMode.allCases) { Text($0.label).tag($0) }
+            }
+            .labelsHidden().fixedSize()
+            .help("Group decisions by month or by topic cluster")
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
     }
@@ -75,10 +91,27 @@ struct DecisionLedgerView: View {
     }
 
     private var grouped: [(key: String, items: [Decision])] {
-        let fmt = DateFormatter(); fmt.dateFormat = "MMMM yyyy"
-        let groups = Dictionary(grouping: filtered) { fmt.string(from: $0.date) }
-        return groups.map { ($0.key, $0.value.sorted { $0.date > $1.date }) }
-            .sorted { ($0.items.first?.date ?? .distantPast) > ($1.items.first?.date ?? .distantPast) }
+        switch groupMode {
+        case .byMonth:
+            let fmt = DateFormatter(); fmt.dateFormat = "MMMM yyyy"
+            let groups = Dictionary(grouping: filtered) { fmt.string(from: $0.date) }
+            return groups.map { ($0.key, $0.value.sorted { $0.date > $1.date }) }
+                .sorted { ($0.items.first?.date ?? .distantPast) > ($1.items.first?.date ?? .distantPast) }
+        case .byTopic:
+            return topicGroups
+        }
+    }
+
+    /// 4-D: cluster the filtered decisions by embedding similarity into labeled
+    /// topic groups. Cheap + synchronous; recomputed via `.task` when the inputs
+    /// change so it never runs on every body evaluation.
+    private func recomputeTopicGroups() {
+        let embByID = Dictionary(
+            VaultIndexService.shared.allEmbeddings()
+                .filter { $0.entityKind == "decision" }
+                .map { ($0.entityID, $0.vector) },
+            uniquingKeysWith: { a, _ in a })
+        topicGroups = DecisionClusterer.cluster(filtered, embeddings: embByID)
     }
 
     @ViewBuilder
