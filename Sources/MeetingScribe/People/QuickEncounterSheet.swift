@@ -258,14 +258,13 @@ struct QuickEncounterSheet: View {
     private func saveIfValid() {
         guard !isSaving, let kind = selectedKind else { return }
         isSaving = true
-        let moodTag = selectedMood.map { " [mood:\($0.rawValue)]" } ?? ""
-        let noteFull = note.trimmingCharacters(in: .whitespacesAndNewlines) + moodTag
-        // C2-7: persist the plain kind — no emoji in stored data.
+        // C2-6: mood is a first-class field now, not a [mood:x] tag in notes.
         let enc = people.addEncounter(
             to: person.id,
             eventName: kind.rawValue,
             date: date,
-            notes: noteFull.trimmingCharacters(in: .whitespacesAndNewlines)
+            notes: note.trimmingCharacters(in: .whitespacesAndNewlines),
+            mood: selectedMood?.rawValue
         )
         onSave?(enc)
         // Schedule updated reminders now that there's a new encounter.

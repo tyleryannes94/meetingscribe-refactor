@@ -632,7 +632,8 @@ final class PeopleStore: ObservableObject {
                       location: String? = nil,
                       notes: String = "",
                       meetingID: String? = nil,
-                      taskIDs: [String] = []) -> Encounter {
+                      taskIDs: [String] = [],
+                      mood: String? = nil) -> Encounter {
         let encounter = Encounter(personID: personID,
                                   eventTagID: eventTagID,
                                   eventName: eventName,
@@ -640,7 +641,8 @@ final class PeopleStore: ObservableObject {
                                   location: location,
                                   notes: notes,
                                   meetingID: meetingID,
-                                  taskIDs: taskIDs)
+                                  taskIDs: taskIDs,
+                                  mood: mood)
         encounters.append(encounter)
         encounters.sort { $0.date > $1.date }
         writeEncounter(encounter)

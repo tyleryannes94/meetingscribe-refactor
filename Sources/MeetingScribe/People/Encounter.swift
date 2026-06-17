@@ -25,6 +25,9 @@ struct Encounter: Identifiable, Codable, Hashable {
     /// linked meeting's extracted tasks, closing the person ↔ encounter ↔ task
     /// triangle. Optional/defaulted so older per-file encounters still decode.
     var taskIDs: [String] = []
+    /// Optional mood (C2-6) — a first-class field (Mood rawValue) instead of a
+    /// `[mood:x]` tag buried in notes.
+    var mood: String?
 
     init(id: String = UUID().uuidString,
          personID: String,
@@ -36,7 +39,9 @@ struct Encounter: Identifiable, Codable, Hashable {
          meetingID: String? = nil,
          voiceNoteID: String? = nil,
          createdAt: Date = Date(),
-         taskIDs: [String] = []) {
+         taskIDs: [String] = [],
+         mood: String? = nil) {
+        self.mood = mood
         self.id = id
         self.personID = personID
         self.eventTagID = eventTagID
@@ -54,7 +59,7 @@ struct Encounter: Identifiable, Codable, Hashable {
 extension Encounter {
     private enum CodingKeys: String, CodingKey {
         case id, personID, eventTagID, eventName, date, location, notes,
-             meetingID, voiceNoteID, createdAt, taskIDs
+             meetingID, voiceNoteID, createdAt, taskIDs, mood
     }
 
     /// Tolerant decode so encounters written before `taskIDs` existed still load.
@@ -71,5 +76,6 @@ extension Encounter {
         voiceNoteID = try c.decodeIfPresent(String.self, forKey: .voiceNoteID)
         createdAt = (try? c.decode(Date.self, forKey: .createdAt)) ?? Date()
         taskIDs = (try? c.decode([String].self, forKey: .taskIDs)) ?? []
+        mood = try c.decodeIfPresent(String.self, forKey: .mood)
     }
 }
