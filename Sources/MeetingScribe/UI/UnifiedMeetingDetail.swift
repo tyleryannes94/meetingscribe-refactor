@@ -285,7 +285,7 @@ struct UnifiedMeetingDetail: View {
         // collapse on a past meeting doesn't bury Brief on an upcoming one.
         ScrollViewReader { _ in
             ScrollView {
-                VStack(alignment: .leading, spacing: NDS.spaceXL) {
+                VStack(alignment: .leading, spacing: 2) {
                     // The Ask-AI section that used to live inside the canvas
                     // is gone — the global right-side `ChatSidebar` is the one
                     // chat surface, and it's already scoped to this meeting via
@@ -333,7 +333,7 @@ struct UnifiedMeetingDetail: View {
     @ViewBuilder var chatSection: some View {
         if meeting != nil {
             MSSection("Ask AI", systemImage: "bubble.left.and.sparkles",
-                      persistenceKey: "meeting.chat.\(modeKey)",
+                      persistenceKey: "meeting.chat.v2.\(modeKey)",
                       defaultExpanded: false) {
                 GeometryReader { geo in
                     chatBody
@@ -367,7 +367,7 @@ struct UnifiedMeetingDetail: View {
         if !omit {
             MSSection(transcriptSectionTitle,
                       systemImage: "text.alignleft",
-                      persistenceKey: "meeting.transcript.\(modeKey)",
+                      persistenceKey: "meeting.transcript.v2.\(modeKey)",
                       defaultExpanded: defaultExpanded) {
                 transcriptSectionBody
             }
@@ -420,7 +420,7 @@ struct UnifiedMeetingDetail: View {
     @ViewBuilder var notesSection: some View {
         if meeting != nil {
             MSSection("Your notes", systemImage: "doc.text",
-                      persistenceKey: "meeting.notes.\(modeKey)",
+                      persistenceKey: "meeting.notes.v2.\(modeKey)",
                       defaultExpanded: true) {
                 notesSectionBody
             }
@@ -468,7 +468,7 @@ struct UnifiedMeetingDetail: View {
         if count > 0 {
             MSSection("Related & linked", systemImage: "link",
                       count: count,
-                      persistenceKey: "meeting.related",
+                      persistenceKey: "meeting.related.v2",
                       defaultExpanded: false) {
                 VStack(alignment: .leading, spacing: NDS.spaceMD) {
                     if !relatedMeetings.isEmpty {
@@ -493,7 +493,7 @@ struct UnifiedMeetingDetail: View {
                 || (bodyLoaded && !transcript.isEmpty) || !bodyLoaded
             if showSection {
                 MSSection("Summary", systemImage: "doc.text",
-                          persistenceKey: "meeting.summary",
+                          persistenceKey: "meeting.summary.v2",
                           defaultExpanded: true,
                           trailing: { copyMenu }) {
                     summarySectionBody(meetingID: m.id)
@@ -547,7 +547,7 @@ struct UnifiedMeetingDetail: View {
             if !marks.isEmpty {
                 MSSection("Highlights", systemImage: "flag.fill",
                           count: marks.count,
-                          persistenceKey: "meeting.highlights") {
+                          persistenceKey: "meeting.highlights.v2") {
                     FlowLayout(spacing: NDS.spaceSM) {
                         ForEach(marks) { mark in
                             Button { tab = .transcript } label: {
@@ -586,7 +586,7 @@ struct UnifiedMeetingDetail: View {
             if !isUpcoming {
                 MSSection("Outcomes", systemImage: "checklist",
                           count: items.count,
-                          persistenceKey: "meeting.outcomes",
+                          persistenceKey: "meeting.outcomes.v2",
                           defaultExpanded: !items.isEmpty || !decs.isEmpty,
                           trailing: {
                               if !unconfirmed.isEmpty {

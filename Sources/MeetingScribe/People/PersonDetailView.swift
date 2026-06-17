@@ -575,7 +575,7 @@ struct PersonDetailView: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: NDS.splitPaneTopInset)
             ScrollView {
-                VStack(alignment: .leading, spacing: NDS.spaceXL) {
+                VStack(alignment: .leading, spacing: 2) {
                     workContent
                 }
                 .padding(.horizontal, NDS.spaceXL)
@@ -676,23 +676,24 @@ struct PersonDetailView: View {
         reconnectSection
         inCommonSection
 
-        // Identity-rail content (was in the 300pt column) now stacks as
-        // MSSections so it doesn't fight the canvas for width.
+        // Identity-rail content — kept available, but collapsed by default
+        // so the canvas leads with the actionable stuff (Tasks / Meetings).
+        // Tap a header to expand.
         MSSection("Contact", systemImage: "person.crop.circle",
-                  persistenceKey: "person.contact",
-                  defaultExpanded: true) {
+                  persistenceKey: "person.contact.v2",
+                  defaultExpanded: false) {
             contactRows
         }
         MSSection("Tags", systemImage: "tag",
                   count: tags.count,
-                  persistenceKey: "person.tags",
-                  defaultExpanded: true) {
+                  persistenceKey: "person.tags.v2",
+                  defaultExpanded: false) {
             tagsEditSection
         }
         MSSection("Relationships", systemImage: "person.2",
                   count: current.relationships.count,
-                  persistenceKey: "person.relationships",
-                  defaultExpanded: true,
+                  persistenceKey: "person.relationships.v2",
+                  defaultExpanded: false,
                   trailing: {
                       MSInlineButton("Add", systemImage: "plus") {
                           showAddRelationship = true
@@ -702,8 +703,8 @@ struct PersonDetailView: View {
             relationshipsSection
         }
         MSSection("Encounters", systemImage: "mappin.and.ellipse",
-                  persistenceKey: "person.encounters",
-                  defaultExpanded: true,
+                  persistenceKey: "person.encounters.v2",
+                  defaultExpanded: false,
                   trailing: {
                       MSInlineButton("Log encounter", systemImage: "calendar.badge.plus") {
                           showAddEncounter = true
@@ -714,7 +715,7 @@ struct PersonDetailView: View {
         if !current.photoRelativePaths.isEmpty {
             MSSection("Photos", systemImage: "photo",
                       count: current.photoRelativePaths.count,
-                      persistenceKey: "person.photos",
+                      persistenceKey: "person.photos.v2",
                       defaultExpanded: false) {
                 photosSection
             }
@@ -722,13 +723,13 @@ struct PersonDetailView: View {
 
         MSSection("Tasks", systemImage: "checklist",
                   count: personTasks.filter { $0.status != .completed }.count,
-                  persistenceKey: "person.tasks",
+                  persistenceKey: "person.tasks.v2",
                   defaultExpanded: true) {
             tasksSection
         }
         MSSection("Meetings", systemImage: "calendar",
                   count: current.meetingMentions.count,
-                  persistenceKey: "person.meetings",
+                  persistenceKey: "person.meetings.v2",
                   defaultExpanded: true,
                   trailing: {
                       MSInlineButton("Add to a meeting", systemImage: "calendar.badge.plus") {
@@ -742,46 +743,46 @@ struct PersonDetailView: View {
             }
         }
         MSSection("Messages", systemImage: "message",
-                  persistenceKey: "person.messages",
+                  persistenceKey: "person.messages.v2",
                   defaultExpanded: false) {
             messagesSection
         }
         MSSection("Discuss next time", systemImage: "bubble.left",
                   count: current.talkingPoints.count,
-                  persistenceKey: "person.talkingpoints",
+                  persistenceKey: "person.talkingpoints.v2",
                   defaultExpanded: false) {
             talkingPointsSection
         }
         MSSection("Memories", systemImage: "sparkles",
                   count: current.memories.count,
-                  persistenceKey: "person.memories",
+                  persistenceKey: "person.memories.v2",
                   defaultExpanded: false) {
             memoriesSection
         }
         MSSection("About", systemImage: "text.alignleft",
-                  persistenceKey: "person.bio",
+                  persistenceKey: "person.bio.v2",
                   defaultExpanded: false) {
             notes
         }
         MSSection("Saved analyses", systemImage: "doc.text",
                   count: current.attachedNotes.count,
-                  persistenceKey: "person.attachednotes",
+                  persistenceKey: "person.attachednotes.v2",
                   defaultExpanded: false) {
             attachedNotesSection
         }
         MSSection("AI suggestions", systemImage: "wand.and.stars",
-                  persistenceKey: "person.aisuggestions",
+                  persistenceKey: "person.aisuggestions.v2",
                   defaultExpanded: false) {
             aiSuggestionsSection
         }
         MSSection("Favorites", systemImage: "heart",
                   count: current.favorites.count,
-                  persistenceKey: "person.favorites",
+                  persistenceKey: "person.favorites.v2",
                   defaultExpanded: false) {
             favoritesEditSection
         }
         MSSection("Perf-review evidence", systemImage: "doc.text.magnifyingglass",
-                  persistenceKey: "person.evidence",
+                  persistenceKey: "person.evidence.v2",
                   defaultExpanded: false) {
             evidenceSection
         }
