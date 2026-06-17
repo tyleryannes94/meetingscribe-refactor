@@ -29,20 +29,23 @@ struct WeeklyReviewView: View {
                     statRow("Decisions made", this: m.decisions, prior: m.decisionsPrior)
 
                     if !m.recentDecisions.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            NotionEyebrow(text: "Key decisions")
-                            ForEach(m.recentDecisions.prefix(6), id: \.id) { d in
-                                HStack(alignment: .top, spacing: 6) {
-                                    Image(systemName: "circle.fill").scaledFont(5)
-                                        .foregroundStyle(NDS.brand).padding(.top, 6)
-                                    Text(d.text).scaledFont(12).foregroundStyle(NDS.textPrimary)
+                        MSSection("Key decisions", systemImage: "checkmark.seal.fill",
+                                  count: m.recentDecisions.count,
+                                  persistenceKey: "weeklyReview.keyDecisions") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(m.recentDecisions.prefix(6), id: \.id) { d in
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Image(systemName: "circle.fill").scaledFont(5)
+                                            .foregroundStyle(NDS.brand).padding(.top, 6)
+                                        Text(d.text).scaledFont(12).foregroundStyle(NDS.textPrimary)
+                                    }
                                 }
                             }
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        NotionEyebrow(text: "Reflection")
+                    MSSection("Reflection", systemImage: "sparkles",
+                              persistenceKey: "weeklyReview.reflection") {
                         if vm.reflection.isEmpty && vm.generating {
                             HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Synthesizing…").font(NDS.small) }
                         } else {
