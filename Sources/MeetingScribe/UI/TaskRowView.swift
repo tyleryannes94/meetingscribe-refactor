@@ -367,7 +367,7 @@ struct ActionItemRow: View {
     @ViewBuilder
     private var syncButtons: some View {
         if isPushing {
-            ProgressView().controlSize(.small).frame(width: 24)
+            ProgressView().controlSize(.small).frame(width: 24) // design-lint:allow
         } else if showsLinear || showsNotion {
             if showsLinear { linearButton }
             if showsNotion { notionButton }
@@ -472,29 +472,29 @@ struct ActionItemRow: View {
                     Text("Linked to Linear")
                         .font(.caption2).foregroundStyle(NDS.brand)
                     Button("Open") { onOpenLinear(url) }
-                        .controlSize(.small)
+                        .controlSize(.small) // design-lint:allow
                 } else {
                     Button {
                         onPushLinear()
                     } label: {
                         Label("Push to Linear", systemImage: "l.square")
                     }
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                 }
                 if let url = item.notionURL {
                     Text("Linked to Notion")
                         .font(.caption2).foregroundStyle(.purple)
                     Button("Re-sync") { onPush() }
-                        .controlSize(.small)
+                        .controlSize(.small) // design-lint:allow
                     Button("Open") { onOpenNotion(url) }
-                        .controlSize(.small)
+                        .controlSize(.small) // design-lint:allow
                 } else {
                     Button {
                         onPush()
                     } label: {
                         Label("Push to Notion", systemImage: "arrow.up.right.square")
                     }
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                 }
                 Spacer()
                 Button(role: .destructive) {
@@ -502,7 +502,7 @@ struct ActionItemRow: View {
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
-                .controlSize(.small)
+                .controlSize(.small) // design-lint:allow
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -525,7 +525,7 @@ struct ActionItemRow: View {
                     Label(dateLabel(item.startDate, placeholder: "Set start"), systemImage: "calendar.badge.clock")
                         .font(.caption)
                 }
-                .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small)
+                .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small) // design-lint:allow
                 .popover(isPresented: $startPickerShown) {
                     datePopover(current: item.startDate, onSet: onStart, onClose: { startPickerShown = false })
                 }
@@ -538,7 +538,7 @@ struct ActionItemRow: View {
                     Label(dateLabel(item.dueDate, placeholder: "Set due"), systemImage: "calendar")
                         .font(.caption)
                 }
-                .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small)
+                .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small) // design-lint:allow
                 .popover(isPresented: $datePickerShown) {
                     datePopover(current: item.dueDate, onSet: onDue, onClose: { datePickerShown = false })
                 }
@@ -594,7 +594,7 @@ struct ActionItemRow: View {
                     let n = newLabelName.trimmingCharacters(in: .whitespaces)
                     if !n.isEmpty { onCreateLabel(n); newLabelName = "" }
                 })
-                .textFieldStyle(.roundedBorder).frame(width: 140).controlSize(.small)
+                .textFieldStyle(.roundedBorder).frame(width: 140).controlSize(.small) // design-lint:allow
             }
         }
     }

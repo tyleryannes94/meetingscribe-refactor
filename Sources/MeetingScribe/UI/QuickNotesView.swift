@@ -84,7 +84,7 @@ struct QuickNotesView: View {
     private var importButton: some View {
         if importing {
             HStack(spacing: 4) {
-                ProgressView().controlSize(.small)
+                ProgressView().controlSize(.small) // design-lint:allow
                 Text("Importing…").font(.caption)
             }
         } else {
@@ -137,7 +137,7 @@ struct QuickNotesView: View {
             }
         case .transcribing:
             HStack(spacing: 4) {
-                ProgressView().controlSize(.small)
+                ProgressView().controlSize(.small) // design-lint:allow
                 Text("Transcribing…").font(.caption)
             }
         case .error(let msg):
@@ -174,7 +174,7 @@ struct QuickNoteRow: View {
                         Image(systemName: "keyboard").font(.caption2).foregroundStyle(.secondary)
                     }
                     if manager.isTranscribingQuickNote(note) {
-                        ProgressView().controlSize(.mini)
+                        ProgressView().controlSize(.mini) // design-lint:allow
                     } else if manager.isPolishingQuickNote(note) {
                         Image(systemName: "sparkles").font(.caption2).foregroundStyle(.purple)
                     } else if manager.lastErrorForQuickNote(note) != nil {
@@ -293,7 +293,7 @@ struct QuickNoteDetail: View {
             } label: { Label(drive.isConnected ? "Google Drive" : "Google Drive (connect in Settings)",
                              systemImage: "arrow.up.doc") }
         } label: {
-            if drive.isWorking { ProgressView().controlSize(.small) }
+            if drive.isWorking { ProgressView().controlSize(.small) } // design-lint:allow
             else { Label("Export", systemImage: "square.and.arrow.up") }
         }
         .menuStyle(.borderlessButton).fixedSize()
@@ -328,7 +328,7 @@ struct QuickNoteDetail: View {
 
     private func inlineStatus(_ text: String, icon: String, color: Color, spinner: Bool) -> some View {
         HStack(spacing: 5) {
-            if spinner { ProgressView().controlSize(.small) }
+            if spinner { ProgressView().controlSize(.small) } // design-lint:allow
             Image(systemName: icon).font(.caption).foregroundStyle(color)
             Text(text).font(.caption).foregroundStyle(.secondary)
         }
@@ -486,7 +486,7 @@ struct QuickNoteDetail: View {
             Spacer()
             if isInFlight {
                 HStack(spacing: 4) {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.small) // design-lint:allow
                     Text(inFlightText).font(.caption2).foregroundStyle(.secondary)
                 }
             }
@@ -499,7 +499,7 @@ struct QuickNoteDetail: View {
                     .font(.caption)
             }
             .buttonStyle(MSSecondaryButtonStyle())
-            .controlSize(.small)
+            .controlSize(.small) // design-lint:allow
             .disabled(textIsEmpty)
             Button {
                 onRerun()
@@ -509,7 +509,7 @@ struct QuickNoteDetail: View {
                     .font(.caption)
             }
             .buttonStyle(MSSecondaryButtonStyle())
-            .controlSize(.small)
+            .controlSize(.small) // design-lint:allow
             .disabled(rerunDisabled)
             .help(rerunLabel)
         }

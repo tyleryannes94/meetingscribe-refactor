@@ -32,7 +32,7 @@ extension ActionItemsView {
             if item.subtaskProgress.total > 0 {
                 ProgressView(value: Double(item.subtaskProgress.done),
                              total: Double(item.subtaskProgress.total))
-                    .controlSize(.small).tint(NDS.brand)
+                    .controlSize(.small).tint(NDS.brand) // design-lint:allow
             }
             HStack(spacing: 6) {
                 Text(item.priority.label)

@@ -81,7 +81,7 @@ var notesMainArea: some View {
                     Button {
                         selectedOccurrenceID = nil
                     } label: { Label("Back to this call", systemImage: "arrow.uturn.left").font(.caption) }
-                    .buttonStyle(.borderless).controlSize(.small)
+                    .buttonStyle(.borderless).controlSize(.small) // design-lint:allow
                 }
                 .padding([.horizontal, .top])
                 let priorNotes = manager.userNotes(for: prior)

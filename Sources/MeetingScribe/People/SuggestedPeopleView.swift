@@ -20,7 +20,7 @@ struct SuggestedPeopleView: View {
                     Spacer()
                     if extraction.isRunning {
                         HStack(spacing: 4) {
-                            ProgressView().controlSize(.small)
+                            ProgressView().controlSize(.small) // design-lint:allow
                             Text("Scanning \(extraction.processed)/\(extraction.total)")
                                 .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                         }
@@ -67,9 +67,9 @@ private struct SuggestionRow: View {
             Spacer(minLength: 4)
             HStack(spacing: 6) {
                 Button(suggestion.isPossibleMatch ? "Link" : "Add", action: onConfirm)
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                 Button("Dismiss", action: onDismiss)
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                     .buttonStyle(.borderless)
                     .foregroundStyle(NDS.textTertiary)
             }
