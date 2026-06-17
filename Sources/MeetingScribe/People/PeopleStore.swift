@@ -1258,6 +1258,11 @@ final class PeopleStore: ObservableObject {
     /// reusing the canonical `RelationshipHealth` 0–100 scorer so the persisted
     /// value never drifts from the live health badge. Called on meeting
     /// finalization (for attendees) and on the gated background refresh.
+    /// 2-E: cached iMessage signal per person — (days since last text, last-30-day
+    /// message count). Populated by `refreshIMessageSignals()` and read by
+    /// `recomputeStrength`. In-memory only (rebuilt from the Messages DB).
+    private var iMessageSignal: [String: (days: Int, last30: Int)] = [:]
+
     @discardableResult
     func recomputeStrength(forPersonID id: String) -> Double? {
         guard let idx = people.firstIndex(where: { $0.id == id }) else { return nil }
@@ -1271,12 +1276,17 @@ final class PeopleStore: ObservableObject {
             return gaps[gaps.count / 2]
         }()
         let last = dates.first ?? p.lastInteractionAt
-        let daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 9_999
+        var daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 9_999
         // 2-E: multi-signal — count meeting mentions as ~0.3x of an encounter so
         // people who recur in your meetings register as active relationships even
-        // before a manual encounter is logged. (iMessage signal is added by the
-        // async health pass; this stays synchronous and cheap.)
-        let effectiveEncounters = encs.count + p.meetingMentions.count / 3
+        // before a manual encounter is logged. The iMessage signal (recency +
+        // 30-day volume), populated by `refreshIMessageSignals`, folds in here:
+        // recent texts count as recent contact and steady texting counts as
+        // effective encounters, so people you text often don't read as "overdue".
+        let imsg = iMessageSignal[id]
+        if let imsg { daysSince = min(daysSince, imsg.days) }
+        let imsgEncounters = (imsg?.last30 ?? 0) >= 10 ? 3 : ((imsg?.last30 ?? 0) >= 3 ? 1 : 0)
+        let effectiveEncounters = encs.count + p.meetingMentions.count / 3 + imsgEncounters
         let health = RelationshipHealth(daysSinceLast: daysSince,
                                         cadenceDays: p.effectiveCheckInDays,
                                         encounterCount: effectiveEncounters,
@@ -1306,6 +1316,27 @@ final class PeopleStore: ObservableObject {
         for p in stale { recomputeStrength(forPersonID: p.id) }
         if !stale.isEmpty { log.info("Refreshed strength for \(stale.count, privacy: .public) person(s)") }
         return stale.count
+    }
+
+    /// 2-E: background pass that reads each typed person's iMessage recency +
+    /// 30-day volume from the Messages DB into `iMessageSignal`, then recomputes
+    /// their strength so the health score reflects texting. Gated by the
+    /// ResourceGovernor; best-effort (skips silently without Full Disk Access).
+    /// Reads on the main actor but yields between people to stay responsive.
+    func refreshIMessageSignals(maxPeople: Int = 100) async {
+        guard ResourceGovernor.shared.canScheduleWork(tier: .backgroundInsight) else { return }
+        let candidates = Array(people.filter { $0.relationshipType != .unset }.prefix(maxPeople))
+        var refreshed = 0
+        for p in candidates {
+            guard let (stats, _) = try? MessagesAnalyzer.analyze(person: p, recentLimit: 0),
+                  stats.total > 0, let last = stats.lastDate else { continue }
+            iMessageSignal[p.id] = (days: Int(Date().timeIntervalSince(last) / 86400),
+                                    last30: stats.last30)
+            recomputeStrength(forPersonID: p.id)
+            refreshed += 1
+            await Task.yield()
+        }
+        if refreshed > 0 { log.info("iMessage health signal refreshed for \(refreshed, privacy: .public) person(s)") }
     }
 
     /// How many typed relationships are overdue for a check-in (last interaction
