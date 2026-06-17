@@ -32,6 +32,10 @@ struct ChatPanel: View {
 
     @State private var input: String = ""
     @FocusState private var inputFocused: Bool
+    /// P0-2: which capability groups are open. Only the first is seeded open so
+    /// the empty state stays calm while prompts remain discoverable.
+    @State private var expandedSections: Set<UUID> = []
+    @State private var didSeedDisclosure = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,8 +85,13 @@ struct ChatPanel: View {
             if let sections = capabilitySections {
                 Text("What can I ask?")
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                ForEach(sections) { section in
-                    DisclosureGroup {
+                ForEach(Array(sections.enumerated()), id: \.element.id) { idx, section in
+                    DisclosureGroup(isExpanded: Binding(
+                        get: { expandedSections.contains(section.id) },
+                        set: { isOpen in
+                            if isOpen { expandedSections.insert(section.id) }
+                            else { expandedSections.remove(section.id) }
+                        })) {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(section.prompts, id: \.self) { promptButton($0) }
                         }
@@ -91,6 +100,12 @@ struct ChatPanel: View {
                         Text(section.label)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary).textCase(.uppercase)
+                    }
+                    .onAppear {
+                        if idx == 0 && !didSeedDisclosure {
+                            expandedSections.insert(section.id)
+                            didSeedDisclosure = true
+                        }
                     }
                 }
             } else if let prompts = examplePrompts {

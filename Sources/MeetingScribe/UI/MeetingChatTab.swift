@@ -7,21 +7,45 @@ extension UnifiedMeetingDetail {
 var chatBody: some View {
         if let m = meeting {
             ChatPanel(
-                session: meetingChat,
-                contextPrefix: chatContext(for: m),
+                session: chatSession,
                 density: .compact,
-                examplePrompts: [
-                    "Summarize the key decisions from this meeting.",
-                    "Pull the action items and who owns each.",
-                    "What questions were left unanswered?",
-                    "Draft a follow-up email recapping this call."
-                ]
+                capabilitySections: Self.meetingCapabilitySections
             )
+            // P0-2: scope the shared assistant to this meeting on the session's
+            // pageContext (same mechanism Today/People use) instead of a
+            // per-message contextPrefix on a throwaway session. Messages persist.
+            .onAppear {
+                attachChatIfNeeded()
+                chatSession.setContext(chatContext(for: m))
+            }
+            .onChange(of: m.id) { _, _ in
+                chatSession.setContext(chatContext(for: m))
+            }
         } else {
             placeholder(systemImage: "sparkles",
                         title: "No meeting context",
                         message: "Open a meeting to chat about it.")
         }
+    }
+
+    /// Meeting-scoped capability groups so discovery matches the Today sidebar's
+    /// categorized "What can I ask?" instead of a flat prompt list (P0-2).
+    static var meetingCapabilitySections: [ChatPanel.CapabilitySection] {
+        [
+            .init(label: "This meeting", prompts: [
+                "Summarize the key decisions from this meeting.",
+                "Pull the action items and who owns each.",
+                "What questions were left unanswered?"
+            ]),
+            .init(label: "Follow-up", prompts: [
+                "Draft a follow-up email recapping this call.",
+                "What should I send each attendee afterward?"
+            ]),
+            .init(label: "Analysis", prompts: [
+                "What did the attendees seem to disagree on?",
+                "How does this connect to our earlier meetings?"
+            ])
+        ]
     }
 
     /// Per-meeting context the AI sees alongside every user message.
@@ -71,7 +95,7 @@ func chatContext(for m: Meeting) -> String {
 
 func attachChatIfNeeded() {
         guard !chatAttached else { return }
-        meetingChat.attach(manager: manager)
+        chatSession.attach(manager: manager)
         chatAttached = true
     }
 }
