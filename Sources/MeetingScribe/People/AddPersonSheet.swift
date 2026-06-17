@@ -144,7 +144,7 @@ struct AddPersonSheet: View {
                 .padding(16)
             }
         }
-        .frame(width: 460, height: 540)
+        .frame(width: 460, minHeight: 540)
         .onAppear { if editing == nil { nameFocused = true } }
     }
 

@@ -24,7 +24,7 @@ struct TaskTrashView: View {
                 list
             }
         }
-        .frame(width: 460, height: 440)
+        .frame(width: 460, minHeight: 440)
         .background(NDS.bg)
     }
 

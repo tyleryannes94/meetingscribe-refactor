@@ -704,7 +704,7 @@ struct DuplicateReviewSheet: View {
                 }
             }
         }
-        .frame(width: 460, height: 520)
+        .frame(width: 460, minHeight: 520)
         .onAppear {
             guard !loaded else { return }
             pairs = people.duplicateCandidates()

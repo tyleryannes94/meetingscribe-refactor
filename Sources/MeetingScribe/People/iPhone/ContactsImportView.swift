@@ -48,7 +48,7 @@ struct ContactsImportView: View {
             Divider()
             footer
         }
-        .frame(width: 480, height: 560)
+        .frame(width: 480, minHeight: 560)
         .task { await loadIfNeeded() }
         .alert("Import complete", isPresented: Binding(
             get: { resultMessage != nil }, set: { if !$0 { resultMessage = nil } })) {

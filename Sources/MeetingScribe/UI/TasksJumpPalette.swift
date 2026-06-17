@@ -81,7 +81,7 @@ struct TasksJumpPalette: View {
                 .padding(8)
             }
         }
-        .frame(width: 540, height: 440)
+        .frame(width: 540, minHeight: 440)
         .onAppear { focused = true }
         .onExitCommand { isPresented = false }
     }

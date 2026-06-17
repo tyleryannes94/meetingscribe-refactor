@@ -31,7 +31,7 @@ struct TaskInsightsView: View {
                 .padding(18)
             }
         }
-        .frame(width: 520, height: 560)
+        .frame(width: 520, minHeight: 560)
         .background(NDS.bg)
     }
 

@@ -66,7 +66,7 @@ struct PersonBriefSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(width: 560, height: 640)
+        .frame(width: 560, minHeight: 640)
         .onAppear { regenerate() }
         .onDisappear { vm.cancel() }
     }
