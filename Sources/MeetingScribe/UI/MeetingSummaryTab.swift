@@ -14,15 +14,31 @@ extension UnifiedMeetingDetail {
             VStack(spacing: 0) {
                 outcomesStrip        // action items + decisions, always visible (TM-5)
                 highlightsStrip      // C1-2 "mark moment" anchors, if any
-                summaryDisclosure
-                Divider().overlay(NDS.divider)
-                notesEditor
+                if summaryHasContent {
+                    // P0-1: read the recap and write notes together in one canvas,
+                    // with a draggable divider so neither is crushed — drag down for
+                    // more summary, up for more notes.
+                    VSplitView {
+                        summaryDisclosure
+                        notesEditor
+                    }
+                    .frame(maxHeight: .infinity)
+                } else {
+                    // No summary yet → notes editor takes the full canvas.
+                    notesEditor
+                }
                 relatedMeetingsStrip // 4-F/5-A: embedding-similar meetings
             }
         default:
             // Live/upcoming: no finished summary yet — just the notes editor.
             notesEditor
         }
+    }
+
+    /// Whether a finished AI summary exists for this past meeting — gates the
+    /// summary/notes split so an empty recap doesn't leave a dead top pane.
+    private var summaryHasContent: Bool {
+        !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// 4-F / 5-A: meetings the embedding index found similar to this one, loaded
@@ -163,13 +179,18 @@ extension UnifiedMeetingDetail {
                 .padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 6)
                 if summaryExpanded {
                     followUpButton.padding(.horizontal).padding(.bottom, 8)
+                    // P0-1: no fixed 320pt cap — the summary shares the canvas via
+                    // the VSplitView in combinedNotesBody, so long recaps are
+                    // readable (scroll within their resizable pane) instead of
+                    // crushed to ~5 lines.
                     ScrollView {
                         MarkdownEditor(text: .constant(summary), isEditable: false)
                             .padding(.horizontal, 8)
                     }
-                    .frame(maxHeight: 320)
+                    .frame(maxHeight: .infinity)
                 }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
             .background(NDS.sidebarBg)
         } else if !bodyLoaded {
             MSSkeleton(lines: 4).padding(14)
