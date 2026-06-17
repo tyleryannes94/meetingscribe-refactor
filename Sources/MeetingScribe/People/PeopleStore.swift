@@ -1352,6 +1352,21 @@ final class PeopleStore: ObservableObject {
         }
     }
 
+    /// Names of typed people most overdue for a check-in (most-overdue first).
+    /// Drives the weekly relationship digest notification.
+    func overdueCheckInNames(limit: Int = 10) -> [String] {
+        let now = Date()
+        return people.compactMap { p -> (name: String, days: Int)? in
+            guard p.relationshipType != .unset else { return nil }
+            let last = p.lastInteractionAt ?? p.createdAt
+            let daysSince = Int(now.timeIntervalSince(last) / 86400)
+            return daysSince > p.effectiveCheckInDays ? (p.displayName, daysSince) : nil
+        }
+        .sorted { $0.days > $1.days }
+        .prefix(limit)
+        .map(\.name)
+    }
+
     /// One-time backfill so the identity layer is retroactive: link every
     /// existing meeting's attendees to people. Guarded by a UserDefaults flag.
     func backfillMeetingLinks(_ meetings: [Meeting]) {
