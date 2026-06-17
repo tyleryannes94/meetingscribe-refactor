@@ -441,10 +441,8 @@ extension UnifiedMeetingDetail {
             showFollowUp = true
         } label: {
             Label("Draft follow-up…", systemImage: "paperplane")
-                .font(.callout)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.regular)
+        .buttonStyle(MSPrimaryButtonStyle())
         .sheet(isPresented: $showFollowUp) {
             if let m = meeting {
                 NavigationStack {
