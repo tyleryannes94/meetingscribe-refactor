@@ -64,7 +64,7 @@ func chatContext(for m: Meeting) -> String {
             lines.append("What you know about the people here (from your private notes):")
             lines.append(contentsOf: blocks)
         }
-        lines.append("If you need the transcript, notes, or summary, call get_transcript / get_notes / get_summary with this meeting_id.")
+        lines.append("If you need the transcript, notes, or summary, call get_transcript / get_notes / get_summary with the \"id\" \(m.id).")
         return lines.joined(separator: "\n")
     }
 
