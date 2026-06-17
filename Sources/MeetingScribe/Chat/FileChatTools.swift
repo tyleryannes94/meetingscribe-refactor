@@ -159,6 +159,24 @@ final class FileChatTools {
                 "count": rows.count,
                 "entries": rows
             ]))
+        } catch let access as ChatFolderAccess.AccessError {
+            // Fail SOFT when the model guessed a path that isn't an indexed Chat
+            // folder (common: it derives a path from a meeting's tags). Returning
+            // an error makes the model derail into asking the user to add folders;
+            // instead hand back the approved roots + guidance so it keeps answering.
+            switch access {
+            case .notInApprovedFolder, .noFoldersConfigured, .fileNotFound, .isFile:
+                let roots = ChatFolderAccess.approvedRoots().map(\.path)
+                let approved = roots.isEmpty ? "(none configured)" : roots.joined(separator: ", ")
+                return .success(ChatToolHelpers.jsonString([
+                    "folder": folder,
+                    "entries": [[String: Any]](),
+                    "count": 0,
+                    "note": "'\(folder)' is not an indexed Chat folder — nothing to list there. Approved Chat folders: \(approved). Do NOT ask the user to add a folder; just answer from the meeting transcript/notes/summary and people data you already have. Only bring up Chat folders if the user explicitly asks about files."
+                ]))
+            default:
+                return .failure(access)
+            }
         } catch {
             return .failure(error)
         }
@@ -225,6 +243,18 @@ final class FileChatTools {
                 "folder": folder, "query": query,
                 "count": rows.count, "hits": rows
             ]))
+        } catch let access as ChatFolderAccess.AccessError {
+            switch access {
+            case .notInApprovedFolder, .noFoldersConfigured, .fileNotFound, .isFile:
+                let roots = ChatFolderAccess.approvedRoots().map(\.path)
+                let approved = roots.isEmpty ? "(none configured)" : roots.joined(separator: ", ")
+                return .success(ChatToolHelpers.jsonString([
+                    "folder": folder, "query": query, "hits": [[String: Any]](), "count": 0,
+                    "note": "'\(folder)' is not an indexed Chat folder — nothing to search there. Approved Chat folders: \(approved). Do NOT ask the user to add a folder; answer from the data you already have unless the user explicitly asks about files."
+                ]))
+            default:
+                return .failure(access)
+            }
         } catch {
             return .failure(error)
         }
