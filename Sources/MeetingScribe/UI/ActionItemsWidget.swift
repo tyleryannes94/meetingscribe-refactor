@@ -41,7 +41,7 @@ struct ActionItemsWidget: View {
                 }
             }
         }
-        .padding(16)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(NDS.fieldBg)
