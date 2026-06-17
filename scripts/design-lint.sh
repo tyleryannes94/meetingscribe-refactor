@@ -45,6 +45,23 @@ scan "raw priority/status color" 'case \.(low|medium|high|urgent|open|inProgress
 # 3. Cold AppKit surface colors — should be NDS.fieldBg/rowHover/hairline/columnBg.
 scan "cold AppKit surface color" 'Color\(NSColor\.(controlBackgroundColor|separatorColor|windowBackgroundColor|textBackgroundColor)\)'
 
+# 5. (X3 / 05 §6.3) Native AppKit button chrome — use MS*ButtonStyle instead.
+scan "native .borderedProminent button" '\.buttonStyle\(\.borderedProminent\)'
+scan "native .bordered button"          '\.buttonStyle\(\.bordered\)'
+
+# 6. (X3) .controlSize on a Button — height comes from the MS style token.
+#    ProgressView/TextField/Picker uses are legitimate and excluded line-locally.
+CS="$(grep -rnE --include='*.swift' '\.controlSize\(' "${UI_DIRS[@]}" 2>/dev/null \
+        | grep -vE 'ProgressView|TextField|Picker' \
+        | grep -vE '// *design-lint:allow' || true)"
+if [[ -n "$CS" ]]; then
+    csn="$(printf '%s\n' "$CS" | grep -c .)"
+    total=$((total + csn))
+    echo "── .controlSize on a Button ($csn) ────────────────────────────────"
+    printf '%s\n' "$CS" | sed "s#$ROOT/##"
+    echo
+fi
+
 # 4. Jargon in user-facing Text("…") — the ratified word-map (D4-6): vault→library,
 #    Ollama→summary engine, MCP→Claude connection, whisper→speech-to-text. Tech
 #    names are allowed only on Settings/Advanced + diagnostics surfaces (excluded
