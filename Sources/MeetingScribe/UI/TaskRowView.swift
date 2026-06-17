@@ -161,13 +161,7 @@ struct ActionItemRow: View {
                             .foregroundStyle(NDS.brand)
                             .lineLimit(1)
                     }
-                    if !item.isManual {
-                        Label(item.meetingTitle, systemImage: "calendar")
-                            .labelStyle(.titleAndIcon)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
+                    TaskMeetingChip(item: item)
                     if item.subtaskProgress.total > 0 {
                         Label("\(item.subtaskProgress.done)/\(item.subtaskProgress.total)",
                               systemImage: "checklist")
