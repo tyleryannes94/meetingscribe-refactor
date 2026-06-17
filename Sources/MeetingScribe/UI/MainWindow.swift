@@ -141,7 +141,8 @@ struct MainWindow: View {
                     .tracking(-0.3)
                 Spacer()
             }
-            .padding(.horizontal, 14).padding(.top, 16).padding(.bottom, 14)
+            // P1-3: align to NDS tokens so the rail's left edge is consistent.
+            .padding(.horizontal, NDS.spaceLG).padding(.top, NDS.spaceLG).padding(.bottom, NDS.spaceMD)
 
             // WORKSPACE group
             navGroupLabel(NavGroup.workspace.rawValue)
@@ -158,7 +159,7 @@ struct MainWindow: View {
             }
 
             Spacer()
-            Divider().overlay(NDS.divider).padding(.horizontal, 10).padding(.bottom, 6)
+            Divider().overlay(NDS.divider).padding(.horizontal, NDS.spaceLG).padding(.bottom, NDS.spaceSM)
 
             // Bottom row: search + settings. The Light/Dark toggle was removed
             // (C3-4) — the app follows the system appearance like a native Mac app.
@@ -186,7 +187,7 @@ struct MainWindow: View {
                 // button "didn't trigger".
                 SettingsGearButton()
             }
-            .padding(.horizontal, 12).padding(.bottom, 12)
+            .padding(.horizontal, NDS.spaceLG).padding(.bottom, NDS.spaceMD)
         }
         .frame(width: 240)  // increased from 216
         .frame(maxHeight: .infinity, alignment: .top)

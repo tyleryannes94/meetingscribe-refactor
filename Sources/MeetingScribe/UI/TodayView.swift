@@ -130,7 +130,7 @@ struct TodayView: View {
 
     private var feed: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 30) {   // P1-2: calmer section rhythm (was 22)
                 header
                 firstStepsCard   // 5-H: dismissible new-user onboarding
                 MorningBriefCard(contextSummary: morningContextSummary)   // 5-C
@@ -188,7 +188,7 @@ struct TodayView: View {
     /// Default-collapsed; remembers its open/closed state across launches.
     @ViewBuilder
     private var moreSection: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 30) {   // P1-2: calmer section rhythm (was 22)
             Button {
                 withAnimation(NDS.motion(.easeInOut(duration: 0.2), reduce: reduceMotion)) {
                     moreExpanded.toggle()
