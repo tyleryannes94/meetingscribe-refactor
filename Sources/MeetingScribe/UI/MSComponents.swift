@@ -399,19 +399,20 @@ struct MSEmptyState<Actions: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Image(systemName: systemImage)
-                .scaledFont(36).foregroundStyle(.secondary)
-            Text(title).font(.headline)
+                .scaledFont(28).foregroundStyle(.tertiary)
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(NDS.textSecondary)
             if let message {
                 Text(message)
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(NDS.textTertiary)
                     .multilineTextAlignment(.center)
+                    .frame(maxWidth: 340)
             }
             actions().padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        .padding(24)
     }
 }
 
