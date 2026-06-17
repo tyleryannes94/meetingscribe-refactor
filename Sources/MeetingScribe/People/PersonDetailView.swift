@@ -729,6 +729,84 @@ struct PersonDetailView: View {
         return (v.isEmpty ? [] : [v]) + Array(rest)
     }
 
+    // MARK: - Compact header (P1, additive)
+
+    /// P1 / 02 §4.1: full-width identity header for the de-tabbed canvas. One
+    /// Primary CTA + one `⋯` overflow + a FlowLayout metadata row that wraps
+    /// (R2 fit guardrail) instead of clipping. Not yet wired into `body` —
+    /// P2 swaps `identityPanel`'s button rows for this; the canvas migration
+    /// (P3-P6) puts it at the top of the scrolling column.
+    @ViewBuilder
+    private var compactHeader: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                MSAvatar(name: current.displayName, size: 48)
+                VStack(alignment: .leading, spacing: 2) {
+                    // R1 fit guardrail: name truncates so Primary + overflow
+                    // stay right-anchored on narrow canvases.
+                    Text(current.displayName)
+                        .scaledFont(22, weight: .heavy, relativeTo: .title, kind: .display)
+                        .foregroundStyle(NDS.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .contentShape(Rectangle())
+                        .onTapGesture { beginIdentityEdit() }
+                        .help("Click to edit name, role, and company")
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .scaledFont(12)
+                            .foregroundStyle(NDS.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                Button { showBrief = true } label: {
+                    Label("Brief Me", systemImage: "sparkles")
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
+                Menu {
+                    Button { beginIdentityEdit() } label: {
+                        Label("Edit name & role", systemImage: "pencil")
+                    }
+                    Button { showEdit = true } label: {
+                        Label("Edit all fields…", systemImage: "square.and.pencil")
+                    }
+                    Button { showAddEncounter = true } label: {
+                        Label("Log encounter", systemImage: "calendar.badge.plus")
+                    }
+                    Button { showAddRelationship = true } label: {
+                        Label("Add relationship", systemImage: "person.2.badge.plus")
+                    }
+                    Button { showAddToMeeting = true } label: {
+                        Label("Add to a meeting", systemImage: "calendar.badge.plus")
+                    }
+                    Divider()
+                    Button(role: .destructive) { confirmDelete = true } label: {
+                        Label("Delete \(firstName)", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .scaledFont(13).foregroundStyle(NDS.textSecondary)
+                        .frame(width: NDS.buttonIconSide, height: NDS.buttonIconSide)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .minTap()
+                .help("More actions")
+                .accessibilityLabel("More actions")
+            }
+            // R2 fit guardrail: multi-control metadata row uses FlowLayout so
+            // it wraps to a second line instead of clipping.
+            FlowLayout(spacing: 8) {
+                relationshipTypePicker
+                if let health = relationshipHealth { healthBadge(health) }
+                if let since = knownSinceLine {
+                    Text(since).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                }
+            }
+        }
+    }
+
     // MARK: - Identity panel (left column)
 
     private var identityPanel: some View {
