@@ -223,7 +223,7 @@ struct ActionItemRow: View {
             .menuStyle(.borderlessButton)
             .frame(width: 28)
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        .padding(.horizontal, 10).padding(.vertical, 6)
         .contentShape(Rectangle())
         // Double-click opens the full page; single-tap expands inline (P0-2).
         // The 2-count gesture must precede the 1-count so SwiftUI can disambiguate.
