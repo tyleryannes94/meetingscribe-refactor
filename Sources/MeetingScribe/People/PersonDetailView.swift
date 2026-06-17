@@ -808,48 +808,32 @@ struct PersonDetailView: View {
     }
 
     // MARK: - Identity panel (left column)
+    //
+    // P2 (ux-audit-2026-06b): the action button rows + standalone
+    // relationshipType/health block previously stacked inside this 300pt
+    // column have been folded into `compactHeader` — one Primary + one ⋯
+    // overflow + a FlowLayout metadata row. The identity column now leads
+    // with the compact header, then the inline edit form (when editing),
+    // then the rest of the panel sections stay unchanged.
 
     private var identityPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Avatar + name
-            HStack(alignment: .center, spacing: 12) {
-                MSAvatar(name: current.displayName, size: 56)
-                if editingIdentity {
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField("Name", text: $draftName)
-                            .textFieldStyle(.roundedBorder)
-                            .scaledFont(15, weight: .semibold)
-                            .onSubmit { saveIdentityEdit() }
-                        TextField("Role", text: $draftRole)
-                            .textFieldStyle(.roundedBorder)
-                            .scaledFont(12)
-                            .onSubmit { saveIdentityEdit() }
-                        TextField("Company", text: $draftCompany)
-                            .textFieldStyle(.roundedBorder)
-                            .scaledFont(12)
-                            .onSubmit { saveIdentityEdit() }
-                    }
-                } else {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(current.displayName)
-                            .scaledFont(22, weight: .heavy, relativeTo: .title, kind: .display)
-                            .foregroundStyle(NDS.textPrimary)
-                        if !subtitle.isEmpty {
-                            Text(subtitle)
-                                .scaledFont(12)
-                                .foregroundStyle(NDS.textSecondary)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { beginIdentityEdit() }
-                    .help("Click to edit name, role, and company")
-                }
-            }
+            compactHeader
 
             // Inline contact + bio editing (PPL-1) — quick edit of the primary
             // email/phone/address and the bio without opening the full sheet.
             if editingIdentity {
                 VStack(alignment: .leading, spacing: 6) {
+                    TextField("Name", text: $draftName)
+                        .textFieldStyle(.roundedBorder)
+                        .scaledFont(15, weight: .semibold)
+                        .onSubmit { saveIdentityEdit() }
+                    TextField("Role", text: $draftRole)
+                        .textFieldStyle(.roundedBorder).scaledFont(12)
+                        .onSubmit { saveIdentityEdit() }
+                    TextField("Company", text: $draftCompany)
+                        .textFieldStyle(.roundedBorder).scaledFont(12)
+                        .onSubmit { saveIdentityEdit() }
                     TextField("Email", text: $draftEmail)
                         .textFieldStyle(.roundedBorder).scaledFont(12)
                         .onSubmit { saveIdentityEdit() }
@@ -866,74 +850,16 @@ struct PersonDetailView: View {
                         Text("Editing the first value — use ⋯ for all.")
                             .font(.caption2).foregroundStyle(NDS.textTertiary)
                     }
+                    HStack(spacing: 6) {
+                        Button { saveIdentityEdit() } label: {
+                            Label("Save", systemImage: "checkmark")
+                        }
+                        .buttonStyle(MSPrimaryButtonStyle())
+                        Button { editingIdentity = false } label: { Text("Cancel") }
+                            .buttonStyle(MSSecondaryButtonStyle())
+                    }
                 }
             }
-
-            // Action buttons
-            if editingIdentity {
-                HStack(spacing: 6) {
-                    Button { saveIdentityEdit() } label: {
-                        Label("Save", systemImage: "checkmark")
-                    }
-                    .buttonStyle(MSPrimaryButtonStyle())
-                    Button { editingIdentity = false } label: { Text("Cancel") }
-                        .buttonStyle(MSSecondaryButtonStyle())
-                }
-            } else {
-                // Wrap so the action buttons never overflow / cut off in the
-                // fixed-width (300pt) identity column — they flow to a second row
-                // when they don't fit instead of clipping.
-                FlowLayout(spacing: 6) {
-                    // 2-B: the flagship People feature — a one-tap, AI-synthesized
-                    // relationship brief drawn from meetings, tasks, talking points,
-                    // and strength, streamed into a sheet.
-                    Button { showBrief = true } label: {
-                        Label("Brief Me", systemImage: "sparkles")
-                    }
-                    .buttonStyle(MSPrimaryButtonStyle())
-                    Button { beginIdentityEdit() } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    .buttonStyle(MSSecondaryButtonStyle())
-                    Button { showEdit = true } label: {
-                        Image(systemName: "ellipsis")
-                    }
-                    .buttonStyle(MSSecondaryButtonStyle())
-                    .help("Edit all fields — email, phone, address, tags…")
-                    .accessibilityLabel("Edit all fields")
-                    Button(role: .destructive) { confirmDelete = true } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(MSSecondaryButtonStyle())
-                    .accessibilityLabel("Delete person")
-                }
-                // Always-visible add affordances so logging an encounter or
-                // adding the FIRST relationship doesn't require navigating away
-                // or waiting for a section to appear. (UX3-4/A8) Wrapped so the
-                // three text buttons don't overflow the 300pt column.
-                FlowLayout(spacing: 6) {
-                    MSInlineButton("Log encounter", systemImage: "calendar.badge.plus") {
-                        showAddEncounter = true
-                    }
-                    .help("Record an in-person or call check-in")
-                    MSInlineButton("Relationship", systemImage: "person.2.badge.plus") {
-                        showAddRelationship = true
-                    }
-                    // Open the chat rail grounded on this person — the page context
-                    // is already set via updateChatContext(). (cross-tab)
-                    MSInlineButton("Ask AI", systemImage: "sparkles") { askAIAboutPerson() }
-                }
-                .padding(.top, 2)
-            }
-        // Relationship type row — always visible; tapping cycles through types
-        // or opens a compact picker. Hidden during active identity editing to
-        // keep the form focused.
-        if !editingIdentity {
-            relationshipTypePicker
-            if let health = relationshipHealth {
-                healthBadge(health)
-            }
-        }
         }
     }
 
