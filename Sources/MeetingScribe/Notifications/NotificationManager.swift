@@ -87,8 +87,10 @@ final class NotificationManager: NSObject, ObservableObject {
         let existingIDs = Set(existing.map { $0.identifier })
 
         // Cancel anything we previously scheduled that's no longer relevant.
-        let liveIDs = Set(meetings.map { "meeting-\($0.id)" })
-        let toCancel = existingIDs.subtracting(liveIDs).filter { $0.hasPrefix("meeting-") }
+        // (Includes the 3-H pre-meeting "brief-" nudges alongside "meeting-".)
+        let liveIDs = Set(meetings.flatMap { ["meeting-\($0.id)", "brief-\($0.id)"] })
+        let toCancel = existingIDs.subtracting(liveIDs)
+            .filter { $0.hasPrefix("meeting-") || $0.hasPrefix("brief-") }
         if !toCancel.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: Array(toCancel))
         }
@@ -97,6 +99,25 @@ final class NotificationManager: NSObject, ObservableObject {
         encoder.dateEncodingStrategy = .iso8601
 
         for m in meetings {
+            // 3-H: a pre-meeting brief nudge 15 minutes ahead, deep-linking to
+            // the meeting so the brief is one tap away before the call.
+            let briefID = "brief-\(m.id)"
+            let briefTrigger = m.startDate.addingTimeInterval(-15 * 60)
+            if !existingIDs.contains(briefID), briefTrigger.timeIntervalSinceNow > 0 {
+                let bc = UNMutableNotificationContent()
+                bc.title = "Coming up: \(m.displayTitle)"
+                if let brief = briefs[m.id], !brief.isEmpty {
+                    bc.body = String(brief.prefix(180))
+                } else {
+                    bc.body = "Starts in 15 minutes — open to review your brief."
+                }
+                bc.sound = .default
+                bc.userInfo[deepLinkKey] = "meetingscribe://meeting/\(m.id)"
+                let bt = UNTimeIntervalNotificationTrigger(
+                    timeInterval: max(1, briefTrigger.timeIntervalSinceNow), repeats: false)
+                try? await center.add(UNNotificationRequest(identifier: briefID, content: bc, trigger: bt))
+            }
+
             let id = "meeting-\(m.id)"
             if existingIDs.contains(id) { continue }
             let triggerDate = m.startDate.addingTimeInterval(-10)
