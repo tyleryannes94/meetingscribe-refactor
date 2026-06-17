@@ -8,8 +8,9 @@ import OSLog
 /// (`docs/CROSS_DEVICE_SYNC_MASTER_PLAN.md`) lays out for the additive merge
 /// engine, but for plain user files instead of model-aware merges.
 ///
-/// Not auto-scheduled by this PR — Settings drives it via "Sync now". A timer
-/// is a follow-up.
+/// Periodic auto-sync is opt-in via Settings. When enabled, a single Timer
+/// fans out to every peer at `autoSyncInterval`; defaults to off so an
+/// unconfigured fresh install never hits a peer that isn't there.
 @MainActor
 final class SyncEngine: ObservableObject {
     static let shared = SyncEngine()
@@ -25,7 +26,69 @@ final class SyncEngine: ObservableObject {
     /// Per-peer in-flight gate so two manual "Sync now" taps don't race.
     @Published private(set) var runningPeerIDs: Set<String> = []
 
-    private init() {}
+    /// Whether the periodic background sync is on.
+    @Published var autoSyncEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(autoSyncEnabled, forKey: Self.autoSyncEnabledKey)
+            if autoSyncEnabled { scheduleTimer() } else { cancelTimer() }
+        }
+    }
+
+    /// Interval between auto-syncs. Default 5 minutes — high enough to be
+    /// useful for "I made a change on my work MacBook, give it ~5 min to
+    /// show up on my Mac mini," low enough that Tailscale + the small vault
+    /// size keeps CPU/network noise minimal.
+    @Published var autoSyncInterval: TimeInterval {
+        didSet {
+            UserDefaults.standard.set(autoSyncInterval, forKey: Self.autoSyncIntervalKey)
+            if autoSyncEnabled { scheduleTimer() }
+        }
+    }
+
+    private static let autoSyncEnabledKey = "sync.autoEnabled"
+    private static let autoSyncIntervalKey = "sync.autoIntervalSeconds"
+    static let defaultInterval: TimeInterval = 300       // 5 minutes
+    static let minInterval: TimeInterval = 60            // hard floor — don't hammer
+    static let maxInterval: TimeInterval = 86_400        // once a day ceiling
+
+    private var timer: Timer?
+
+    private init() {
+        let storedEnabled = UserDefaults.standard.object(forKey: Self.autoSyncEnabledKey) as? Bool
+        let storedInterval = UserDefaults.standard.object(forKey: Self.autoSyncIntervalKey) as? Double
+        self.autoSyncEnabled = storedEnabled ?? false
+        let clamped = max(Self.minInterval,
+                          min(Self.maxInterval, storedInterval ?? Self.defaultInterval))
+        self.autoSyncInterval = clamped
+        if self.autoSyncEnabled { scheduleTimer() }
+    }
+
+    // MARK: - Timer
+
+    private func scheduleTimer() {
+        cancelTimer()
+        let t = Timer.scheduledTimer(withTimeInterval: autoSyncInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.runAllPeers() }
+        }
+        // Tolerance lets the OS coalesce wakes — cheaper on the battery for
+        // the same effective cadence.
+        t.tolerance = autoSyncInterval * 0.15
+        timer = t
+    }
+
+    private func cancelTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func runAllPeers() {
+        Task { [weak self] in
+            guard let self else { return }
+            for peer in SyncPeerStore.shared.peers {
+                await self.syncNow(peerID: peer.id)
+            }
+        }
+    }
 
     /// Run one full round-trip with `peer`. Pulls first (cheap reads), then
     /// pushes any local mutations. Updates the peer's `lastPullAt` /

@@ -1352,6 +1352,23 @@ struct TailscaleSyncSection: View {
             Text("Configure another Mac running MeetingScribe as a peer. The engine pulls files newer than the last sync, then pushes any local changes since the last push. Last-write-wins per file by modification time — same model as `docs/CROSS_DEVICE_SYNC_MASTER_PLAN.md`. Both Macs need the same shared secret in their peer entry; copy it from the side that generated it.")
                 .font(.caption).foregroundStyle(.secondary)
 
+            Toggle("Sync automatically", isOn: $engine.autoSyncEnabled)
+                .help("Run every configured peer on a timer in the background.")
+            if engine.autoSyncEnabled {
+                HStack {
+                    Text("Every")
+                    Picker("", selection: $engine.autoSyncInterval) {
+                        Text("1 minute").tag(TimeInterval(60))
+                        Text("5 minutes").tag(TimeInterval(300))
+                        Text("15 minutes").tag(TimeInterval(900))
+                        Text("1 hour").tag(TimeInterval(3600))
+                        Text("6 hours").tag(TimeInterval(21_600))
+                    }
+                    .labelsHidden().fixedSize()
+                    Spacer()
+                }
+            }
+
             if peerStore.peers.isEmpty {
                 Text("No peers yet — add one below to start syncing.")
                     .font(.caption2).foregroundStyle(.secondary)
