@@ -569,6 +569,7 @@ extension UnifiedMeetingDetail {
 private struct InlineActionItemRow: View {
     let item: ActionItem
     @ObservedObject var store: ActionItemStore
+    @EnvironmentObject var router: WorkspaceRouter
 
     @State private var titleDraft: String
     @FocusState private var titleFocused: Bool
@@ -608,7 +609,19 @@ private struct InlineActionItemRow: View {
 
                 HStack(spacing: 10) {
                     if let owner = item.owner, !owner.isEmpty {
-                        Text(owner).font(.caption).foregroundStyle(.secondary)
+                        // T1: owner jumps to the person when linked, else plain text.
+                        if let pid = item.ownerPersonID {
+                            Button { router.openPerson(pid) } label: {
+                                HStack(spacing: 4) {
+                                    MSAvatar(name: owner, size: 14)
+                                    Text(owner).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .help("Open \(owner)")
+                        } else {
+                            Text(owner).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     // Due-date quick-set menu.
                     Menu {

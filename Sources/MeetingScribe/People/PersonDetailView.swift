@@ -1857,8 +1857,18 @@ struct PersonDetailView: View {
                                 .foregroundStyle(due < Date() && !done ? .red : NDS.textTertiary)
                         }
                         if !item.meetingTitle.isEmpty {
-                            Label(item.meetingTitle, systemImage: "mic")
-                                .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                            // T3: jump to the source meeting (nested plain button is
+                            // hit-tested before the row's task-open button).
+                            if !item.meetingID.isEmpty, let m = manager.meeting(id: item.meetingID) {
+                                Button { router.openMeeting(m) } label: {
+                                    Label(item.meetingTitle, systemImage: "mic")
+                                        .font(NDS.tiny).foregroundStyle(NDS.brand).lineLimit(1)
+                                }
+                                .buttonStyle(.plain).help("Open \(item.meetingTitle)")
+                            } else {
+                                Label(item.meetingTitle, systemImage: "mic")
+                                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                            }
                         }
                     }
                 }
