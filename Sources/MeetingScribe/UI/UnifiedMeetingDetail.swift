@@ -288,7 +288,9 @@ struct UnifiedMeetingDetail: View {
                             outcomesSection
                                 .id(SectionAnchor.outcomes)
                             highlightsSection
-                            // Summary / Related land in M6/M9.
+                            summarySection
+                                .id(SectionAnchor.summary)
+                            // Related lands in M9.
                         }
                         .padding(.horizontal, NDS.spaceXL)
                         .padding(.vertical, NDS.spaceXL)
@@ -304,6 +306,62 @@ struct UnifiedMeetingDetail: View {
                 VStack(spacing: 0) { EmptyView() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// M6 / 01 §6 Step 6 — Summary section. Past-only. Branch order matches
+    /// the spec: real summary → editor + edit-by-asking + feedback; else
+    /// generating → banner; else loaded-with-transcript → engine-off retry;
+    /// else cold → skeleton; else omitted. Replaces `summaryDisclosure` /
+    /// `pastSummaryBody` / `emptySummaryView` (M10 will delete them).
+    @ViewBuilder var summarySection: some View {
+        if case .past = mode, let m = meeting {
+            let showSection = hasRealSummary || isSummaryGenerating
+                || (bodyLoaded && !transcript.isEmpty) || !bodyLoaded
+            if showSection {
+                MSSection("Summary", systemImage: "doc.text",
+                          persistenceKey: "meeting.summary",
+                          defaultExpanded: true,
+                          trailing: { copyMenu }) {
+                    summarySectionBody(meetingID: m.id)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func summarySectionBody(meetingID: String) -> some View {
+        if hasRealSummary {
+            GeometryReader { geo in
+                let h = min(420, max(180, geo.size.height * 0.45))
+                VStack(alignment: .leading, spacing: NDS.spaceMD) {
+                    ScrollView {
+                        MarkdownEditor(text: .constant(summary), isEditable: false)
+                            .padding(.horizontal, 4)
+                    }
+                    .frame(height: h)
+                    .overlay(RoundedRectangle(cornerRadius: NDS.radiusSmall)
+                        .strokeBorder(NDS.hairline, lineWidth: 1))
+                    if let m = meeting {
+                        if manager.ollamaReachable, !summary.isEmpty {
+                            SummaryEditByAsking(meeting: m, current: summary,
+                                                onChanged: { summary = $0 })
+                        }
+                        SummaryFeedbackRow(meetingID: m.id) {
+                            manager.pipelineController.transcribeNow(meeting: m,
+                                                                     regenerateSummary: true)
+                        }
+                        followUpButton
+                    }
+                }
+            }
+            .frame(minHeight: 260)
+        } else if isSummaryGenerating {
+            summaryGeneratingBanner
+        } else if bodyLoaded && !transcript.isEmpty {
+            summaryFailedBanner
+        } else if !bodyLoaded {
+            MSSkeleton(lines: 4).padding(.vertical, NDS.spaceSM)
         }
     }
 
