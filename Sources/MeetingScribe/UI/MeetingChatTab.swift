@@ -28,6 +28,10 @@ var chatBody: some View {
     /// Keeps the conversation scoped to this call without the user having
     /// to repeat themselves.
 func chatContext(for m: Meeting) -> String {
+        // Make this meeting resolvable by the chat tools even if it isn't a
+        // finalized past meeting yet (calendar/today meeting). Fixes Ask AI's
+        // "meeting not found". Plain (non-published) var — no view invalidation.
+        manager.chatContextMeeting = m
         let f = DateFormatter()
         f.dateFormat = "EEE, MMM d 'at' h:mm a"
         var lines: [String] = []

@@ -624,8 +624,19 @@ final class MeetingManager: ObservableObject {
         return updated
     }
 
+    /// The meeting a meeting-scoped chat is currently about. Set when the chat
+    /// rail opens for a meeting so the chat tools can resolve it by id even when
+    /// it isn't (yet) a finalized past meeting — e.g. a calendar/today meeting
+    /// whose id is the calendar event id, not an internal recording UUID. Fixes
+    /// "Ask AI" returning "meeting not found" for the meeting you're looking at.
+    var chatContextMeeting: Meeting?
+
     /// The loaded meeting with this id, if any (Phase 4 task↔meeting links).
-    func meeting(id: String) -> Meeting? { pastMeetings.first { $0.id == id } }
+    /// Falls back to the active chat-context meeting so an in-progress / calendar
+    /// meeting still resolves.
+    func meeting(id: String) -> Meeting? {
+        pastMeetings.first { $0.id == id } ?? (chatContextMeeting?.id == id ? chatContextMeeting : nil)
+    }
 
     /// Reads a meeting's `summary.md` off disk (4-3 / 4-4). Returns nil when the
     /// meeting isn't loaded or has no summary yet.
