@@ -709,13 +709,13 @@ struct SummaryFeedbackRow: View {
                         showWhy = false
                         onRegenerate()
                     }
-                    .controlSize(.small)
+                    .buttonStyle(MSPrimaryButtonStyle())
                     .disabled(why.trimmingCharacters(in: .whitespaces).isEmpty)
                     Button("Just save") {
                         SummaryFeedback.set(up: false, why: why, for: meetingID)
                         showWhy = false
                     }
-                    .controlSize(.small)
+                    .buttonStyle(MSSecondaryButtonStyle())
                 }
             }
         }
