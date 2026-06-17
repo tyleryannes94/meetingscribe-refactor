@@ -303,8 +303,16 @@ struct MSSection<Content: View, Trailing: View>: View {
             }
             .padding(.vertical, NDS.spaceSM)
             if isExpanded {
-                content().padding(.top, NDS.spaceSM)
+                content()
+                    .padding(.top, NDS.spaceSM)
+                    .padding(.leading, 28)   // align with title baseline (chevron + icon)
             }
+            // Thin hairline at the bottom of every section to give the canvas
+            // visual rhythm without forcing each section into its own card.
+            Rectangle()
+                .fill(NDS.divider)
+                .frame(height: 1)
+                .padding(.top, NDS.spaceMD)
         }
     }
 }
