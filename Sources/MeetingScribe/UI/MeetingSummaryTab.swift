@@ -211,9 +211,9 @@ extension UnifiedMeetingDetail {
                             .buttonStyle(.borderless)
                             Text(item.title).font(NDS.small).lineLimit(1)
                                 .strikethrough(item.status == .completed, color: NDS.textTertiary)
-                            if let owner = item.owner, !owner.isEmpty {
-                                Text(owner).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                            }
+                            // T14: owner is navigable when hard-linked, matching
+                            // every other task surface (04 §3.9).
+                            TaskOwnerChip(item: item, size: 12)
                             Spacer(minLength: 0)
                         }
                     }

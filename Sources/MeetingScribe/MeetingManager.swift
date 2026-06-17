@@ -782,6 +782,11 @@ final class MeetingManager: ObservableObject {
         let primary = tagStore.primaryTag(for: updated)
         do {
             try store.writeMeeting(updated, primaryTag: primary)
+            // T13: rename propagates to denormalized task `meetingTitle` so the
+            // Tasks list shows the new title without waiting for a re-extract.
+            if title != nil && updated.displayTitle != meeting.displayTitle {
+                actionItems.refreshMeetingTitle(updated.id, to: updated.displayTitle)
+            }
             // Mirror the change onto the live in-memory meeting if it's the
             // one currently being recorded, so the UI reflects the picker
             // change immediately without waiting for a list refresh.

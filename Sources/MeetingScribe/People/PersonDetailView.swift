@@ -1630,38 +1630,12 @@ struct PersonDetailView: View {
 
     // MARK: - Tasks (cross-tab: ActionItems owned by this person)
 
-    /// Lowercased tokens that an ActionItem.owner string can match this person by:
-    /// full name, first name, and any email.
-    private func ownerTokens(_ p: Person) -> Set<String> {
-        var t = Set<String>()
-        let name = p.displayName.lowercased().trimmingCharacters(in: .whitespaces)
-        if !name.isEmpty {
-            t.insert(name)
-            if let first = name.split(separator: " ").first { t.insert(String(first)) }
-        }
-        for e in p.emails {
-            let el = e.lowercased().trimmingCharacters(in: .whitespaces)
-            if !el.isEmpty { t.insert(el) }
-        }
-        return t
-    }
-
-    private func ownerMatchesPerson(_ item: ActionItem) -> Bool {
-        // Exact hard link wins; otherwise fall back to owner-string matching for
-        // legacy tasks that predate the Person link.
-        if let pid = item.ownerPersonID { return pid == current.id }
-        guard let owner = item.owner?.lowercased().trimmingCharacters(in: .whitespaces),
-              !owner.isEmpty else { return false }
-        let tokens = ownerTokens(current)
-        // Exact token match, or the owner string contains the full name.
-        if tokens.contains(owner) { return true }
-        let full = current.displayName.lowercased().trimmingCharacters(in: .whitespaces)
-        return full.split(separator: " ").count > 1 && owner.contains(full)
-    }
-
+    /// T10 / 04 §4.5: one matcher across the whole app — `PersonResolver.taskBelongs`.
+    /// Tightens the profile to exact resolution; legacy substring hits drop off
+    /// (re-resolution on People mutation in T11 backfills the real link).
     private var personTasks: [ActionItem] {
         actionItems.items
-            .filter { ownerMatchesPerson($0) }
+            .filter { PersonResolver.taskBelongs($0, to: current) }
             .sorted { lhs, rhs in
                 let lDone = lhs.status == .completed, rDone = rhs.status == .completed
                 if lDone != rDone { return !lDone }   // open first

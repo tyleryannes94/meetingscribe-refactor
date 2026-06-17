@@ -529,7 +529,15 @@ final class PeopleStore: ObservableObject {
         }
         people.sort(by: Self.recencyThenName)
         writePerson(next)
+        // T11: any add/edit may newly resolve previously-unassigned task owners.
+        // The app wires this callback at startup; nil is the safe default.
+        onPersonUpsert?(self)
     }
+
+    /// T11: app-level hook fired after `updatePerson`. Wired at startup to
+    /// `ActionItemStore.reresolveUnassignedOwners` so old extracted tasks pick
+    /// up their hard link without a re-extract (closes 04 §3.6 part 1).
+    var onPersonUpsert: ((PeopleStore) -> Void)?
 
     func deletePerson(_ person: Person) {
         people.removeAll { $0.id == person.id }

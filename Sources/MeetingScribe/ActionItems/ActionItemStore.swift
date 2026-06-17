@@ -1260,6 +1260,49 @@ final class ActionItemStore: ObservableObject {
         items.filter { $0.ownerPersonID == personID }
     }
 
+    /// T13 / 04 §4.4: keep the denormalized `meetingTitle` in step with a
+    /// renamed meeting, without needing a re-extract (closes §3.7 stale-title
+    /// half). NEVER touches `meetingID` — that would change `signature` and
+    /// silently un-dedup the task's history.
+    func refreshMeetingTitle(_ meetingID: String, to newTitle: String) {
+        guard !meetingID.isEmpty else { return }
+        var changed = false
+        for idx in items.indices where items[idx].meetingID == meetingID && items[idx].meetingTitle != newTitle {
+            items[idx].meetingTitle = newTitle
+            changed = true
+        }
+        if changed { save() }
+    }
+
+    /// T11 / 04 §4.5: live tasks with an owner-text that resolved to no Person.
+    /// Excludes self tokens and already-linked tasks. The review queue source
+    /// and the input to `reresolveUnassignedOwners`.
+    func unassignedOwnerTasks() -> [ActionItem] {
+        items.filter { item in
+            guard item.ownerPersonID == nil, item.status != .completed else { return false }
+            guard let owner = item.owner?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !owner.isEmpty else { return false }
+            return !PersonResolver.selfTokens.contains(owner.lowercased())
+        }
+    }
+
+    /// T11: re-attempt owner resolution for every unassigned-owner task against
+    /// the current People snapshot. Used after a Person is added/edited so old
+    /// extracted tasks pick up their hard link without a re-extract.
+    /// Returns the number of tasks newly linked.
+    @discardableResult
+    func reresolveUnassignedOwners(against people: [Person]) -> Int {
+        guard !people.isEmpty else { return 0 }
+        var linked = 0
+        for item in unassignedOwnerTasks() {
+            guard let pid = PersonResolver.resolveOwner(item.owner, in: people) else { continue }
+            let resolvedName = people.first(where: { $0.id == pid })?.displayName ?? item.owner
+            setOwnerPerson(item.id, personID: pid, ownerName: resolvedName)
+            linked += 1
+        }
+        return linked
+    }
+
     /// T4: open task count for a person (drives the People-list row badge +
     /// the person profile's Tasks section header).
     func openCount(forPerson personID: String) -> Int {

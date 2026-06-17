@@ -385,6 +385,12 @@ extension ActionItemsView {
             return filtered.filter { $0.delegated == true }
                 .sorted { $0.createdAt < $1.createdAt }
         }
+        // T12: unassigned-owners review queue. Source of truth lives in the
+        // store so this stays consistent with the sidebar count.
+        if isUnassignedOwnersScope {
+            let queue = Set(store.unassignedOwnerTasks().map(\.id))
+            return filtered.filter { queue.contains($0.id) }
+        }
         // "All tasks" and "Unsorted" honor the active context switcher (1-2);
         // an explicitly-opened project/person/waiting bucket spans contexts.
         guard let pid = env.selectedProjectID else { return contextFiltered(filtered) }
