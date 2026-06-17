@@ -170,6 +170,23 @@ struct MeetingCard: View {
                     .foregroundStyle(NDS.textSecondary)
                     .lineLimit(1)
             }
+            // T8: surface unfinished follow-ups so a past meeting with open
+            // tasks doesn't read as "done." Cheap O(items) filter on the
+            // already-in-memory action item store.
+            if variant == .past {
+                let openCount = manager.actionItems.items(for: meeting.id)
+                    .filter { $0.status != .completed }.count
+                if openCount > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checklist").font(.caption2)
+                        Text("\(openCount) open").font(.caption2)
+                    }
+                    .foregroundStyle(NDS.brand)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(NDS.brand.opacity(0.10), in: Capsule())
+                    .help("\(openCount) unfinished follow-up\(openCount == 1 ? "" : "s")")
+                }
+            }
             if variant == .live { liveLine } else { actionsRow }
         }
     }

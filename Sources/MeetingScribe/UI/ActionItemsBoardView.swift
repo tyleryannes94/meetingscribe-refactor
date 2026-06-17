@@ -127,9 +127,7 @@ extension ActionItemsView {
                         Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1).help(name)
                     }
                     Spacer(minLength: 4)
-                    if let owner = item.owner, !owner.isEmpty {
-                        TaskOwnerAvatar(name: owner, size: 16)
-                    }
+                    TaskOwnerChip(item: item, size: 16)
                     Menu {
                         ForEach(ActionItem.Status.allCases) { s in
                             Button(s.label) { store.setStatus(item.id, status: s) }
@@ -147,7 +145,7 @@ extension ActionItemsView {
                     }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 20)
                 }
-                Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).help(item.meetingTitle)
+                TaskMeetingChip(item: item)
             }
         }
         .padding(10)
