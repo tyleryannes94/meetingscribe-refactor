@@ -113,6 +113,14 @@ enum PersonResolver {
     /// Tokens that mean "the user", which never map to a Person record.
     static let selfTokens: Set<String> = ["me", "i", "myself", "my", "self"]
 
+    /// T10 / 04 §4.5: does `item` belong to `person`? Hard link wins. Otherwise
+    /// falls back to the exact email-/name-/alias-resolution used on write.
+    /// Never substring. Single source of truth for "is this task this person's?"
+    static func taskBelongs(_ item: ActionItem, to person: Person) -> Bool {
+        if let pid = item.ownerPersonID { return pid == person.id }
+        return resolveOwner(item.owner, in: [person]) == person.id
+    }
+
     // MARK: - Bulk helpers
 
     /// The subset of a meeting's attendees that resolve to an existing Person,

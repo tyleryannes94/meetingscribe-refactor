@@ -69,6 +69,11 @@ struct MeetingScribeApp: App {
                     router.route(kind: parsed.kind, id: parsed.id, manager: manager)
                 }
                 .task {
+                    // T11: re-resolve unassigned task owners whenever a person
+                    // is added or edited (04 §3.6 part 1).
+                    PeopleStore.shared.onPersonUpsert = { [weak m = manager] store in
+                        m?.actionItems.reresolveUnassignedOwners(against: store.people)
+                    }
                     startServices()
                     await ActivityLog.shared.log(.appLaunch)  // 1C funnel
                 }

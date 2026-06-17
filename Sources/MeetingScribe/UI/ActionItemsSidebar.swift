@@ -497,8 +497,11 @@ struct ProjectRail: View {
     @ViewBuilder
     private var peopleSection: some View {
         let buckets = ownerBuckets
-        if !buckets.isEmpty {
-            disclosureHeader(title: "People", count: buckets.count, expanded: $peopleExpanded)
+        let unassignedCount = store.unassignedOwnerTasks().count
+        if !buckets.isEmpty || unassignedCount > 0 {
+            disclosureHeader(title: "People",
+                             count: buckets.count + (unassignedCount > 0 ? 1 : 0),
+                             expanded: $peopleExpanded)
             if peopleExpanded {
                 ForEach(buckets.prefix(8), id: \.person.id) { bucket in
                     personRow(bucket.person, open: bucket.open)
@@ -508,7 +511,36 @@ struct ProjectRail: View {
                         .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                         .padding(.horizontal, 12).padding(.vertical, 2)
                 }
+                // T12: Unassigned-owners review bucket — tasks whose owner text
+                // didn't resolve to a Person. Fix the link, or add the person.
+                if unassignedCount > 0 {
+                    unassignedOwnersRow(count: unassignedCount)
+                }
             }
+        }
+    }
+
+    private func unassignedOwnersRow(count: Int) -> some View {
+        let sentinel = ActionItemsView.unassignedOwnersSentinel
+        let selected = env.selectedMeetingID == nil && env.selectedInitiativeID == nil
+            && env.selectedProjectID == sentinel
+        return SidebarRow(selected: selected) {
+            env.selectedMeetingID = nil
+            env.selectedInitiativeID = nil
+            env.selectedProjectID = sentinel
+        } content: {
+            HStack(spacing: 8) {
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .scaledFont(14)
+                    .foregroundStyle(selected ? NDS.textPrimary : NDS.gold)
+                    .frame(width: 16)
+                Text("Unassigned").lineLimit(1).font(NDS.body)
+                    .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+                Spacer()
+                Text("\(count)").font(NDS.tiny.monospacedDigit())
+                    .foregroundStyle(NDS.textTertiary)
+            }
+            .help("Tasks with an owner name that didn't match a person")
         }
     }
 

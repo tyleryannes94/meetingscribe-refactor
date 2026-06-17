@@ -105,6 +105,12 @@ struct ActionItemsView: View {
     static let recurringSentinel = "__recurring__"
     /// My Tasks (5-2): the current user's tasks bucketed by date.
     static let myTasksSentinel = "__mytasks__"
+    /// T12 / 04 §4.3: review queue for tasks whose `owner` text didn't resolve
+    /// to a Person — fix the link inline, or add the person.
+    static let unassignedOwnersSentinel = "__unassigned_owners__"
+
+    /// True when the rail's "Unassigned owners" review bucket is selected (T12).
+    var isUnassignedOwnersScope: Bool { env.selectedProjectID == Self.unassignedOwnersSentinel }
 
     /// The person id currently scoping the task list, if a People-facet row is
     /// selected in the rail (P2-2). Decoded from `env.selectedProjectID`.
