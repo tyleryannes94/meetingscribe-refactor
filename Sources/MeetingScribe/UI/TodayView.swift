@@ -173,7 +173,7 @@ struct TodayView: View {
                 // disclosure so the home screen opens calm.
                 moreSection
             }
-            .padding(.horizontal, 28).padding(.vertical, 24)
+            .padding(.horizontal, 20).padding(.vertical, 16)
             // Full window width (req #5) — the feed is cards/lists, not prose,
             // so no reading-measure cap. (Prose panes keep their own measure.)
             .frame(maxWidth: .infinity, alignment: .leading)
