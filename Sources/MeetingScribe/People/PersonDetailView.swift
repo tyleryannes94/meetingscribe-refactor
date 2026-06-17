@@ -521,8 +521,8 @@ struct PersonDetailView: View {
     @ViewBuilder
     private var proactiveInsightCard: some View {
         if let insight = relationshipInsight {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "lightbulb.fill").foregroundStyle(NDS.brand).scaledFont(12)
+            HStack(alignment: .center, spacing: 10) {
+                healthRing
                 Text(insight).font(NDS.small).foregroundStyle(NDS.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
@@ -530,6 +530,23 @@ struct PersonDetailView: View {
             .padding(10)
             .background(NDS.brand.opacity(0.07), in: RoundedRectangle(cornerRadius: NDS.radius))
         }
+    }
+
+    /// Relationship-health arc (coach): the persisted strength score (0–1) as a
+    /// colored ring with the percentage, banded green / gold / red.
+    private var healthRing: some View {
+        let score = max(0, min(1, current.relationshipStrengthScore))
+        let color: Color = score >= 0.66 ? .green : (score >= 0.33 ? NDS.gold : NDS.danger)
+        return ZStack {
+            Circle().stroke(color.opacity(0.18), lineWidth: 4)
+            Circle().trim(from: 0, to: max(0.02, score))
+                .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text("\(Int(score * 100))")
+                .scaledFont(11, weight: .bold).foregroundStyle(color)
+        }
+        .frame(width: 38, height: 38)
+        .help("Relationship health")
     }
 
     private var relationshipInsight: String? {
