@@ -18,6 +18,15 @@ struct ChatPanel: View {
     var density: Density = .regular
     /// Optional placeholder examples shown when the chat is empty.
     var examplePrompts: [String]? = nil
+    /// 5-F: optional categorized "What can I ask?" prompt groups, shown
+    /// collapsibly in the empty state. Takes precedence over examplePrompts.
+    var capabilitySections: [CapabilitySection]? = nil
+
+    struct CapabilitySection: Identifiable {
+        let id = UUID()
+        let label: String
+        let prompts: [String]
+    }
 
     enum Density { case compact, regular }
 
@@ -69,26 +78,24 @@ struct ChatPanel: View {
                     .font(density == .compact ? .callout.weight(.semibold)
                                               : .title3.weight(.semibold))
             }
-            if let prompts = examplePrompts {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(prompts, id: \.self) { text in
-                        Button {
-                            input = text
-                            inputFocused = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.up.right.circle").font(.caption2)
-                                Text(text).font(.caption).multilineTextAlignment(.leading)
-                            }
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Color.secondary.opacity(0.08),
-                                        in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            if let sections = capabilitySections {
+                Text("What can I ask?")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(sections) { section in
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(section.prompts, id: \.self) { promptButton($0) }
                         }
-                        .buttonStyle(.plain)
+                        .padding(.top, 4)
+                    } label: {
+                        Text(section.label)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary).textCase(.uppercase)
                     }
+                }
+            } else if let prompts = examplePrompts {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(prompts, id: \.self) { promptButton($0) }
                 }
             }
             Label("Running locally via Ollama. No API key, no outbound traffic.",
@@ -97,6 +104,25 @@ struct ChatPanel: View {
                 .padding(.top, 4)
         }
         .padding(.horizontal, density == .compact ? 12 : 18)
+    }
+
+    /// A tappable suggested-prompt chip that drops the text into the input.
+    private func promptButton(_ text: String) -> some View {
+        Button {
+            input = text
+            inputFocused = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.right.circle").font(.caption2)
+                Text(text).font(.caption).multilineTextAlignment(.leading)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
     }
 
     private func errorBanner(_ err: String) -> some View {

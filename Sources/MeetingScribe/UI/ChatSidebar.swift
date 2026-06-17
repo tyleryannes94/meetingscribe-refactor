@@ -12,6 +12,32 @@ struct ChatSidebar: View {
     @State private var showingFolders = false
     @State private var folders: [String] = AppSettings.shared.chatFolders
 
+    /// 5-F: categorized "What can I ask?" prompts, lightly personalized with a
+    /// recent contact so the suggestions feel grounded in the user's own data.
+    private static func capabilitySections() -> [ChatPanel.CapabilitySection] {
+        let person = PeopleStore.shared.people.first?.displayName ?? "a contact"
+        return [
+            .init(label: "People", prompts: [
+                "Brief me on \(person).",
+                "Who am I overdue to check in with?",
+                "What do \(person) and I usually text about?"
+            ]),
+            .init(label: "Meetings", prompts: [
+                "Summarize my calls from this week.",
+                "What action items came out of yesterday's meetings?",
+                "What questions were left unanswered recently?"
+            ]),
+            .init(label: "Decisions", prompts: [
+                "What decisions did we make recently?",
+                "Why did we land on our current approach?"
+            ]),
+            .init(label: "Tasks", prompts: [
+                "What's due this week?",
+                "What am I waiting on from other people?"
+            ])
+        ]
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -19,12 +45,7 @@ struct ChatSidebar: View {
             ChatPanel(
                 session: session,
                 density: .compact,
-                examplePrompts: [
-                    "What action items came out of yesterday's meetings?",
-                    "Summarize my calls from this week.",
-                    "List my voice notes from the past 7 days.",
-                    "Find files in my Chat folders that mention 'pricing'."
-                ]
+                capabilitySections: Self.capabilitySections()
             )
         }
         .background(
