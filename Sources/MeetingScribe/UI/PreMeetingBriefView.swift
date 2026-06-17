@@ -62,22 +62,20 @@ struct PreMeetingBriefView: View {
             return (p, String(note.body.prefix(220)))
         }
         if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Label("About these people", systemImage: "person.text.rectangle")
-                    .font(.headline).foregroundStyle(NDS.brand)
+                    .font(.caption.weight(.semibold)).foregroundStyle(NDS.textSecondary)
                 ForEach(Array(entries.enumerated()), id: \.offset) { _, e in
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(e.person.displayName).font(.subheadline.weight(.semibold))
+                            Text(e.person.displayName).font(.callout.weight(.semibold))
                             if e.person.relationshipStrengthScore > 0 {
-                                Text("· \(Int(e.person.relationshipStrengthScore * 100)) strength")
+                                Text("\(Int(e.person.relationshipStrengthScore * 100)) strength")
                                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                             }
                         }
                         Text(e.excerpt).font(.callout).foregroundStyle(NDS.textSecondary)
                     }
-                    .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(NDS.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: NDS.rowRadius))
                 }
             }
         }
@@ -95,12 +93,12 @@ struct PreMeetingBriefView: View {
             return (p.displayName, p.talkingPoints)
         }
         if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Label("Discuss next time", systemImage: "bubble.left.fill")
-                    .font(.headline).foregroundStyle(NDS.gold)
+                    .font(.caption.weight(.semibold)).foregroundStyle(NDS.gold)
                 ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.name).font(.subheadline.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.name).font(.callout.weight(.semibold))
                         ForEach(Array(entry.points.enumerated()), id: \.offset) { _, pt in
                             HStack(alignment: .top, spacing: 6) {
                                 Text("•").foregroundStyle(NDS.gold)
@@ -108,9 +106,6 @@ struct PreMeetingBriefView: View {
                             }
                         }
                     }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(NDS.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: NDS.rowRadius))
                 }
             }
         }
@@ -167,37 +162,20 @@ struct PreMeetingBriefView: View {
     @ViewBuilder
     private var synthesizedSection: some View {
         if generating {
-            // D4-9: a shaped skeleton + labeled spinner instead of a bare one,
-            // so the loading brief reads as "coming", not broken.
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Synthesizing brief…").font(.caption).foregroundStyle(.secondary)
-                }
-                MSSkeleton(lines: 4)
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Synthesizing brief…").font(.caption).foregroundStyle(.secondary)
             }
-            .padding(12)
-            .background(NDS.brand.opacity(0.06),
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            MSSkeleton(lines: 4)
         } else if let brief, !brief.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Label("Summary", systemImage: "sparkles")
-                        .font(.callout.weight(.semibold)).foregroundStyle(NDS.brand)
-                    Spacer()
-                    // P1-5: regenerate on demand — re-synthesizes from the latest
-                    // prior meetings + open items, bypassing the cached brief.
-                    Button { regenerateBrief() } label: {
-                        Label("Regenerate", systemImage: "arrow.clockwise").font(.caption)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Re-synthesize this brief from the latest prior meetings and open items")
-                }
-                MarkdownText(brief)
+            HStack(spacing: 6) {
+                Label("Summary", systemImage: "sparkles")
+                    .font(.caption.weight(.semibold)).foregroundStyle(NDS.brand)
+                Spacer()
+                MSInlineButton("Regenerate", systemImage: "arrow.clockwise") { regenerateBrief() }
+                    .help("Re-synthesize from the latest prior meetings and open items")
             }
-            .padding(12)
-            .background(NDS.brand.opacity(0.06),
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            MarkdownText(brief)
         }
     }
 
@@ -224,69 +202,52 @@ struct PreMeetingBriefView: View {
     }
 
     private var openItemsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Open action items from prior meetings",
-                  systemImage: "checklist")
-                .font(.callout.weight(.semibold))
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Open action items from prior meetings", systemImage: "checklist")
+                .font(.caption.weight(.semibold)).foregroundStyle(NDS.textSecondary)
 
             ForEach(openItems.prefix(10)) { item in
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "circle")
-                        .scaledFont(14)
+                        .scaledFont(12)
                         .foregroundStyle(.secondary)
-                        .padding(.top, 1)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
-                            .font(.callout)
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.title).font(.callout)
                         if let mtg = manager.pastMeetings.first(where: { $0.id == item.meetingID }) {
-                            Text(mtg.displayTitle)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Text(mtg.displayTitle).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.vertical, 2)
             }
 
             if openItems.count > 10 {
                 Text("+ \(openItems.count - 10) more in Tasks tab")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(12)
-        .background(NDS.brand.opacity(0.06),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var priorMeetingsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Recent meetings with these attendees",
-                  systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
-                .font(.callout.weight(.semibold))
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Recent meetings with these attendees", systemImage: "clock.arrow.circlepath")
+                .font(.caption.weight(.semibold)).foregroundStyle(NDS.textSecondary)
 
             ForEach(priorMeetings.prefix(5)) { m in
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     HStack {
-                        Text(m.displayTitle)
-                            .font(.callout.weight(.medium))
+                        Text(m.displayTitle).font(.callout)
                         Spacer()
-                        Text(m.startDate, style: .date)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text(m.startDate, style: .date).font(.caption).foregroundStyle(.secondary)
                     }
                     let items = manager.actionItems.items(for: m.id)
                         .filter { $0.status != .completed }
                     if !items.isEmpty {
                         Text("\(items.count) open action item\(items.count == 1 ? "" : "s")")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                            .font(.caption).foregroundStyle(NDS.gold)
                     }
                 }
-                .padding(10)
-                .background(Color.secondary.opacity(0.07),
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
     }
