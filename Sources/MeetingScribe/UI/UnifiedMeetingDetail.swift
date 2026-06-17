@@ -306,6 +306,8 @@ struct UnifiedMeetingDetail: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: NDS.spaceXL) {
                         notesSection
+                        transcriptSection
+                            .id(SectionAnchor.transcript)
                     }
                     .padding(.horizontal, NDS.spaceXL)
                     .padding(.vertical, NDS.spaceXL)
@@ -315,6 +317,73 @@ struct UnifiedMeetingDetail: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+    }
+
+    /// M7 / 01 §6 Step 7 — Transcript section. Lazy-mounted via the
+    /// `MSSection`'s collapse state (C-B): the heavy `TranscriptSyncView`
+    /// parse only happens on first expand. Mode-multiplexed title (C-C):
+    /// "Live transcript" / "Pre-meeting brief" / "Transcript". Bounded
+    /// height so the inner self-scrolling AppKit text view doesn't fight
+    /// the outer ScrollView (C-A). The shared `audioController` (C-D) is
+    /// passed unchanged so a timestamp tap seeks the same audio the
+    /// transport bar plays.
+    @ViewBuilder var transcriptSection: some View {
+        let defaultExpanded: Bool = {
+            switch mode {
+            case .past: return false
+            case .live, .upcoming: return true
+            }
+        }()
+        // Past with no transcript and not loading → omit (no empty husk).
+        let omit: Bool = {
+            if case .past = mode { return bodyLoaded && transcript.isEmpty }
+            return false
+        }()
+        if !omit {
+            MSSection(transcriptSectionTitle,
+                      systemImage: "text.alignleft",
+                      persistenceKey: "meeting.transcript",
+                      defaultExpanded: defaultExpanded) {
+                transcriptSectionBody
+            }
+        }
+    }
+
+    private var transcriptSectionTitle: String {
+        switch mode {
+        case .live:     return "Live transcript"
+        case .upcoming: return "Pre-meeting brief"
+        case .past:     return "Transcript"
+        }
+    }
+
+    @ViewBuilder
+    private var transcriptSectionBody: some View {
+        GeometryReader { geo in
+            let h = max(320, geo.size.height * 0.55)
+            switch mode {
+            case .live:
+                LiveTranscriptScroll(transcriber: manager.liveTranscriber,
+                                     recordingStartedAt: liveStartedAt)
+                    .frame(height: h)
+            case .upcoming(let m):
+                PreMeetingBriefView(meeting: m)
+                    .environmentObject(manager)
+                    .frame(height: h)
+            case .past:
+                if !bodyLoaded {
+                    MSSkeleton(lines: 8).padding(.vertical, NDS.spaceSM)
+                } else if !transcript.isEmpty {
+                    TranscriptSyncView(rawTranscript: transcript,
+                                       audioController: audioURLs.isEmpty ? nil : audioController,
+                                       initialSearch: transcriptSearchSeed,
+                                       meetingID: meeting?.id,
+                                       attendees: meeting?.attendees ?? [])
+                        .frame(height: h)
+                }
+            }
+        }
+        .frame(minHeight: 360)
     }
 
     /// M5 / 01 §6 Step 5 — Notes section. The C-A constraint test: the
