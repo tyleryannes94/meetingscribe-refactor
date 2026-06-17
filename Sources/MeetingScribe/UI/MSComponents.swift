@@ -156,6 +156,160 @@ extension MSSectionHeader where Trailing == EmptyView {
     }
 }
 
+// MARK: - Button system (UX-audit round 2)
+//
+// One sanctioned style per role; never raw .bordered / .borderedProminent /
+// .controlSize / bare .borderless for a visible action:
+//   Primary    MSPrimaryButtonStyle    34pt   the one likely next action (≤1/section)
+//   Secondary  MSSecondaryButtonStyle  30pt   supporting actions; button-styled menus
+//   Tertiary   MSInlineButton          28pt   inline list/form actions (was .borderless+small)
+//   Icon-only  NotionIconButton+.minTap 30²/44 glyph actions
+//   Destructive MSDangerButtonStyle    34pt   stop/delete
+
+/// Inline ghost text-action — the sanctioned replacement for the ad-hoc
+/// `.buttonStyle(.borderless).font(NDS.small)` clusters scattered across the
+/// person/meeting views. Wraps `MSTertiaryButtonStyle` so every inline action
+/// is one consistent 28pt height with the muted-label treatment.
+@available(macOS 14.0, *)
+struct MSInlineButton: View {
+    let title: String
+    var systemImage: String? = nil
+    let action: () -> Void
+
+    init(_ title: String, systemImage: String? = nil, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            if let systemImage {
+                Label(title, systemImage: systemImage)
+            } else {
+                Text(title)
+            }
+        }
+        .buttonStyle(MSTertiaryButtonStyle())
+    }
+}
+
+extension View {
+    /// Chrome for a `Menu` whose label should read as a secondary button —
+    /// matches `MSSecondaryButtonStyle` (surface fill, hairline, `NDS.radius`,
+    /// `buttonSecondaryH`) so a menu trigger never drifts from a real button
+    /// (fixes the hand-built radius-8 Options chrome in the meeting header).
+    func msMenuButtonChrome() -> some View {
+        self
+            .scaledFont(13, weight: .bold)
+            .foregroundStyle(NDS.textPrimary)
+            .padding(.horizontal, NDS.buttonHPadMd)
+            .frame(height: NDS.buttonSecondaryH)
+            .background(NDS.fieldBg,
+                        in: RoundedRectangle(cornerRadius: NDS.radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: NDS.radius, style: .continuous)
+                .strokeBorder(NDS.hairline, lineWidth: 1))
+            .contentShape(Rectangle())
+    }
+}
+
+/// One reusable collapsible section (UX-audit round 2). The de-tabbed Meeting
+/// and Person canvases stack these instead of using pill tabs: a chevron + an
+/// eyebrow title + optional count, an optional trailing accessory (e.g. an Add
+/// button, kept OUTSIDE the toggle's hit area), over a `@ViewBuilder` body.
+/// Collapse state persists across navigation/relaunch when `persistenceKey` is
+/// set (`@AppStorage("section.<key>.expanded")`), else it's transient `@State`.
+/// Owns no horizontal padding or card — the host wraps it.
+@available(macOS 14.0, *)
+struct MSSection<Content: View, Trailing: View>: View {
+    let title: String
+    var systemImage: String?
+    var count: Int?
+    var persistenceKey: String?
+    var defaultExpanded: Bool
+    @ViewBuilder var trailing: () -> Trailing
+    @ViewBuilder var content: () -> Content
+
+    @State private var localExpanded: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(_ title: String,
+         systemImage: String? = nil,
+         count: Int? = nil,
+         persistenceKey: String? = nil,
+         defaultExpanded: Bool = true,
+         @ViewBuilder trailing: @escaping () -> Trailing,
+         @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.systemImage = systemImage
+        self.count = count
+        self.persistenceKey = persistenceKey
+        self.defaultExpanded = defaultExpanded
+        self.trailing = trailing
+        self.content = content
+        _localExpanded = State(initialValue: defaultExpanded)
+    }
+
+    private var storageKey: String? { persistenceKey.map { "section.\($0).expanded" } }
+
+    private var isExpanded: Bool {
+        if let storageKey { return UserDefaults.standard.object(forKey: storageKey) as? Bool ?? defaultExpanded }
+        return localExpanded
+    }
+
+    private func toggle() {
+        let next = !isExpanded
+        if let storageKey { UserDefaults.standard.set(next, forKey: storageKey) }
+        withAnimation(NDS.motion(.easeInOut(duration: NDS.motionFast), reduce: reduceMotion)) {
+            localExpanded = next   // also drives a re-render for the persisted path
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: NDS.spaceSM) {
+                Button(action: toggle) {
+                    HStack(spacing: NDS.spaceSM) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .scaledFont(10, weight: .semibold).foregroundStyle(NDS.textTertiary)
+                        if let systemImage {
+                            Label(title, systemImage: systemImage)
+                                .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                        } else {
+                            Text(title).font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                        }
+                        if let count {
+                            Text("\(count)").font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary)
+                        }
+                        Spacer(minLength: NDS.spaceSM)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                trailing()
+            }
+            .padding(.vertical, NDS.spaceSM)
+            if isExpanded {
+                content().padding(.top, NDS.spaceSM)
+            }
+        }
+    }
+}
+
+@available(macOS 14.0, *)
+extension MSSection where Trailing == EmptyView {
+    init(_ title: String,
+         systemImage: String? = nil,
+         count: Int? = nil,
+         persistenceKey: String? = nil,
+         defaultExpanded: Bool = true,
+         @ViewBuilder content: @escaping () -> Content) {
+        self.init(title, systemImage: systemImage, count: count,
+                  persistenceKey: persistenceKey, defaultExpanded: defaultExpanded,
+                  trailing: { EmptyView() }, content: content)
+    }
+}
+
 /// One search field for the whole app (V5 SC-2). Replaces the divergent inline
 /// magnifying-glass + TextField + clear-button stacks. Esc clears; pass
 /// `autoFocus` to grab focus on appear.
