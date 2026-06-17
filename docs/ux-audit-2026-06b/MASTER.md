@@ -1,467 +1,184 @@
 # MASTER — De-tab Meetings + People, Fix Buttons, Integrate Tasks
 
-*Consolidated plan for ux-audit-2026-06b. Reconciles all five area docs into one
-problem inventory, one set of cross-cutting decisions, and one global build
-sequence. Faithful to the source docs — every numbered finding is reproduced
-below, grouped by area, with its file:line evidence and severity preserved.*
+*Consolidated plan for the round-2 deep redesign (`docs/ux-audit-2026-06b`). Reconciles all five area docs (`01`–`05`) into one complete problem inventory, the cross-cutting decisions, and one global build sequence. **Every numbered finding from every doc is reproduced below** — grouped by area, with file:line evidence and severity preserved. The `01`–`05` docs hold the full detail (700–900 lines each); this is the index + sequencer.*
 
 ## Goal
+Replace the tabbed Meeting- and Person-detail views with single scrolling canvases of collapsible `MSSection`s (everything visible at once), fix the inconsistent/"weird" button sizes by routing every action through the existing `MS*ButtonStyle` system, make the People list answer "who needs me right now?", and make Tasks feel connected to the meeting they came from and the person who owns them.
 
-Turn the two dense, tabbed detail surfaces — **Meeting detail**
-(`UnifiedMeetingDetail`) and **Person detail** (`PersonDetailView`) — into
-**single vertically-scrolling canvases of collapsible `MSSection` blocks**.
-Along the way:
-
-1. **De-tab.** Replace the meeting `DetailTab` picker (Meeting / Actions /
-   Transcript / Ask AI) and the person `MSPillTabs` (`PersonTab`) with one scroll
-   column of `MSSection`s whose expand/collapse state persists. No tab switch
-   loses scroll position; nothing hides in a slot you have to discover.
-2. **Fix button sizes.** Normalize every button to the Phase-F role table
-   (Primary 34 / Secondary 30 / Tertiary 28 / Icon 30-visible-44-hit / Danger 34 /
-   Menu-chrome 30). Kill the `.borderedProminent` / `.bordered` / `.controlSize` /
-   bare-`.borderless` drift, and add a CI lint guard so it stays killed.
-3. **Integrate Tasks.** Make the task↔meeting↔owner three-way join coherent and
-   navigable everywhere (every rendered edge is a door), surface open-task counts
-   on People rows and meeting cards, add a triage-able People list, promote the
-   person Tasks section to top-level, unify the two divergent owner-matchers, and
-   close the unresolved-owner / orphaned-meeting gaps.
-
-The shared substrate (`05-layout-components`) is the keystone — it ships first;
-the two canvases and the Tasks integration stack on top of it.
-
----
-
-## Phase / area map
-
-| Phase | Code | Area / source doc | What it delivers |
-|---|---|---|---|
-| Foundation | **F** | 05-layout-components | Confirm `MSSection`, button styles, tokens exist; button-style swaps (Group A); centered 760 canvas recipe; design-lint guard |
-| Buttons | **B** | 05 (Group A) + 01 (header) + 02 (Phase A) | Every banned native button → sanctioned `MS*` style across the five files |
-| Tasks | **T** | 04-tasks-integration | Navigable meeting/owner chips, count badges, store helpers, unassigned-owner review, orphan guards, unified matcher |
-| People list | **L** | 03-people-list | Overdue predicate, task index, richer row, triage control, grouping, density, deep-links |
-| Meeting canvas | **M** | 01-meeting-detail | De-tab `UnifiedMeetingDetail` into the 7-section meeting canvas |
-| Person canvas | **P** | 02-person-detail | De-tab `PersonDetailView` into the compact-header + 18-section person canvas |
-| Cleanup | **X** | 01 §6 / 02 / 04 | Delete dead tab machinery, dead vars, flag branches |
+## Area map
+| Doc | Area | Headline change |
+|-----|------|-----------------|
+| 01-meeting-detail.md | Meeting detail | 4 tabs → one collapsible canvas (flag-gated migration) |
+| 02-person-detail.md | Person detail | de-cram to compact header + `MSSection` stack; fix buttons; de-tab |
+| 03-people-list.md | People list | triage grouping + richer rows + task signals |
+| 04-tasks-integration.md | Tasks ↔ Meetings/People | navigable owner/meeting everywhere; count badges; unify matchers |
+| 05-layout-components.md | Shared system | button rules + `MSSection` + spacing + CI lint guard |
 
 ---
 
 ## Complete problem inventory
 
-Every numbered problem from each doc, grouped by area, with original IDs,
-file:line evidence, and severity. Where two docs found the same thing, both are
-listed and the overlap is noted.
+### A. Meeting detail (from `01`)
+| ID | Problem | Evidence | Severity |
+|----|---------|----------|----------|
+| **P1** | Tab fragmentation: one page cut into four | `DetailTab` (`MeetingTranscriptTab.swift:172`) drives exclusive `switch tab` (`UnifiedMeetingDetail.swift:157-164`) via `MSPillTabs` (`tabPicker:254`) | high |
+| **P2** | Action items rendered in **three** places, two stale | `outcomesStrip` (`MeetingSummaryTab.swift:195-235`) read-only preview · `actionsBody` (`UnifiedMeetingDetail.swift:277-320`) the real CRUD · `actionItemsSection` (`MeetingSummaryTab.swift:472-537`) a 2nd full list via legacy `pastSummaryBody` | high |
+| **P3** | `applySmartTabDefault` guesses the page & races a 300ms timer | `:427-444`, `Task.sleep` `:436`, fills vs `reload()` `:369` non-deterministically; `hasAppliedTabDefault` guard `:428` | medium |
+| **P4** | Cross-tab teleports lose scroll + notes caret | `highlightsStrip` `tab=.transcript` (`MeetingSummaryTab.swift:168`); `consumeTranscriptQuery` (`MeetingTranscriptTab.swift:58`); `reviewBanner onReviewTasks` (`UnifiedMeetingDetail.swift:139`) | medium |
+| **P5** | Mode-multiplexed content hidden in tab slots | `transcriptBody` (`MeetingTranscriptTab.swift:19-51`) is live/upcoming(brief)/past by mode | medium |
+| **P6** | Header density eats 250–300pt before content | `header` (`MeetingDetailHeader.swift:8-106`) stacks 8 rows + reviewBanner + audioBar + tabPicker | low–med |
+| **P7** | Generating/failed summary states duplicated & inconsistent | new `summaryGeneratingBanner`/`summaryFailedBanner` (`MeetingSummaryTab.swift:70/91`) vs legacy `pastSummaryBody`/`emptySummaryView` (`:335/400`); 240pt cap mismatch | medium |
 
-### Meeting detail (01-meeting-detail.md)
+### B. Person detail (from `02`)
+| ID | Problem | Evidence | Severity |
+|----|---------|----------|----------|
+| **P1-A** | Three-column cram on default width | `body:366-375` forces identityPane(300)+workArea+chat(320) all visible; ~880pt min | P1 |
+| **P1-B** | 300pt identityPane overload (7 stacked sections) | `:503-518`; `EncounterHeatMap:1677` etc. clip inside 268pt usable | P1 |
+| **P1-C** | Two ragged FlowLayout button rows, mixed heights | Row1 `:852-875` (34pt Primary + 30pt Secondary mix); Row2 `:880-897` (`.borderless`+`.font(NDS.small)`) | P1 |
+| **P1-D** | Sub-44pt taps on important verbs | Log encounter/Relationship/Ask AI `:884/889/895` borderless, no `.minTap()` | P1 |
+| **P1-E** | `.borderedProminent` reconnect/health CTAs | `healthWhyPopover:1003-1006`; dead `header:1525-1528` | P1/P2 |
+| **P1-F** | Bare `Button("Add")`/`Button("Run")` everywhere | `:1073,1134,1782,1890,2308,2354,2827,1269,1600` | P1 |
+| **P1-G** | "A bunch of unnecessary tabs" | `MSPillTabs:574` so narrow it had to scroll (`MSComponents.swift:88-92`); hides Tasks under Meetings | P1 |
+| **P2-H** | Scrolling section-nav pills (dead cram tell) | `sectionNav`/`sectionNavItems:698-738` | P2 |
+| **P2-I** | Duplicate "Brief Me" + duplicate "Notes" | Brief Me `:856` & `:1525`; Notes = bio `:1655` & attached `:2576` | P2 |
+| **P2-J** | Inline-text-action `.borderless` clusters | Analyze `:2431`, addEmail `:1564`, Suggest `:1172`, photos `:1601`, Save-to-notes `:2524` | P2 |
+| **P3-K** | Menus with no chrome | `:1048,1708,2394` `.menuStyle(.borderlessButton)` → want `.msMenuButtonChrome()` | P3 |
 
-- **P1 — Tab fragmentation: one page cut into four. Severity: high.** `DetailTab`
-  (`MeetingTranscriptTab.swift:172`) drives an exclusive `switch tab`
-  (`UnifiedMeetingDetail.swift:157-164`) via `MSPillTabs` (`tabPicker`, `:254`).
-  Only one of {Meeting, Actions, Transcript, Ask AI} on screen; tab round-trips
-  throw away scroll positions (each arm has its own `ScrollView`/`VSplitView`).
-- **P2 — Action items rendered in three places, two stale. Severity: high.**
-  (1) `outcomesStrip` (`MeetingSummaryTab.swift:195-235`) read-only preview;
-  (2) `actionsBody` (`UnifiedMeetingDetail.swift:277-320`) the real CRUD surface
-  (`MeetingActionRow` + "Add all N → Tasks" + "Add action item");
-  (3) `actionItemsSection(_:)` (`MeetingSummaryTab.swift:472-537`) a second full
-  list (`InlineActionItemRow`) reachable via `pastSummaryBody` (`:393`).
-  *Overlaps with 04 §3.9 / O5 (non-navigable owner in outcomesStrip).*
-- **P3 — `applySmartTabDefault` guesses the page and races a timer. Severity:
-  medium.** `applySmartTabDefault()` (`UnifiedMeetingDetail.swift:427-444`) fires
-  a 300 ms `Task.sleep` (`:436`) that flips `summaryExpanded` based on whether
-  `summary` is non-empty at that instant; `reload()` (`:369`) fills it async →
-  non-deterministic. Guards `hasAppliedTabDefault` (`:428`) + reset (`:173`)
-  exist only to stop re-firing.
-- **P4 — Cross-tab teleports lose scroll and notes context. Severity: medium.**
-  `highlightsStrip` → `tab = .transcript` (`MeetingSummaryTab.swift:168`);
-  `consumeTranscriptQuery()` → `tab = .transcript` (`MeetingTranscriptTab.swift:58`);
-  `reviewBanner.onReviewTasks` → `tab = .actions` (`UnifiedMeetingDetail.swift:139`).
-  Each teleport unmounts the arm, loses scroll/caret, mounts target at top.
-- **P5 — Mode-multiplexed content hidden in tab slots. Severity: medium.**
-  `transcriptBody` (`MeetingTranscriptTab.swift:19-51`) overloads the Transcript
-  tab to be `LiveTranscriptScroll` / `PreMeetingBriefView` (relabeled "Brief",
-  `tabPicker:262`) / `TranscriptSyncView` by mode. Upcoming brief is behind a tab
-  users don't open; live transcript is one tab from the notes.
-- **P6 — Header density. Severity: low-medium.** `header`
-  (`MeetingDetailHeader.swift:8-106`) stacks spine + title/meta/chips/CTA/overflow
-  + attendee scroll + shared-history + conference-URL + `TagPicker` + upcoming row
-  + status banner, then `reviewBanner`/`audioBar`/`tabPicker` follow; canvas can
-  start 250-300pt down.
-- **P7 — Generating / failed summary states duplicated and inconsistent.
-  Severity: medium.** New canvas: `summaryGeneratingBanner`
-  (`MeetingSummaryTab.swift:70`) + `summaryFailedBanner` (`:91`). Legacy:
-  `pastSummaryBody` (`:335`) inline tokens (`:339-349`) + `emptySummaryView`
-  (`:400`). Two visual languages; token preview capped at 240pt (`:82`) in one
-  place, uncapped (`:347`) in the other.
+### C. People list (from `03`)
+| ID | Problem | Evidence | Severity |
+|----|---------|----------|----------|
+| **P-1** | Flat, undifferentiated scroll | single `ForEach(filtered):319-324`, no anchors among 500+ | P1 |
+| **P-2** | `PersonRow` under-signals (no overdue, no task counts) | `:614-653`; `items(forPerson:)` exists `ActionItemStore.swift:1259` | P1 |
+| **P-3** | Reconnect intelligence buried in no-selection dashboard | `goneCold`/etc. `PeopleInsightsView:84-147`, only when `selection==nil` `:557` | P1 |
+| **P-4** | No grouping (sort ≠ triage) | `sorted(_:):71-82` reorders but can't bucket | P1 |
+| **P-5** | Tasks↔People never meet in the list | `ownerPersonID` consumed only in `PersonDetailView`; list has no `ActionItemStore` | P2→P1 |
+| **P-6** | Static geometry/density | sidebar fixed `260/320/380:113`; row fixed `.padding(.vertical,3)` | P3 |
+| **P-7** | Snapshot/live row divergence risk | `SnapshotPersonRow:589-612` vs `PersonRow` independent (accepted; document) | P3 |
+| **P-8** | Sort axis & triage axis conflated | one `PeopleSort:565-584` hidden in icon menu, disabled while searching | P2 |
+| **P-9** | No bridge from "looking at person" → "what they owe" | no one-tap list→scoped-Tasks despite `personSentinel` existing | P2 |
 
-### Person detail (02-person-detail.md)
+### D. Tasks integration (from `04`)
+| ID | Gap | Evidence | Severity |
+|----|-----|----------|----------|
+| **3.1** | Dead meeting text in Tasks **list** row | `TaskRowView.swift:164-170` inert | P1 |
+| **3.2** | Dead meeting text in Tasks **board** card | `ActionItemsBoardView.swift:150` | P1 |
+| **3.3** | Dead owner avatar on **board** card | `ActionItemsBoardView.swift:130-132` | P2 |
+| **3.4** | No open-task signal on **People list** rows | `PersonRow:615-648` | P2 |
+| **3.5** | No open-task badge on **meeting cards** | `MeetingCard.content:123-175` | P2 |
+| **3.6** | Unresolved owners never resurface | backfill only at extraction (`MeetingPipelineController.swift:277-278,438-439`; `QuickNotesController.swift:261-262`); no review surface | P2 |
+| **3.7** | Orphaned-from-meeting tasks (stale `meetingID`/`meetingTitle`) | nothing nulls on delete; title only refreshes on re-extract (`reconcileExtracted:1048`) | P3 |
+| **3.8** | Two divergent owner-matchers | `PersonResolver.resolveOwner:70-114` (strict) vs `PersonDetailView.ownerMatchesPerson:1731-1742` (substring) | P3 |
+| **3.9** | Non-navigable owner in summary `outcomesStrip` | `MeetingSummaryTab.swift:214-216` read-only `Text(owner)` | P3 |
 
-- **P1-A — Three-column cram on the default width. Severity: P1.** `body`
-  (`:366-375`) forces identityPane(300) + workArea(min ~260 inside `maxWidth:760`)
-  + chat(min 320); HSplitView floor ~880pt before either side breathes.
-- **P1-B — 300pt identityPane overload (7 stacked sections). Severity: P1.**
-  `identityPane` (`:503-518`) stacks identity + insight + tags + contact +
-  relationships + encounters + photos into a fixed 300pt rail (268pt usable);
-  `EncounterHeatMap` (`:1677`), rel rows, tag chips all wrap/clip.
-- **P1-C — Two ragged FlowLayout button rows with mixed heights. Severity: P1.**
-  Row 1 (`:852-875`): Brief Me (Primary 34) / Edit (Secondary 30) / ⋯ (Secondary
-  30 icon) / trash (Secondary 30 icon). Row 2 (`:880-897`): Log encounter /
-  Relationship / Ask AI all `.borderless`+`NDS.small`.
-- **P1-D — Sub-44pt taps on important verbs. Severity: P1.** Row 2 verbs
-  (`:884, :889, :895`) are `.borderless`+`NDS.small`, no `.minTap()`, ~20pt tall —
-  core CRM loop verbs under the 44pt tap minimum.
-- **P1-E — `.borderedProminent` reconnect/health CTAs (raw style violation).
-  Severity: P1 (live popover) / P2 (dead header).** `healthWhyPopover` "Log a
-  check-in" `.borderedProminent`+`controlSize(.small)`+`.tint` (`:1003-1006`);
-  dead `header` "Brief Me" `.borderedProminent` (`:1525-1528`). *Overlaps with
-  05 §2.3 #1 and #4 (worst offenders).*
-- **P1-F — Bare `Button("Add")` / `Button("Run")` everywhere. Severity: P1.**
-  `:1073` (tags), `:1134` (favorites), `:1782` (tasks), `:1890` (relationships,
-  `.borderless`), `:2308` (talking points), `:2354` (memories); `Button("Run")`
-  `:2827` (deep); `:1269` (suggestions); `:1600` (photos).
-- **P1-G — "A bunch of unnecessary tabs." Severity: P1.** `MSPillTabs` (`:574`)
-  with 4 tabs in a column so narrow `MSPillTabs` was made horizontally scrolling
-  (`MSComponents.swift:88-92`); tabs hide content (Tasks under Meetings, §1.5).
-- **P2-H — Scrolling section-nav pills (cram tell, dead). Severity: P2.**
-  `sectionNav`/`sectionNavItems` (`:698-738`) — horizontally-scrolling pill rail
-  of 9 jump-chips, superseded; remove.
-- **P2-I — Duplicate "Brief Me" + duplicate "Notes." Severity: P2.** "Brief Me"
-  in live `identityPanel` (`:856`) and dead `header` (`:1525`); "Notes" is both
-  the bio (`:1655`) and attached notes (`:2576`).
-- **P2-J — Inline-text-action `.borderless` clusters. Severity: P2.**
-  `analysisPresetMenu` Analyze (`:2431`), `addEmailControl` (`:1564`),
-  `aiSuggestionsSection` Suggest (`:1172`), photos Add (`:1601`), Save-to-notes
-  (`:2524`), etc. *Overlaps with 05 §2.3 #5.*
-- **P3-K — Borderless menus without chrome. Severity: P3.** `checkInGoalMenu`
-  (`:1704-1710`), `relationshipTypePicker` (`:1041-1049`), `messagesSection` Scan
-  (`:2387-2394`) use `.menuStyle(.borderlessButton)` with no chrome; sanctioned is
-  `.msMenuButtonChrome()`.
+### E. Layout/components — worst button offenders (from `05`)
+| Rank | Offender | Why weird |
+|------|----------|-----------|
+| 1 | `PersonDetailView.swift:1525-1532` (dead 2nd identity header) | `.borderedProminent` Brief Me + bare-default Edit/Delete; duplicate of correct cluster `:856-874` — **fix/delete first** |
+| 2 | `MeetingSummaryTab.swift:446-447` (`followUpButton`) | `.borderedProminent` blue hero on a coral page |
+| 3 | `MeetingSummaryTab.swift:714,720` (Save&regenerate / Just save) | bare `Button(...).controlSize(.small)`, not the MSPrimary+MSSecondary pair |
+| 4 | `PersonDetailView.swift:1006` (Log a check-in) | `.borderedProminent.tint(NDS.brand)` invents a lilac native CTA |
+| 5 | `PersonDetailView.swift:884,889,895,1172,1601,2431,2524,2528,2611,2618` | `.borderless`+`.font(NDS.small/.tiny)` link-blue, drifting 11/12pt heights |
+| 6 | `PersonDetailView.swift:2036,2122` region | mixed bordered/borderless in one cluster |
 
-(02 §3 carries a full 61-row per-button audit — every individual button's
-current style → target style, with the role→style→height contract rules. Those
-rows become the B-phase increments in BUILD-PROMPTS rather than being duplicated
-line-by-line here.)
-
-### People list + navigation (03-people-list.md)
-
-- **P-1 — Flat, undifferentiated scroll. Severity: P1.** Single
-  `ForEach(filtered)` (`:319-324`), no section anchors; with 500+ contacts the
-  4-6 overdue people are buried among hundreds of dormant imports.
-- **P-2 — `PersonRow` under-signals. Severity: P1.** `PersonRow` (`:614-653`):
-  avatar + name + type chip + role/company + relative date; no overdue state, no
-  task count (only a 2pt health ring). *Overlaps with 04 §3.4 / C3.*
-- **P-3 — Reconnect intelligence buried in the no-selection dashboard. Severity:
-  P1.** `goneCold`/`comingUp`/`mostActive` (`PeopleInsightsView.swift:84-147`)
-  shown only when `selection == nil` (`:557-558`); invisible during triage. The
-  "Mark reached out" affordance (`:37-43`) is likewise dashboard-only.
-- **P-4 — No grouping. Severity: P1.** `sorted(_:)` (`:71-82`) reorders but can't
-  bucket; overdue 6 interleaved with 494 others; sort ≠ triage.
-- **P-5 — Tasks↔People never meet in the list. Severity: P2 → P1 for task-driven
-  users.** `ActionItem.ownerPersonID` consumed only inside `PersonDetailView`
-  (`:230`, `:404`); the list has no `ActionItemStore` in env, no "who owes me
-  open tasks" entry, despite `TaskQuery.Scope.person` + a complete deep-link path
-  existing. *Overlaps with 04 §3.4 / C3.*
-- **P-6 — Static geometry / density. Severity: P3.** Sidebar fixed `260/320/380`
-  (`:113`); row fixed `.padding(.vertical,3)` + 28pt avatar; no density control.
-- **P-7 — Snapshot/live divergence risk. Severity: P3 (watch-item).**
-  `SnapshotPersonRow` (`:589-612`) and `PersonRow` (`:614-653`) are independent;
-  new live-row signals momentarily absent on snapshot. Acceptable (sub-second,
-  `allowsHitTesting(false)`); will NOT add task/overdue signals to the snapshot.
-- **P-8 — Sort axis and triage axis conflated. Severity: P2.** One ordering lever
-  (`PeopleSort`, `:565-584`), hidden behind an icon menu (`:216-228`), disabled
-  while searching (`:227`); no "which subset" lever.
-- **P-9 — No bridge from "looking at this person" to "what do they owe me."
-  Severity: P2.** From the list you can open a profile but not one-tap into the
-  Tasks tab scoped to that person, despite `personSentinel` existing.
-
-### Tasks integration (04-tasks-integration.md)
-
-- **§3.1 — Dead meeting text in Tasks list row. Severity: P1.**
-  `TaskRowView.swift:164-170` renders `Label(item.meetingTitle, "calendar")` inert
-  (the table M1 made the identical cell clickable). (Surface M2.)
-- **§3.2 — Dead meeting text in Tasks board card. Severity: P1.**
-  `ActionItemsBoardView.swift:150` — `Text(item.meetingTitle)`, no button. (M3.)
-- **§3.3 — Dead owner avatar on the board card. Severity: P2.**
-  `ActionItemsBoardView.swift:130-132` — `TaskOwnerAvatar`, no nav even when
-  `ownerPersonID` set. (O3.)
-- **§3.4 — No open-task signal on People list rows. Severity: P2.** `PersonRow`
-  (`PeopleListView.swift:615-648`) shows recency, no task count. *Overlaps with
-  03 P-2 / P-5.* (C3.)
-- **§3.5 — No open-task badge on meeting cards. Severity: P2.**
-  `MeetingCard.content` (`MeetingCard.swift:123-175`) has health + outcome line,
-  no "3 open tasks". (C4.)
-- **§3.6 — Unresolved owners never resurface. Severity: P2.** When
-  `PersonResolver.resolveOwner` returns nil, the task keeps owner text with
-  `ownerPersonID == nil` forever; backfill loops
-  (`MeetingPipelineController.swift:277-278, 438-439`;
-  `QuickNotesController.swift:261-262`) run only at extraction; no review surface.
-- **§3.7 — Orphaned-from-meeting tasks (stale `meetingID`/`meetingTitle`).
-  Severity: P3.** Deleted meeting: nothing nulls `meetingID`; "Open meeting"
-  degrades to text (guards at `ActionItemsTableView.swift:187`,
-  `PersonDetailView.swift:1862`) but stays labeled "From <title>". Stale title:
-  refreshes only on a re-extract hitting the same signature
-  (`reconcileExtracted:1048`).
-- **§3.8 — Two divergent owner-matchers. Severity: P3.**
-  (1) `PersonResolver.resolveOwner`/`resolve` (`PersonResolver.swift:70-114`) —
-  email/exact-name/exact-alias, never substring; used on every write.
-  (2) `PersonDetailView.ownerMatchesPerson` (`:1731-1742`) + `ownerTokens`
-  (`:1717-1729`) — hard-link first, then first-name token + substring
-  (`owner.contains(full)`, `:1741`); used by `personTasks` (`:1744-1752`) to
-  display. They disagree.
-- **§3.9 — Non-navigable owner in meeting summary outcomesStrip. Severity: P3.**
-  `MeetingSummaryTab.swift:214-216` — read-only `Text(owner)`, never linked even
-  when `ownerPersonID` exists. *Overlaps with 01 P2 (third action render).* (O5.)
-
-(04 §2 surface audit also catalogs the already-done items — M1/M5/M6 meeting nav,
-O1/O2/O4/O6 owner nav, C1/C2/C5/C6 counts — preserved in the DONE markers below.)
-
-### Layout & components (05-layout-components.md)
-
-- **Drift class — native button chrome (repo-wide tally, §2.2).**
-  `.buttonStyle(.borderedProminent)` ×29 (BAN); `.buttonStyle(.bordered)` ×11
-  (BAN); `.controlSize(...)` ×88 (BAN on a `Button`; OK on ProgressView/TextField);
-  `.buttonStyle(.borderless)` ×75 (BAN on a visible text action). These render
-  native blue/gray push buttons ignoring the Bloom palette and 30/34pt tokens.
-- **Worst offenders (§2.3), all within the five spec files:**
-  1. `PersonDetailView.swift:1525-1532` — dead secondary identity header, "Brief
-     Me" `.borderedProminent` + bare Edit/Delete. *Same as 02 P1-E / P2-I.* Worst
-     single offender — fix first.
-  2. `MeetingSummaryTab.swift:446-447` — `followUpButton`
-     `.borderedProminent.controlSize(.regular)` + self-set `.font(.callout)` (`:444`).
-  3. `MeetingSummaryTab.swift:714, 720` — "Save & regenerate" / "Just save" bare
-     `Button.controlSize(.small)`, no style.
-  4. `PersonDetailView.swift:1006` — health-popover "Log a check-in"
-     `.borderedProminent.controlSize(.small).tint(NDS.brand)` (invents a lilac
-     CTA). *Same as 02 P1-E.*
-  5. `PersonDetailView.swift:884, 889, 895, 1172, 1601, 2431, 2524, 2528, 2611,
-     2618` — `.borderless`+`NDS.small/.tiny` inline text cluster. *Same as 02 P2-J.*
-  6. `PersonDetailView.swift:2036, 2122` region — mixed bordered/borderless next
-     to `MSSecondaryButtonStyle`.
-- **Eyebrow tracking inconsistent (§1.6).** `NotionEyebrow` `.tracking(0.6)`,
-  `MSTintedHeaderCard` `.tracking(0.8)` (`MSComponents.swift:56`),
-  `MSSectionHeader`/`MSSection` none. Standardize on `NDS.sectionLabel` +
-  uppercase + `.tracking(0.6)`.
-- **Hard-coded press springs (§1.5).** The four `MS*ButtonStyle` press animations
-  hard-code `.spring(response: 0.3, dampingFraction: 0.7)`
-  (`NotionDesign.swift:509, 545, 563, 579`) instead of `NDS.springStandard`. Don't
-  introduce new hard-coded springs.
-- **Untitled* legacy aliases (§2.1).** `UntitledPrimaryButtonStyle`
-  (`NotionDesign.swift:497-511`) / `UntitledSecondaryButtonStyle` (`:514-526`)
-  hard-code padding instead of tokens; treat any survivor as a swap target.
-- **Canvas column left-pinned, not centered (§5.1).** Both canvases use
-  `.padding(20).frame(maxWidth:760, alignment:.leading).frame(maxWidth:.infinity,
-  alignment:.leading)` (`UnifiedMeetingDetail.swift:315-317`,
-  `PersonDetailView.swift:583-585`) — centers the clamp then re-pins left; on a
-  wide window the column hugs the left edge. Redesign centers at 760 with
-  `NDS.spaceXL` padding.
-- **`MSSection` adopted in zero call sites (§4).** Defined and merged
-  (`MSComponents.swift:216-311`) but a grep for `MSSection(` in `Sources/` returns
-  nothing — the redesign is its first consumer.
+Ad-hoc tally (repo-wide, `05` §2.2): ~29 `.borderedProminent`, 11 `.bordered`, 88 `.controlSize`, 75 `.borderless`, 200 `.plain` vs 22/25 `MS*` styled.
 
 ---
 
 ## Cross-cutting decisions
+- **One collapsible primitive — `MSSection`** (built Phase F, `MSComponents.swift`). Both canvases stack these; collapse state persists via `section.<key>.expanded`. (01 §4.3, 02 §0.2/§4.2, 05 §4.) Key convention `section.meeting.*` / `section.person.*` (05 §4.7).
+- **One button system** — every action uses an `MS*ButtonStyle`; bans `.bordered`/`.borderedProminent`/`.controlSize`/bare `.borderless` for actions. Wrappers `MSInlineButton` (28pt tertiary) + `msMenuButtonChrome()` (built Phase F). (05 §3, referenced by 01/02.)
+- **Shared canvas column recipe** — `maxWidth 760` **centered**, h-pad `NDS.spaceLG`, between-section `NDS.spaceXL`, within-section `NDS.spaceSM`; one density. Both canvases currently left-pin at hard-coded 20 (`UnifiedMeetingDetail.swift:315-317`, `PersonDetailView.swift:583-585`) — fix to centered tokens. (05 §5.)
+- **Unified owner-matcher** — collapse the two implementations into one `PersonResolver.taskBelongs` used by both the profile and the People facet. (04 §3.8/§4.5.)
+- **Reuse existing deep-link** — People→Tasks uses the existing `ActionItemsView.personSentinel` route; no new router/TaskQuery plumbing. (03 §4.1, 04.)
+- **Per-row task counts are memoized**, never per-row `items(forPerson:)` (O(n·rows)); a `[personID:(open,overdue)]` index mirrors `encounterCountIndex`. (03 §3.8.)
+- **CI guard** — extend `design-lint.sh` to fail on `.borderedProminent`/`.bordered`/`.controlSize` on `Button`. (05 §6.3.)
 
-Shared decisions that touch more than one area, with the docs each came from.
-
-1. **Shared `MSSection` is the de-tabbing spine.** `MSComponents.swift:216-311`:
-   `MSSection(title, systemImage:, count:, persistenceKey:, defaultExpanded:,
-   trailing:, content:)`. Chevron + eyebrow + count + a `trailing` accessory kept
-   outside the toggle hit area; collapse persists under
-   `@AppStorage("section.<key>.expanded")`; reduce-motion-aware; owns no
-   horizontal padding (host wraps). *From 05 §4; consumed by 01 §4.3, 02 §4.2.*
-   **Persistence-key namespacing:** `meeting.<x>` and `person.<x>` only (component
-   prepends `section.`, appends `.expanded`); never collide. *05 §4.7.*
-
-2. **One sanctioned button style per role (the button system).** Primary 34 /
-   Secondary 30 / Tertiary `MSInlineButton` 28 / Icon `NotionIconButton`+`.minTap()`
-   30-visible-44-hit / Danger 34 / Menu `.msMenuButtonChrome()` 30. Bans:
-   `.borderedProminent`, `.bordered`, `.controlSize` on a Button, `.tint` to
-   recolor a native button, `.borderless` on a visible text action, hand-built
-   chrome. One Primary per section/header. *From 05 §2-3; the contract for 02 §3
-   (61-button audit) and 01 (header buttons).*
-
-3. **Canvas column recipe.** Max content width **760**, **centered**
-   (`.frame(maxWidth:760).frame(maxWidth:.infinity, alignment:.center)`),
-   `NDS.spaceXL` (24) horizontal + vertical padding, `NDS.spaceXL` between
-   sections, `NDS.spaceMD` (12) within a section, `NDS.spaceSM` (8) per action
-   row. Top inset (`splitPaneTopInset` 60 / `tabTopInset` 14) comes from the host,
-   don't re-add. *From 05 §5; applied by 01 §4 and 02 §4. Note: the meeting canvas
-   uses 20pt h-padding to match the header inset per 01 §4.3 — a deliberate local
-   exception to the spaceXL rule; the person canvas uses 20pt per 02 §9.2.*
-
-4. **Unified owner-matcher.** Collapse the two divergent matchers into
-   `PersonResolver.taskBelongs(_:to:)` (hard-link first, else the same
-   email/exact-name/exact-alias resolution used on write — never substring).
-   `PersonDetailView.personTasks` adopts it; delete `ownerMatchesPerson` +
-   `ownerTokens`. *From 04 §3.8 / §4.5; intentionally tightens the profile to
-   match the rail/counts, so land re-resolve (04 B8) before tightening.*
-
-5. **Shared task-link chips (deep-link reuse).** New
-   `Sources/MeetingScribe/UI/TaskLinkChips.swift`: `TaskMeetingChip(item:)`
-   (button → `router.openMeeting` when `meeting(id:)` resolves, else inert text;
-   branches on `source == "voice_note"` → `router.route(kind:.voiceNote)`; nothing
-   when `isManual`) and `TaskOwnerChip(item:, size:)` (avatar+name, button →
-   `router.openPerson` when linked). Reused by Tasks list/board, meeting
-   outcomesStrip, and the meeting canvas Outcomes section. *From 04 §4.1.*
-
-6. **Person-scope task deep-link path (reuse, do not rebuild).**
-   `router.openTasks(route: ActionItemsView.personSentinel(person.id))` — the
-   existing `personSentinel` → `TasksRoute.person` → `TaskQuery.Scope.person` chain.
-   Used by both the People-list task chip (03 §4.2, 04 §4.2) and the person
-   canvas. *From 03 §4.1, 04 §4.2.*
-
-7. **Reusable overdue predicate.** Extract `PeopleStore.isOverdueForCheckIn(_:)`
-   + `overdueDays(_:)` from `overdueCheckInCount` (`:1367-1375`) /
-   `overdueCheckInNames` (`:1379-1390`); pure refactor (nav badge unchanged).
-   Single source of truth for the nav badge, the People "Needs attention" triage,
-   the OVERDUE section, and the row pill. *From 03 §3.4; consumed by 03 §3.3/3.5/3.6.*
-
-8. **Memoized per-person task-count index.** Mirror `encounterCountIndex` — one
-   O(tasks) pass on task mutation into `[personID:TaskCounts]`, never
-   `items(forPerson:)` per row (O(people×tasks)). New store helpers
-   `openCount(forPerson:)` / `overdueCount(forPerson:)` / `unassignedOwnerTasks()`
-   fold the duplicated inline predicates (TodayView, sidebar, PersonContextBuilder)
-   into one place. *From 03 §3.8, 04 §4.5.*
-
-9. **Bounded-height rule for self-scrolling panes (the C-A physics).** Every
-   descendant containing `MarkdownEditor` / `RichMarkdownEditor` /
-   `TranscriptSyncView` / `LiveTranscriptScroll` / `ChatPanel` must have a finite
-   frame height before mount; the outer canvas is NOT a `ScrollView` around the
-   editor. *From 01 §3 (C-A); the meeting canvas is the primary consumer; the
-   person canvas's chat column is already separate so it's lower-risk there.*
-
-10. **Design-lint CI guard.** Extend `scripts/design-lint.sh` with a button-chrome
-    scan (`.borderedProminent`, `.bordered`, `.controlSize` on a Button excluding
-    ProgressView/TextField), with a `// design-lint:allow` escape hatch; flip to
-    `fail` in CI only after B-phase drives the count to zero. *From 05 §6 Group C.*
-
-11. **Eyebrow + spring standardization.** Eyebrow = `NDS.sectionLabel` + uppercase
-    + `.tracking(0.6)`; any new animation through `NDS.motion(_:reduce:)`; no new
-    hard-coded springs (use `NDS.springStandard`). *From 05 §1.5-1.6, §7.*
+## Hard constraints (do not fight)
+- **C-A:** `MarkdownEditor`/`RichMarkdownEditor` is `NSScrollView`-backed (`isVerticallyResizable`, `greatestFiniteMagnitude`) — it CANNOT nest in an outer `ScrollView`. The notes/transcript/chat panes get **bounded explicit heights** and scroll internally; the page scrolls via collapsed short headers. A top-level `ScrollView` is safe only once every long child has a fixed frame. (01 §3 C-A.)
+- **C-B:** `TranscriptSyncView` is heavy — lazy-mount behind a collapsed disclosure (`if expanded { … }`). (01 §3 C-B.)
+- **C-C:** transcript slot multiplexes live/upcoming/past — keep the multiplex, relabel the section per mode. (01 §3 C-C.)
+- **C-D:** one shared `AudioPlayerController`. (01 §3 C-D.)
+- **Person "fit is good now"** — current no-clip safety = FlowLayout wraps + scrolling pills; the redesign moves actions to the wide canvas (≥480–560pt) and keeps FlowLayout for the metadata row. Flag fit risk on every person step (R1 name overflow, R2 metadata wrap, R3 mins). (02 §5.)
 
 ---
 
-## Global build sequencing
+## Complete build sequence (every increment from every doc)
 
-Dependency-ordered phases. The foundation ships first because both canvases and
-Tasks stack on it. Within Tasks/People-list the order is "plumbing → signals →
-structure → geometry → deep-links". The two big canvases (M, P) are
-flag-gated / incremental and come after their button cleanup. Cleanup (X) is
-last, after soak.
+Phase order **F → B → T → L → M → P → X**. ✅ = merged. Each increment compiles green before merge; `make install` every ~2.
 
-```
-F (foundation: confirm primitives, button swaps, canvas recipe, lint guard)
-│
-├─ B (button normalization across the five files; depends on F's role table)
-│
-├─ T (tasks integration; chips + store helpers + counts + review + matcher)
-│      │
-│      └─ L (people list; consumes T's openCount + the overdue predicate)
-│
-├─ M (meeting canvas de-tab; depends on B for in-section buttons, T for the
-│      Outcomes merge + navigable owner)
-│
-└─ P (person canvas de-tab; depends on B (Phase A buttons), T (taskBelongs,
-       owner chips), and the promoted Tasks section)
-│
-X (cleanup: delete tab machinery, dead vars, flag branches — after soak)
-```
+### Phase F — Foundation ✅
+- **F1** ✅ `MSInlineButton` + `msMenuButtonChrome()` (`MSComponents.swift`).
+- **F2** ✅ `MSSection` collapsible (+ `EmptyView` convenience init).
 
-Hard ordering edges:
-- **F → everything.** `MSSection`, the button styles, and the canvas recipe must
-  exist and be confirmed first. (Already merged — see DONE.)
-- **B before M and P's structural change.** Buttons inside each section should be
-  correct before the section container swaps (05 Group A before Group B; 02 Phase
-  A before Phase C/D).
-- **T (B8 re-resolve) before T (B7 tighten matcher).** Tightening the profile
-  matcher drops legacy substring hits — land the re-resolve pass first/together so
-  those tasks get real hard links (04 §3.8 risk).
-- **T (openCount, overdue predicate) before L.** The People-list row pill, triage,
-  and grouping all consume them.
-- **L grouping (Increment 5) before triage (6) is fine**, but both gate on the
-  task index (Increment 2) and the predicate (Increment 1).
-- **M Outcomes merge (Step 3) needs `MeetingActionRow` owner-jump** (lift from the
-  doomed `InlineActionItemRow`) — a small T-adjacent edit.
+### Phase B — Buttons (05 Group A + 02 Phase A)
+- **B1** ✅ Meeting-header: Options menu → `msMenuButtonChrome()`; attendee-rail → `MSInlineButton` (`MeetingDetailHeader.swift`).
+- **B2** Delete dead person code: `header:1511-1534`, `tagRow:1536-1540`, `sectionNav`/`sectionNavItems:698-738` (clears offender #1 + P2-H). *(02-A1)*
+- **B3** `healthWhyPopover` "Log a check-in" `.borderedProminent`→`MSPrimaryButtonStyle` (`PersonDetailView.swift:1003-1006`, offender #4). *(02-A2)*
+- **B4** Person `.borderless`/bare text actions → `MSInlineButton` (tags/favorites/talking-points/memories/photos/suggest/analyze/save/deep, P1-F/P2-J, offender #5). *(02-A3)*
+- **B5** Person glyph buttons → `NotionIconButton`+`.minTap()` or `.plain`+`.minTap()` (chip×, reset chat, remove-rel, log-meeting+, memory delete, dismiss, expand/delete, encounter delete). *(02-A4)*
+- **B6** Person menu chrome: `relationshipTypePicker:1041-1049`, `checkInGoalMenu:1704-1710`, Scan menu `:2387-2394` → `.msMenuButtonChrome()` (P3-K). *(02-A5)*
+- **B7** Person sheet/popover footers → Secondary; sheet confirms → Primary (addEmail/reconnect/evidence/customPrompt/addToMeeting/AddRelationshipSheet). *(02-A6)*
+- **B8** `MeetingSummaryTab.swift:446-447` `followUpButton` `.borderedProminent`→`MSPrimaryButtonStyle` (offender #2). *(05 Group A)*
+- **B9** `MeetingSummaryTab.swift:714,720` Save&regenerate/Just save → MSPrimary+MSSecondary pair (offender #3). *(05 Group A)*
 
-### Already DONE (do not re-implement)
+### Phase T — Tasks linkage (04 build plan)
+- **T1** ✅ Owner→person nav in meeting summary `InlineActionItemRow` (`MeetingSummaryTab.swift`).
+- **T2** ✅ Table meeting-cell + owner navigate (`ActionItemsTableView.swift`).
+- **T3** ✅ Person `taskRow` source-meeting link (`PersonDetailView.swift`).
+- **T4** ✅ `openCount/overdueCount(forPerson:)` + `unassignedOwnerTasks()` (`ActionItemStore.swift`). *(04-B4)*
+- **T5** Shared `TaskMeetingChip`/`TaskOwnerChip` components. *(04-B1)*
+- **T6** Adopt `TaskMeetingChip` in the Tasks **list** row — closes 3.1 (`TaskRowView.swift:164-170`). *(04-B2)*
+- **T7** Adopt chips on the **board** card — closes 3.2, 3.3 (`ActionItemsBoardView.swift:130-132,150`). *(04-B3)*
+- **T8** Open-task badge on **meeting cards** — closes 3.5 (`MeetingCard.swift:123-175`). *(04-B6)*
+- **T9** Open-task pill on People-list rows — closes 3.4 (same chip as L3; built once). *(04-B5)* ✅
+- **T10** Unify owner-matcher → `PersonResolver.taskBelongs` — closes 3.8. *(04-B7)*
+- **T11** Re-resolve unassigned owners on People mutation — closes 3.6 pt1. *(04-B8)*
+- **T12** "Unassigned owners" review rail — closes 3.6 pt2 (`ActionItemsSidebar`). *(04-B9)*
+- **T13** `refreshMeetingTitle` on rename + deleted-meeting degrade tooltip — closes 3.7. *(04-B10)*
+- **T14** Owner nav in summary `outcomesStrip` — closes 3.9 (`MeetingSummaryTab.swift:214-216`). *(04-B11)*
 
-- **Phase F (foundation) merged.** `MSSection`, `MSSectionHeader`,
-  `MSInlineButton`, `msMenuButtonChrome`, `MSEmptyState`, `MSSkeleton`,
-  `NotionIconButton`, the four `MS*ButtonStyle`, and all `NDS` tokens exist
-  (05 Step 0 confirms; greenfield `MSSection` — first consumer is this work).
-- **B1 (meeting-header buttons) merged.** The meeting header's Save/Cancel
-  (Primary/Secondary), `MSInlineButton`, `msMenuButtonChrome` "Options", and the
-  `MSDangerButtonStyle` Stop already follow the role table
-  (`MeetingDetailHeader.swift:35/44/128/131/210/401-408`).
-- **T1 merged** — owner→person link in summary `InlineActionItemRow`
-  (`MeetingSummaryTab.swift:611-625`; 04 B0a / surface O4).
-- **T2 merged** — Tasks table meeting-cell + owner navigation
-  (`ActionItemsTableView.swift:145-157, 184-199`; 04 B0b / M1 / O1).
-- **T3 merged** — person `taskRow` meeting link
-  (`PersonDetailView.swift:1859-1872`; 04 B0c / M5).
-- Also already navigable per 04 §2 (not separate increments): O2 (list-row owner),
-  O6 (task-page assignee), M6 (task-page "From meeting"); count surfaces C1
-  (rail People facet), C2 (Today), C5 (summary header), C6 (profile Tasks).
+### Phase L — People list (03 build plan)
+- **L1** ✅ Extract `isOverdueForCheckIn`/`daysOverdue` (`PeopleStore.swift`). *(03-Inc1)*
+- **L2** ✅ Inject `ActionItemStore` + memoized task-count index (`PeopleListView.swift`). *(03-Inc2)*
+- **L3** ✅ `PersonRow` task chip. *(03-Inc3, = T9)*
+- **L4** ✅ `PersonRow` overdue pill. *(03-Inc4)*
+- **L5** ✅ Section grouping + triage segmented control. *(03-Inc5 + Inc6)*
+- **L6** Density toggle (comfortable/compact) + optional meeting-count signal. *(03-Inc7)*
+- **L7** ✅ Widen sidebar `280/340/420`. *(03-Inc9)*
+- **L8** ✅ Task-chip deep-link + "Mark reached out" row action. *(03-Inc8)*
+- **L9** Birthday/special-date clause for "This week" grouping. *(03-Inc9)*
+- **L10** Polish + edge passes (search-mode no-grouping, snapshot divergence note, select-mode). *(03-Inc10)*
 
-Everything else (the B2… button swaps, T B1-B11 minus B0a-c, all of L, all of M,
-all of P, X) is remaining — enumerated in BUILD-PROMPTS.md.
+### Phase M — Meeting canvas de-tab (01 build plan; flag `meetingCanvasV2`)
+- **M0** Confirm `MSSection`+tokens (done via F). *(01-Step0)*
+- **M1** Flag + canvas scaffold (flag-off identical). *(01-Step1)*
+- **M2** Canvas chrome split: top `ScrollView` group vs bottom group (C-A). *(01-Step2)*
+- **M3** Outcomes section (the P2 merge: `MeetingActionRow` CRUD + decisions; drop preview + legacy `actionItemsSection`). *(01-Step3)*
+- **M4** Highlights section. *(01-Step4)*
+- **M5** Notes section (bounded editor + drag grabber, C-A). *(01-Step5)*
+- **M6** Summary section (+ generating/failed unification, P7). *(01-Step6)*
+- **M7** Transcript section (lazy + mode-multiplex, C-B/C-C). *(01-Step7)*
+- **M8** Ask AI section + rewire teleports to scroll-to-anchor (P4). *(01-Step8)*
+- **M9** Related & linked section + reviewBanner rewire; flip the flag. *(01-Step9)*
+- **M10** Cleanup: delete `tabPicker`/`switch tab`/`applySmartTabDefault`/`actionsBody`/legacy bodies/`DetailTab`. *(01-Step10)*
 
----
+### Phase P — Person canvas de-tab (02 build plan)
+- **P1** `compactHeader` var (avatar + name + one Primary "Brief Me" + ⋯ overflow; type+health in FlowLayout metadata row). *(02-B1)*
+- **P2** Swap `identityPanel` button rows for `compactHeader` (still in identityPane — tightest fit test). *(02-B2)*
+- **P3** Introduce `personCanvas` (one ScrollView, sections inline, no tabs yet). *(02-C1)*
+- **P4** Repoint `body` to two-column split; delete `detailPane`/`identityPane`/`workArea`/`workContent`. *(02-C2)*
+- **P5** Convert each section to `MSSection` (strip per-section eyebrows; rename Notes→About/Saved analyses); promote **Tasks** to top-level expanded. *(02-D1)*
+- **P6** Delete `MSPillTabs` usage + `PersonTab` + `personTab`. *(02-D2)*
+- **P7** Rewrite `keyboardVerbs` (N expand-then-focus memories; T focus task field; drop ⌘1–5). *(02-E1)*
+- **P8** Empty-states + consistency pass (self-hide vs inline empty line; provenanceFooter once). *(02-F1)*
+- **P9** Reduce-motion + a11y labels. *(02-F2)*
+- **P10** Build verification. *(02-F3)*
 
-## Known hard constraints
+### Phase X — Cleanup / system
+- **X1** Standardize both canvas columns to centered `maxWidth 760` + `NDS.spaceXL`/`spaceLG` tokens. *(05 §5)*
+- **X2** `MSSection` adoption sweep for any remaining bare-VStack sections (05 Group B).
+- **X3** Extend `design-lint.sh` to fail on `.borderedProminent`/`.bordered`/`.controlSize` on `Button` (05 Group C).
 
-1. **MarkdownEditor can't nest in an outer ScrollView (C-A).**
-   `MarkdownEditor.makeNSView` (`MarkdownEditor.swift:26-76`) builds its own
-   `NSScrollView` with an unbounded-height text view; inside a SwiftUI `ScrollView`
-   it gets infinite proposed height, the inner scroller never engages, two scroll
-   systems fight, long notes push everything off-screen. `RichMarkdownEditor`
-   (`:707`), `TranscriptSyncView` (`:114-123`), `LiveTranscriptScroll`
-   (`MeetingTranscriptTab.swift:84`), and `ChatPanel` have the same shape. **The
-   meeting canvas outer container is NOT a ScrollView around these** — short
-   sections scroll together in one `ScrollView`; the editor/transcript/chat sit at
-   explicit `geo`-derived bounded heights below it. Summary (read-only
-   `MarkdownEditor`) gets a capped internal scroll `min(420, max(180, h*0.45))`.
-   *01 §3 C-A; the single highest-risk constraint on the meeting canvas.*
+**Suggested order:** F ✅ → B1 ✅ → T1–T4 ✅ → L1–L5 ✅ → L7,L8 ✅ → **B2–B9 → L6,L9,L10 → T5–T8 → M1–M10 → P1–P10 → T10–T14 → X1–X3.** (T9/L3 are the same chip — already built.)
 
-2. **Lazy transcript (C-B).** `TranscriptSyncView` parses the raw transcript on
-   appear (`:124-128`), builds a speaker map, renders a `LazyVStack` of hundreds of
-   segments — the most expensive thing on the page. Never mount eagerly: gate on
-   the section's expanded state + a `transcriptEverExpanded` latch; `.past`
-   defaults collapsed, `.live`/`.upcoming` expanded. *01 §3 C-B.*
-
-3. **Mode multiplex (C-C / C-D).** The transcript slot is three unrelated views by
-   mode (live scroll / pre-meeting brief / synced transcript). Keep the `switch
-   mode` inside the section body but make the section title + default-collapse
-   mode-aware (`transcriptSectionTitle`); omit the whole section for `.past` with
-   no transcript (no empty husk). One shared `AudioPlayerController` (C-D) stays as
-   `@StateObject` on the parent so audio survives a collapsed transcript. *01 §3
-   C-C / C-D.*
-
-4. **Person "fit is good" risk.** The user confirmed nothing clips today. The
-   redesign widens the constraint (300pt rail → ~720pt canvas) which is safer, but
-   three new fit risks must be guarded: **R1** compactHeader Row 1 (long name +
-   Brief Me + ⋯) — `lineLimit(1).truncationMode(.tail)` + `Spacer(minLength:8)`,
-   buttons right-anchored and never clip; **R2** compactHeader Row 2 (type picker +
-   health + known-since) — must be a `FlowLayout` so it wraps; **R3** HSplitView
-   mins lowered (detail 560→480, chat 320→300, floor ~780) — keep generous
-   idealWidths. **Rule: never a fixed-width HStack of ≥2 growable text controls —
-   put it in a FlowLayout.** *02 §5.*
-
-5. **Board-card drag vs nested button.** `ActionItemsBoardView` cards are
-   `.draggable`; a nested `TaskMeetingChip`/`TaskOwnerChip` button can swallow the
-   drag start — verify drag still works (the title is the drag handle). *04 B3.*
-
-6. **`ActionItemStore` env injection is a runtime, not compile, dependency.**
-   Injecting it into the People list (03 Increment 2) needs a `make install`
-   runtime check — a missing `@EnvironmentObject` is a crash, not a build error.
-   *03 §5 Increment 2.*
-
-7. **People-list perf invariants.** The synchronous `snapshotRows` fast-path must
-   render frame-0; no O(n²) per render (memoize task counts); search stays FTS5
-   relevance-ordered with NO grouping/sort while querying; `selection` ↔
-   `router.selectedPersonID` two-way sync intact. *03 §0.3.*
-
-8. **Don't null `meetingID` on meeting delete.** It would flip
-   `isManual`/`needsTriage` and change `signature`, silently un-deduping the task
-   against its own history. Prefer the soft degrade (inert chip + "source meeting
-   deleted" tooltip). *04 §3.7 / §4.4 / §6.2.*
+**Counts:** ~42 distinct problems/gaps (7 + 11 + 9 + 9 + 6 offenders) across the five docs; ~57 build increments (B:9, T:14, L:10, M:11, P:10, X:3), of which 13 are ✅ merged.
