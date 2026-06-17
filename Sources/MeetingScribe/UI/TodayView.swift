@@ -25,6 +25,8 @@ struct TodayView: View {
     /// D5-1 "Today, calm by default": the long-tail sections collapse under one
     /// "More" disclosure so Today opens calm. Default-collapsed; remembered.
     @AppStorage("today.moreExpanded") private var moreExpanded = false
+    /// 5-H: once dismissed, the new-user first-steps card stays gone.
+    @AppStorage("today.firstStepsDismissed") private var firstStepsDismissed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Navigation is owned by `WorkspaceRouter` (D1-1): meeting cards route to
@@ -58,10 +60,78 @@ struct TodayView: View {
 
     // MARK: - Feed (left column)
 
+    /// 5-H: dismissible onboarding card on the new-user blank state — three
+    /// concrete first actions. Self-hides once the user has any meetings or
+    /// once dismissed.
+    @ViewBuilder
+    private var firstStepsCard: some View {
+        if !firstStepsDismissed && manager.pastMeetings.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("First steps")
+                        .scaledFont(15, weight: .semibold).foregroundStyle(NDS.textPrimary)
+                    Spacer()
+                    Button { firstStepsDismissed = true } label: {
+                        Image(systemName: "xmark").scaledFont(11).foregroundStyle(NDS.textTertiary)
+                    }
+                    .buttonStyle(.plain).help("Dismiss")
+                }
+                firstStepRow("Record your first meeting", "record.circle") { router.section = .meetings }
+                firstStepRow("Add a person", "person.badge.plus") { router.section = .people }
+                firstStepRow("Set a check-in cadence", "bell.badge") { router.section = .people }
+            }
+            .msCard(accentBorder: true)
+        }
+    }
+
+    private func firstStepRow(_ title: String, _ icon: String,
+                              _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon).scaledFont(13).foregroundStyle(NDS.brand).frame(width: 18)
+                Text(title).scaledFont(13).foregroundStyle(NDS.textSecondary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").scaledFont(10).foregroundStyle(NDS.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 5-I: after 5pm, a wrap-up card closing the daily loop — how many of
+    /// today's tasks are still open. Self-hides before 5pm.
+    @ViewBuilder
+    private var endOfDayCard: some View {
+        if Calendar.current.component(.hour, from: Date()) >= 17 {
+            let openToday = actionItems.items.filter {
+                $0.status != .completed
+                    && ($0.dueDate.map { Calendar.current.isDateInToday($0) } ?? false)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "moon.stars.fill").scaledFont(13).foregroundStyle(NDS.brand)
+                    Text("End of day")
+                        .scaledFont(15, weight: .semibold).foregroundStyle(NDS.textPrimary)
+                }
+                if openToday.isEmpty {
+                    Text("Today's tasks are all wrapped up. Nice work.")
+                        .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                } else {
+                    Text("\(openToday.count) task\(openToday.count == 1 ? "" : "s") still open for today.")
+                        .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                    Button("Review tasks") { router.section = .actions }
+                        .buttonStyle(.borderless).font(NDS.small)
+                }
+            }
+            .msCard()
+        }
+    }
+
     private var feed: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
+                firstStepsCard   // 5-H: dismissible new-user onboarding
                 MorningBriefCard(contextSummary: morningContextSummary)   // 5-C
                 turnaroundCard  // U3-2: the back-to-back bridge (imminent only)
                 dayShapeStrip   // U3-3: the 7am coffee scan, answered in 10s
@@ -95,6 +165,8 @@ struct TodayView: View {
                 // Kanban board of all open tasks, with one-tap add (Notion/Trello
                 // style) right on the home page.
                 HomeTasksBoard(store: manager.actionItems)
+
+                endOfDayCard   // 5-I: after-5pm wrap-up
 
                 // D5-1: everything below the fold collapses under one "More"
                 // disclosure so the home screen opens calm.
