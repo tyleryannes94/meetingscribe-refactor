@@ -32,34 +32,31 @@ struct MeetingCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
                 timeColumn
                 content
                 Spacer(minLength: 0)
                 accessory
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(backgroundFill)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(borderColor,
                                   lineWidth: variant == .live ? 1.5
-                                           : isExpanded ? 1.2 : 0.5)
+                                           : isExpanded ? 1.0 : 0)
             )
-            .shadow(color: .black.opacity(hovering ? 0.06 : 0.025),
-                    radius: hovering ? 8 : 3,
-                    y: hovering ? 3 : 1)
-            .scaleEffect(hovering && !reduceMotion ? 1.005 : 1.0)
+            .scaleEffect(hovering && !reduceMotion ? 1.003 : 1.0)
             .animation(NDS.motion(.spring(response: 0.18, dampingFraction: 0.85), reduce: reduceMotion), value: hovering)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .contextMenu { rowMenu }   // right-click actions (V5 SC-7)
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contextMenu { rowMenu }
         .task(id: meeting.id) { await loadOutcome() }
     }
 
