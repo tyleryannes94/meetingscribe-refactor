@@ -271,27 +271,24 @@ struct MSSection<Content: View, Trailing: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: NDS.spaceSM) {
                 Button(action: toggle) {
-                    HStack(spacing: NDS.spaceSM) {
+                    HStack(spacing: 8) {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .scaledFont(10, weight: .semibold)
+                            .scaledFont(9, weight: .semibold)
                             .foregroundStyle(headerHovered ? NDS.textSecondary : NDS.textTertiary)
-                            .frame(width: 12, alignment: .center)
+                            .frame(width: 10, alignment: .center)
                         if let systemImage {
                             Image(systemName: systemImage)
-                                .scaledFont(12, weight: .semibold)
-                                .foregroundStyle(NDS.brand.opacity(0.85))
-                                .frame(width: 16)
+                                .scaledFont(11, weight: .medium)
+                                .foregroundStyle(NDS.textSecondary)
+                                .frame(width: 14)
                         }
-                        Text(title.uppercased())
-                            .scaledFont(11, weight: .heavy, relativeTo: .caption)
-                            .tracking(0.8)
+                        Text(title)
+                            .scaledFont(12, weight: .semibold, relativeTo: .body)
                             .foregroundStyle(NDS.textPrimary)
                         if let count, count > 0 {
                             Text("\(count)")
                                 .font(NDS.tiny.monospacedDigit())
-                                .foregroundStyle(NDS.textSecondary)
-                                .padding(.horizontal, 6).padding(.vertical, 1)
-                                .background(NDS.fieldBg, in: Capsule())
+                                .foregroundStyle(NDS.textTertiary)
                         }
                         Spacer(minLength: NDS.spaceSM)
                     }
@@ -300,22 +297,16 @@ struct MSSection<Content: View, Trailing: View>: View {
                 .buttonStyle(.plain)
                 trailing()
             }
-            .padding(.vertical, NDS.spaceSM)
-            .padding(.horizontal, NDS.spaceSM)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
             .background(headerHovered ? NDS.rowHover : Color.clear,
-                        in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+                        in: RoundedRectangle(cornerRadius: NDS.radiusSmall))
             .onHover { headerHovered = $0 }
             if isExpanded {
                 content()
-                    .padding(.top, NDS.spaceSM)
-                    .padding(.leading, 28)   // align with title baseline (chevron + icon)
+                    .padding(.top, 6)
+                    .padding(.horizontal, 6)
             }
-            // Thin hairline at the bottom of every section to give the canvas
-            // visual rhythm without forcing each section into its own card.
-            Rectangle()
-                .fill(NDS.divider)
-                .frame(height: 1)
-                .padding(.top, NDS.spaceMD)
         }
     }
 }
