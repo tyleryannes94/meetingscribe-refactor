@@ -20,24 +20,24 @@ struct MeetingActionRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             Button {
                 store.setStatus(item.id, status: item.status == .completed ? .open : .completed)
             } label: {
                 Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "circle")
-                    .scaledFont(15)
+                    .scaledFont(14)
                     .foregroundStyle(item.status == .completed ? NDS.mint : NDS.textTertiary)
             }
             .buttonStyle(.plain)
             .padding(.top, 1)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
-                    .scaledFont(13.5, weight: .medium)
+                    .font(.callout)
                     .strikethrough(item.status == .completed)
                     .foregroundStyle(item.status == .completed ? NDS.textTertiary : NDS.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     if item.dueDate != nil { DueChip(date: item.dueDate, status: item.status) }
                     ownerMenu
                 }
@@ -46,20 +46,16 @@ struct MeetingActionRow: View {
             Spacer(minLength: 8)
 
             if item.needsTriage {
-                Button { store.confirm(item.id) } label: {
-                    Label("Tasks", systemImage: "arrow.right.circle")
+                MSInlineButton("Tasks", systemImage: "arrow.right.circle") {
+                    store.confirm(item.id)
                 }
-                .buttonStyle(MSSecondaryButtonStyle())
                 .help("Add to the Tasks workspace")
             } else if item.status != .completed {
                 Label("In Tasks", systemImage: "checkmark")
                     .font(NDS.tiny).foregroundStyle(NDS.mint)
             }
         }
-        .padding(12)
-        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
-            .strokeBorder(NDS.hairline, lineWidth: 1))
+        .padding(.vertical, 4)
         .opacity(item.status == .completed ? 0.7 : 1)
     }
 
