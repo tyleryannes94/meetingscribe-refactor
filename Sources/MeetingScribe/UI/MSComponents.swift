@@ -86,28 +86,32 @@ struct MSPillTabs<Tab: Hashable>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(tabs, id: \.tab) { item in
-                let active = item.tab == selection
-                Button {
-                    withAnimation(NDS.motion(NDS.springStandard, reduce: reduceMotion)) {
-                        selection = item.tab
-                    }
-                } label: {
-                    Text(item.label)
-                        .scaledFont(13, weight: active ? .bold : .semibold)
-                        .foregroundStyle(active ? NDS.onAccent : NDS.textSecondary)
-                        .padding(.horizontal, 15).padding(.vertical, 8)
-                        .background {
-                            if active {
-                                Capsule().fill(NDS.accentGradient)
-                            } else {
-                                Capsule().fill(.clear)
-                            }
+        // Scroll horizontally so the tabs never cut off in a narrow column
+        // (the person-profile work area can be ~260pt wide).
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(tabs, id: \.tab) { item in
+                    let active = item.tab == selection
+                    Button {
+                        withAnimation(NDS.motion(NDS.springStandard, reduce: reduceMotion)) {
+                            selection = item.tab
                         }
-                        .contentShape(Capsule())
+                    } label: {
+                        Text(item.label)
+                            .scaledFont(13, weight: active ? .bold : .semibold)
+                            .foregroundStyle(active ? NDS.onAccent : NDS.textSecondary)
+                            .padding(.horizontal, 15).padding(.vertical, 8)
+                            .background {
+                                if active {
+                                    Capsule().fill(NDS.accentGradient)
+                                } else {
+                                    Capsule().fill(.clear)
+                                }
+                            }
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
     }
