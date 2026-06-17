@@ -602,8 +602,10 @@ struct PersonDetailView: View {
     private var storyItems: [StoryItem] {
         var items: [StoryItem] = []
         for e in people.encounters(for: current.id) {
+            let emoji = e.mood.flatMap { Encounter.Mood(rawValue: $0)?.emoji }
+            let title = emoji.map { "\($0)  \(e.eventName)" } ?? e.eventName
             items.append(.init(date: e.date, icon: "checkmark.circle.fill", kind: "Encounter",
-                               title: e.eventName, detail: e.notes.isEmpty ? nil : e.notes))
+                               title: title, detail: e.notes.isEmpty ? nil : e.notes))
         }
         for m in current.meetingMentionRecords {
             items.append(.init(date: m.date, icon: "bubble.left.and.bubble.right.fill", kind: "Meeting",
