@@ -139,6 +139,21 @@ final class RelationshipNotificationManager {
         }
     }
 
+    /// 2-D: an ad-hoc "remind me to reach out" nudge scheduled `days` from now,
+    /// independent of the cadence reminders. Used by the KeepInTouch board.
+    func scheduleOneOff(person: Person, days: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = "\(person.relationshipType.emoji) Reach out to \(person.displayName)"
+        content.body = "You asked to be reminded to get in touch."
+        content.userInfo["personID"] = person.id
+        content.sound = .default
+        let interval = max(60, TimeInterval(days) * 86_400)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+        let req = UNNotificationRequest(identifier: "oneoff-\(person.id)-\(Int(interval))",
+                                        content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(req)
+    }
+
     private func checkInBody(for type: RelationshipType) -> String {
         switch type {
         case .romanticPartner: return "How are things between you two?"
