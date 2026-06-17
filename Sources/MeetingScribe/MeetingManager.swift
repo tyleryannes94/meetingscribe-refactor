@@ -1040,6 +1040,9 @@ final class MeetingManager: ObservableObject {
                 if !summary.isEmpty { self.decisions.extract(from: summary, meeting: m) }
                 if i % 20 == 19 { await Task.yield() }
             }
+            // P0-E: ensure decisions that were already extracted (so `extract`
+            // no-ops) still land in the vault index after the P0 upgrade.
+            self.decisions.backfillVaultIndexIfNeeded()
         }
     }
 
