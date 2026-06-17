@@ -140,6 +140,25 @@ final class PeopleChatTools {
                         ])
                     ])
                 ])
+            ),
+            .init(
+                name: "get_person_message_insights",
+                description: "Extract STRUCTURED insights from a person's iMessage history: recurring topics, notable verbatim quotes (with dates), commitments/plans with due dates, and overall tone. Use for 'what do we mostly text about?', 'pull any commitments or dates from my texts with X', or 'what are memorable things they've said?'. Requires Full Disk Access. The `id` accepts a UUID / name / email / phone.",
+                input_schema: .object([
+                    "type": .string("object"),
+                    "required": .array([.string("id")]),
+                    "properties": .object([
+                        "id": .object([
+                            "type": .string("string"),
+                            "description": .string("Person UUID from list_people, OR display name / email / phone — the lookup is tolerant.")
+                        ]),
+                        "snippetLimit": .object([
+                            "type": .string("integer"),
+                            "description": .string("How many recent messages to analyze. Default 200."),
+                            "default": .int(200)
+                        ])
+                    ])
+                ])
             )
         ]
     }
@@ -152,6 +171,7 @@ final class PeopleChatTools {
         case "get_person":              return getPerson(input)
         case "get_person_messages":     return getPersonMessages(input)
         case "ask_about_person_messages": return await askAboutPersonMessages(input)
+        case "get_person_message_insights": return await getPersonMessageInsights(input)
         case "list_person_meetings":    return .success(listPersonMeetings(input))
         case "attach_note_to_person":   return attachNoteToPerson(input)
         default:                        return nil
@@ -405,6 +425,43 @@ final class PeopleChatTools {
         } catch {
             return .failure(AnthropicClient.ClientError
                 .toolExecutionFailed("ask_about_person_messages", error.localizedDescription))
+        }
+    }
+
+    /// 8b: structured topics / quotes / commitments / tone from a person's
+    /// message history, for the model to present or save.
+    private func getPersonMessageInsights(_ input: [String: JSONValue]) async -> Result<String, Error> {
+        guard let id = input["id"]?.asString else {
+            return .failure(personNotFoundError("get_person_message_insights", input: "(missing id)"))
+        }
+        guard let p = resolvePerson(id) else {
+            return .failure(personNotFoundError("get_person_message_insights", input: id))
+        }
+        let limit = input["snippetLimit"]?.asInt ?? 200
+        do {
+            let result = try MessagesAnalyzer.analyze(person: p, recentLimit: limit)
+            guard let insights = await MessagesAnalyzer.extractStructured(
+                person: p, recent: result.recent, using: OllamaService()) else {
+                return .success(ChatToolHelpers.jsonString([
+                    "personId": p.id, "note": "Not enough messages to extract insights."
+                ]))
+            }
+            let quotes = insights.quotes.map { ["speaker": $0.speaker, "text": $0.text, "date": $0.date] }
+            let commitments = insights.commitments.map {
+                ["who": $0.who, "what": $0.what, "dueDate": $0.dueDate ?? ""]
+            }
+            return .success(ChatToolHelpers.jsonString([
+                "personId": p.id,
+                "personDisplayName": p.displayName,
+                "topics": insights.topics,
+                "quotes": quotes,
+                "commitments": commitments,
+                "tone": insights.tone,
+                "messageCount": result.stats.total
+            ]))
+        } catch {
+            return .failure(AnthropicClient.ClientError
+                .toolExecutionFailed("get_person_message_insights", error.localizedDescription))
         }
     }
 

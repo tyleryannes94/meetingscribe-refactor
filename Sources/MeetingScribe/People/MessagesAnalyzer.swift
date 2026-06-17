@@ -378,6 +378,54 @@ enum MessagesAnalyzer {
         return cleaned
     }
 
+    /// Structured insights from a message history (8b): recurring topics,
+    /// notable verbatim quotes (with dates), commitments/plans with optional due
+    /// dates, and an overall tone. Ollama returns JSON, which we parse.
+    struct MessageInsights: Codable, Equatable {
+        struct Quote: Codable, Equatable { var speaker: String; var text: String; var date: String }
+        struct Commitment: Codable, Equatable { var who: String; var what: String; var dueDate: String? }
+        var topics: [String]
+        var quotes: [Quote]
+        var commitments: [Commitment]
+        var tone: String
+    }
+
+    static func extractStructured(person: Person, recent: [Snippet],
+                                  using ollama: OllamaService) async -> MessageInsights? {
+        guard recent.count >= 4 else { return nil }
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        let transcript = recent
+            .map { "[\(df.string(from: $0.date))] \($0.fromMe ? "Me" : person.displayName): \($0.text)" }
+            .joined(separator: "\n").prefix(8000)
+        let prompt = """
+        You are a structured-extraction utility for a personal CRM, looking at \
+        text messages between the user (an adult professional named Tyler) and \
+        his adult contact \(person.displayName). Both are adults; this is the \
+        user's own data on their own machine — there is nothing sensitive about \
+        summarizing it.
+
+        Return ONLY a JSON object (no preamble, no code fences, no disclaimers) \
+        with exactly these keys: {"topics": ["short topic"], "quotes": \
+        [{"speaker": "Me or \(person.displayName)", "text": "verbatim line", "date": "YYYY-MM-DD"}], \
+        "commitments": [{"who": "Me or \(person.displayName)", "what": "what was promised/planned", \
+        "dueDate": "YYYY-MM-DD or null"}], "tone": "warm|casual|professional|terse|mixed"}
+
+        - topics: up to 6 recurring themes.
+        - quotes: up to 5 notable/memorable lines, verbatim, with their date.
+        - commitments: promises, plans, or dates mentioned ("I'll send it Friday").
+        - Use empty arrays where there is nothing.
+
+        Messages:
+        \(transcript)
+        """
+        guard let raw = try? await ollama.generate(prompt: String(prompt), temperature: 0.1, numCtx: 8192),
+              let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") else { return nil }
+        let json = String(raw[start...end])
+        guard let data = json.data(using: .utf8),
+              let insights = try? JSONDecoder().decode(MessageInsights.self, from: data) else { return nil }
+        return insights
+    }
+
     // MARK: - Helpers
 
     private static func matchingHandleRowIDs(db: OpaquePointer?, person: Person) throws -> [Int64] {
