@@ -61,7 +61,15 @@ enum ChatToolHelpers {
 
     static func allMeetings(manager: MeetingManager) -> [Meeting] {
         let inMemory = manager.pastMeetings
-        if !inMemory.isEmpty { return inMemory }
-        return manager.store.listPastMeetings()
+        var base = inMemory.isEmpty ? manager.store.listPastMeetings() : inMemory
+        // Include the meeting the chat is currently scoped to. A today/calendar
+        // meeting may not be in the finalized past index yet (its id is the
+        // calendar event id, not an internal recording UUID), so without this
+        // `get_summary` / `get_transcript` return "meeting not found" for the very
+        // meeting the user is looking at.
+        if let ctx = manager.chatContextMeeting, !base.contains(where: { $0.id == ctx.id }) {
+            base.insert(ctx, at: 0)
+        }
+        return base
     }
 }
