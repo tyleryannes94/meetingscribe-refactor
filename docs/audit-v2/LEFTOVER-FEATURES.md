@@ -10,6 +10,8 @@
 | #197 (Wave 1) | **MCP `logEncounter` envelope-key fix** (stops silent encounter data loss); `QuickEncounterSheet` duplicate-save guard; encounters SQLite indexes; `RelationshipPromptLibrary` weekly prompt mounted; check-in reminders scheduled on launch; related-meetings strip rendered (5-A). |
 | #198 (Wave 2) | `DecisionLedgerView` surfaced as a top-level nav destination (4-D reachability half). |
 | #199 (Wave 3) | Today first-steps onboarding card (5-H); after-5pm end-of-day wrap-up card (5-I). |
+| #201 (Wave 4) | **6-D MCP tools** (5 of 6): `list_open_decisions`, `search_decisions`, `list_waiting_on`, `get_voice_note_extracts`, `get_person_brief` — all disk-backed. |
+| #202 (Wave 5) | **3-H pre-meeting brief push** — 15-min-before notification per upcoming meeting, deep-linking to the meeting/brief. |
 
 ## 🔧 Corrections to the audit (already built — verified during this pass)
 
@@ -48,8 +50,9 @@ Each is real and self-contained but needs a non-trivial change (a new AI pass, a
 | **Per-tag summary templates** | `OllamaService.buildPrompt` is a static func with no tag access; needs a tag→template map threaded through `summarize()`. |
 | **5-B Cross-entity ⌘K (decisions/encounters)** | `WorkspaceEntityKind` has no `.decision`/`.encounter` cases; adding them expands a core enum across many switches + needs open/deeplink handlers. The mapper already drops these kinds today. |
 | **4-E Chat citations + 5-G write-back undo** | `ContentBlock.toolResult` has no source field and there's no undo/rollback path — a hardcoded "Sources" disclosure would be misleading, so this needs real retrieval-source plumbing first. |
-| **6-D MCP tool expansion** | The MCP binary reads the vault from disk (no in-process app services). `listOpenDecisions` / `listWaitingOn` / `getVoiceNoteExtracts` are clean disk reads; `getPersonBrief` / `searchDecisions` need disk reimplementation; `scheduleFollowUp` needs EventKit perms in the MCP process (uncertain). A focused MCP-only PR. |
-| **3-H Pre-meeting brief push / 3-B 7:50am pre-warm** | Needs a per-calendar-event scheduler + brief pre-generation timer; moderate, self-contained, good next pickup. |
+| **6-D MCP `scheduleFollowUp`** | The other 5 tools shipped (#201). This last one needs EventKit write access inside the MCP process (uncertain perms) — deferred. |
+| **3-B 7:50am brief pre-warm** | 3-H (the push) shipped (#202). The 7:50 pre-warm still needs a background timer that pre-generates briefs into BriefCache. |
+| **Check-in `LOG_NOW` deep-link handler** | Routing the check-in notification to a person needs a `meetingscribe://person/<id>` URL-scheme route, which doesn't exist yet — a scheme expansion, not a wiring tweak. |
 | **5-F Capability discovery on Today / 5-E inline AI insight cards** | 5-F: Today has no chat rail to host it. 5-E: a new Ollama-generating per-entity card (not a reuse of the list-level insight views). |
 | **4-D topic clustering** | Nav is now done; k-means over decision embeddings remains. |
 | **4-H Quarterly recap** | Extend `WeeklyRecap` to quarterly scope + Notion export. |
