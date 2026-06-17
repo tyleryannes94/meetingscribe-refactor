@@ -498,25 +498,10 @@ struct PersonDetailView: View {
         workArea
     }
 
-    /// Always-present summary of the person (§4A): identity, tags, contact,
-    /// relationships, cadence/encounters, photos. Scrolls on its own.
-    private var identityPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                identityPanel
-                proactiveInsightCard
-                tagsEditSection
-                contactRows
-                relationshipsSection
-                encountersSection
-                if !current.photoRelativePaths.isEmpty { photosSection }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, NDS.splitPaneTopInset)
-            .padding(.bottom, 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
+    // `identityPane` (the 300pt left column) is gone — its content stacks at
+    // the top of the canvas now. Helpers (`tagsEditSection`, `contactRows`,
+    // `relationshipsSection`, `encountersSection`, `photosSection`) are still
+    // used by `workContent` so they stay.
 
     /// 5-E / C2-3: a pinned, deterministic relationship insight at the top of the
     /// profile — the "why" behind the health, computed instantly from cadence +
@@ -1400,44 +1385,10 @@ struct PersonDetailView: View {
         }
     }
 
-    // MARK: - Embedded chat (replaces the toggled sidebar rail)
+    // `personChatColumn` is gone — the global right-side ChatSidebar is the
+    // single chat surface, scoped to this person via `updateChatContext()`.
 
-    private var personChatColumn: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .scaledFont(13, weight: .semibold)
-                    .foregroundStyle(NDS.brand)
-                Text("Ask about \(firstName)")
-                    .scaledFont(13, weight: .semibold)
-                    .foregroundStyle(NDS.textPrimary)
-                    .lineLimit(1)
-                Spacer()
-                if !chatSession.messages.isEmpty {
-                    NotionIconButton(systemName: "arrow.counterclockwise", help: "Clear conversation") {
-                        chatSession.reset()
-                    }
-                    .minTap()
-                }
-            }
-            .padding(.horizontal, 14).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 10)
-            .background(NDS.sidebarBg)
-            Divider().overlay(NDS.divider)
-            ChatPanel(
-                session: chatSession,
-                density: .compact,
-                examplePrompts: [
-                    "Give me a briefing on \(current.displayName).",
-                    "What are my open tasks with them?",
-                    "Suggest tags and a relationship for this person.",
-                    "When did we last meet and what about?"
-                ]
-            )
-        }
-        .background(NDS.sidebarBg)
-    }
-
-    // MARK: - Meeting history (right column, Meetings tab)
+    // MARK: - Meeting history
 
     /// True when `m` lists this person as an attendee. Resolved through the one
     /// identity layer (email-first, exact-name-second) — the old substring test
