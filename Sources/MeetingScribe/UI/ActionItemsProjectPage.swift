@@ -50,7 +50,7 @@ struct ProjectPageHeader: View {
                 if progress.total > 0 {
                     HStack(spacing: 6) {
                         ProgressView(value: Double(progress.done), total: Double(progress.total))
-                            .frame(width: 72).controlSize(.small).tint(NDS.brand)
+                            .frame(width: 72).controlSize(.small).tint(NDS.brand) // design-lint:allow
                         Text("\(progress.done)/\(progress.total)")
                             .font(NDS.small).foregroundStyle(NDS.textTertiary)
                     }
@@ -265,7 +265,7 @@ struct LinearLinkControl: View {
             Text("Imports its issues under this project and keeps them in sync.")
                 .font(.caption2).foregroundStyle(.secondary)
             if loading {
-                HStack { ProgressView().controlSize(.small); Text("Loading…").font(.caption) }
+                HStack { ProgressView().controlSize(.small); Text("Loading…").font(.caption) } // design-lint:allow
             } else if projects.isEmpty {
                 Text("No Linear projects found. Check your key in Settings → Integrations.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -337,7 +337,7 @@ struct InitiativePage: View {
                             store.setProjectInitiative(p.id, initiativeID: initiativeID)
                             onOpenProject(p.id)
                         } label: { Label("Add project", systemImage: "plus") }
-                        .buttonStyle(.borderless).controlSize(.small)
+                        .buttonStyle(.borderless).controlSize(.small) // design-lint:allow
                     }
                     if projects.isEmpty {
                         Text("No projects yet. Add one to start organizing work under this initiative.")

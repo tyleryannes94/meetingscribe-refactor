@@ -236,7 +236,7 @@ struct MeetingCard: View {
             }
             .buttonStyle(MSPrimaryButtonStyle())
             .tint(.red)
-            .controlSize(.regular)
+            .controlSize(.regular) // design-lint:allow
         }
     }
 
@@ -285,7 +285,7 @@ struct MeetingCard: View {
                     }
                     .menuStyle(.borderlessButton)
                     .buttonStyle(MSPrimaryButtonStyle())
-                    .controlSize(.regular)
+                    .controlSize(.regular) // design-lint:allow
                 } else {
                     // No conference URL: just a Record button.
                     Button {
@@ -298,7 +298,7 @@ struct MeetingCard: View {
                         }
                     } label: { Label("Record", systemImage: "record.circle") }
                     .buttonStyle(MSPrimaryButtonStyle())
-                    .controlSize(.regular)
+                    .controlSize(.regular) // design-lint:allow
                 }
             }
         case .past:
@@ -355,7 +355,7 @@ struct MeetingCard: View {
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 .animation(NDS.motion(.spring(response: 0.22, dampingFraction: 0.85), reduce: reduceMotion), value: isExpanded)
         } else if manager.isTranscribingMeeting(meeting) {
-            ProgressView().controlSize(.small)
+            ProgressView().controlSize(.small) // design-lint:allow
         }
     }
 

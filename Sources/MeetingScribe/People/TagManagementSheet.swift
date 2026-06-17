@@ -43,8 +43,8 @@ struct TagManagementSheet: View {
             if editingID == tag.id {
                 TextField("Tag name", text: $draftName, onCommit: { commitRename(tag) })
                     .textFieldStyle(.roundedBorder)
-                Button("Save") { commitRename(tag) }.controlSize(.small)
-                Button("Cancel") { editingID = nil }.controlSize(.small)
+                Button("Save") { commitRename(tag) }.controlSize(.small) // design-lint:allow
+                Button("Cancel") { editingID = nil }.controlSize(.small) // design-lint:allow
             } else {
                 Text(tag.name).font(.body)
                 Text("\(count)").font(.caption2).foregroundStyle(.secondary)

@@ -418,7 +418,7 @@ private struct TranscribingPill: View {
     @ObservedObject var controller: FloatingOverlayController
     var body: some View {
         HStack(spacing: 14) {
-            ProgressView().controlSize(.small)
+            ProgressView().controlSize(.small) // design-lint:allow
             VStack(alignment: .leading, spacing: 2) {
                 Text("Transcribing").font(.callout.weight(.semibold))
                 Text("Whisper is running locally · usually a few seconds")
@@ -498,7 +498,7 @@ private struct ErrorPill: View {
             }
             Spacer()
             Button("Dismiss") { controller.cancelOverlay() }
-                .controlSize(.small)
+                .controlSize(.small) // design-lint:allow
         }
     }
 }

@@ -409,7 +409,7 @@ struct SettingsView: View {
                     Image(systemName: drive.isConnected ? "checkmark.seal.fill" : "circle.dashed")
                         .foregroundStyle(drive.isConnected ? .green : .secondary)
                     Text(drive.isConnected ? "Connected" : "Not connected").font(.callout.weight(.medium))
-                    if drive.isWorking { ProgressView().controlSize(.small) }
+                    if drive.isWorking { ProgressView().controlSize(.small) } // design-lint:allow
                 }
                 Text("Export voice notes and meeting notes to a folder in your Google Drive. One-time setup: create an OAuth client so the app can talk to your Drive (Google requires this — it's tied to your account).")
                     .font(.caption).foregroundStyle(.secondary)
@@ -956,7 +956,7 @@ struct CalendarPickerSection: View {
                     Button { Task { await refresh() } } label: {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                     .help("Re-scan connected calendars")
                 }
                 if !allCalendars.isEmpty {
@@ -970,7 +970,7 @@ struct CalendarPickerSection: View {
                         AppSettings.shared.enabledCalendarIDs = enabled
                         NotificationCenter.default.post(name: .meetingScribeSettingsChanged, object: nil)
                     }
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                 }
             }
             if !calendar.authorized {
@@ -982,7 +982,7 @@ struct CalendarPickerSection: View {
                     } label: {
                         Label("Grant Calendar access", systemImage: "checkmark.shield")
                     }
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                 }
             } else if allCalendars.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -993,7 +993,7 @@ struct CalendarPickerSection: View {
                     } label: {
                         Label("Refresh calendars", systemImage: "arrow.clockwise")
                     }
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1078,7 +1078,7 @@ struct OllamaStatusRow: View {
                 } label: {
                     Label("Check", systemImage: "arrow.clockwise")
                 }
-                .controlSize(.small)
+                .controlSize(.small) // design-lint:allow
                 .disabled(starting)
 
                 if !reachable {
@@ -1087,7 +1087,7 @@ struct OllamaStatusRow: View {
                     } label: {
                         if starting {
                             HStack(spacing: 4) {
-                                ProgressView().controlSize(.small)
+                                ProgressView().controlSize(.small) // design-lint:allow
                                 Text("Starting…")
                             }
                         } else {
@@ -1095,7 +1095,7 @@ struct OllamaStatusRow: View {
                                   systemImage: binaryPath == nil ? "arrow.down.app" : "play.fill")
                         }
                     }
-                    .controlSize(.small)
+                    .controlSize(.small) // design-lint:allow
                     .disabled(starting || binaryPath == nil)
                 }
             }

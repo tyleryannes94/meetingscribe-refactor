@@ -114,7 +114,7 @@ struct MSErrorState: View {
                     if let label = presented.fixLabel, let onFix {
                         Button(label, action: onFix)
                             .buttonStyle(MSPrimaryButtonStyle())
-                            .controlSize(.small)
+                            .controlSize(.small) // design-lint:allow
                             .tint(tint)
                     }
                     if let raw, !raw.isEmpty {

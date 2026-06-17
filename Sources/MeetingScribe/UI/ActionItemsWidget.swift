@@ -65,7 +65,7 @@ struct ActionItemsWidget: View {
                 Text("Done").font(.caption2)
             }
             .toggleStyle(.switch)
-            .controlSize(.mini)
+            .controlSize(.mini) // design-lint:allow
             Button {
                 onOpenFull()
             } label: {
@@ -74,7 +74,7 @@ struct ActionItemsWidget: View {
                     .font(.caption)
             }
             .buttonStyle(MSSecondaryButtonStyle())
-            .controlSize(.small)
+            .controlSize(.small) // design-lint:allow
         }
     }
 

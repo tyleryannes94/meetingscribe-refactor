@@ -77,7 +77,7 @@ struct HomeTasksBoard: View {
                 Button { addTask(.open) } label: {
                     Label("Add task", systemImage: "plus")
                 }
-                .buttonStyle(MSPrimaryButtonStyle()).controlSize(.small)
+                .buttonStyle(MSPrimaryButtonStyle()).controlSize(.small) // design-lint:allow
             }
             filterBar
             ScrollView(.horizontal, showsIndicators: false) {

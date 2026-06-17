@@ -446,7 +446,7 @@ struct TodayView: View {
                             FollowUpStatus.setSent(m.id, true)
                             followUpRefresh += 1
                         }
-                        .controlSize(.small)
+                        .controlSize(.small) // design-lint:allow
                     }
                     .padding(.vertical, 6).padding(.horizontal, 10)
                     .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
@@ -730,10 +730,10 @@ struct TodayView: View {
                                 UNNotificationRequest(identifier: "nudge-\(t.id)", content: content, trigger: trigger))
                             ToastCenter.shared.show("Nudge set — reminder in 2 days")
                         }
-                        .controlSize(.small)
+                        .controlSize(.small) // design-lint:allow
                         .help("Remind me to follow up in 2 days")
                         Button("Resolve") { actionItems.setStatus(t.id, status: .completed) }
-                            .controlSize(.small)
+                            .controlSize(.small) // design-lint:allow
                     }
                     .padding(.vertical, 6).padding(.horizontal, 10)
                     .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))

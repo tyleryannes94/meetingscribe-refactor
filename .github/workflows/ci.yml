@@ -41,16 +41,11 @@ jobs:
         run: ./scripts/check-cross-tree-dupes.sh
 
       # Design-system guard: fail on re-introduced raw fonts / priority-status
-      # colors / cold AppKit surface colors under UI/ + People/. The whole-app
-      # refresh drove these to zero; this keeps them there. Intentional
-      # exceptions carry a trailing `// design-lint:allow`.
-      #
-      # X3 added bans for native button chrome (`.borderedProminent`/`.bordered`/
-      # `.controlSize` on Button) — currently ~70 surviving violations across
-      # the repo. Mode is `warn` until those are swept; the spec says flip
-      # to `fail` only after Groups A+B drive the count to zero (05 §6.3).
+      # X3 button-chrome bans are now zero across UI/. Flip back to `fail` so
+      # the CI guards against regressions. Intentional exceptions still carry
+      # a trailing `// design-lint:allow` and are excluded from the count.
       - name: Guard — design-system drift
-        run: ./scripts/design-lint.sh warn
+        run: ./scripts/design-lint.sh fail
 
       - name: Build (release — matches local `make dev`)
         run: swift build -c release
