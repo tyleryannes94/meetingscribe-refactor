@@ -659,6 +659,7 @@ final class PeopleStore: ObservableObject {
         // store knowing those subscribers exist.
         db.indexEncounter(encounter, personName: person(by: personID)?.displayName)
         SecondBrainEventBus.shared.publish(.encounterLogged(encounter: encounter, personID: personID))
+        StreakTracker.shared.record(.captureAction)   // 5-D
         return encounter
     }
 

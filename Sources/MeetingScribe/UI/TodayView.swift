@@ -20,6 +20,7 @@ struct TodayView: View {
     @EnvironmentObject var actionItems: ActionItemStore
     @State private var showStandup = false
     @State private var showDecisionLedger = false   // 4-D
+    @ObservedObject private var streaks = StreakTracker.shared   // 5-D
 
     /// D5-1 "Today, calm by default": the long-tail sections collapse under one
     /// "More" disclosure so Today opens calm. Default-collapsed; remembered.
@@ -37,6 +38,7 @@ struct TodayView: View {
             .onAppear {
                 calendar.refreshUpcoming()
                 manager.refreshPastMeetings()
+                StreakTracker.shared.record(.dailyOpen)   // 5-D
             }
             .task {
                 // Defer the one-shot backfills (action items, people, search index,
@@ -60,6 +62,7 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
+                MorningBriefCard(contextSummary: morningContextSummary)   // 5-C
                 turnaroundCard  // U3-2: the back-to-back bridge (imminent only)
                 dayShapeStrip   // U3-3: the 7am coffee scan, answered in 10s
                 quickActions
@@ -139,6 +142,9 @@ struct TodayView: View {
 
                 // Owe / Owed commitments split by direction. (U3-2/P2-7)
                 commitmentsSection
+
+                // 5-J: delegation board — what you're waiting on others for.
+                waitingOnSection
 
                 // "On this day" — resurface meetings from prior weeks/months/
                 // years on today's date. (C2-9/C2-6)
@@ -590,6 +596,67 @@ struct TodayView: View {
 
     // MARK: - Sections
 
+    /// 5-C: compact facts the morning brief synthesizes. Empty ⇒ card hides.
+    private var morningContextSummary: String {
+        let cal = Calendar.current
+        let todays = manager.pastMeetings.filter { cal.isDateInToday($0.startDate) }
+            + calendar.upcoming.filter { cal.isDateInToday($0.startDate) }
+        let overdueFollowUps = actionItems.items.filter {
+            $0.status != .completed && ($0.dueDate.map { $0 < Date() } ?? false)
+        }.count
+        let checkIns = PeopleStore.shared.overdueCheckInCount
+        guard !todays.isEmpty || overdueFollowUps > 0 || checkIns > 0 else { return "" }
+        var parts: [String] = []
+        if !todays.isEmpty {
+            let names = todays.prefix(4).map(\.displayTitle).joined(separator: ", ")
+            parts.append("Meetings today (\(todays.count)): \(names).")
+        }
+        if overdueFollowUps > 0 { parts.append("\(overdueFollowUps) follow-up(s) overdue.") }
+        if checkIns > 0 { parts.append("\(checkIns) relationship check-in(s) overdue.") }
+        return parts.joined(separator: " ")
+    }
+
+    /// 5-J: first-class delegation board — tasks you're waiting on others for.
+    @ViewBuilder
+    private var waitingOnSection: some View {
+        let waiting = actionItems.items.filter { $0.delegated == true && $0.status != .completed }
+        if !waiting.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "hourglass").foregroundStyle(NDS.gold)
+                    Text("Waiting on").scaledFont(15, weight: .semibold)
+                }
+                ForEach(waiting.prefix(8)) { t in
+                    let who = t.ownerPersonID.flatMap { PeopleStore.shared.person(by: $0)?.displayName } ?? t.owner
+                    let days = Int(Date().timeIntervalSince(t.createdAt) / 86400)
+                    HStack(spacing: 8) {
+                        Button {
+                            router.route(kind: .actionItem, id: t.id, manager: manager)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(t.title).scaledFont(13, weight: .medium)
+                                    .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                                HStack(spacing: 6) {
+                                    if let who, !who.isEmpty {
+                                        Text(who).scaledFont(11).foregroundStyle(NDS.brand)
+                                    }
+                                    Text("\(days)d").scaledFont(11).foregroundStyle(NDS.textTertiary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button("Resolve") { actionItems.setStatus(t.id, status: .completed) }
+                            .controlSize(.small)
+                    }
+                    .padding(.vertical, 6).padding(.horizontal, 10)
+                    .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
@@ -597,9 +664,23 @@ struct TodayView: View {
                     .scaledFont(30, weight: .heavy, relativeTo: .largeTitle, kind: .display)
                     .tracking(-0.8)
                     .foregroundStyle(.primary)
-                Text(subtitleString())
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    Text(subtitleString())
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    // 5-K: privacy positioning — everything stays on-device.
+                    Label("100% Local", systemImage: "lock.fill")
+                        .scaledFont(10, weight: .semibold)
+                        .foregroundStyle(NDS.textTertiary)
+                        .help("Recordings, transcripts, and AI all run on your Mac — nothing is uploaded.")
+                    // 5-D: compounding-value streak.
+                    if streaks.currentStreak > 0 {
+                        Label("\(streaks.currentStreak) day streak", systemImage: "flame.fill")
+                            .scaledFont(10, weight: .semibold)
+                            .foregroundStyle(NDS.gold)
+                            .help("Consecutive days you opened MeetingScribe and captured something.")
+                    }
+                }
             }
             Spacer()
             Button { showStandup = true } label: {
