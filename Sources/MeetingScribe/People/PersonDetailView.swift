@@ -692,51 +692,6 @@ struct PersonDetailView: View {
         }
     }
 
-    // MARK: - Section jump-rail (U3, legacy — superseded by the work-area tabs)
-
-    /// Chips for the present sections; tapping scrolls the profile to that anchor.
-    @ViewBuilder
-    private func sectionNav(_ proxy: ScrollViewProxy) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(sectionNavItems, id: \.id) { item in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            proxy.scrollTo(item.id, anchor: .top)
-                        }
-                    } label: {
-                        Text(item.label)
-                            .font(NDS.tiny)
-                            .padding(.horizontal, 9).padding(.vertical, 4)
-                            .background(NDS.fieldBg, in: Capsule())
-                            .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
-                            .foregroundStyle(NDS.textSecondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private var sectionNavItems: [(id: String, label: String)] {
-        var items: [(id: String, label: String)] = [(id: "nav-tags", label: "Tags")]
-        let hasContact = !current.emails.filter { !$0.isEmpty }.isEmpty
-            || !current.phones.filter { !$0.isEmpty }.isEmpty
-            || !current.addresses.filter { !$0.isEmpty }.isEmpty
-            || current.birthday != nil
-        if hasContact { items.append((id: "nav-contact", label: "Contact")) }
-        items.append(contentsOf: [
-            (id: "nav-ai", label: "Suggestions"),
-            (id: "nav-relationships", label: "Relationships"),
-            (id: "nav-encounters", label: "Encounters"),
-            (id: "nav-meetings", label: "Meetings"),
-            (id: "nav-tasks", label: "Tasks"),
-            (id: "nav-notes", label: "Notes"),
-            (id: "nav-messages", label: "Messages"),
-        ])
-        return items
-    }
-
     // MARK: - Inline identity editing
     // (req #2 — edit core fields in place; full sheet stays behind the ellipsis)
 
@@ -1506,37 +1461,6 @@ struct PersonDetailView: View {
         .padding(.vertical, 6).padding(.horizontal, 10)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
-    }
-
-    private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "person.circle.fill")
-                .scaledFont(48).foregroundStyle(NDS.brand.opacity(0.7))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(current.displayName).font(NDS.pageTitle)
-                if !subtitle.isEmpty {
-                    Text(subtitle).font(NDS.body).foregroundStyle(NDS.textSecondary)
-                }
-            }
-            Spacer()
-            // 2-B: the flagship People feature — a one-tap, AI-synthesized
-            // relationship brief drawn from meetings, tasks, talking points, and
-            // strength, streamed into a sheet.
-            Button { showBrief = true } label: {
-                Label("Brief Me", systemImage: "sparkles")
-            }
-            .buttonStyle(.borderedProminent)
-            Button { showEdit = true } label: { Label("Edit", systemImage: "pencil") }
-            Button(role: .destructive) { confirmDelete = true } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-    }
-
-    private var tagRow: some View {
-        HStack(spacing: 6) {
-            ForEach(tags) { t in TagChip(tag: t, removable: false, onRemove: nil) }
-        }
     }
 
     @ViewBuilder
