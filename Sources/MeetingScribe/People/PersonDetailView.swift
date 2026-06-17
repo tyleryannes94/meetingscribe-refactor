@@ -373,12 +373,12 @@ struct PersonDetailView: View {
         HSplitView {
             // Two-pane detail (§4): fixed identity/contact pane + tabbed work area.
             detailPane
-                .frame(minWidth: 560, idealWidth: 760)
+                .frame(minWidth: 480, idealWidth: 720)
                 .background(NDS.bg)
-                .background(keyboardVerbs)   // C2-11: N / L / T / ⌘1–5
+                .background(keyboardVerbs)   // N / L / T
 
             personChatColumn
-                .frame(minWidth: 320, idealWidth: 380, maxWidth: 480)
+                .frame(minWidth: 300, idealWidth: 360, maxWidth: 460)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { updateChatContext() }
@@ -495,15 +495,12 @@ struct PersonDetailView: View {
     // MARK: - Two-pane detail (§4)
 
     /// Fixed identity/contact pane on the left + tabbed work area on the right.
+    /// Collapsed two-column person canvas — the 300pt identity rail is gone.
+    /// Everything that used to live in it (compactHeader + insight + tags +
+    /// contact + relationships + encounters + photos) now sits at the top of
+    /// the right canvas above the rest of the MSSection stack.
     private var detailPane: some View {
-        HStack(spacing: 0) {
-            identityPane
-                .frame(width: 300)
-                .background(NDS.sidebarBg)
-            Divider().overlay(NDS.divider)
-            workArea
-                .frame(maxWidth: .infinity)
-        }
+        workArea
     }
 
     /// Always-present summary of the person (§4A): identity, tags, contact,
@@ -676,10 +673,57 @@ struct PersonDetailView: View {
     /// meeting" action becomes the Meetings section's trailing accessory.
     @ViewBuilder
     private var workContent: some View {
-        // Reconnect / In common are always-on glance sections (self-hide
-        // when empty), so render them above the collapsible stack.
+        // The compact header and the always-on glance cards now live AT THE TOP
+        // OF THE CANVAS (no more 300pt identity rail). The cramped column
+        // showed e.g. "H..." for "Horst Carreño-Bauer" — gone.
+        identityPanel    // compactHeader + inline edit form when editing
+        proactiveInsightCard
         reconnectSection
         inCommonSection
+
+        // Identity-rail content (was in the 300pt column) now stacks as
+        // MSSections so it doesn't fight the canvas for width.
+        MSSection("Contact", systemImage: "person.crop.circle",
+                  persistenceKey: "person.contact",
+                  defaultExpanded: true) {
+            contactRows
+        }
+        MSSection("Tags", systemImage: "tag",
+                  count: tags.count,
+                  persistenceKey: "person.tags",
+                  defaultExpanded: true) {
+            tagsEditSection
+        }
+        MSSection("Relationships", systemImage: "person.2",
+                  count: current.relationships.count,
+                  persistenceKey: "person.relationships",
+                  defaultExpanded: true,
+                  trailing: {
+                      MSInlineButton("Add", systemImage: "plus") {
+                          showAddRelationship = true
+                      }
+                      .disabled(people.people.count < 2)
+                  }) {
+            relationshipsSection
+        }
+        MSSection("Encounters", systemImage: "mappin.and.ellipse",
+                  persistenceKey: "person.encounters",
+                  defaultExpanded: true,
+                  trailing: {
+                      MSInlineButton("Log encounter", systemImage: "calendar.badge.plus") {
+                          showAddEncounter = true
+                      }
+                  }) {
+            encountersSection
+        }
+        if !current.photoRelativePaths.isEmpty {
+            MSSection("Photos", systemImage: "photo",
+                      count: current.photoRelativePaths.count,
+                      persistenceKey: "person.photos",
+                      defaultExpanded: false) {
+                photosSection
+            }
+        }
 
         MSSection("Tasks", systemImage: "checklist",
                   count: personTasks.filter { $0.status != .completed }.count,
