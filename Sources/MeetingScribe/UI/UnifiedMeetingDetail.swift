@@ -287,7 +287,8 @@ struct UnifiedMeetingDetail: View {
                         VStack(alignment: .leading, spacing: NDS.spaceXL) {
                             outcomesSection
                                 .id(SectionAnchor.outcomes)
-                            // Highlights / Summary / Related land in M4-M6/M9.
+                            highlightsSection
+                            // Summary / Related land in M6/M9.
                         }
                         .padding(.horizontal, NDS.spaceXL)
                         .padding(.vertical, NDS.spaceXL)
@@ -303,6 +304,41 @@ struct UnifiedMeetingDetail: View {
                 VStack(spacing: 0) { EmptyView() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// M4 / 01 §6 Step 4 — Highlights section. Each `MeetingMark` is a
+    /// timestamped chip; M8 will rewire the tap target to scroll-to-transcript
+    /// + seed the search instead of teleporting `tab = .transcript`.
+    @ViewBuilder var highlightsSection: some View {
+        if let m = meeting {
+            let marks = MeetingMarks.load(m.id)
+            if !marks.isEmpty {
+                MSSection("Highlights", systemImage: "flag.fill",
+                          count: marks.count,
+                          persistenceKey: "meeting.highlights") {
+                    FlowLayout(spacing: NDS.spaceSM) {
+                        ForEach(marks) { mark in
+                            Button { tab = .transcript } label: {
+                                HStack(spacing: 5) {
+                                    Text(mark.timestamp)
+                                        .scaledFont(11, weight: .semibold).monospacedDigit()
+                                        .foregroundStyle(NDS.gold)
+                                    if !mark.label.isEmpty {
+                                        Text(mark.label)
+                                            .scaledFont(11).foregroundStyle(NDS.textPrimary)
+                                    }
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(NDS.gold.opacity(0.12))
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .help("Jump to the transcript")
+                        }
+                    }
+                }
+            }
         }
     }
 
