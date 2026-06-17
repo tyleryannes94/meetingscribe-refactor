@@ -30,10 +30,10 @@ struct MorningBriefCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(14)
+            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(NDS.gold.opacity(0.07), in: RoundedRectangle(cornerRadius: NDS.cardRadius))
-            .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius).strokeBorder(NDS.gold.opacity(0.2), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius).strokeBorder(NDS.gold.opacity(0.18), lineWidth: 0.5))
             .onAppear { vm.generateIfStale(contextSummary) }
         }
     }

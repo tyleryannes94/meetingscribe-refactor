@@ -50,10 +50,10 @@ struct NeedsAttentionWidget: View {
                     .buttonStyle(.plain).foregroundStyle(NDS.brand)
                 }
             }
-            .padding(16)
+            .padding(12)
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.orange.opacity(0.06)))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.orange.opacity(0.25), lineWidth: 0.5))
+                .strokeBorder(Color.orange.opacity(0.22), lineWidth: 0.5))
         }
     }
 
