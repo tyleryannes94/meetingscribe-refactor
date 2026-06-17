@@ -208,7 +208,18 @@ extension UnifiedMeetingDetail {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if summary.isEmpty {
-                    if bodyLoaded { emptySummaryView }
+                    if let live = meeting.flatMap({ pipeline.liveSummaryByID[$0.id] }), !live.isEmpty {
+                        // 1-C: summary is generating — show tokens as they stream in.
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Summarizing…").scaledFont(12, weight: .semibold)
+                                    .foregroundStyle(NDS.textSecondary)
+                            }
+                            MarkdownEditor(text: .constant(live), isEditable: false)
+                        }
+                        .padding(24)
+                    } else if bodyLoaded { emptySummaryView }
                     else { MSSkeleton(lines: 6).padding(24) }   // loading, not empty (PP-1)
                 } else {
                     // Read-only markdown renderer — true heading sizes,

@@ -128,7 +128,7 @@ final class WebAPI {
         }
 
         let id = rest[1]
-        guard let meeting = meetingStore.listPastMeetings(limit: 100_000).first(where: { $0.id == id }) else {
+        guard let meeting = meetingStore.meeting(byID: id) else {   // 1-I: O(1) index lookup
             return .error(404, "Meeting not found")
         }
 

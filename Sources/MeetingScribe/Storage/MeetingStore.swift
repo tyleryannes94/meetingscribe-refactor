@@ -59,11 +59,32 @@ final class MeetingStore {
     // hitch repeated on every onAppear across multiple tabs. Now we hold
     // the parsed list in memory and invalidate it on writes.
     private var _indexMemoryCache: [Meeting]?
+    /// O(1) id → Meeting map (1-I), kept in lockstep with `_indexMemoryCache`.
+    /// Replaces the linear `listPastMeetings().first(where:)` scan the MCP/WebAPI
+    /// meeting lookup did on every request — which degraded with 500+ meetings.
+    private var _meetingByID: [String: Meeting] = [:]
     private func cachedIndex() -> [Meeting]? {
         cacheQueue.sync { _indexMemoryCache }
     }
     private func setCachedIndex(_ list: [Meeting]?) {
-        cacheQueue.async(flags: .barrier) { self._indexMemoryCache = list }
+        cacheQueue.async(flags: .barrier) {
+            self._indexMemoryCache = list
+            if let list {
+                self._meetingByID = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            } else {
+                self._meetingByID.removeAll()
+            }
+        }
+    }
+
+    /// O(1) lookup of a meeting by id. Warms the in-memory index on a cold cache,
+    /// then falls back to the returned list once (so it is always correct even if
+    /// a population path is mid-flight).
+    func meeting(byID id: String) -> Meeting? {
+        if let hit = cacheQueue.sync(execute: { _meetingByID[id] }) { return hit }
+        let list = listPastMeetings(limit: 100_000)
+        if let hit = cacheQueue.sync(execute: { _meetingByID[id] }) { return hit }
+        return list.first { $0.id == id }
     }
     /// Synchronously refresh the in-memory cache from the freshest copy
     /// we have. Used after a write so the next read is instant.

@@ -20,6 +20,17 @@ final class MeetingPipelineController: ObservableObject {
     /// "Transcribe Now" button. Independent of the global recording state so
     /// the user can start a new recording for a different meeting.
     @Published private(set) var transcribingIDs: Set<String> = []
+
+    /// Partial summary text as it streams from Ollama, keyed by meeting id (1-C).
+    /// The summary tab renders this live so a stop→summary turns the 30–90s blank
+    /// wait into a token-by-token "thinking" view. Cleared when the summary is
+    /// written (success or failure).
+    @Published private(set) var liveSummaryByID: [String: String] = [:]
+
+    private func appendLiveSummary(_ id: String, _ piece: String) {
+        liveSummaryByID[id, default: ""] += piece
+    }
+    private func clearLiveSummary(_ id: String) { liveSummaryByID[id] = nil }
     /// Directory of the most recently finalized meeting — so the UI can
     /// auto-select it after stop.
     @Published private(set) var lastCompletedDir: URL?
@@ -188,11 +199,17 @@ final class MeetingPipelineController: ObservableObject {
             workingMeeting.title = derived
         }
 
-        // 3. Summarize.
+        // 3. Summarize — streaming so the summary tab fills in live (1-C).
         let summary: String
         var summaryFailed = false
+        let liveID = workingMeeting.id
+        liveSummaryByID[liveID] = ""
         do {
-            summary = try await summarizer.summarize(meeting: workingMeeting, transcript: transcript)
+            summary = try await summarizer.summarize(
+                meeting: workingMeeting, transcript: transcript,
+                onToken: { [weak self] piece in
+                    Task { @MainActor in self?.appendLiveSummary(liveID, piece) }
+                })
         } catch {
             log.error("Summary failed: \(error.localizedDescription, privacy: .public)")
             ErrorReporter.shared.report(error, category: .summary,
@@ -200,6 +217,7 @@ final class MeetingPipelineController: ObservableObject {
             summary = "# Summary\n\n_Summary unavailable: \(error.localizedDescription)_\n"
             summaryFailed = true
         }
+        clearLiveSummary(liveID)
         do { try store.writeSummary(summary, for: workingMeeting, primaryTag: primary) }
         catch {
             log.error("Failed to write summary: \(error.localizedDescription, privacy: .public)")
@@ -364,8 +382,14 @@ final class MeetingPipelineController: ObservableObject {
         // 5. Regenerate summary (best effort).
         var summaryFailed = false
         if regenerateSummary {
+            let liveID = meeting.id
+            await MainActor.run { self.liveSummaryByID[liveID] = "" }
             do {
-                let summary = try await summarizer.summarize(meeting: meeting, transcript: transcript)
+                let summary = try await summarizer.summarize(
+                    meeting: meeting, transcript: transcript,
+                    onToken: { [weak self] piece in
+                        Task { @MainActor in self?.appendLiveSummary(liveID, piece) }
+                    })
                 await MainActor.run {
                     try? store.writeSummary(summary, for: meeting, primaryTag: primary)
                     var extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
@@ -396,6 +420,7 @@ final class MeetingPipelineController: ObservableObject {
                                                  context: ["phase": "transcribe-now-summary", "meeting": meeting.id])
                 summaryFailed = true
             }
+            await MainActor.run { self.clearLiveSummary(liveID) }
         } else {
             // Even without a summary regeneration, refresh the markdown snapshot.
             await MainActor.run {

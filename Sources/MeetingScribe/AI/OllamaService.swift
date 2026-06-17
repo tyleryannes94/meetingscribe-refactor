@@ -22,6 +22,12 @@ final class OllamaService {
         let response: String
     }
 
+    /// One NDJSON frame from a streaming `/api/generate` response (1-C).
+    private struct StreamChunk: Decodable {
+        let response: String?
+        let done: Bool?
+    }
+
     // MARK: - Meeting-type templates (C1-8)
     //
     // The summary prompt used to be one-size-fits-all, so a 1:1 recap and a
@@ -288,7 +294,51 @@ final class OllamaService {
         return decoded.response.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func summarize(meeting: Meeting, transcript: String) async throws -> String {
+    /// Stream tokens from `/api/generate` (stream:true, NDJSON), invoking
+    /// `onToken` for each chunk as it arrives and returning the full text (1-C).
+    /// Turns the 30–90s blank wait on a summary into a live "thinking" view.
+    /// `onToken` is invoked off the main actor — hop to main in UI callers.
+    func streamGenerate(prompt: String,
+                        temperature: Double = 0.2,
+                        numCtx: Int = 8192,
+                        onToken: @escaping @Sendable (String) -> Void) async throws -> String {
+        let settings = AppSettings.shared
+        if !(await isReachable()) {
+            guard Self.binaryPath != nil else { throw SummaryError.notInstalled }
+            _ = await ensureRunning()
+            guard await isReachable() else { throw SummaryError.unreachable("auto-start timed out") }
+        }
+        let url = settings.ollamaURL.appendingPathComponent("api/generate")
+        try EgressPolicy.assertOllamaEgressAllowed(url)
+        let body = GenerateRequest(model: settings.ollamaModel, prompt: prompt, stream: true,
+                                   options: .init(temperature: temperature, num_ctx: numCtx))
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(body)
+        req.timeoutInterval = 600
+
+        let (bytes, response): (URLSession.AsyncBytes, URLResponse)
+        do { (bytes, response) = try await URLSession.shared.bytes(for: req) }
+        catch { throw SummaryError.unreachable(error.localizedDescription) }
+        guard let http = response as? HTTPURLResponse else { throw SummaryError.http(-1, "no http response") }
+        guard (200..<300).contains(http.statusCode) else { throw SummaryError.http(http.statusCode, "") }
+
+        var full = ""
+        for try await line in bytes.lines {
+            guard !line.isEmpty, let data = line.data(using: .utf8),
+                  let chunk = try? JSONDecoder().decode(StreamChunk.self, from: data) else { continue }
+            if let piece = chunk.response, !piece.isEmpty { full += piece; onToken(piece) }
+            if chunk.done == true { break }
+        }
+        return full.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Summarize, optionally streaming tokens to `onToken` as they arrive (1-C).
+    /// When `onToken` is nil the behavior is identical to the original blocking
+    /// call, so every existing caller is unaffected.
+    func summarize(meeting: Meeting, transcript: String,
+                   onToken: (@Sendable (String) -> Void)? = nil) async throws -> String {
         let settings = AppSettings.shared
 
         // Make sure Ollama is up. Cheap if it already is, otherwise auto-launches.
@@ -305,6 +355,9 @@ final class OllamaService {
         try EgressPolicy.assertOllamaEgressAllowed(url)
 
         let prompt = Self.buildPrompt(meeting: meeting, transcript: transcript)
+        if let onToken {
+            return try await streamGenerate(prompt: prompt, temperature: 0.2, numCtx: 8192, onToken: onToken)
+        }
         let body = GenerateRequest(
             model: settings.ollamaModel,
             prompt: prompt,
