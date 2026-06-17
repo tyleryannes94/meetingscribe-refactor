@@ -47,13 +47,13 @@ extension ActionItemsView {
         }
 
         VStack(spacing: 0) {
-            HStack(spacing: 9) {
-                Image(systemName: "person.fill").scaledFont(20).foregroundStyle(NDS.brand)
-                Text("My Tasks").font(NDS.title)
+            HStack(spacing: 8) {
+                Image(systemName: "person.fill").scaledFont(16).foregroundStyle(NDS.brand)
+                Text("My Tasks").scaledFont(22, weight: .bold, kind: .display)
                 Spacer()
                 stat(label: "Open", value: mine.count, color: NDS.brand)
             }
-            .padding(.horizontal, 32).padding(.top, 22).padding(.bottom, 14)
+            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
             Divider().overlay(NDS.divider)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {

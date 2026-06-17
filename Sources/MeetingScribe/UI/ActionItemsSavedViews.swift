@@ -12,10 +12,10 @@ extension ActionItemsView {
             let tasks = store.tasks(matching: view.query)
             VStack(spacing: 0) {
                 HStack(alignment: .center) {
-                    HStack(spacing: 9) {
+                    HStack(spacing: 8) {
                         Image(systemName: view.icon ?? "line.3.horizontal.decrease.circle")
-                            .scaledFont(20).foregroundStyle(NDS.brand)
-                        Text(view.name).font(NDS.title)
+                            .scaledFont(16).foregroundStyle(NDS.brand)
+                        Text(view.name).scaledFont(22, weight: .bold, kind: .display)
                     }
                     Spacer()
                     stat(label: "Tasks", value: tasks.count, color: NDS.brand)
@@ -28,7 +28,7 @@ extension ActionItemsView {
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                     }
                 }
-                .padding(.horizontal, 32).padding(.top, 22).padding(.bottom, 14)
+                .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
                 Divider().overlay(NDS.divider)
                 if tasks.isEmpty {
                     VStack(spacing: 10) {
@@ -84,13 +84,13 @@ extension ActionItemsView {
             .filter { !$0.needsTriage && $0.recurrence != nil }
             .sorted { sort($0, $1) }
         VStack(spacing: 0) {
-            HStack(spacing: 9) {
-                Image(systemName: "repeat").scaledFont(20).foregroundStyle(NDS.brand)
-                Text("Recurring").font(NDS.title)
+            HStack(spacing: 8) {
+                Image(systemName: "repeat").scaledFont(16).foregroundStyle(NDS.brand)
+                Text("Recurring").scaledFont(22, weight: .bold, kind: .display)
                 Spacer()
                 stat(label: "Tasks", value: tasks.count, color: NDS.brand)
             }
-            .padding(.horizontal, 32).padding(.top, 22).padding(.bottom, 14)
+            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
             Divider().overlay(NDS.divider)
             if tasks.isEmpty {
                 VStack(spacing: 10) {
