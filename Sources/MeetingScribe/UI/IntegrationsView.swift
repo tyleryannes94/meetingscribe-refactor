@@ -55,7 +55,7 @@ struct IntegrationsView: View {
                 calendarCard
                 mcpCard
             }
-            .padding(.horizontal, 28).padding(.vertical, 22)
+            .padding(.horizontal, 20).padding(.vertical, 16)
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
