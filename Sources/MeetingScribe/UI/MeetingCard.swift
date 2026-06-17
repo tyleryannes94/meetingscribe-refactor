@@ -126,6 +126,7 @@ struct MeetingCard: View {
                 Text(meeting.displayTitle)
                     .font(.headline)
                     .lineLimit(1)
+                    .help(meeting.displayTitle)
                 // End-of-pipeline health badge (audit 8.1) — surfaces
                 // recordings that finished with no transcribable audio or
                 // partial capture so the user isn't blindsided by an

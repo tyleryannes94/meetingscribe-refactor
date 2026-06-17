@@ -258,7 +258,7 @@ struct TodayView: View {
                             Text(mins == 0 ? "Starting now" : "Up next in \(mins) min")
                                 .scaledFont(12, weight: .bold).foregroundStyle(NDS.gold)
                             Text(m.displayTitle).scaledFont(15, weight: .semibold)
-                                .foregroundStyle(NDS.textPrimary).lineLimit(1)
+                                .foregroundStyle(NDS.textPrimary).lineLimit(1).help(m.displayTitle)
                             Text(turnaroundSubtitle(meeting: m, person: person, loops: loops))
                                 .scaledFont(11.5).foregroundStyle(NDS.textSecondary).lineLimit(1)
                         }

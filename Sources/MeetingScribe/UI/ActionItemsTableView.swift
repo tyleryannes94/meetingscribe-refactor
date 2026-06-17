@@ -136,6 +136,7 @@ extension ActionItemsView {
                     .font(.callout)
                     .strikethrough(item.status == .completed)
                     .lineLimit(1)
+                    .help(item.title)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) { tableEditingTitleID = item.id; tableTitleDraft = item.title }
@@ -172,7 +173,7 @@ extension ActionItemsView {
             }
             if !tableColHidden("meeting") {
                 Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary)
-                    .lineLimit(1).frame(width: Col.meeting, alignment: .leading)
+                    .lineLimit(1).help(item.meetingTitle).frame(width: Col.meeting, alignment: .leading)
             }
             Color.clear.frame(width: 24)
         }

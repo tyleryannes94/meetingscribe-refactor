@@ -128,7 +128,7 @@ struct DecisionLedgerView: View {
                 }
                 HStack(spacing: 8) {
                     statusBadge(d.status)
-                    Text(d.meetingTitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                    Text(d.meetingTitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1).help(d.meetingTitle)
                     Spacer()
                     ForEach(d.personIDs.prefix(3), id: \.self) { pid in
                         if let p = people.person(by: pid) {

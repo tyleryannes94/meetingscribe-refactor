@@ -238,7 +238,7 @@ struct ProjectRail: View {
                     HStack(spacing: 8) {
                         Image(systemName: "pin.fill").scaledFont(11)
                             .foregroundStyle(NDS.brand).frame(width: 16)
-                        Text(p.name).lineLimit(1).font(NDS.body)
+                        Text(p.name).lineLimit(1).font(NDS.body).help(p.name)
                         Spacer()
                     }
                 }
@@ -427,7 +427,7 @@ struct ProjectRail: View {
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(m.displayTitle).lineLimit(1).font(NDS.body)
+                    Text(m.displayTitle).lineLimit(1).font(NDS.body).help(m.displayTitle)
                     Text(Self.shortDate(m.startDate)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 }
                 Spacer()
@@ -456,7 +456,7 @@ struct ProjectRail: View {
                     .scaledFont(13)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                     .frame(width: 16)
-                Text(title).lineLimit(1).font(NDS.body)
+                Text(title).lineLimit(1).font(NDS.body).help(title)
                 Spacer()
                 if count > 0 {
                     Text("\(count)").font(NDS.tiny.monospacedDigit())
@@ -525,7 +525,7 @@ struct ProjectRail: View {
                     .scaledFont(14)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                     .frame(width: 16)
-                Text(person.displayName).lineLimit(1).font(NDS.body)
+                Text(person.displayName).lineLimit(1).font(NDS.body).help(person.displayName)
                 Spacer()
                 if open > 0 {
                     Text("\(open)").font(NDS.tiny.monospacedDigit())
@@ -649,7 +649,7 @@ private struct WaitingRow: View {
             Image(systemName: "hourglass.tophalf.filled")
                 .scaledFont(11).foregroundStyle(NDS.textTertiary).frame(width: 16)
             VStack(alignment: .leading, spacing: 0) {
-                Text(item.title).lineLimit(1).font(NDS.body)
+                Text(item.title).lineLimit(1).font(NDS.body).help(item.title)
                 let owner = (item.owner ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 Text(owner.isEmpty ? "Unassigned" : owner)
                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
@@ -754,7 +754,7 @@ struct PageTreeNode: View {
                 .scaledFont(12)
                 .foregroundStyle(isSelected ? NDS.textPrimary : NDS.textSecondary)
                 .frame(width: 15)
-            Text(project.name).font(NDS.body).lineLimit(1)
+            Text(project.name).font(NDS.body).lineLimit(1).help(project.name)
                 .foregroundStyle(isSelected ? NDS.textPrimary : NDS.textSecondary)
             Spacer(minLength: 4)
             if hovering {
@@ -848,7 +848,7 @@ struct InitiativeNode: View {
                         .textFieldStyle(.roundedBorder).font(NDS.body).frame(maxWidth: 150)
                         .onSubmit(commitRename)
                 } else {
-                    Text(initiative.name).font(NDS.body.weight(.medium)).lineLimit(1)
+                    Text(initiative.name).font(NDS.body.weight(.medium)).lineLimit(1).help(initiative.name)
                         .foregroundStyle(isSelected ? NDS.textPrimary : NDS.textSecondary)
                 }
                 Spacer(minLength: 4)

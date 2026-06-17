@@ -43,7 +43,7 @@ extension ActionItemsView {
                                 HStack(spacing: 9) {
                                     Image(systemName: item.status.systemImage)
                                         .foregroundStyle(item.status == .inProgress ? NDS.selectColor("orange") : NDS.selectColor("blue"))
-                                    Text(item.title).font(NDS.body).lineLimit(1)
+                                    Text(item.title).font(NDS.body).lineLimit(1).help(item.title)
                                     Spacer()
                                     if let p = store.project(for: item) {
                                         NotionChip(p.name, color: NDS.selectColor(p.name))
@@ -66,7 +66,7 @@ extension ActionItemsView {
                             Button { env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = p.id } label: {
                                 HStack(spacing: 9) {
                                     Image(systemName: p.icon ?? "doc.text").foregroundStyle(NDS.selectColor(p.name))
-                                    Text(p.name).font(NDS.body).lineLimit(1)
+                                    Text(p.name).font(NDS.body).lineLimit(1).help(p.name)
                                     Spacer()
                                     let open = store.openCount(forProject: p.id)
                                     if open > 0 { Text("\(open)").font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary) }
@@ -87,7 +87,7 @@ extension ActionItemsView {
                             Button { env.selectedTaskID = nil; env.selectedProjectID = nil; env.selectedMeetingID = m.id } label: {
                                 HStack(spacing: 9) {
                                     Image(systemName: "doc.text").foregroundStyle(NDS.textSecondary)
-                                    Text(m.displayTitle).font(NDS.body).lineLimit(1)
+                                    Text(m.displayTitle).font(NDS.body).lineLimit(1).help(m.displayTitle)
                                     Spacer()
                                     Text(Self.dashDate(m.startDate)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                                 }
