@@ -826,7 +826,7 @@ struct PersonDetailView: View {
                     // R1 fit guardrail: name truncates so Primary + overflow
                     // stay right-anchored on narrow canvases.
                     Text(current.displayName)
-                        .scaledFont(24, weight: .heavy, relativeTo: .title, kind: .display)
+                        .scaledFont(22, weight: .bold, kind: .display)
                         .foregroundStyle(NDS.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.tail)
