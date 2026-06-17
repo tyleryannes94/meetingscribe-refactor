@@ -301,11 +301,68 @@ struct UnifiedMeetingDetail: View {
                 // M2 §4.4 separator: the user reads recap-area-above /
                 // work-area-below; one Divider keeps that mental model clear.
                 Divider().overlay(NDS.divider)
-                // LONG self-scrolling sections — populated by M5/M7/M8.
-                // Empty today so the flag-on canvas is just the top group.
-                VStack(spacing: 0) { EmptyView() }
+                // LONG self-scrolling sections — Notes lands now (M5);
+                // Transcript + Ask AI follow in M7/M8.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: NDS.spaceXL) {
+                        notesSection
+                    }
+                    .padding(.horizontal, NDS.spaceXL)
+                    .padding(.vertical, NDS.spaceXL)
+                    .frame(maxWidth: Self.canvasContentMaxWidth)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// M5 / 01 §6 Step 5 — Notes section. The C-A constraint test: the
+    /// `RichMarkdownEditor` is `NSScrollView`-backed and cannot nest in an
+    /// outer SwiftUI `ScrollView` with unbounded height, so the editor gets a
+    /// fixed `frame(height:)` and self-scrolls. The MSSection lazy-mounts
+    /// content when expanded, so a collapsed Notes section never violates
+    /// C-A in the first place.
+    @ViewBuilder var notesSection: some View {
+        if meeting != nil {
+            MSSection("Your notes", systemImage: "doc.text",
+                      persistenceKey: "meeting.notes",
+                      defaultExpanded: true) {
+                notesSectionBody
+            }
+        }
+    }
+
+    @AppStorage("meeting.notes.height") private var notesPaneHeight: Double = 320
+
+    @ViewBuilder
+    private var notesSectionBody: some View {
+        VStack(alignment: .leading, spacing: NDS.spaceSM) {
+            Text("Markdown notes — type `/` for blocks, `@` to link. Saved to notes.md.")
+                .font(.caption).foregroundStyle(.secondary)
+            RichMarkdownEditor(text: $noteDraft,
+                               placeholder: "Type / for blocks, @ to link a meeting…",
+                               mentionProvider: { manager.workspaceEntities() })
+                .frame(height: max(160, notesPaneHeight))
+                .overlay(RoundedRectangle(cornerRadius: NDS.radiusSmall)
+                    .strokeBorder(NDS.hairline, lineWidth: 1))
+            // C-A drag-resize grabber (01 §4.5).
+            Rectangle().fill(Color.clear)
+                .frame(height: 6)
+                .contentShape(Rectangle())
+                .overlay(Capsule().fill(NDS.textTertiary.opacity(0.35))
+                    .frame(width: 36, height: 3))
+                .gesture(DragGesture().onChanged { v in
+                    let next = notesPaneHeight + Double(v.translation.height)
+                    notesPaneHeight = min(max(160, next), 900)
+                })
+                .help("Drag to resize notes")
+            if let m = meeting,
+               !noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                MSInlineButton("Push to-dos → Tasks", systemImage: "arrow.right.circle") {
+                    pushNoteTodosToTasks(m)
+                }
+            }
         }
     }
 
