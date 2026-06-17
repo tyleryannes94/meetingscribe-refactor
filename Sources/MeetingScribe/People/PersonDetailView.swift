@@ -1025,7 +1025,7 @@ struct PersonDetailView: View {
                 TextField("Add a tag — clients, family, an event…", text: $newTagName)
                     .textFieldStyle(.plain)
                     .onSubmit { commitTagEntry() }
-                if !newTagName.isEmpty { Button("Add") { commitTagEntry() }.font(NDS.small) }
+                if !newTagName.isEmpty { MSInlineButton("Add") { commitTagEntry() } }
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -1086,7 +1086,7 @@ struct PersonDetailView: View {
                 TextField("Add a favorite — coffee order, hobby, team…", text: $newFavorite)
                     .textFieldStyle(.plain)
                     .onSubmit { addFavorite() }
-                if !newFavorite.isEmpty { Button("Add") { addFavorite() }.font(NDS.small) }
+                if !newFavorite.isEmpty { MSInlineButton("Add") { addFavorite() } }
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -1119,12 +1119,9 @@ struct PersonDetailView: View {
                 if aiRunning {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button {
+                    MSInlineButton(aiSuggestions == nil ? "Suggest" : "Refresh", systemImage: "sparkles") {
                         Task { await generateAISuggestions() }
-                    } label: {
-                        Label(aiSuggestions == nil ? "Suggest" : "Refresh", systemImage: "sparkles")
                     }
-                    .buttonStyle(.borderless).font(NDS.small)
                 }
             }
 
