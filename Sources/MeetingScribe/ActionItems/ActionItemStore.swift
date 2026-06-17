@@ -366,6 +366,7 @@ final class ActionItemStore: ObservableObject {
         save()
         TaskChangeLog.shared.record(.create, entity: .task, id: item.id,
                                     summary: "Created “\(item.title)”")
+        StreakTracker.shared.record(.captureAction)   // 5-D
         return item
     }
 
