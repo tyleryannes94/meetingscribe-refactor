@@ -36,6 +36,9 @@ struct UnifiedMeetingDetail: View {
     /// Prevents tab from jumping when the user has already made a selection.
     @State private var hasAppliedTabDefault = false
     @State var chatAttached = false
+    /// P1-6: when a meeting has many attendees, collapse past 8 behind a
+    /// "View all" expander so the header doesn't sprawl into a long chip rail.
+    @State var showAllAttendees = false
     /// In the My Notes tab for a recurring series: which occurrence's notes are
     /// shown. nil = the current call (editable); otherwise a prior meeting id
     /// (read-only).
