@@ -328,7 +328,7 @@ struct PeopleListView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("People").font(.title2).bold()
+                Text("People").scaledFont(22, weight: .bold, kind: .display)
                 Text("\(people.people.count)")
                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 Spacer()

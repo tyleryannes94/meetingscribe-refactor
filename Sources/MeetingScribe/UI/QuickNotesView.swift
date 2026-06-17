@@ -43,15 +43,15 @@ struct QuickNotesView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("Notes").scaledFont(15, weight: .semibold)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Notes").scaledFont(22, weight: .bold, kind: .display)
                 Text("\(manager.quickNotes.count)")
-                    .scaledFont(11).foregroundStyle(NDS.textTertiary)
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 Spacer()
                 importButton
                 recordButton
             }
-            .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
+            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 6)
             Divider().overlay(NDS.divider)
             if manager.quickNotes.isEmpty {
                 MSEmptyState(systemImage: "waveform.badge.plus",
