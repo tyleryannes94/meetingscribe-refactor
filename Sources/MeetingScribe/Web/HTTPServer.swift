@@ -48,9 +48,12 @@ struct HTTPResponse: Sendable {
                      body: data)
     }
 
-    static func jsonObject(_ object: Any, status: Int = 200) -> HTTPResponse {
+    static func jsonObject(_ object: Any, status: Int = 200,
+                           setCookie: String? = nil) -> HTTPResponse {
         let data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
-        return .json(data, status: status)
+        var headers: [String: String] = ["Content-Type": "application/json; charset=utf-8"]
+        if let setCookie { headers["Set-Cookie"] = setCookie }
+        return HTTPResponse(status: status, headers: headers, body: data)
     }
 
     static func error(_ status: Int, _ message: String) -> HTTPResponse {

@@ -42,11 +42,18 @@ final class WebAPI {
         guard comps.first == "api" else {
             return .html(WebAssets.notFoundHTML, status: 404)
         }
-        guard isAuthorized(request) else {
-            return .error(401, "Unauthorized — open the link from the QR code in MeetingScribe → Settings.")
+
+        // Auth endpoints sit OUTSIDE the gate so the phone can hit
+        // /api/auth/login before it has a session.
+        let rest = Array(comps.dropFirst())
+        if rest.first == "auth" {
+            return handleAuth(request, rest: Array(rest.dropFirst()))
         }
 
-        let rest = Array(comps.dropFirst())
+        guard isAuthorized(request) else {
+            return .error(401, "Unauthorized — sign in, or open the link from the QR code in MeetingScribe → Settings.")
+        }
+
         switch rest.first {
         case "health":     return health()
         case "today":      return today()
@@ -67,17 +74,38 @@ final class WebAPI {
 
     private func serveRoot(_ request: HTTPRequest) -> HTTPResponse {
         let token = AppSettings.shared.webServerToken
-        if let t = request.query["t"], constantTimeEqual(t, token) {
+        // 1) Legacy ?t=<token> QR-link redirect — same UX as before, kept so
+        //    existing pairings keep working.
+        if let t = request.query["t"], !token.isEmpty, constantTimeEqual(t, token) {
             let cookie = "ms_token=\(token); Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly"
             return .redirect(to: "/", setCookie: cookie)
         }
-        if let c = request.cookies["ms_token"], constantTimeEqual(c, token) {
+        // 2) Valid multi-user session cookie → straight to the app.
+        if let session = request.cookies["ms_session"],
+           AccountStore.shared.validate(sessionToken: session) != nil {
             return .html(WebAssets.appHTML)
         }
+        // 3) Legacy shared-token cookie → also straight to the app.
+        if !token.isEmpty,
+           let c = request.cookies["ms_token"],
+           constantTimeEqual(c, token) {
+            return .html(WebAssets.appHTML)
+        }
+        // 4) Otherwise show the unified sign-in page (account login + token
+        //    fallback under the disclosure).
         return .html(WebAssets.unlockHTML)
     }
 
     private func isAuthorized(_ request: HTTPRequest) -> Bool {
+        // Multi-user session cookie (the new flow). Validates against
+        // AccountStore and bumps the session's lastUsedAt. Takes priority over
+        // the legacy shared-token so a logged-in account doesn't get demoted
+        // by a stale ms_token cookie.
+        if let session = request.cookies["ms_session"],
+           AccountStore.shared.validate(sessionToken: session) != nil {
+            return true
+        }
+        // Legacy shared-token path — keeps existing QR pairings working.
         let token = AppSettings.shared.webServerToken
         guard !token.isEmpty else { return false }
         if let c = request.cookies["ms_token"], constantTimeEqual(c, token) { return true }
@@ -87,6 +115,70 @@ final class WebAPI {
         }
         if let t = request.query["t"], constantTimeEqual(t, token) { return true }
         return false
+    }
+
+    // MARK: - Auth endpoints (POST /api/auth/login, /api/auth/logout, GET /api/auth/me)
+
+    private func handleAuth(_ request: HTTPRequest, rest: [String]) -> HTTPResponse {
+        switch rest.first {
+        case "login":  return handleLogin(request)
+        case "logout": return handleLogout(request)
+        case "me":     return handleAuthMe(request)
+        default:       return .error(404, "Unknown auth endpoint")
+        }
+    }
+
+    private func handleLogin(_ request: HTTPRequest) -> HTTPResponse {
+        guard request.method == "POST" else { return .error(405, "Method not allowed") }
+        struct Body: Decodable { let email: String; let password: String; let deviceLabel: String? }
+        guard let body = try? JSONDecoder().decode(Body.self, from: request.body) else {
+            return .error(400, "Expected JSON {email, password, deviceLabel?}")
+        }
+        guard let account = AccountStore.shared.authenticate(email: body.email,
+                                                              password: body.password) else {
+            // Same error message + status for unknown-email and wrong-password
+            // so the response can't be used to enumerate accounts.
+            return .error(401, "Invalid email or password")
+        }
+        let session = AccountStore.shared.issueSession(for: account.id,
+                                                        deviceLabel: body.deviceLabel)
+        let cookie = "ms_session=\(session.id); Path=/; Max-Age=7776000; SameSite=Lax; HttpOnly"
+        let payload: [String: Any] = [
+            "ok": true,
+            "account": [
+                "id": account.id,
+                "email": account.email,
+                "displayName": account.displayName
+            ]
+        ]
+        return .jsonObject(payload, setCookie: cookie)
+    }
+
+    private func handleLogout(_ request: HTTPRequest) -> HTTPResponse {
+        if let session = request.cookies["ms_session"] {
+            AccountStore.shared.revoke(sessionToken: session)
+        }
+        let cookie = "ms_session=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly"
+        return .jsonObject(["ok": true], setCookie: cookie)
+    }
+
+    private func handleAuthMe(_ request: HTTPRequest) -> HTTPResponse {
+        if let session = request.cookies["ms_session"],
+           let account = AccountStore.shared.validate(sessionToken: session) {
+            return .jsonObject([
+                "ok": true,
+                "account": [
+                    "id": account.id,
+                    "email": account.email,
+                    "displayName": account.displayName
+                ]
+            ])
+        }
+        // Legacy shared-token sessions don't have a multi-user identity.
+        if isAuthorized(request) {
+            return .jsonObject(["ok": true, "shared": true])
+        }
+        return .error(401, "Not signed in")
     }
 
     private func constantTimeEqual(_ a: String, _ b: String) -> Bool {

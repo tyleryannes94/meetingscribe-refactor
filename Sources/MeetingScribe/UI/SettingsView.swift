@@ -1234,6 +1234,10 @@ struct PhoneAccessSection: View {
             }
         }
         .onAppear { refresh() }
+
+        // Multi-user accounts — replaces (or supplements) the shared-token QR
+        // path so people can sign in from any device with email + password.
+        WebAccountsSection()
     }
 
     private func refresh() {
@@ -1247,5 +1251,80 @@ struct PhoneAccessSection: View {
             qr = nil
         }
         copied = false
+    }
+}
+
+/// Accounts subsection for the phone web UI. Lists local user records with a
+/// "Create account" form and a delete affordance. Lives next to the QR token
+/// so users can see both paths in one place.
+@available(macOS 14.0, *)
+struct WebAccountsSection: View {
+    @ObservedObject private var store = AccountStore.shared
+    @State private var newEmail = ""
+    @State private var newPassword = ""
+    @State private var newDisplayName = ""
+    @State private var error: String?
+
+    var body: some View {
+        Section("Accounts") {
+            Text("Users you've added here can sign into the phone web UI with their email and password — from any device, over the same Tailscale link. The shared QR token above keeps working alongside this.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            if store.accounts.isEmpty {
+                Text("No accounts yet — add one below to enable email + password sign-in.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(store.accounts) { account in
+                    HStack(spacing: 10) {
+                        Image(systemName: "person.crop.circle.fill")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(account.displayName).font(.callout)
+                            Text(account.email).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(role: .destructive) {
+                            store.deleteAccount(id: account.id)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Delete this account and sign out every device using it")
+                    }
+                }
+            }
+
+            Divider().padding(.vertical, 4)
+
+            Text("Add account").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            TextField("Name (optional)", text: $newDisplayName)
+            TextField("Email", text: $newEmail)
+                .textContentType(.emailAddress)
+                .disableAutocorrection(true)
+            SecureField("Password (8+ characters)", text: $newPassword)
+            if let error {
+                Text(error).font(.caption2).foregroundStyle(.orange)
+            }
+            HStack {
+                Spacer()
+                Button("Create account") {
+                    let nameInput = newDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let result = store.createAccount(
+                        email: newEmail,
+                        password: newPassword,
+                        displayName: nameInput.isEmpty ? nil : nameInput)
+                    if result == nil {
+                        error = "Couldn't create account. Check the email isn't already in use, that it looks like an email, and that the password is at least 8 characters."
+                    } else {
+                        error = nil
+                        newEmail = ""
+                        newPassword = ""
+                        newDisplayName = ""
+                    }
+                }
+                .disabled(newEmail.isEmpty || newPassword.count < 8)
+            }
+        }
     }
 }
