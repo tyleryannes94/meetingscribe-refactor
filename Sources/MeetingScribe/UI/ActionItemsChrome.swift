@@ -281,23 +281,18 @@ extension ActionItemsView {
     // MARK: - Header
 
     var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 9) {
-                    Text("📋").scaledFont(26)
-                    Text(headerTitle).font(NDS.title)
-                }
-                Text(subtitle)
-                    .font(NDS.small).foregroundStyle(NDS.textSecondary)
-            }
+        HStack(alignment: .firstTextBaseline) {
+            Text(headerTitle).font(NDS.title)
+            Text(subtitle)
+                .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
             Spacer()
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 stat(label: "Open", value: store.items.filter { $0.status == .open }.count, color: NDS.selectColor("blue"))
                 stat(label: "In Progress", value: store.items.filter { $0.status == .inProgress }.count, color: NDS.selectColor("orange"))
                 stat(label: "Done", value: store.items.filter { $0.status == .completed }.count, color: NDS.selectColor("green"))
             }
         }
-        .padding(.horizontal, 32).padding(.top, 22).padding(.bottom, 14)
+        .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 8)
     }
 
     var headerTitle: String {
@@ -306,13 +301,13 @@ extension ActionItemsView {
     }
 
     func stat(label: String, value: Int, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text("\(value)").font(.system(size: 14, weight: .semibold).monospacedDigit()) // design-lint:allow
-            Text(label).font(NDS.small).foregroundStyle(NDS.textSecondary)
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text("\(value)").font(NDS.tiny.monospacedDigit().weight(.semibold))
+            Text(label).font(NDS.tiny).foregroundStyle(NDS.textSecondary)
         }
-        .padding(.horizontal, 11).padding(.vertical, 6)
-        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 7))
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(NDS.fieldBg, in: Capsule())
     }
 
     var subtitle: String {
