@@ -49,6 +49,11 @@ struct PeopleListView: View {
     @AppStorage("people.sortOrder") private var sortRaw = PeopleSort.recent.rawValue
     private var sortOrder: PeopleSort { PeopleSort(rawValue: sortRaw) ?? .recent }
 
+    /// L6: row density toggle. Comfortable shows the meeting-count signal and a
+    /// 28pt avatar; compact drops to 22pt + tighter padding for dense scanning.
+    @AppStorage("people.rowDensity") private var densityRaw = RowDensity.comfortable.rawValue
+    private var density: RowDensity { RowDensity(rawValue: densityRaw) ?? .comfortable }
+
     /// Active relationship-type filter; nil = show all types.
     @State private var relationshipTypeFilter: RelationshipType? = nil
 
@@ -91,13 +96,17 @@ struct PeopleListView: View {
         debouncedQuery.isEmpty && relationshipTypeFilter == nil && tagFilters.isEmpty && triage == .all
     }
 
-    /// L4: bucket the list into Overdue / This week / Everyone else.
+    /// L4 + L9: bucket the list into Overdue / This week / Everyone else.
+    /// "This week" includes both recently-contacted people AND anyone with a
+    /// birthday / recurring special date in the next 7 days.
     private func groupedSections(_ list: [Person]) -> [(title: String, rows: [Person])] {
         let now = Date()
         var overdue: [Person] = [], thisWeek: [Person] = [], rest: [Person] = []
         for p in list {
             if people.isOverdueForCheckIn(p) { overdue.append(p); continue }
-            if let last = p.lastInteractionAt, now.timeIntervalSince(last) <= 7 * 86400 {
+            let recent = p.lastInteractionAt.map { now.timeIntervalSince($0) <= 7 * 86400 } ?? false
+            let upcomingDate = PersonDateHelpers.nextSpecialDateWithin(p, days: 7, now: now)
+            if recent || upcomingDate {
                 thisWeek.append(p)
             } else { rest.append(p) }
         }
@@ -286,6 +295,20 @@ struct PeopleListView: View {
             .menuStyle(.borderlessButton).fixedSize()
             .disabled(!query.isEmpty)
             .help("Sort people")
+            // L6: density toggle — compact for dense scanning, comfortable to
+            // surface the meeting-count signal on each row.
+            Menu {
+                Picker("Density", selection: $densityRaw) {
+                    ForEach(RowDensity.allCases) { d in
+                        Label(d.label, systemImage: d.icon).tag(d.rawValue)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: density.icon)
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help("Row density")
             // Multi-select for bulk tag / merge / delete (FT3-2/FT3-3).
             if !people.people.isEmpty {
                 Button {
@@ -383,7 +406,9 @@ struct PeopleListView: View {
                     ForEach(filtered) { person in
                         PersonRow(person: person,
                                   overdueDays: people.isOverdueForCheckIn(person) ? people.daysOverdue(person) : 0,
-                                  taskCounts: taskCounts[person.id] ?? (0, 0))
+                                  taskCounts: taskCounts[person.id] ?? (0, 0),
+                                  meetingCount: meetingCount(person),
+                                  density: density)
                             .tag(person.id)
                     }
                 }
@@ -415,7 +440,9 @@ struct PeopleListView: View {
     private func personListRow(_ person: Person) -> some View {
         PersonRow(person: person,
                   overdueDays: people.isOverdueForCheckIn(person) ? people.daysOverdue(person) : 0,
-                  taskCounts: taskCounts[person.id] ?? (0, 0))
+                  taskCounts: taskCounts[person.id] ?? (0, 0),
+                  meetingCount: meetingCount(person),
+                  density: density)
             .tag(person.id)
             .contextMenu { personRowMenu(person) }   // right-click (SC-7)
     }
@@ -679,6 +706,26 @@ enum PeopleTriage: String, CaseIterable, Identifiable {
     }
 }
 
+/// L6: row density toggle (persisted via @AppStorage).
+/// Comfortable = 28pt avatar + 3pt vertical + meeting-count badge.
+/// Compact     = 22pt avatar + 1pt vertical + no meeting-count.
+enum RowDensity: String, CaseIterable, Identifiable {
+    case comfortable, compact
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .comfortable: return "Comfortable"
+        case .compact:     return "Compact"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .comfortable: return "rectangle.grid.1x2"
+        case .compact:     return "list.bullet"
+        }
+    }
+}
+
 /// List ordering options (persisted via @AppStorage). Applied when not searching.
 enum PeopleSort: String, CaseIterable, Identifiable {
     case recent, name, meetings, newest
@@ -736,6 +783,12 @@ private struct PersonRow: View {
     /// the list so the row stays O(1).
     var overdueDays: Int = 0
     var taskCounts: (open: Int, overdue: Int) = (0, 0)
+    /// L6: optional meeting-count signal; passed in (O(1) via encounter index)
+    /// rather than computed here so the row stays cheap. nil = hide.
+    var meetingCount: Int? = nil
+    /// L6: row density. Compact tightens padding/avatar; comfortable shows the
+    /// meeting-count badge.
+    var density: RowDensity = .comfortable
     @EnvironmentObject var people: PeopleStore
 
     private var subtitle: String {
@@ -744,7 +797,7 @@ private struct PersonRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            MSAvatar(name: person.displayName, size: 28,
+            MSAvatar(name: person.displayName, size: density == .compact ? 22 : 28,
                      ringColor: healthRingColor(for: person, in: people))
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
@@ -767,21 +820,35 @@ private struct PersonRow: View {
                         .font(NDS.tiny.weight(.semibold)).foregroundStyle(NDS.danger)
                         .padding(.horizontal, 6).padding(.vertical, 1)
                         .background(NDS.danger.opacity(0.12), in: Capsule())
+                        .accessibilityLabel("\(overdueDays) days overdue for check-in")
                 } else if let last = person.lastInteractionAt {
                     Text(Self.relative.localizedString(for: last, relativeTo: Date()))
                         .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 }
-                // L3: open-task chip (reddened when any are overdue), hidden when 0.
-                if taskCounts.open > 0 {
-                    HStack(spacing: 3) {
-                        Image(systemName: "checklist").scaledFont(9)
-                        Text("\(taskCounts.open)").font(NDS.tiny.monospacedDigit())
+                HStack(spacing: 6) {
+                    // L3: open-task chip (reddened when any are overdue), hidden when 0.
+                    if taskCounts.open > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checklist").scaledFont(9)
+                            Text("\(taskCounts.open)").font(NDS.tiny.monospacedDigit())
+                        }
+                        .foregroundStyle(taskCounts.overdue > 0 ? NDS.danger : NDS.textTertiary)
+                        .accessibilityLabel("\(taskCounts.open) open task\(taskCounts.open == 1 ? "" : "s")\(taskCounts.overdue > 0 ? ", \(taskCounts.overdue) overdue" : "")")
                     }
-                    .foregroundStyle(taskCounts.overdue > 0 ? NDS.danger : NDS.textTertiary)
+                    // L6: meeting count — comfortable density only; O(1) via the
+                    // store's encounter index, so safe to surface row-side.
+                    if density == .comfortable, let mc = meetingCount, mc > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "calendar").scaledFont(9)
+                            Text("\(mc)").font(NDS.tiny.monospacedDigit())
+                        }
+                        .foregroundStyle(NDS.textTertiary)
+                        .accessibilityLabel("\(mc) meeting\(mc == 1 ? "" : "s")")
+                    }
                 }
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, density == .compact ? 1 : 3)
     }
 
     private static let relative: RelativeDateTimeFormatter = {
