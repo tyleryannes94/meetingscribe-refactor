@@ -264,7 +264,6 @@ struct PersonDetailView: View {
     @State private var reconnectError: String?
     @State private var newTaskTitle = ""
     @State private var newFavorite = ""
-    @State private var showNewTag = false
     @State private var newTagName = ""
     @State private var aiSuggestions: PersonAISuggestions?
     @State private var aiRunning = false
@@ -882,9 +881,10 @@ struct PersonDetailView: View {
                 // three text buttons don't overflow the 300pt column.
                 FlowLayout(spacing: 6) {
                     Button { showAddEncounter = true } label: {
-                        Label("Encounter", systemImage: "calendar.badge.plus")
+                        Label("Log encounter", systemImage: "calendar.badge.plus")
                     }
                     .buttonStyle(.borderless).font(NDS.small)
+                    .help("Record an in-person or call check-in")
                     Button { showAddRelationship = true } label: {
                         Label("Relationship", systemImage: "person.2.badge.plus")
                     }
@@ -1055,42 +1055,27 @@ struct PersonDetailView: View {
 
     // MARK: - Tags (inline add) + Favorites (inline add)
 
-    /// Tags with an always-present "Add tag" menu so tagging doesn't require the
-    /// full edit sheet. Lists existing people-tags and offers to create a new one.
+    /// Tags with an inline add field (P0-5) so tagging is one keystroke, not a
+    /// menu → popover. Matches an existing people-tag by name, else creates one.
     private var tagsEditSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Tags").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                Spacer()
-                Menu {
-                    let unused = peopleTags.allTags.filter { !current.tagIDs.contains($0.id) }
-                    if !unused.isEmpty {
-                        ForEach(unused) { t in
-                            Button(t.name) { addTag(t.id) }
-                        }
-                        Divider()
-                    }
-                    Button("New tag…") { showNewTag = true }
-                } label: {
-                    Label("Add tag", systemImage: "plus")
-                }
-                .menuStyle(.borderlessButton).fixedSize().font(NDS.small)
-            }
-            if tags.isEmpty {
-                Text("No tags yet. Use Add tag to group this person (clients, family, an event…).")
-                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
-            } else {
+            Text("Tags").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+            if !tags.isEmpty {
                 FlowLayout(spacing: 5) {
                     ForEach(tags) { t in
                         TagChip(tag: t, removable: true) { removeTag(t.id) }
                     }
                 }
             }
-        }
-        .alert("New tag", isPresented: $showNewTag) {
-            TextField("Tag name", text: $newTagName)
-            Button("Add") { commitNewTag() }
-            Button("Cancel", role: .cancel) { newTagName = "" }
+            HStack(spacing: 8) {
+                Image(systemName: "tag").foregroundStyle(NDS.textTertiary)
+                TextField("Add a tag — clients, family, an event…", text: $newTagName)
+                    .textFieldStyle(.plain)
+                    .onSubmit { commitTagEntry() }
+                if !newTagName.isEmpty { Button("Add") { commitTagEntry() }.font(NDS.small) }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
         }
     }
 
@@ -1106,12 +1091,20 @@ struct PersonDetailView: View {
         people.updatePerson(u)
     }
 
-    private func commitNewTag() {
+    /// Inline tag add: reuse an existing people-tag whose name matches
+    /// (case-insensitive), else create a new one, then attach — no menu/sheet.
+    private func commitTagEntry() {
         let name = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
         newTagName = ""
         guard !name.isEmpty else { return }
-        let tag = peopleTags.createTag(name: name)
-        addTag(tag.id)
+        if let existing = peopleTags.allTags.first(where: {
+            $0.name.caseInsensitiveCompare(name) == .orderedSame
+        }) {
+            addTag(existing.id)
+        } else {
+            let tag = peopleTags.createTag(name: name)
+            addTag(tag.id)
+        }
     }
 
     /// Favorites with an inline add field so favorite things can be captured
@@ -1674,8 +1667,6 @@ struct PersonDetailView: View {
                 Text("Encounters").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                 Spacer()
                 checkInGoalMenu
-                Button { showAddEncounter = true } label: { Label("Add", systemImage: "plus") }
-                    .buttonStyle(.borderless).font(NDS.small)
             }
             if mine.isEmpty {
                 Text("No encounters yet. Add where you met or last saw them.")
