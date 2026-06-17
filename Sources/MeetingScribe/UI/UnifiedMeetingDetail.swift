@@ -159,19 +159,13 @@ struct UnifiedMeetingDetail: View {
             Divider()
             audioBar
             Divider().opacity(audioURLs.isEmpty ? 0 : 1)
-            if canvasV2 {
-                canvasBody
-            } else {
-                tabbedBody
-            }
+            canvasBody
         }
         .onAppear {
             reload()
             attachChatIfNeeded()
-            applySmartTabDefault()
         }
         .onChange(of: meeting?.id) { _, _ in
-            hasAppliedTabDefault = false
             reload()
         }
         .onChange(of: audioURLs) { _, urls in audioController.reload(urls: urls) }
