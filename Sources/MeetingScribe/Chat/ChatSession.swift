@@ -54,6 +54,18 @@ final class ChatSession: ObservableObject {
         // place; the chat is still grounded on the entity it was opened on.
     }
 
+    /// Clear the sticky entity anchor without wiping the conversation. Lets
+    /// the user "unpin" the chat from a person/meeting and have follow-up
+    /// turns track the current page instead.
+    func clearAnchor() {
+        guard !anchorLabel.isEmpty || !anchorContext.isEmpty else { return }
+        anchorContext = ""
+        anchorLabel = ""
+        pageContext = ""
+        contextLabel = ""
+        persistAnchor()
+    }
+
     // Persist the conversation across relaunches (V5 TS-1) — it was in-memory
     // only, so every restart wiped the chat.
     private static let cacheName = "chat-session"
