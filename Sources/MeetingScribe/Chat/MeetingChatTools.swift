@@ -230,8 +230,9 @@ final class MeetingChatTools {
     }
 
     private func getMeeting(_ input: [String: JSONValue]) -> Result<String, Error> {
-        guard let id = input["id"]?.asString,
-              let m = ChatToolHelpers.allMeetings(manager: manager).first(where: { $0.id == id }) else {
+        let id = input["id"]?.asString ?? input["meeting_id"]?.asString
+        let all = ChatToolHelpers.allMeetings(manager: manager)
+        guard let m = id.flatMap({ mid in all.first(where: { $0.id == mid }) }) ?? manager.chatContextMeeting else {
             return .failure(AnthropicClient.ClientError
                 .toolExecutionFailed("get_meeting", "meeting not found"))
         }
@@ -260,8 +261,14 @@ final class MeetingChatTools {
     }
 
     private func getText(_ input: [String: JSONValue], filename: String) -> Result<String, Error> {
-        guard let id = input["id"]?.asString,
-              let m = ChatToolHelpers.allMeetings(manager: manager).first(where: { $0.id == id }) else {
+        // Accept either `id` (the schema) or `meeting_id` (which the prompt has
+        // historically nudged the model toward), and fall back to the meeting
+        // the chat is scoped to when the id is missing or doesn't resolve — so a
+        // meeting-scoped Ask AI never returns "meeting not found" for the very
+        // meeting being viewed.
+        let id = input["id"]?.asString ?? input["meeting_id"]?.asString
+        let all = ChatToolHelpers.allMeetings(manager: manager)
+        guard let m = id.flatMap({ mid in all.first(where: { $0.id == mid }) }) ?? manager.chatContextMeeting else {
             return .failure(AnthropicClient.ClientError
                 .toolExecutionFailed("get_text", "meeting not found"))
         }
