@@ -341,13 +341,13 @@ private struct IntegrationCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: icon).scaledFont(18)
-                        .foregroundStyle(tint).frame(width: 38, height: 38)
-                        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                HStack(spacing: 10) {
+                    Image(systemName: icon).scaledFont(15)
+                        .foregroundStyle(tint).frame(width: 30, height: 30)
+                        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(title).scaledFont(14, weight: .semibold).foregroundStyle(NDS.textPrimary)
+                            Text(title).scaledFont(13.5, weight: .semibold).foregroundStyle(NDS.textPrimary)
                             statusPill
                             if testing { ProgressView().controlSize(.small) }
                         }
@@ -359,7 +359,7 @@ private struct IntegrationCard<Content: View>: View {
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .scaledFont(11).foregroundStyle(NDS.textTertiary)
                 }
-                .padding(14)
+                .padding(12)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -373,14 +373,14 @@ private struct IntegrationCard<Content: View>: View {
                             .padding(.top, 2)
                     }
                 }
-                .padding(14)
+                .padding(12)
             } else if let status {
                 Text(status).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
-                    .padding(.horizontal, 14).padding(.bottom, 12)
+                    .padding(.horizontal, 12).padding(.bottom, 10)
             }
         }
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(NDS.hairline, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(NDS.hairline, lineWidth: 0.5))
     }
 
     private var statusPill: some View {
