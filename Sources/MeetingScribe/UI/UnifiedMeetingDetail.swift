@@ -290,7 +290,7 @@ struct UnifiedMeetingDetail: View {
                             highlightsSection
                             summarySection
                                 .id(SectionAnchor.summary)
-                            // Related lands in M9.
+                            relatedSection
                         }
                         .padding(.horizontal, NDS.spaceXL)
                         .padding(.vertical, NDS.spaceXL)
@@ -306,6 +306,28 @@ struct UnifiedMeetingDetail: View {
                 VStack(spacing: 0) { EmptyView() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// M9 / 01 §6 Step 9 — Related & linked section. Combines the
+    /// embedding-similar list (`relatedMeetingsStrip`) with the cross-entity
+    /// backlinks (`backlinksPanel`). Hidden when both empty.
+    @ViewBuilder var relatedSection: some View {
+        let count = relatedMeetings.count + backlinks.count
+        if count > 0 {
+            MSSection("Related & linked", systemImage: "link",
+                      count: count,
+                      persistenceKey: "meeting.related",
+                      defaultExpanded: false) {
+                VStack(alignment: .leading, spacing: NDS.spaceMD) {
+                    if !relatedMeetings.isEmpty {
+                        relatedMeetingsStrip
+                    }
+                    if !backlinks.isEmpty {
+                        backlinksPanel
+                    }
+                }
+            }
         }
     }
 
