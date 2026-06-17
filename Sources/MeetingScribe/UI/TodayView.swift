@@ -19,6 +19,7 @@ struct TodayView: View {
     @EnvironmentObject var decisions: DecisionStore
     @EnvironmentObject var actionItems: ActionItemStore
     @State private var showStandup = false
+    @State private var showDecisionLedger = false   // 4-D
 
     /// D5-1 "Today, calm by default": the long-tail sections collapse under one
     /// "More" disclosure so Today opens calm. Default-collapsed; remembered.
@@ -441,6 +442,9 @@ struct TodayView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal").foregroundStyle(NDS.brand)
                     Text("Recent decisions").scaledFont(15, weight: .semibold)
+                    Spacer()
+                    Button("View all") { showDecisionLedger = true }   // 4-D
+                        .scaledFont(12).buttonStyle(.plain).foregroundStyle(NDS.brand)
                 }
                 ForEach(items.prefix(5)) { d in
                     Button {
@@ -454,6 +458,12 @@ struct TodayView: View {
                                     .scaledFont(13)
                                     .foregroundStyle(NDS.textPrimary)
                                     .multilineTextAlignment(.leading)
+                                // 4-A: surface the rationale (the WHY) inline.
+                                if let r = d.rationale, !r.isEmpty {
+                                    Text(r).scaledFont(11)
+                                        .foregroundStyle(NDS.textSecondary)
+                                        .multilineTextAlignment(.leading)
+                                }
                                 Text("\(d.meetingTitle) · \(d.date.formatted(date: .abbreviated, time: .omitted))")
                                     .scaledFont(11)
                                     .foregroundStyle(NDS.textTertiary)
@@ -601,6 +611,13 @@ struct TodayView: View {
             StandupDigestSheet(
                 markdown: StandupDigest.markdown(manager: manager, calendar: calendar),
                 isPresented: $showStandup)
+        }
+        .sheet(isPresented: $showDecisionLedger) {
+            DecisionLedgerView(asSheet: true)   // 4-D
+                .environmentObject(decisions)
+                .environmentObject(PeopleStore.shared)
+                .environmentObject(manager)
+                .environmentObject(router)
         }
     }
 

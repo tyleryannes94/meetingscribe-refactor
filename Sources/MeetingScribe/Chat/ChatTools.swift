@@ -35,13 +35,14 @@ final class ChatTools {
     private let integrationTools: IntegrationChatTools
     private let fileTools: FileChatTools
     private let peopleTools: PeopleChatTools
+    private let decisionTools: DecisionChatTools   // 4-C
 
     /// Order matters for `run(name:input:)` only as a tiebreaker — tool
     /// names are unique across handlers, so the first non-nil `run` wins
     /// and we never traverse the rest. The catalogs are concatenated in
     /// the same order so `tools` is stable across launches.
     private var handlers: [any ChatToolHandler] {
-        [meetingTools, actionItemTools, integrationTools, fileTools, peopleTools]
+        [meetingTools, actionItemTools, integrationTools, fileTools, peopleTools, decisionTools]
     }
 
     init(manager: MeetingManager) {
@@ -51,6 +52,7 @@ final class ChatTools {
         self.integrationTools = IntegrationChatTools(manager: manager)
         self.fileTools        = FileChatTools()
         self.peopleTools      = PeopleChatTools(manager: manager)
+        self.decisionTools    = DecisionChatTools(manager: manager)
     }
 
     // MARK: - Catalog (Anthropic.Tool schemas)
