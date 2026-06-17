@@ -441,10 +441,8 @@ extension UnifiedMeetingDetail {
             showFollowUp = true
         } label: {
             Label("Draft follow-up…", systemImage: "paperplane")
-                .font(.callout)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.regular)
+        .buttonStyle(MSPrimaryButtonStyle())
         .sheet(isPresented: $showFollowUp) {
             if let m = meeting {
                 NavigationStack {
@@ -711,13 +709,13 @@ struct SummaryFeedbackRow: View {
                         showWhy = false
                         onRegenerate()
                     }
-                    .controlSize(.small)
+                    .buttonStyle(MSPrimaryButtonStyle())
                     .disabled(why.trimmingCharacters(in: .whitespaces).isEmpty)
                     Button("Just save") {
                         SummaryFeedback.set(up: false, why: why, for: meetingID)
                         showWhy = false
                     }
-                    .controlSize(.small)
+                    .buttonStyle(MSSecondaryButtonStyle())
                 }
             }
         }

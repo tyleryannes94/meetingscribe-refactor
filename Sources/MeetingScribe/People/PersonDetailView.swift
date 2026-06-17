@@ -436,6 +436,7 @@ struct PersonDetailView: View {
                 Text("Add \(current.displayName) to a meeting").font(.headline)
                 Spacer()
                 Button("Done") { showAddToMeeting = false }
+                    .buttonStyle(MSSecondaryButtonStyle())
             }
             .padding()
             Divider().overlay(NDS.divider)
@@ -833,21 +834,16 @@ struct PersonDetailView: View {
                 // or waiting for a section to appear. (UX3-4/A8) Wrapped so the
                 // three text buttons don't overflow the 300pt column.
                 FlowLayout(spacing: 6) {
-                    Button { showAddEncounter = true } label: {
-                        Label("Log encounter", systemImage: "calendar.badge.plus")
+                    MSInlineButton("Log encounter", systemImage: "calendar.badge.plus") {
+                        showAddEncounter = true
                     }
-                    .buttonStyle(.borderless).font(NDS.small)
                     .help("Record an in-person or call check-in")
-                    Button { showAddRelationship = true } label: {
-                        Label("Relationship", systemImage: "person.2.badge.plus")
+                    MSInlineButton("Relationship", systemImage: "person.2.badge.plus") {
+                        showAddRelationship = true
                     }
-                    .buttonStyle(.borderless).font(NDS.small)
                     // Open the chat rail grounded on this person — the page context
                     // is already set via updateChatContext(). (cross-tab)
-                    Button { askAIAboutPerson() } label: {
-                        Label("Ask AI", systemImage: "sparkles")
-                    }
-                    .buttonStyle(.borderless).font(NDS.small)
+                    MSInlineButton("Ask AI", systemImage: "sparkles") { askAIAboutPerson() }
                 }
                 .padding(.top, 2)
             }
@@ -958,7 +954,7 @@ struct PersonDetailView: View {
             Button { showHealthWhy = false; showAddEncounter = true } label: {
                 Label("Log a check-in", systemImage: "plus.circle")
             }
-            .buttonStyle(.borderedProminent).controlSize(.small).tint(NDS.brand)
+            .buttonStyle(MSPrimaryButtonStyle())
         }
         .padding(14).frame(width: 260)
     }
@@ -999,8 +995,10 @@ struct PersonDetailView: View {
                     Image(systemName: "chevron.down").scaledFont(9)
                         .foregroundStyle(NDS.textTertiary)
                 }
+                .msMenuButtonChrome()
             }
             .menuStyle(.borderlessButton)
+            .fixedSize()
             .help("Set relationship type — controls check-in cadence and coaching content")
             Spacer()
         }
@@ -1025,7 +1023,7 @@ struct PersonDetailView: View {
                 TextField("Add a tag — clients, family, an event…", text: $newTagName)
                     .textFieldStyle(.plain)
                     .onSubmit { commitTagEntry() }
-                if !newTagName.isEmpty { Button("Add") { commitTagEntry() }.font(NDS.small) }
+                if !newTagName.isEmpty { MSInlineButton("Add") { commitTagEntry() } }
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -1070,10 +1068,10 @@ struct PersonDetailView: View {
                     ForEach(current.favorites, id: \.self) { fav in
                         HStack(spacing: 4) {
                             Text(fav).font(NDS.small)
-                            Button { removeFavorite(fav) } label: {
-                                Image(systemName: "xmark.circle.fill").scaledFont(11)
+                            NotionIconButton(systemName: "xmark.circle.fill", help: "Remove favorite") {
+                                removeFavorite(fav)
                             }
-                            .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                            .minTap()
                         }
                         .padding(.horizontal, 9).padding(.vertical, 4)
                         .background(NDS.fieldBg, in: Capsule())
@@ -1086,7 +1084,7 @@ struct PersonDetailView: View {
                 TextField("Add a favorite — coffee order, hobby, team…", text: $newFavorite)
                     .textFieldStyle(.plain)
                     .onSubmit { addFavorite() }
-                if !newFavorite.isEmpty { Button("Add") { addFavorite() }.font(NDS.small) }
+                if !newFavorite.isEmpty { MSInlineButton("Add") { addFavorite() } }
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -1119,12 +1117,9 @@ struct PersonDetailView: View {
                 if aiRunning {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button {
+                    MSInlineButton(aiSuggestions == nil ? "Suggest" : "Refresh", systemImage: "sparkles") {
                         Task { await generateAISuggestions() }
-                    } label: {
-                        Label(aiSuggestions == nil ? "Suggest" : "Refresh", systemImage: "sparkles")
                     }
-                    .buttonStyle(.borderless).font(NDS.small)
                 }
             }
 
@@ -1221,7 +1216,7 @@ struct PersonDetailView: View {
             }
             Spacer(minLength: 0)
             if let actionLabel {
-                Button(actionLabel, action: accept).font(NDS.small)
+                MSInlineButton(actionLabel) { accept() }
             } else if let disabledNote {
                 Text(disabledNote).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
             }
@@ -1318,9 +1313,10 @@ struct PersonDetailView: View {
                     .scaledFont(13, weight: .semibold)
                 Spacer()
                 if !chatSession.messages.isEmpty {
-                    Button { chatSession.reset() } label: { Image(systemName: "arrow.counterclockwise") }
-                        .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
-                        .help("Clear conversation")
+                    NotionIconButton(systemName: "arrow.counterclockwise", help: "Clear conversation") {
+                        chatSession.reset()
+                    }
+                    .minTap()
                 }
             }
             .padding(.horizontal, 14).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 10)
@@ -1482,10 +1478,7 @@ struct PersonDetailView: View {
 
     /// Inline "+ Add email" (§4A) — appends a deduped email via the store service.
     private var addEmailControl: some View {
-        Button { showAddEmail = true } label: {
-            Label("Add email", systemImage: "plus").font(NDS.tiny)
-        }
-        .buttonStyle(.borderless).foregroundStyle(NDS.accent)
+        MSInlineButton("Add email", systemImage: "plus") { showAddEmail = true }
         .popover(isPresented: $showAddEmail, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Add email").scaledFont(13, weight: .bold, relativeTo: .headline)
@@ -1495,6 +1488,7 @@ struct PersonDetailView: View {
                 HStack {
                     Spacer()
                     Button("Cancel") { showAddEmail = false; newEmailDraft = "" }
+                        .buttonStyle(MSSecondaryButtonStyle())
                     Button("Add") { commitAddEmail() }
                         .buttonStyle(MSPrimaryButtonStyle())
                         .disabled(newEmailDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -1521,8 +1515,7 @@ struct PersonDetailView: View {
             HStack {
                 Text("Photos").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                 Spacer()
-                Button { attachPhotos() } label: { Label("Add", systemImage: "photo.badge.plus") }
-                    .buttonStyle(.borderless).font(NDS.small)
+                MSInlineButton("Add", systemImage: "photo.badge.plus") { attachPhotos() }
             }
             if current.photoRelativePaths.isEmpty {
                 Text("No photos yet. Add pictures exported from Apple Photos, Google Photos, or any file.")
@@ -1628,9 +1621,10 @@ struct PersonDetailView: View {
         } label: {
             Label(current.checkInGoalDays.map { "Goal: \($0)d" } ?? "Set goal",
                   systemImage: "target")
+                .msMenuButtonChrome()
         }
         .menuStyle(.borderlessButton)
-        .font(NDS.small)
+        .fixedSize()
         .help("Set an aspirational check-in goal for this person")
     }
 
@@ -1703,7 +1697,7 @@ struct PersonDetailView: View {
                     .textFieldStyle(.plain)
                     .onSubmit { addTaskForPerson() }
                 if !newTaskTitle.isEmpty {
-                    Button("Add") { addTaskForPerson() }.font(NDS.small)
+                    MSInlineButton("Add") { addTaskForPerson() }
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
@@ -1763,7 +1757,8 @@ struct PersonDetailView: View {
                     .scaledFont(15)
                     .foregroundStyle(done ? NDS.brand : NDS.textTertiary)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .minTap()
 
             Button {
                 router.route(kind: .actionItem, id: item.id, manager: manager)
@@ -1811,8 +1806,7 @@ struct PersonDetailView: View {
             HStack {
                 Text("Relationships").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                 Spacer()
-                Button { showAddRelationship = true } label: { Label("Add", systemImage: "plus") }
-                    .buttonStyle(.borderless).font(NDS.small)
+                MSInlineButton("Add", systemImage: "plus") { showAddRelationship = true }
                     .disabled(people.people.count < 2)
             }
             if current.relationships.isEmpty {
@@ -1827,10 +1821,10 @@ struct PersonDetailView: View {
                         Text(people.person(by: rel.toPersonID)?.displayName ?? "Unknown")
                             .scaledFont(13.5, weight: .semibold)
                         Spacer(minLength: 0)
-                        Button { people.removeRelationship(rel, from: current.id) } label: {
-                            Image(systemName: "xmark.circle.fill")
+                        NotionIconButton(systemName: "xmark.circle.fill", help: "Remove relationship") {
+                            people.removeRelationship(rel, from: current.id)
                         }
-                        .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                        .minTap()
                     }
                     .padding(10)
                     .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -1953,13 +1947,11 @@ struct PersonDetailView: View {
                         .buttonStyle(.plain)
                         // §8.2 — one-tap "log this meeting as an encounter".
                         if !hasEncounter(forMeeting: m.id) {
-                            Button {
+                            NotionIconButton(systemName: "plus.circle", help: "Log this meeting as an encounter") {
                                 people.addEncounter(to: current.id, eventName: m.displayTitle,
                                                     date: m.startDate, meetingID: m.id)
-                            } label: { Image(systemName: "plus.circle") }
-                                .buttonStyle(.borderless)
-                                .help("Log this meeting as an encounter")
-                                .accessibilityLabel("Log this meeting as an encounter")
+                            }
+                            .minTap()
                         }
                     }
                 }
@@ -2088,8 +2080,10 @@ struct PersonDetailView: View {
                     NSPasteboard.general.setString(reconnectDraft, forType: .string)
                     ToastCenter.shared.show("Copied")
                 } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    .buttonStyle(MSSecondaryButtonStyle())
                     .disabled(reconnectDraft.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button("Done") { showReconnectDraft = false }
+                    .buttonStyle(MSSecondaryButtonStyle())
             }
             .padding(12)
             Divider().overlay(NDS.divider)
@@ -2160,6 +2154,7 @@ struct PersonDetailView: View {
                 Button { showEvidence = true } label: {
                     Label("Compile last 6 months", systemImage: "doc.text.magnifyingglass")
                 }
+                .buttonStyle(MSSecondaryButtonStyle())
                 Spacer()
             }
             Text("A deterministic summary of meetings, decisions, completed work, and check-ins — no AI, instant.")
@@ -2179,7 +2174,9 @@ struct PersonDetailView: View {
                     NSPasteboard.general.setString(text, forType: .string)
                     ToastCenter.shared.show("Evidence copied")
                 } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    .buttonStyle(MSSecondaryButtonStyle())
                 Button("Done") { showEvidence = false }
+                    .buttonStyle(MSSecondaryButtonStyle())
             }
             .padding(12)
             Divider()
@@ -2229,7 +2226,7 @@ struct PersonDetailView: View {
                 TextField("Add a talking point to raise next time…", text: $newTalkingPoint)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(addTalkingPoint)
-                Button("Add", action: addTalkingPoint)
+                MSInlineButton("Add") { addTalkingPoint() }
                     .disabled(newTalkingPoint.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             ForEach(Array(current.talkingPoints.enumerated()), id: \.offset) { idx, point in
@@ -2239,8 +2236,10 @@ struct PersonDetailView: View {
                     Text(point).font(NDS.body).frame(maxWidth: .infinity, alignment: .leading)
                     Button { removeTalkingPoint(at: idx) } label: {
                         Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(NDS.mint)
                     }
-                    .buttonStyle(.borderless).foregroundStyle(NDS.mint)
+                    .buttonStyle(.plain)
+                    .minTap()
                     .help("Done — remove this point")
                 }
                 .padding(10)
@@ -2275,7 +2274,7 @@ struct PersonDetailView: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($memoryFieldFocused)
                     .onSubmit(addMemory)
-                Button("Add", action: addMemory)
+                MSInlineButton("Add") { addMemory() }
                     .disabled(newMemory.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             ForEach(current.memories) { m in
@@ -2283,10 +2282,10 @@ struct PersonDetailView: View {
                     Image(systemName: "sparkles").scaledFont(12)
                         .foregroundStyle(NDS.brand.opacity(0.7)).padding(.top, 2)
                     Text(m.text).font(NDS.body).frame(maxWidth: .infinity, alignment: .leading)
-                    Button { people.deleteMemory(m, from: current.id) } label: {
-                        Image(systemName: "xmark.circle.fill")
+                    NotionIconButton(systemName: "xmark.circle.fill", help: "Delete memory") {
+                        people.deleteMemory(m, from: current.id)
                     }
-                    .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
+                    .minTap()
                 }
                 .padding(10)
                 .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -2314,8 +2313,9 @@ struct PersonDetailView: View {
                         }
                     } label: {
                         Label("Scan", systemImage: "message")
+                            .msMenuButtonChrome()
                     }
-                    .menuStyle(.borderlessButton).fixedSize().font(NDS.small)
+                    .menuStyle(.borderlessButton).fixedSize()
                 }
             }
             if let err = messageError {
@@ -2349,11 +2349,8 @@ struct PersonDetailView: View {
     /// can rerun deliberately.
     private var analysisPresetMenu: some View {
         HStack(spacing: 6) {
-            Button { showAnalyzePopover = true } label: {
-                Label("Analyze…", systemImage: "sparkles")
-            }
-            .buttonStyle(.borderless).font(NDS.small)
-            .popover(isPresented: $showAnalyzePopover, arrowEdge: .bottom) { analyzePopover }
+            MSInlineButton("Analyze…", systemImage: "sparkles") { showAnalyzePopover = true }
+                .popover(isPresented: $showAnalyzePopover, arrowEdge: .bottom) { analyzePopover }
             if let running = analysisRunning {
                 ProgressView().controlSize(.small)
                 Text("Running: \(running.label)…")
@@ -2442,16 +2439,13 @@ struct PersonDetailView: View {
                     Text(output.preset.label.uppercased())
                         .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                     Spacer()
-                    Button {
+                    MSInlineButton("Save to notes", systemImage: "square.and.arrow.down") {
                         saveAnalysisToNotes(output)
-                    } label: { Label("Save to notes", systemImage: "square.and.arrow.down") }
-                        .buttonStyle(.borderless).font(NDS.tiny)
-                    Button {
+                    }
+                    NotionIconButton(systemName: "xmark", help: "Dismiss analysis output") {
                         analysisOutput = nil
-                    } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.borderless).font(NDS.tiny)
-                        .help("Dismiss")
-                        .accessibilityLabel("Dismiss analysis output")
+                    }
+                    .minTap()
                 }
                 Text(output.body)
                     .font(NDS.small)
@@ -2480,10 +2474,12 @@ struct PersonDetailView: View {
             HStack {
                 Spacer()
                 Button("Cancel") { showCustomPrompt = false }
+                    .buttonStyle(MSSecondaryButtonStyle())
                 Button("Run") {
                     showCustomPrompt = false
                     runAnalysis(.custom)
                 }
+                .buttonStyle(MSPrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
                 .disabled(customPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -2527,19 +2523,16 @@ struct PersonDetailView: View {
                 Spacer()
                 Text(Self.dateFormatter.string(from: note.createdAt))
                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                Button {
+                NotionIconButton(systemName: expanded ? "chevron.up" : "chevron.down",
+                                 help: expanded ? "Collapse" : "Expand") {
                     noteExpansion[note.id] = !expanded
-                } label: {
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 }
-                .buttonStyle(.borderless).font(NDS.tiny)
-                Button(role: .destructive) {
+                .minTap()
+                NotionIconButton(systemName: "trash", help: "Delete saved analysis") {
                     people.deleteAttachedNote(note, from: current.id)
                     noteExpansion.removeValue(forKey: note.id)
-                } label: {
-                    Image(systemName: "trash")
                 }
-                .buttonStyle(.borderless).font(NDS.tiny)
+                .minTap()
             }
             if expanded {
                 Text(note.body)
@@ -2748,8 +2741,7 @@ struct PersonDetailView: View {
             if deepRunning {
                 ProgressView().controlSize(.small)
             } else {
-                Button(deepNote == nil ? "Run" : "Refresh") { runDeepMessageAnalysis() }
-                    .font(NDS.small)
+                MSInlineButton(deepNote == nil ? "Run" : "Refresh") { runDeepMessageAnalysis() }
             }
         }
     }
@@ -2897,9 +2889,10 @@ private struct EncounterRow: View {
                 }
             }
             Spacer(minLength: 0)
-            Button { onDelete() } label: { Image(systemName: "xmark.circle.fill") }
-                .buttonStyle(.borderless).foregroundStyle(NDS.textTertiary)
-                .accessibilityLabel("Delete encounter")
+            NotionIconButton(systemName: "xmark.circle.fill", help: "Delete encounter") {
+                onDelete()
+            }
+            .minTap()
         }
         .padding(10)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
@@ -2927,8 +2920,12 @@ private struct AddRelationshipSheet: View {
             HStack {
                 Text("Add Relationship").font(.headline)
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Save", action: save).keyboardShortcut(.defaultAction)
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(MSSecondaryButtonStyle())
+                    .keyboardShortcut(.cancelAction)
+                Button("Save", action: save)
+                    .buttonStyle(MSPrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
                     .disabled(selectedID == nil || label.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(12)
