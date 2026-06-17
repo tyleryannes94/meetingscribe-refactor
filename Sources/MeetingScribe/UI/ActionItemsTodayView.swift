@@ -49,9 +49,9 @@ extension ActionItemsView {
     private func todayHeader(overdue: Int, dueToday: Int) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 9) {
-                    Image(systemName: "sun.max.fill").scaledFont(22).foregroundStyle(NDS.selectColor("orange"))
-                    Text("Today").font(NDS.title)
+                HStack(spacing: 8) {
+                    Image(systemName: "sun.max.fill").scaledFont(16).foregroundStyle(NDS.selectColor("orange"))
+                    Text("Today").scaledFont(22, weight: .bold, kind: .display)
                 }
                 Text(Self.todayDateString())
                     .font(NDS.small).foregroundStyle(NDS.textSecondary)
@@ -64,7 +64,7 @@ extension ActionItemsView {
                 stat(label: "Due today", value: dueToday, color: NDS.brand)
             }
         }
-        .padding(.horizontal, 32).padding(.top, 22).padding(.bottom, 14)
+        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
     }
 
     private func todaySection(_ title: String, items: [ActionItem], tint: Color) -> some View {
