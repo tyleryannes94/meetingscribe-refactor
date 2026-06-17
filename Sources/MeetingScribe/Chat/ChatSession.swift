@@ -26,16 +26,42 @@ final class ChatSession: ObservableObject {
     /// what the assistant is grounded on without a heavy header. Empty on
     /// top-level pages (no pill).
     @Published var contextLabel: String = ""
+    /// The entity the chat was opened on (a person, a meeting). Once set, it
+    /// sticks across top-level navigation so a conversation that started on
+    /// Horst's profile keeps grounding tool calls on Horst even when the user
+    /// moves to Tasks. Replaced when the chat is opened on a different entity
+    /// or cleared by `reset()`.
+    private var anchorContext: String = ""
+    private var anchorLabel: String = ""
 
     func setContext(_ context: String, label: String = "") {
-        if context != pageContext { pageContext = context }
-        if label != contextLabel { contextLabel = label }
+        if !label.isEmpty {
+            // Entity-grounded context (person / meeting detail). Become the
+            // sticky anchor; replace any prior anchor (the user is now on a
+            // different entity) and update the published page state to match.
+            anchorContext = context
+            anchorLabel = label
+            if context != pageContext { pageContext = context }
+            if label != contextLabel { contextLabel = label }
+            persistAnchor()
+        } else if anchorLabel.isEmpty {
+            // No anchor — safe to track wherever the user navigated to.
+            if context != pageContext { pageContext = context }
+            if !contextLabel.isEmpty { contextLabel = "" }
+        }
+        // Else: anchor is active and the caller is reporting top-level
+        // section navigation. Leave the anchor (and the breadcrumb pill) in
+        // place; the chat is still grounded on the entity it was opened on.
     }
 
     // Persist the conversation across relaunches (V5 TS-1) — it was in-memory
     // only, so every restart wiped the chat.
     private static let cacheName = "chat-session"
     private static let cacheVersion = 1
+    private static let anchorCacheName = "chat-anchor"
+    private static let anchorCacheVersion = 1
+
+    private struct AnchorState: Codable { let context: String; let label: String }
 
     /// Default init for @StateObject. Must call `attach(manager:)`
     /// before any user message lands or tools will be unavailable.
@@ -44,10 +70,24 @@ final class ChatSession: ObservableObject {
                                        name: Self.cacheName, version: Self.cacheVersion) {
             messages = saved
         }
+        if let anchor = VaultCache.load(AnchorState.self,
+                                        name: Self.anchorCacheName,
+                                        version: Self.anchorCacheVersion) {
+            anchorContext = anchor.context
+            anchorLabel = anchor.label
+            pageContext = anchor.context
+            contextLabel = anchor.label
+        }
     }
 
     private func persist() {
         VaultCache.save(messages, name: Self.cacheName, version: Self.cacheVersion)
+    }
+
+    private func persistAnchor() {
+        VaultCache.save(AnchorState(context: anchorContext, label: anchorLabel),
+                        name: Self.anchorCacheName,
+                        version: Self.anchorCacheVersion)
     }
 
     func attach(manager: MeetingManager) {
@@ -56,16 +96,21 @@ final class ChatSession: ObservableObject {
     }
 
     var systemPrompt: String {
-        let contextBlock = pageContext.isEmpty ? "" : """
+        let effective = anchorContext.isEmpty ? pageContext : anchorContext
+        let contextBlock = effective.isEmpty ? "" : """
 
         WHERE THE USER IS RIGHT NOW (PRIMARY CONTEXT — read this every turn):
-          \(pageContext)
+          \(effective)
           For ANY ambiguous question (pronouns, "this", "they", "next week",
           "the trip", "what about…"), assume it's about the entity above.
           If the context names a person with an id, use that id directly for
           get_person / get_person_messages / list_person_meetings /
           attach_note_to_person — do NOT call list_people first when the id
           is right there.
+          If an earlier tool result in THIS conversation already revealed an
+          entity id (person id, meeting id), keep using that id for follow-up
+          calls. Do NOT ask the user to re-specify the person/meeting and do
+          NOT call list_people again just to learn the id you already saw.
 
         """
         return """
@@ -233,7 +278,12 @@ final class ChatSession: ObservableObject {
     func reset() {
         messages = []
         lastError = nil
+        anchorContext = ""
+        anchorLabel = ""
+        pageContext = ""
+        contextLabel = ""
         persist()
+        persistAnchor()
     }
 
     // MARK: - Retrieve-then-ground (C2-2)
