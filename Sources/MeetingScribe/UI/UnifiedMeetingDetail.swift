@@ -79,6 +79,12 @@ struct UnifiedMeetingDetail: View {
     @State var connectingAttendee: String?
     /// The persistent "Who's here" people rail (P1-2). On by default; toggle ⌥⌘P.
     @AppStorage("meetingPeopleRailVisible") var peopleRailVisible = true
+
+    /// M1: opt-in scaffold for the de-tabbed canvas (`docs/ux-audit-2026-06b/01`).
+    /// Flag-off path is byte-for-byte today's tabbed UI; enabling this flag
+    /// today swaps to a stub canvas that just hosts the existing sections in a
+    /// scrolling column. The flag stays opt-in until the M2–M9 sections land.
+    @AppStorage("meetingCanvasV2") var canvasV2 = false
     /// Query carried from a search hit into the transcript find bar (U2-2).
     @State var transcriptSearchSeed: String?
 
@@ -153,16 +159,11 @@ struct UnifiedMeetingDetail: View {
             Divider()
             audioBar
             Divider().opacity(audioURLs.isEmpty ? 0 : 1)
-            tabPicker
-            Group {
-                switch tab {
-                case .notes:      combinedNotesBody
-                case .actions:    actionsBody
-                case .transcript: transcriptBody
-                case .chat:       chatBody
-                }
+            if canvasV2 {
+                canvasBody
+            } else {
+                tabbedBody
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             reload()
@@ -242,6 +243,36 @@ struct UnifiedMeetingDetail: View {
         // Switching meetings closes any open connect panel.
         .onChange(of: meeting?.id) { _, _ in connectingAttendee = nil }
     }
+    // MARK: - Body branches (M1 flag-gated)
+
+    /// Today's path: pill tab picker + one mode-multiplexed body. Stays byte-
+    /// for-byte unchanged while `canvasV2` is off.
+    @ViewBuilder var tabbedBody: some View {
+        tabPicker
+        Group {
+            switch tab {
+            case .notes:      combinedNotesBody
+            case .actions:    actionsBody
+            case .transcript: transcriptBody
+            case .chat:       chatBody
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// M1 scaffold: GeometryReader → VStack shell for the de-tabbed canvas.
+    /// Today renders today's notes/combined body inside the shell so the editor
+    /// still works at bounded height (proves the C-A constraint). M2-M9 replace
+    /// the body with collapsible MSSections.
+    @ViewBuilder var canvasBody: some View {
+        GeometryReader { _ in
+            VStack(spacing: 0) {
+                combinedNotesBody
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
     // MARK: - Tabs
 
     /// Count of this meeting's action items still awaiting review (Triage) —
