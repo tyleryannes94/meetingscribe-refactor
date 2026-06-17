@@ -130,7 +130,7 @@ struct TodayView: View {
 
     private var feed: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 30) {   // P1-2: calmer section rhythm (was 22)
+            VStack(alignment: .leading, spacing: 18) {   // Was 30 — too much air between top-level cards.
                 header
                 firstStepsCard   // 5-H: dismissible new-user onboarding
                 MorningBriefCard(contextSummary: morningContextSummary)   // 5-C
