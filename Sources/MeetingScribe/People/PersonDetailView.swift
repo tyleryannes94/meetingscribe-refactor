@@ -794,14 +794,15 @@ struct PersonDetailView: View {
     /// (P3-P6) puts it at the top of the scrolling column.
     @ViewBuilder
     private var compactHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
-                MSAvatar(name: current.displayName, size: 48)
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
+                MSAvatar(name: current.displayName, size: 56,
+                         ringColor: healthRingColor(for: current, in: people))
+                VStack(alignment: .leading, spacing: 3) {
                     // R1 fit guardrail: name truncates so Primary + overflow
                     // stay right-anchored on narrow canvases.
                     Text(current.displayName)
-                        .scaledFont(22, weight: .heavy, relativeTo: .title, kind: .display)
+                        .scaledFont(24, weight: .heavy, relativeTo: .title, kind: .display)
                         .foregroundStyle(NDS.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -810,7 +811,7 @@ struct PersonDetailView: View {
                         .help("Click to edit name, role, and company")
                     if !subtitle.isEmpty {
                         Text(subtitle)
-                            .scaledFont(12)
+                            .scaledFont(12.5)
                             .foregroundStyle(NDS.textSecondary)
                             .lineLimit(1)
                     }
