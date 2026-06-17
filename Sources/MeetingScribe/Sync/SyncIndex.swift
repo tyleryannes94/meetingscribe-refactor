@@ -51,10 +51,16 @@ enum SyncIndex {
                                      options: [.skipsHiddenFiles, .skipsPackageDescendants],
                                      errorHandler: nil) else { return [] }
         var out: [Entry] = []
-        let rootPath = vaultRoot.standardized.path
+        // Resolve symlinks on both sides — on macOS the FileManager enumerator
+        // returns URLs whose paths the kernel has already resolved (e.g.
+        // `/var/folders/…` → `/private/var/folders/…`), but `URL.standardized`
+        // only collapses `.`/`..`. Without resolving symlinks the prefix match
+        // drops every file when the vault lives under a symlinked tree
+        // (notably `temporaryDirectory` in tests).
+        let rootPath = vaultRoot.resolvingSymlinksInPath().path
         while let url = it.nextObject() as? URL {
             // Compute the relative path early so we can prefix-skip whole subtrees.
-            let abs = url.standardized.path
+            let abs = url.resolvingSymlinksInPath().path
             guard abs.hasPrefix(rootPath) else { continue }
             var rel = String(abs.dropFirst(rootPath.count))
             while rel.hasPrefix("/") { rel.removeFirst() }
