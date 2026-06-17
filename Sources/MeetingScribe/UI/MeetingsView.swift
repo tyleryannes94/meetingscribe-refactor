@@ -107,16 +107,16 @@ struct MeetingsView: View {
     // MARK: - List header
 
     private var listHeader: some View {
-        VStack(spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Meetings").font(NDS.title)
-                    Text("\(upcoming.count) upcoming · \(past.count) past")
-                        .font(NDS.small).foregroundStyle(NDS.textSecondary)
-                }
+        VStack(spacing: 6) {
+            // Title row + search packed onto two lines instead of three. The
+            // upcoming/past counts now sit beside the title as a muted suffix.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Meetings").font(NDS.title)
+                Text("\(upcoming.count) upcoming · \(past.count) past")
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 Spacer()
             }
-            .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 0)
+            .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 4)
 
             // Search bar — always visible (not hidden behind ⌘K)
             HStack(spacing: 8) {
@@ -134,12 +134,12 @@ struct MeetingsView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 7)
+            .padding(.horizontal, 10).padding(.vertical, 6)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(NDS.hairline, lineWidth: 1))
             .padding(.horizontal, 12)
 
-            // List / Month view toggle — re-exposes the month grid (option B).
+            // List / Month view toggle
             Picker("", selection: $listMode) {
                 ForEach(ListMode.allCases) { m in
                     Label(m.label, systemImage: m.systemImage).tag(m)
@@ -147,15 +147,10 @@ struct MeetingsView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .padding(.horizontal, 12).padding(.bottom, 2)
+            .padding(.horizontal, 12)
 
-            // Scope + saved-view tabs — one shared chip component (D4-10).
-            // Horizontally scrollable so a long saved-view list never overflows
-            // the narrow list pane.
+            // Scope + filter chips
             scopeRow
-
-            // Filter chips — tag / source / has-recording (C1-5). Person filter
-            // deferred (attendee→person lives in PeopleStore, out of scope here).
             filterRow
         }
         .sheet(isPresented: $showSaveSheet) {
