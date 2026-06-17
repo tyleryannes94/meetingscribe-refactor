@@ -442,7 +442,7 @@ struct SettingsView: View {
                             AppSettings.shared.googleDriveFolderName = googleFolderDraft.trimmingCharacters(in: .whitespaces)
                             Task { await drive.connect() }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(MSPrimaryButtonStyle())
                         .disabled(googleClientIDDraft.trimmingCharacters(in: .whitespaces).isEmpty
                                   || googleSecretDraft.trimmingCharacters(in: .whitespaces).isEmpty
                                   || drive.isWorking)

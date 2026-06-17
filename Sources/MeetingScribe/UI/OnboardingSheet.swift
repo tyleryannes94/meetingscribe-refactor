@@ -111,12 +111,12 @@ struct OnboardingSheet: View {
                         vaultURL = AppSettings.defaultStorageURL
                         AppSettings.shared.storageDir = vaultURL
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(MSSecondaryButtonStyle())
 
                     Button("Change Location…") {
                         chooseVaultLocation()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(MSSecondaryButtonStyle())
                 }
             }
             .padding(.horizontal, 32).padding(.bottom, 24)
@@ -131,7 +131,7 @@ struct OnboardingSheet: View {
                     advance()
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(MSPrimaryButtonStyle())
             }
             .padding(.horizontal, 24).padding(.vertical, 16)
             .background(.bar)
@@ -199,7 +199,7 @@ struct OnboardingSheet: View {
                         .font(.callout.weight(.medium))
                     Button("Reopen MeetingScribe") { relaunchApp() }
                         .keyboardShortcut(.defaultAction)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(MSPrimaryButtonStyle())
                 } else {
                     if currentPermission.status == .denied {
                         Button("Open System Settings") { openSystemSettings(for: currentPermission.kind) }
@@ -208,7 +208,7 @@ struct OnboardingSheet: View {
                         Task { await requestPermission(currentPermission.kind) }
                     }
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(MSPrimaryButtonStyle())
                 }
             }
             .padding(.horizontal, 24).padding(.vertical, 16)

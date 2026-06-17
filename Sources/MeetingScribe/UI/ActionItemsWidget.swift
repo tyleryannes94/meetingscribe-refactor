@@ -73,7 +73,7 @@ struct ActionItemsWidget: View {
                     .labelStyle(.titleOnly)
                     .font(.caption)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(MSSecondaryButtonStyle())
             .controlSize(.small)
         }
     }
