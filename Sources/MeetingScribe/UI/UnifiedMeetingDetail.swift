@@ -24,7 +24,10 @@ struct UnifiedMeetingDetail: View {
     @ObservedObject var drive = GoogleDriveService.shared
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
-    @StateObject var meetingChat = ChatSession()
+    /// P0-2: the single app-wide assistant (same instance the Today sidebar +
+    /// person view use), so messages persist when you navigate between a
+    /// meeting and elsewhere instead of being wiped by a per-view session.
+    @EnvironmentObject var chatSession: ChatSession
 
     @State var tab: DetailTab = .notes
     /// Summary disclosure state within the combined Notes canvas (CN-1).

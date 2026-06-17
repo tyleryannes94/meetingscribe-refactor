@@ -1358,7 +1358,10 @@ struct PersonDetailView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles").foregroundStyle(NDS.brand)
-                Text("Ask AI about \(current.displayName.split(separator: " ").first.map(String.init) ?? current.displayName)")
+                // P0-2: the assistant already knows who it's scoped to (context
+                // is set via updateChatContext); a plain "Chat" header matches
+                // the one app-wide assistant instead of a per-page label.
+                Text("Chat")
                     .scaledFont(13, weight: .semibold)
                 Spacer()
                 if !chatSession.messages.isEmpty {
