@@ -100,9 +100,9 @@ struct MSPillTabs<Tab: Hashable>: View {
                         }
                     } label: {
                         Text(item.label)
-                            .scaledFont(13, weight: active ? .bold : .semibold)
+                            .scaledFont(12.5, weight: active ? .bold : .semibold)
                             .foregroundStyle(active ? NDS.onAccent : NDS.textSecondary)
-                            .padding(.horizontal, 15).padding(.vertical, 8)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
                             .background {
                                 if active {
                                     Capsule().fill(NDS.accentGradient)
