@@ -160,7 +160,7 @@ struct TaskPageView: View {
             .buttonStyle(.plain)
             TextField("Untitled", text: $titleDraft, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(NDS.title)
+                .scaledFont(22, weight: .bold, kind: .display)
                 .onChange(of: titleDraft) { _, v in
                     if v != item.title { store.setTitle(itemID, title: v) }
                 }
