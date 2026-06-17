@@ -1121,8 +1121,8 @@ struct PersonDetailView: View {
     /// Favorites with an inline add field so favorite things can be captured
     /// without the edit sheet.
     private var favoritesEditSection: some View {
+        // P8: outer MSSection owns the eyebrow.
         VStack(alignment: .leading, spacing: 8) {
-            Text("Favorite things").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
             if !current.favorites.isEmpty {
                 FlowLayout(spacing: 6) {
                     ForEach(current.favorites, id: \.self) { fav in
@@ -1169,10 +1169,9 @@ struct PersonDetailView: View {
     // MARK: - AI suggestions (tags / relationships / encounters)
 
     private var aiSuggestionsSection: some View {
+        // P8: outer MSSection owns the eyebrow.
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("AI suggestions", systemImage: "wand.and.stars")
-                    .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                 Spacer()
                 if aiRunning {
                     ProgressView().controlSize(.small)
@@ -1630,9 +1629,11 @@ struct PersonDetailView: View {
     }
 
     private var notes: some View {
+        // P8: outer MSSection ("About") owns the eyebrow.
         VStack(alignment: .leading, spacing: 6) {
-            Text("Notes").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-            Text(current.bio).font(NDS.body).foregroundStyle(NDS.textPrimary)
+            Text(current.bio.isEmpty ? "No bio yet." : current.bio)
+                .font(NDS.body)
+                .foregroundStyle(current.bio.isEmpty ? NDS.textTertiary : NDS.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
         }
@@ -1713,15 +1714,8 @@ struct PersonDetailView: View {
 
     private var tasksSection: some View {
         let mine = personTasks
+        // P8 (ux-audit-2026-06b §D1): outer MSSection owns the eyebrow + count.
         return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Tasks").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                if !mine.isEmpty {
-                    Text("\(mine.filter { $0.status != .completed }.count) open")
-                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                }
-                Spacer()
-            }
             // Quick add — assigns this person as owner so it shows up here and in
             // the Actions tab.
             HStack(spacing: 8) {
@@ -2182,8 +2176,8 @@ struct PersonDetailView: View {
     }
 
     private var evidenceSection: some View {
+        // P8: outer MSSection owns the eyebrow.
         VStack(alignment: .leading, spacing: 8) {
-            Text("Perf-review evidence").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
             HStack(spacing: 8) {
                 Button { showEvidence = true } label: {
                     Label("Compile last 6 months", systemImage: "doc.text.magnifyingglass")
@@ -2254,8 +2248,8 @@ struct PersonDetailView: View {
     // MARK: - Discuss next time (U1-5)
 
     private var talkingPointsSection: some View {
+        // P8: outer MSSection owns the eyebrow.
         VStack(alignment: .leading, spacing: 8) {
-            Text("Discuss next time").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
             HStack(spacing: 6) {
                 TextField("Add a talking point to raise next time…", text: $newTalkingPoint)
                     .textFieldStyle(.roundedBorder)
@@ -2301,8 +2295,8 @@ struct PersonDetailView: View {
     // MARK: - Memories
 
     private var memoriesSection: some View {
+        // P8: outer MSSection owns the eyebrow.
         VStack(alignment: .leading, spacing: 8) {
-            Text("Memories").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
             HStack(spacing: 6) {
                 TextField("Add a memory — \"loves single-origin coffee\"", text: $newMemory)
                     .textFieldStyle(.roundedBorder)
@@ -2330,9 +2324,9 @@ struct PersonDetailView: View {
     // MARK: - iMessage analysis
 
     private var messagesSection: some View {
+        // P8: outer MSSection owns the eyebrow.
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Messages").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                 Spacer()
                 if analyzingMessages {
                     ProgressView().controlSize(.small)
@@ -2525,15 +2519,8 @@ struct PersonDetailView: View {
     /// Renders the per-person AttachedNote list — saved chat analyses,
     /// each with a kind chip, timestamp, body, and inline delete.
     private var attachedNotesSection: some View {
+        // P8: outer MSSection owns the eyebrow + count.
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Notes").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                Spacer()
-                if !current.attachedNotes.isEmpty {
-                    Text("\(current.attachedNotes.count)")
-                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                }
-            }
             if current.attachedNotes.isEmpty {
                 Text("Saved analyses — relationship summaries, sentiment trends, etc. Run an analysis below and click \"Save to notes\".")
                     .font(NDS.small).foregroundStyle(NDS.textTertiary)
