@@ -2371,12 +2371,15 @@ struct PersonDetailView: View {
                     ProgressView().controlSize(.small)
                 } else {
                     // Pick WHAT to analyze instead of forcing all-time history.
+                    // P2: "Scan" loads the message stats for a window; the LLM
+                    // "Analyze…" inside the card is a separate step — distinct
+                    // labels so the two aren't confused.
                     Menu {
                         ForEach(MessagesAnalyzer.MessageWindow.presets, id: \.self) { window in
                             Button(window.label) { analyzeMessages(scope: window) }
                         }
                     } label: {
-                        Label("Analyze", systemImage: "message")
+                        Label("Scan", systemImage: "message")
                     }
                     .menuStyle(.borderlessButton).fixedSize().font(NDS.small)
                 }
