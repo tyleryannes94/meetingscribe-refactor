@@ -217,6 +217,8 @@ final class SecondBrainDB {
         CREATE INDEX IF NOT EXISTS idx_meeting_persons_person ON meeting_persons(person_id);
         CREATE INDEX IF NOT EXISTS idx_decision_persons_person ON decision_persons(person_id);
         CREATE INDEX IF NOT EXISTS idx_person_projects_project ON person_projects(project_id);
+        CREATE INDEX IF NOT EXISTS idx_encounters_person ON encounters_idx(person_id);
+        CREATE INDEX IF NOT EXISTS idx_encounters_event_tag ON encounters_idx(event_tag_id);
         """)
 
         exec("PRAGMA user_version=\(Self.schemaVersion);")

@@ -1662,7 +1662,9 @@ func tool_logEncounter(args: [String: Any]) -> JSONValue {
         "notes": notes,
         "createdAt": iso(Date())
     ]
-    let envelope: [String: Any] = ["version": 1, "data": enc]
+    // Must match VaultKit.SchemaEnvelope's "schemaVersion" key, or the app's
+    // decode silently drops every MCP-logged encounter (data loss).
+    let envelope: [String: Any] = ["schemaVersion": 1, "data": enc]
     let encURL = encountersDir().appendingPathComponent("\(encID).json")
     try? FileManager.default.createDirectory(at: encountersDir(), withIntermediateDirectories: true)
     if let data = try? JSONSerialization.data(withJSONObject: envelope, options: [.prettyPrinted, .sortedKeys]) {

@@ -89,6 +89,9 @@ struct QuickEncounterSheet: View {
     /// optimistically and dismisses with an Undo toast — the true 1-tap path.
     /// Flip on to reveal mood/note/date and commit with Save.
     @State private var detailed = false
+    /// Guards against a double-save when Return fires both `onSubmit` and the
+    /// `.return` keyboard shortcut — without it each Enter logs two encounters.
+    @State private var isSaving = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -253,7 +256,8 @@ struct QuickEncounterSheet: View {
     }
 
     private func saveIfValid() {
-        guard let kind = selectedKind else { return }
+        guard !isSaving, let kind = selectedKind else { return }
+        isSaving = true
         let moodTag = selectedMood.map { " [mood:\($0.rawValue)]" } ?? ""
         let noteFull = note.trimmingCharacters(in: .whitespacesAndNewlines) + moodTag
         // C2-7: persist the plain kind — no emoji in stored data.

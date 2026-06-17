@@ -17,10 +17,42 @@ extension UnifiedMeetingDetail {
                 summaryDisclosure
                 Divider().overlay(NDS.divider)
                 notesEditor
+                relatedMeetingsStrip // 4-F/5-A: embedding-similar meetings
             }
         default:
             // Live/upcoming: no finished summary yet — just the notes editor.
             notesEditor
+        }
+    }
+
+    /// 4-F / 5-A: meetings the embedding index found similar to this one, loaded
+    /// in `reload()` into `relatedMeetings` but previously never rendered. Tapping
+    /// one opens it.
+    @ViewBuilder
+    private var relatedMeetingsStrip: some View {
+        if !relatedMeetings.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Related meetings")
+                    .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                ForEach(relatedMeetings) { m in
+                    Button { router.openMeeting(m) } label: {
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(m.displayTitle).font(NDS.small).foregroundStyle(NDS.textPrimary)
+                                Text(m.startDate.formatted(date: .abbreviated, time: .omitted))
+                                    .scaledFont(11).foregroundStyle(NDS.textTertiary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .scaledFont(10).foregroundStyle(NDS.textTertiary)
+                        }
+                        .padding(.vertical, 5).padding(.horizontal, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
         }
     }
 
