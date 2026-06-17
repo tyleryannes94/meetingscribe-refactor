@@ -75,9 +75,11 @@ struct UnifiedMeetingDetail: View {
     @State var transcriptSearchSeed: String?
     /// M10: in-canvas scroll target. Setting this to a section anchor scrolls
     /// the canvas there; the canvas's `.onChange` clears it back to nil. Used
-    /// by the highlights chip and the post-meeting review banner to jump to
-    /// the relevant section instead of teleporting between tabs.
-    @State private var pendingScrollAnchor: SectionAnchor? = nil
+    /// by the highlights chip, the post-meeting review banner, and
+    /// `consumeTranscriptQuery` (in MeetingTranscriptTab.swift) to jump to
+    /// the relevant section instead of teleporting between tabs. Cross-file
+    /// callers need at least internal access, so this is not `private`.
+    @State var pendingScrollAnchor: SectionAnchor? = nil
 
     var meeting: Meeting? {
         switch mode {
