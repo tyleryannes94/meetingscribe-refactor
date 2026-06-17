@@ -143,7 +143,17 @@ extension ActionItemsView {
             }
             if !tableColHidden("project") { projectCell(item).frame(width: Col.project, alignment: .leading) }
             if !tableColHidden("owner") {
-                TaskOwnerLabel(owner: item.owner).frame(width: Col.owner, alignment: .leading)
+                // T2: owner jumps to the linked person.
+                if let pid = item.ownerPersonID {
+                    Button { router.openPerson(pid) } label: {
+                        TaskOwnerLabel(owner: item.owner)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: Col.owner, alignment: .leading)
+                    .help(item.owner.map { "Open \($0)" } ?? "")
+                } else {
+                    TaskOwnerLabel(owner: item.owner).frame(width: Col.owner, alignment: .leading)
+                }
             }
             if !tableColHidden("priority") {
                 Menu {
@@ -172,8 +182,20 @@ extension ActionItemsView {
                 .frame(width: Col.due, alignment: .leading)
             }
             if !tableColHidden("meeting") {
-                Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary)
-                    .lineLimit(1).help(item.meetingTitle).frame(width: Col.meeting, alignment: .leading)
+                // T2: meeting cell jumps to its source meeting when one exists.
+                Group {
+                    if !item.meetingID.isEmpty, let m = manager.meeting(id: item.meetingID) {
+                        Button { router.openMeeting(m) } label: {
+                            Text(item.meetingTitle).font(.caption2).foregroundStyle(NDS.brand)
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain).help("Open \(item.meetingTitle)")
+                    } else {
+                        Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary)
+                            .lineLimit(1).help(item.meetingTitle)
+                    }
+                }
+                .frame(width: Col.meeting, alignment: .leading)
             }
             Color.clear.frame(width: 24)
         }
