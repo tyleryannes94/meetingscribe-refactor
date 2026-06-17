@@ -40,18 +40,18 @@ struct DecisionLedgerView: View {
             filterBar
             Divider().overlay(NDS.divider)
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 8) {
                     if filtered.isEmpty {
                         Text("No decisions match.").font(NDS.small)
                             .foregroundStyle(NDS.textTertiary).padding(.top, 24)
                     }
                     ForEach(grouped, id: \.key) { group in
                         Text(group.key).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                            .padding(.top, 6)
+                            .padding(.top, 4)
                         ForEach(group.items, id: \.id) { d in card(d) }
                     }
                 }
-                .padding(18)
+                .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -63,9 +63,9 @@ struct DecisionLedgerView: View {
     }
 
     private var filterBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass").foregroundStyle(NDS.textTertiary)
-            TextField("Search decisions…", text: $query).textFieldStyle(.plain)
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").scaledFont(12).foregroundStyle(NDS.textTertiary)
+            TextField("Search decisions…", text: $query).textFieldStyle(.plain).font(.callout)
             Picker("", selection: $statusFilter) {
                 Text("All").tag(DecisionStatus?.none)
                 ForEach(DecisionStatus.allCases, id: \.self) { Text($0.rawValue.capitalized).tag(DecisionStatus?.some($0)) }
@@ -77,7 +77,7 @@ struct DecisionLedgerView: View {
             .labelsHidden().fixedSize()
             .help("Group decisions by month or by topic cluster")
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, 12).padding(.vertical, 6)
     }
 
     private var filtered: [Decision] {
