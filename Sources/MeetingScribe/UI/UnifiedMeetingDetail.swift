@@ -260,14 +260,43 @@ struct UnifiedMeetingDetail: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// M1 scaffold: GeometryReader → VStack shell for the de-tabbed canvas.
-    /// Today renders today's notes/combined body inside the shell so the editor
-    /// still works at bounded height (proves the C-A constraint). M2-M9 replace
-    /// the body with collapsible MSSections.
+    /// M2 / 01 §4.1 — section anchors for the upper `ScrollView`'s
+    /// `ScrollViewReader`. The highlights chip / transcript deep-link rewire
+    /// in M8 will `scrollTo(.outcomes / .summary / .transcript)` instead of
+    /// `tab = …`, closing P4 (lost-scroll teleports).
+    enum SectionAnchor: Hashable { case outcomes, summary, transcript }
+
+    /// Detail reading measure for the canvas column (01 §5.1). Matches the
+    /// existing `actionsBody` 760pt clamp.
+    static let canvasContentMaxWidth: CGFloat = 760
+
+    /// M2 scaffold: chrome split between the short, intrinsically-sized
+    /// sections (Outcomes / Highlights / Summary / Related) which scroll
+    /// together up top, and the bounded-height long sections (Notes /
+    /// Transcript / Ask AI) which sit below outside any outer ScrollView so
+    /// they can clip-and-scroll internally without violating C-A.
+    /// M3-M9 fill in the actual sections; today the top group hosts
+    /// `combinedNotesBody` so the editor proves the bounded-height shape.
     @ViewBuilder var canvasBody: some View {
         GeometryReader { _ in
             VStack(spacing: 0) {
-                combinedNotesBody
+                // SHORT sections — share one ScrollView with a ScrollViewReader
+                // so M8 can scroll-to anchors instead of swapping tabs.
+                ScrollViewReader { _ in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: NDS.spaceXL) {
+                            combinedNotesBody   // placeholder until M3-M6 land
+                        }
+                        .frame(maxWidth: Self.canvasContentMaxWidth)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                }
+                // M2 §4.4 separator: the user reads recap-area-above /
+                // work-area-below; one Divider keeps that mental model clear.
+                Divider().overlay(NDS.divider)
+                // LONG self-scrolling sections — populated by M5/M7/M8.
+                // Empty today so the flag-on canvas is just the top group.
+                VStack(spacing: 0) { EmptyView() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
