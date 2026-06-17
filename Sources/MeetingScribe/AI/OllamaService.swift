@@ -294,6 +294,31 @@ final class OllamaService {
         return decoded.response.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// 3-D: pull a strict `## Action Items` section out of free text (a voice
+    /// note transcript), in the same format `ActionItemExtractor` parses for
+    /// meetings. Returns the markdown; the caller runs the extractor on it.
+    func extractActionItems(from transcript: String) async throws -> String {
+        let aliases = AppSettings.shared.myNameAliases.joined(separator: ", ")
+        let prompt = """
+        You extract action items from a voice note. Output ONLY a Markdown \
+        section, nothing else:
+
+        ## Action Items
+        - [ ] <owner> — <action> (due: <date or "unspecified">)
+
+        Rules:
+        - Every item starts with an owner. Use "Me" when the speaker (\(aliases)) \
+        committed to it; use a person's name for tasks owned by someone else.
+        - Include a due date only if one is stated.
+        - If there are no clear action items, output exactly: None.
+        - Do NOT add any other sections, preamble, or commentary.
+
+        TRANSCRIPT:
+        \(transcript)
+        """
+        return try await generate(prompt: prompt, temperature: 0.2, numCtx: 4096)
+    }
+
     /// Stream tokens from `/api/generate` (stream:true, NDJSON), invoking
     /// `onToken` for each chunk as it arrives and returning the full text (1-C).
     /// Turns the 30–90s blank wait on a summary into a live "thinking" view.
