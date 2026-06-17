@@ -15,7 +15,7 @@ extension ActionItemsView {
                 } label: {
                     Label("Add task", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(MSPrimaryButtonStyle())
                 .help("Create a new task")
                 Spacer()
             }

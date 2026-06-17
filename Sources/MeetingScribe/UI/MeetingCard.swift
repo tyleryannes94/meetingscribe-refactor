@@ -234,7 +234,7 @@ struct MeetingCard: View {
             } label: {
                 Label("Stop", systemImage: "stop.fill")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(MSPrimaryButtonStyle())
             .tint(.red)
             .controlSize(.regular)
         }
@@ -284,7 +284,7 @@ struct MeetingCard: View {
                         Task { await manager.switchToRecording(meeting) }
                     }
                     .menuStyle(.borderlessButton)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(MSPrimaryButtonStyle())
                     .controlSize(.regular)
                 } else {
                     // No conference URL: just a Record button.
@@ -297,7 +297,7 @@ struct MeetingCard: View {
                             await manager.startRecording(for: meeting)
                         }
                     } label: { Label("Record", systemImage: "record.circle") }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(MSPrimaryButtonStyle())
                     .controlSize(.regular)
                 }
             }
