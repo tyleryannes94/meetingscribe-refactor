@@ -1274,18 +1274,6 @@ final class ActionItemStore: ObservableObject {
         if changed { save() }
     }
 
-    /// T11 / 04 §4.5: live tasks with an owner-text that resolved to no Person.
-    /// Excludes self tokens and already-linked tasks. The review queue source
-    /// and the input to `reresolveUnassignedOwners`.
-    func unassignedOwnerTasks() -> [ActionItem] {
-        items.filter { item in
-            guard item.ownerPersonID == nil, item.status != .completed else { return false }
-            guard let owner = item.owner?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !owner.isEmpty else { return false }
-            return !PersonResolver.selfTokens.contains(owner.lowercased())
-        }
-    }
-
     /// T11: re-attempt owner resolution for every unassigned-owner task against
     /// the current People snapshot. Used after a Person is added/edited so old
     /// extracted tasks pick up their hard link without a re-extract.
@@ -1318,10 +1306,17 @@ final class ActionItemStore: ObservableObject {
         }.count
     }
 
-    /// T4: tasks that name an owner but aren't linked to a Person record yet —
-    /// the backlog the "Unassigned owners" review surface (T7) works through.
+    /// T4 / T11 / 04 §4.5: tasks that name an owner but aren't linked to a
+    /// Person record yet — the backlog the "Unassigned owners" review surface
+    /// (T7/T12) works through. Excludes self tokens ("me"/"i"/…) so the queue
+    /// isn't polluted by the user's own tasks.
     func unassignedOwnerTasks() -> [ActionItem] {
-        items.filter { ($0.owner?.isEmpty == false) && $0.ownerPersonID == nil && $0.status != .completed }
+        items.filter { item in
+            guard item.ownerPersonID == nil, item.status != .completed else { return false }
+            guard let owner = item.owner?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !owner.isEmpty else { return false }
+            return !PersonResolver.selfTokens.contains(owner.lowercased())
+        }
     }
     func setNotion(_ id: String, pageID: String?, url: String?) {
         update(id) {
