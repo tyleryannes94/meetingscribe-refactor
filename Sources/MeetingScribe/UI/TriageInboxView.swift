@@ -59,8 +59,7 @@ struct TriageInboxView: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Triage inbox")
-                    .scaledFont(28, weight: .heavy, relativeTo: .largeTitle, kind: .display)
-                    .tracking(-0.6)
+                    .scaledFont(22, weight: .bold, kind: .display)
                 Text(count == 0
                      ? "Nothing to review"
                      : "\(count) action item\(count == 1 ? "" : "s") from your meetings awaiting review")
