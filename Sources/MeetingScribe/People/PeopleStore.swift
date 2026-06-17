@@ -631,14 +631,16 @@ final class PeopleStore: ObservableObject {
                       date: Date = Date(),
                       location: String? = nil,
                       notes: String = "",
-                      meetingID: String? = nil) -> Encounter {
+                      meetingID: String? = nil,
+                      taskIDs: [String] = []) -> Encounter {
         let encounter = Encounter(personID: personID,
                                   eventTagID: eventTagID,
                                   eventName: eventName,
                                   date: date,
                                   location: location,
                                   notes: notes,
-                                  meetingID: meetingID)
+                                  meetingID: meetingID,
+                                  taskIDs: taskIDs)
         encounters.append(encounter)
         encounters.sort { $0.date > $1.date }
         writeEncounter(encounter)
@@ -1163,6 +1165,35 @@ final class PeopleStore: ObservableObject {
         writePerson(people[idx])
     }
 
+    /// 2-I: record a typed meeting backlink (role + summary excerpt) for each
+    /// resolved attendee, so the profile can show *what was said* rather than just
+    /// listing a meeting. Idempotent per (person, meeting). Call with the summary
+    /// available (at finalize).
+    func recordMeetingMentions(for meeting: Meeting, summary: String) {
+        let matches = PersonResolver.resolvedAttendees(meeting.attendees, in: people)
+        let lines = summary.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        for (pid, _) in matches {
+            guard let idx = people.firstIndex(where: { $0.id == pid }) else { continue }
+            if people[idx].meetingMentionRecords.contains(where: { $0.meetingID == meeting.id }) { continue }
+            let firstName = people[idx].displayName.split(separator: " ").first.map(String.init)
+                ?? people[idx].displayName
+            let excerpt = lines.first {
+                $0.count < 220 && $0.localizedCaseInsensitiveContains(firstName)
+            }
+            people[idx].meetingMentionRecords.append(MeetingMentionRecord(
+                meetingID: meeting.id, meetingTitle: meeting.displayTitle,
+                date: meeting.startDate, role: "attendee", excerpt: excerpt))
+            // Keep the records newest-first and bounded.
+            people[idx].meetingMentionRecords.sort { $0.date > $1.date }
+            if people[idx].meetingMentionRecords.count > 50 {
+                people[idx].meetingMentionRecords.removeLast(people[idx].meetingMentionRecords.count - 50)
+            }
+            writePerson(people[idx])
+        }
+    }
+
     // MARK: - PersonResolver bridge (P1-1)
 
     /// Resolve an attendee string to a Person through the one identity layer
@@ -1197,16 +1228,22 @@ final class PeopleStore: ObservableObject {
     /// and heat maps reflect the meetings you have — not just manual quick-logs.
     /// Dedups by meetingID and skips when a manual encounter already sits within
     /// ±2h of the meeting (avoids double-counting the same interaction).
-    func emitMeetingEncounters(for meeting: Meeting) {
+    func emitMeetingEncounters(for meeting: Meeting, meetingTasks: [ActionItem] = []) {
         let matches = PersonResolver.resolvedAttendees(meeting.attendees, in: people)
         for (pid, _) in matches {
             let existing = encounters(for: pid)
             if existing.contains(where: { $0.meetingID == meeting.id }) { continue }
             if existing.contains(where: { abs($0.date.timeIntervalSince(meeting.startDate)) < 7200 }) { continue }
+            // 2-J: attach this person's action items from the meeting so the
+            // encounter closes the person ↔ encounter ↔ task triangle.
+            let theirTaskIDs = meetingTasks
+                .filter { $0.meetingID == meeting.id && $0.ownerPersonID == pid }
+                .map(\.id)
             addEncounter(to: pid,
                          eventName: "📅 \(meeting.displayTitle)",
                          date: meeting.startDate,
-                         meetingID: meeting.id)
+                         meetingID: meeting.id,
+                         taskIDs: theirTaskIDs)
         }
         // 1-F: refresh persisted strength for everyone who was in this meeting,
         // whether or not a new encounter was logged (the interaction still moves
@@ -1234,9 +1271,14 @@ final class PeopleStore: ObservableObject {
         }()
         let last = dates.first ?? p.lastInteractionAt
         let daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 9_999
+        // 2-E: multi-signal — count meeting mentions as ~0.3x of an encounter so
+        // people who recur in your meetings register as active relationships even
+        // before a manual encounter is logged. (iMessage signal is added by the
+        // async health pass; this stays synchronous and cheap.)
+        let effectiveEncounters = encs.count + p.meetingMentions.count / 3
         let health = RelationshipHealth(daysSinceLast: daysSince,
                                         cadenceDays: p.effectiveCheckInDays,
-                                        encounterCount: encs.count,
+                                        encounterCount: effectiveEncounters,
                                         medianGapDays: medianGap)
         let score = Double(health.score) / 100.0
         var updated = p

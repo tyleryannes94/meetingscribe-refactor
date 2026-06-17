@@ -240,7 +240,11 @@ final class MeetingPipelineController: ObservableObject {
         }
         actionItems.reconcileExtracted(extracted, for: workingMeeting.id)
         PeopleStore.shared.linkAttendees(of: workingMeeting)
-        PeopleStore.shared.emitMeetingEncounters(for: workingMeeting)   // P1-9
+        PeopleStore.shared.recordMeetingMentions(for: workingMeeting, summary: summary)   // 2-I
+        // P1-9 / 2-A / 2-J: auto-create encounters for resolved attendees, each
+        // carrying that person's action items from this meeting.
+        let meetingTasks = actionItems.items.filter { $0.meetingID == workingMeeting.id }
+        PeopleStore.shared.emitMeetingEncounters(for: workingMeeting, meetingTasks: meetingTasks)
 
         lastCompletedDir = store.directory(for: workingMeeting, primaryTag: primary)
 

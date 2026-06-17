@@ -35,6 +35,7 @@ struct PreMeetingBriefView: View {
                 synthesizedSection
                 if !seriesRecap.isEmpty { seriesRecapSection }   // recurring only
                 talkingPointsSection   // U1-5: "discuss next time" per attendee
+                relationshipSummarySection   // 2-G: who these people are
                 if !openItems.isEmpty   { openItemsSection }
                 if !priorMeetings.isEmpty { priorMeetingsSection }
                 if priorMeetings.isEmpty && openItems.isEmpty { emptyState }
@@ -43,6 +44,41 @@ struct PreMeetingBriefView: View {
         }
         .onAppear { computeBrief() }
         .onChange(of: meeting.id) { _, _ in computeBrief() }
+    }
+
+    /// 2-G: a short "about this person" line per known attendee — the cached
+    /// relationship summary excerpt plus strength — surfaced at the highest-ROC
+    /// moment (2 minutes before the call).
+    @ViewBuilder
+    private var relationshipSummarySection: some View {
+        let people = PeopleStore.shared.people
+        let entries: [(person: Person, excerpt: String)] = meeting.attendees.compactMap { raw in
+            guard let id = PersonResolver.resolve(raw, in: people),
+                  let p = people.first(where: { $0.id == id }),
+                  let note = p.attachedNotes.first(where: { $0.kind == "summary-all" }),
+                  !note.body.isEmpty else { return nil }
+            return (p, String(note.body.prefix(220)))
+        }
+        if !entries.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("About these people", systemImage: "person.text.rectangle")
+                    .font(.headline).foregroundStyle(NDS.brand)
+                ForEach(Array(entries.enumerated()), id: \.offset) { _, e in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(e.person.displayName).font(.subheadline.weight(.semibold))
+                            if e.person.relationshipStrengthScore > 0 {
+                                Text("· \(Int(e.person.relationshipStrengthScore * 100)) strength")
+                                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            }
+                        }
+                        Text(e.excerpt).font(.callout).foregroundStyle(NDS.textSecondary)
+                    }
+                    .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(NDS.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+                }
+            }
+        }
     }
 
     /// U1-5: surface "discuss next time" talking points for the meeting's

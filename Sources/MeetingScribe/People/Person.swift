@@ -204,6 +204,22 @@ struct Relationship: Identifiable, Codable, Hashable {
     }
 }
 
+/// A typed backlink from a person to a meeting they were mentioned in (2-I),
+/// replacing the bare `Set<String>` of meeting ids with the *role* and a short
+/// *excerpt* so the profile can say "Mentioned in Q4 Planning (Dec 3) — 'Alex
+/// will own the budget approval'" instead of just listing a meeting. The old
+/// `Person.meetingMentions` set is kept in parallel (deprecated) for back-compat.
+struct MeetingMentionRecord: Identifiable, Codable, Hashable {
+    var id: String { meetingID }
+    var meetingID: String
+    var meetingTitle: String
+    var date: Date
+    /// "attendee" | "mentioned" — how they appeared.
+    var role: String
+    /// A short excerpt of the summary naming them, if found.
+    var excerpt: String?
+}
+
 /// A first-class person in the second brain. Created manually (Phase A),
 /// auto-populated from meeting transcripts (Phase B), and imported from
 /// Contacts / Gmail / calendar / iMessage (Phase C).
@@ -294,6 +310,9 @@ struct Person: Identifiable, Codable, Hashable {
     /// attendee is a silent data-loss event across strength scores, encounter
     /// counts, and AI context, so resolution checks these.
     var aliases: [String] = []
+    /// Typed meeting backlinks (2-I) — richer than `meetingMentions`, populated
+    /// at finalize with role + excerpt. The Set above stays as the dedup key.
+    var meetingMentionRecords: [MeetingMentionRecord] = []
     /// IDs in external systems keyed by system name, e.g. ["linear": "USR-123",
     /// "notion": "<page>"]. Lets integrations resolve this person bidirectionally.
     var linkedExternalIDs: [String: String] = [:]
@@ -331,6 +350,7 @@ struct Person: Identifiable, Codable, Hashable {
          checkInCadenceDays: Int? = nil,
          checkInGoalDays: Int? = nil,
          aliases: [String] = [],
+         meetingMentionRecords: [MeetingMentionRecord] = [],
          linkedExternalIDs: [String: String] = [:],
          relationshipStrengthScore: Double = 0.0,
          strengthLastComputedAt: Date? = nil) {
@@ -361,6 +381,7 @@ struct Person: Identifiable, Codable, Hashable {
         self.checkInCadenceDays = checkInCadenceDays
         self.checkInGoalDays = checkInGoalDays
         self.aliases = aliases
+        self.meetingMentionRecords = meetingMentionRecords
         self.linkedExternalIDs = linkedExternalIDs
         self.relationshipStrengthScore = relationshipStrengthScore
         self.strengthLastComputedAt = strengthLastComputedAt
@@ -391,7 +412,8 @@ extension Person {
              birthday, specialDates, addresses, favorites, memories, photoRelativePaths,
              contactIdentifier, importSources, relationships, attachedNotes,
              relationshipType, checkInCadenceDays, checkInGoalDays,
-             aliases, linkedExternalIDs, relationshipStrengthScore, strengthLastComputedAt
+             aliases, meetingMentionRecords, linkedExternalIDs,
+             relationshipStrengthScore, strengthLastComputedAt
     }
 
     /// Tolerant decoder. Like `Meeting`, every field added after the first
@@ -431,6 +453,7 @@ extension Person {
         checkInGoalDays = (try? c.decodeIfPresent(Int.self, forKey: .checkInGoalDays)) ?? nil
         // Phase 1 (1-E / 1-F) — tolerant defaults so pre-Phase-1 person.json loads.
         aliases = (try? c.decode([String].self, forKey: .aliases)) ?? []
+        meetingMentionRecords = (try? c.decode([MeetingMentionRecord].self, forKey: .meetingMentionRecords)) ?? []
         linkedExternalIDs = (try? c.decode([String: String].self, forKey: .linkedExternalIDs)) ?? [:]
         relationshipStrengthScore = (try? c.decode(Double.self, forKey: .relationshipStrengthScore)) ?? 0.0
         strengthLastComputedAt = (try? c.decodeIfPresent(Date.self, forKey: .strengthLastComputedAt)) ?? nil
