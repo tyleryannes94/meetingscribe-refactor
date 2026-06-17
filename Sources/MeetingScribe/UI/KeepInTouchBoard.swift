@@ -195,6 +195,15 @@ struct KeepInTouchBoard: View {
                 }
                 .padding(12).frame(width: 280)
             }
+
+            Button {
+                RelationshipNotificationManager.shared.scheduleOneOff(person: person, days: 3)
+                ToastCenter.shared.show("Reminder set — reach out to \(person.displayName) in 3 days")
+            } label: {
+                Image(systemName: "bell.badge").scaledFont(13)
+            }
+            .buttonStyle(.borderless)
+            .help("Remind me to reach out in 3 days")
         }
         .padding(4)
         .background(NDS.surface2, in: Capsule())
