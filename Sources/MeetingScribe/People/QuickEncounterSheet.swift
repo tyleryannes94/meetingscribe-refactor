@@ -217,7 +217,7 @@ struct QuickEncounterSheet: View {
                         Label(selectedKind == nil ? "Select a type above" : "Save check-in",
                               systemImage: selectedKind == nil ? "hand.tap" : "checkmark")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(MSPrimaryButtonStyle())
                     .disabled(selectedKind == nil)
                     .keyboardShortcut(.return, modifiers: [])
                 }

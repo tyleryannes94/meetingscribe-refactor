@@ -102,7 +102,7 @@ struct ContactsImportView: View {
             Text("MeetingScribe reads Contacts read-only to import people.")
                 .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Button("Allow Contacts Access") { Task { await load() } }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(MSPrimaryButtonStyle())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
     }
@@ -147,7 +147,7 @@ struct ContactsImportView: View {
             Button("Select All") { selected = Set(filtered.map { $0.id }) }
                 .disabled(filtered.isEmpty)
             Button("Import Selected") { importSelected() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(MSPrimaryButtonStyle())
                 .disabled(selected.isEmpty)
         }
         .padding(12)
