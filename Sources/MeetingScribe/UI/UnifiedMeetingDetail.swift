@@ -426,14 +426,10 @@ struct UnifiedMeetingDetail: View {
     @ViewBuilder
     private var notesSectionBody: some View {
         VStack(alignment: .leading, spacing: NDS.spaceSM) {
-            Text("Markdown notes — type `/` for blocks, `@` to link. Saved to notes.md.")
-                .font(.caption).foregroundStyle(.secondary)
             RichMarkdownEditor(text: $noteDraft,
                                placeholder: "Type / for blocks, @ to link a meeting…",
                                mentionProvider: { manager.workspaceEntities() })
                 .frame(height: max(160, notesPaneHeight))
-                .overlay(RoundedRectangle(cornerRadius: NDS.radiusSmall)
-                    .strokeBorder(NDS.hairline, lineWidth: 1))
             // C-A drag-resize grabber (01 §4.5).
             Rectangle().fill(Color.clear)
                 .frame(height: 6)
@@ -504,11 +500,8 @@ struct UnifiedMeetingDetail: View {
                 VStack(alignment: .leading, spacing: NDS.spaceMD) {
                     ScrollView {
                         MarkdownEditor(text: .constant(summary), isEditable: false)
-                            .padding(.horizontal, 4)
                     }
                     .frame(height: h)
-                    .overlay(RoundedRectangle(cornerRadius: NDS.radiusSmall)
-                        .strokeBorder(NDS.hairline, lineWidth: 1))
                     if let m = meeting {
                         if manager.ollamaReachable, !summary.isEmpty {
                             SummaryEditByAsking(meeting: m, current: summary,
