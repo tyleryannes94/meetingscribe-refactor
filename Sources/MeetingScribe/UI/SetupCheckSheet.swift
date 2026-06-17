@@ -40,7 +40,7 @@ struct SetupCheckSheet: View {
                 if setup.isReady {
                     Button("Done") { isPresented = false }
                         .keyboardShortcut(.defaultAction)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(MSPrimaryButtonStyle())
                 } else {
                     Button("Skip for now") { isPresented = false }
                 }

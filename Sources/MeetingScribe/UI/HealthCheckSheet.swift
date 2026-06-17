@@ -46,7 +46,7 @@ struct HealthCheckSheet: View {
                 Button("Re-run") { Task { await run() } }.disabled(running)
                 Spacer()
                 Button("Done") { isPresented = false }
-                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction).buttonStyle(MSPrimaryButtonStyle())
             }
         }
         .padding(24)

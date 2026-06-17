@@ -282,7 +282,7 @@ struct CrossDeviceSyncSection: View {
                 }
                 HStack {
                     Button("Save config") { ctl.saveConfig() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(MSPrimaryButtonStyle())
                     Button("Reveal config") { ctl.revealConfig() }
                     if ctl.configExists {
                         Button("Open sync log") { ctl.openLog() }.disabled(ctl.lastSendLog.isEmpty)

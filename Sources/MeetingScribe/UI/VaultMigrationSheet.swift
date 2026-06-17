@@ -31,15 +31,15 @@ struct VaultMigrationSheet: View {
                 Label("Migration complete", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 Button("Done") { onDismiss() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(MSPrimaryButtonStyle())
             } else {
                 HStack(spacing: 12) {
                     Button("Later") { onDismiss() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(MSSecondaryButtonStyle())
                     Button("Migrate Now") {
                         Task { await migrator.migrateLayout(vaultURL: vaultURL) }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(MSPrimaryButtonStyle())
                 }
             }
         }
