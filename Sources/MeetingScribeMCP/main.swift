@@ -981,6 +981,63 @@ let toolList: [JSONValue] = [
             "type": "object",
             "properties": .object([:])
         ])
+    ]),
+    .object([
+        "name": "list_open_decisions",
+        "description": "List open decisions (status == open) across past meetings, newest first. Optionally filter by projectID.",
+        "inputSchema": .object([
+            "type": "object",
+            "properties": .object([
+                "projectID": .object(["type": "string", "description": "Optional project id filter."]),
+                "limit": .object(["type": "integer", "description": "Max rows (default 50)."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "search_decisions",
+        "description": "Substring search over decision text and rationale — answers 'why did we decide X?'. Newest first.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["query"]),
+            "properties": .object([
+                "query": .object(["type": "string", "description": "Text to find in decisions."]),
+                "limit": .object(["type": "integer", "description": "Max rows (default 25)."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "list_waiting_on",
+        "description": "Open action items delegated to someone else (they have an owner) — the things you're waiting on. Optionally filter by owner name/email/id.",
+        "inputSchema": .object([
+            "type": "object",
+            "properties": .object([
+                "personID": .object(["type": "string", "description": "Optional owner name, email, or id filter."]),
+                "limit": .object(["type": "integer", "description": "Max rows (default 50)."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "get_voice_note_extracts",
+        "description": "Search voice-note transcripts for a query substring; returns matching notes with the matched excerpt.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["query"]),
+            "properties": .object([
+                "query": .object(["type": "string", "description": "Text to find in voice notes."]),
+                "limit": .object(["type": "integer", "description": "Max rows (default 20)."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "get_person_brief",
+        "description": "A compact brief for one person: recent encounters, open tasks they own, and recent memories — assembled from the vault.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["id"]),
+            "properties": .object([
+                "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."])
+            ])
+        ])
     ])
 ]
 
@@ -1616,6 +1673,131 @@ func loadEncounters(forPersonID personID: String) -> [[String: Any]] {
     return result
 }
 
+// MARK: - 6-D: decision / waiting-on / voice-note / person-brief tools
+
+/// Reads `<vault>/decisions.json` as raw dicts (SchemaEnvelope or bare array),
+/// newest first. The MCP binary has no `Decision` type, so we stay untyped.
+func loadDecisionsRaw() -> [[String: Any]] {
+    let url = storageDir.appendingPathComponent("decisions.json")
+    guard let data = try? Data(contentsOf: url),
+          let obj = try? JSONSerialization.jsonObject(with: data) else { return [] }
+    let arr: [[String: Any]]
+    if let env = obj as? [String: Any], let inner = env["data"] as? [[String: Any]] { arr = inner }
+    else if let bare = obj as? [[String: Any]] { arr = bare }
+    else { arr = [] }
+    return arr.sorted { (($0["date"] as? String) ?? "") > (($1["date"] as? String) ?? "") }
+}
+
+func decisionRow(_ d: [String: Any]) -> JSONValue {
+    .object([
+        "id":           .string((d["id"] as? String) ?? ""),
+        "text":         .string((d["text"] as? String) ?? ""),
+        "rationale":    .string((d["rationale"] as? String) ?? ""),
+        "status":       .string((d["status"] as? String) ?? "open"),
+        "date":         .string((d["date"] as? String) ?? ""),
+        "meetingTitle": .string((d["meetingTitle"] as? String) ?? "")
+    ])
+}
+
+func tool_listOpenDecisions(args: [String: Any]) -> JSONValue {
+    let projectID = args["projectID"] as? String
+    let limit = (args["limit"] as? Int) ?? 50
+    let rows = loadDecisionsRaw()
+        .filter { (($0["status"] as? String) ?? "open") == "open" }
+        .filter { projectID == nil || ($0["projectID"] as? String) == projectID }
+        .prefix(limit)
+        .map { decisionRow($0) }
+    return .object(["count": .int(rows.count), "decisions": .array(Array(rows))])
+}
+
+func tool_searchDecisions(args: [String: Any]) -> JSONValue {
+    guard let query = (args["query"] as? String)?.lowercased(), !query.isEmpty else {
+        return .object(["error": .string("missing `query`.")])
+    }
+    let limit = (args["limit"] as? Int) ?? 25
+    let rows = loadDecisionsRaw().filter {
+        let t = (($0["text"] as? String) ?? "").lowercased()
+        let r = (($0["rationale"] as? String) ?? "").lowercased()
+        return t.contains(query) || r.contains(query)
+    }.prefix(limit).map { decisionRow($0) }
+    return .object(["count": .int(rows.count), "decisions": .array(Array(rows))])
+}
+
+func tool_listWaitingOn(args: [String: Any]) -> JSONValue {
+    let personFilter = (args["personID"] as? String)?.lowercased()
+    let limit = (args["limit"] as? Int) ?? 50
+    let items = loadActionItemsFromDisk().filter {
+        guard let owner = $0.owner, !owner.isEmpty else { return false }
+        guard $0.status.lowercased() != "completed" else { return false }
+        if let pf = personFilter, !pf.isEmpty { return owner.lowercased().contains(pf) }
+        return true
+    }.prefix(limit)
+    let rows: [JSONValue] = items.map { it in
+        .object([
+            "id":      .string(it.id),
+            "title":   .string(it.title),
+            "owner":   .string(it.owner ?? ""),
+            "status":  .string(it.status),
+            "dueDate": .string(it.dueDate.map { iso($0) } ?? "")
+        ])
+    }
+    return .object(["count": .int(rows.count), "waitingOn": .array(rows)])
+}
+
+func tool_getVoiceNoteExtracts(args: [String: Any]) -> JSONValue {
+    guard let query = (args["query"] as? String)?.lowercased(), !query.isEmpty else {
+        return .object(["error": .string("missing `query`.")])
+    }
+    let limit = (args["limit"] as? Int) ?? 20
+    var rows: [JSONValue] = []
+    for dir in quickNoteDirectories() {
+        guard let note = readQuickNote(at: dir) else { continue }
+        let transcript = readText("transcript.md", in: dir)
+        guard (note.title + " " + transcript).lowercased().contains(query) else { continue }
+        var excerpt = note.snippet
+        if let r = transcript.range(of: query, options: .caseInsensitive) {
+            let start = transcript.index(r.lowerBound, offsetBy: -80, limitedBy: transcript.startIndex) ?? transcript.startIndex
+            let end = transcript.index(r.upperBound, offsetBy: 120, limitedBy: transcript.endIndex) ?? transcript.endIndex
+            excerpt = String(transcript[start..<end])
+        }
+        rows.append(.object([
+            "id":        .string(note.id),
+            "title":     .string(note.title),
+            "createdAt": .string(iso(note.createdAt)),
+            "excerpt":   .string(excerpt)
+        ]))
+        if rows.count >= limit { break }
+    }
+    return .object(["count": .int(rows.count), "voiceNotes": .array(rows)])
+}
+
+func tool_getPersonBrief(args: [String: Any]) -> JSONValue {
+    guard let id = args["id"] as? String, let p = resolvePerson(id) else {
+        return .object(["error": .string("no person matched. Call list_people first.")])
+    }
+    let encs = loadEncounters(forPersonID: p.id).prefix(3).map { e in
+        JSONValue.object([
+            "date":  .string((e["date"] as? String) ?? ""),
+            "kind":  .string((e["eventName"] as? String) ?? ""),
+            "notes": .string((e["notes"] as? String) ?? "")
+        ])
+    }
+    let tasks = loadActionItemsFromDisk().filter {
+        guard let owner = $0.owner else { return false }
+        return owner.lowercased() == p.displayName.lowercased() && $0.status.lowercased() != "completed"
+    }.prefix(10).map { it in
+        JSONValue.object(["title": .string(it.title), "due": .string(it.dueDate.map { iso($0) } ?? "")])
+    }
+    let memories = p.memories.suffix(5).map { JSONValue.object(["text": .string($0.text)]) }
+    return .object([
+        "personID":         .string(p.id),
+        "personName":       .string(p.displayName),
+        "recentEncounters": .array(Array(encs)),
+        "openTasks":        .array(Array(tasks)),
+        "memories":         .array(Array(memories))
+    ])
+}
+
 func tool_listEncounters(args: [String: Any]) -> JSONValue {
     guard let id = args["id"] as? String, let p = resolvePerson(id) else {
         let raw = (args["id"] as? String) ?? "(missing)"
@@ -2020,6 +2202,11 @@ func runTool(name: String, args: [String: Any]) -> JSONValue {
     case "attach_note_to_person": return tool_attachNoteToPerson(args: args)
     case "get_relationship_health": return tool_getRelationshipHealth(args: args)
     case "search_everything":     return tool_searchEverything(args: args)
+    case "list_open_decisions":   return tool_listOpenDecisions(args: args)
+    case "search_decisions":      return tool_searchDecisions(args: args)
+    case "list_waiting_on":       return tool_listWaitingOn(args: args)
+    case "get_voice_note_extracts": return tool_getVoiceNoteExtracts(args: args)
+    case "get_person_brief":      return tool_getPersonBrief(args: args)
     default: return .object(["error": .string("unknown tool: \(name)")])
     }
 }
