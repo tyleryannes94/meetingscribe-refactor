@@ -36,16 +36,17 @@ struct IntegrationsView: View {
 
     private var list: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 9) {
-                    Text("🧩").scaledFont(26)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Integrations").font(NDS.title)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("🧩").scaledFont(18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Integrations").scaledFont(22, weight: .bold, kind: .display)
                         Text("Connect your tools. Everything runs locally or against each service's free API.")
                             .font(NDS.small).foregroundStyle(NDS.textSecondary)
                     }
                     Spacer()
                 }
+                .padding(.bottom, 2)
                 linearCard
                 notionCard
                 googleCard
@@ -55,7 +56,7 @@ struct IntegrationsView: View {
                 calendarCard
                 mcpCard
             }
-            .padding(.horizontal, 20).padding(.vertical, 16)
+            .padding(.horizontal, 16).padding(.vertical, 14)
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
