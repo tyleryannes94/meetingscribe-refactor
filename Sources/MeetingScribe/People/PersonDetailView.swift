@@ -770,7 +770,10 @@ struct PersonDetailView: View {
                         .buttonStyle(MSSecondaryButtonStyle())
                 }
             } else {
-                HStack(spacing: 6) {
+                // Wrap so the action buttons never overflow / cut off in the
+                // fixed-width (300pt) identity column — they flow to a second row
+                // when they don't fit instead of clipping.
+                FlowLayout(spacing: 6) {
                     // 2-B: the flagship People feature — a one-tap, AI-synthesized
                     // relationship brief drawn from meetings, tasks, talking points,
                     // and strength, streamed into a sheet.
@@ -796,8 +799,9 @@ struct PersonDetailView: View {
                 }
                 // Always-visible add affordances so logging an encounter or
                 // adding the FIRST relationship doesn't require navigating away
-                // or waiting for a section to appear. (UX3-4/A8)
-                HStack(spacing: 6) {
+                // or waiting for a section to appear. (UX3-4/A8) Wrapped so the
+                // three text buttons don't overflow the 300pt column.
+                FlowLayout(spacing: 6) {
                     Button { showAddEncounter = true } label: {
                         Label("Encounter", systemImage: "calendar.badge.plus")
                     }
@@ -812,7 +816,6 @@ struct PersonDetailView: View {
                         Label("Ask AI", systemImage: "sparkles")
                     }
                     .buttonStyle(.borderless).font(NDS.small)
-                    Spacer()
                 }
                 .padding(.top, 2)
             }
