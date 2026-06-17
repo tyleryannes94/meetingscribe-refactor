@@ -515,8 +515,7 @@ struct PersonDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
-            .padding(10)
-            .background(NDS.brand.opacity(0.07), in: RoundedRectangle(cornerRadius: NDS.radius))
+            .padding(.vertical, 4)
         }
     }
 
@@ -2069,11 +2068,15 @@ struct PersonDetailView: View {
                     Text(err).font(NDS.tiny).foregroundStyle(NDS.danger)
                 }
             }
-            .msCard()
-            .overlay(
-                RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
-                    .strokeBorder(color.opacity(0.28), lineWidth: 1)
-            )
+            .padding(.vertical, 6)
+            .overlay(alignment: .leading) {
+                // Subtle left accent stripe instead of a full bordered card.
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(color)
+                    .frame(width: 3)
+                    .padding(.vertical, 6)
+            }
+            .padding(.leading, 10)
             .sheet(isPresented: $showReconnectDraft) { reconnectDraftSheet }
         }
     }
