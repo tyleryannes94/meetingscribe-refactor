@@ -271,15 +271,28 @@ struct MSSection<Content: View, Trailing: View>: View {
                 Button(action: toggle) {
                     HStack(spacing: NDS.spaceSM) {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .scaledFont(10, weight: .semibold).foregroundStyle(NDS.textTertiary)
+                            .scaledFont(10, weight: .semibold)
+                            .foregroundStyle(NDS.textTertiary)
+                            .frame(width: 12, alignment: .center)
                         if let systemImage {
-                            Label(title, systemImage: systemImage)
-                                .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                        } else {
-                            Text(title).font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                            Image(systemName: systemImage)
+                                .scaledFont(12, weight: .semibold)
+                                .foregroundStyle(NDS.brand.opacity(0.85))
+                                .frame(width: 16)
                         }
-                        if let count {
-                            Text("\(count)").font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary)
+                        // Visual polish: section titles read as a confident
+                        // heading, not the tiny eyebrow. Eyebrow tracking stays
+                        // for the design-system feel, but at a larger weight.
+                        Text(title.uppercased())
+                            .scaledFont(11, weight: .heavy, relativeTo: .caption)
+                            .tracking(0.8)
+                            .foregroundStyle(NDS.textPrimary)
+                        if let count, count > 0 {
+                            Text("\(count)")
+                                .font(NDS.tiny.monospacedDigit())
+                                .foregroundStyle(NDS.textSecondary)
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(NDS.fieldBg, in: Capsule())
                         }
                         Spacer(minLength: NDS.spaceSM)
                     }
