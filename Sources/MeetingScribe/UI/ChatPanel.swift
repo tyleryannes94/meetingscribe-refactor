@@ -178,17 +178,17 @@ struct ChatPanel: View {
                 .lineLimit(1...6)
                 .focused($inputFocused)
                 .onSubmit { submit() }
-                .padding(.horizontal, 12).padding(.vertical, 8)
+                .padding(.horizontal, 10).padding(.vertical, 7)
                 .background(NDS.fieldBg,
-                            in: RoundedRectangle(cornerRadius: 9))
-                .overlay(RoundedRectangle(cornerRadius: 9)
-                    .strokeBorder(Color.secondary.opacity(0.18), lineWidth: 0.5))
+                            in: RoundedRectangle(cornerRadius: NDS.radiusSmall))
+                .overlay(RoundedRectangle(cornerRadius: NDS.radiusSmall)
+                    .strokeBorder(NDS.hairline, lineWidth: 0.5))
                 .font(density == .compact ? .callout : .body)
             Button {
                 submit()
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: density == .compact ? 24 : 28))
+                    .font(.system(size: density == .compact ? 22 : 26))
                     .foregroundStyle(canSubmit ? NDS.brand
                                                 : Color.secondary.opacity(0.4))
             }
