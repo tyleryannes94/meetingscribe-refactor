@@ -235,6 +235,7 @@ struct PersonDetailView: View {
     var onDeleted: () -> Void
 
     @State private var showEdit = false
+    @State private var showBrief = false   // 2-B
     // Inline identity editing — change name/role/company in place instead of
     // opening the full AddPersonSheet modal for a one-field fix (req #2: easier
     // CRM editing). The modal stays available (ellipsis) for contact fields/tags.
@@ -395,6 +396,12 @@ struct PersonDetailView: View {
             AddRelationshipSheet(personID: current.id).environmentObject(people)
         }
         .sheet(isPresented: $showAddToMeeting) { addToMeetingSheet }
+        .sheet(isPresented: $showBrief) {
+            PersonBriefSheet(personID: current.id,
+                             actionItems: actionItems,
+                             pastMeetings: manager.pastMeetings,
+                             calendarUpcoming: calendar.upcoming)
+        }
         .confirmationDialog("Delete \(current.displayName)?",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
@@ -1380,6 +1387,13 @@ struct PersonDetailView: View {
                 }
             }
             Spacer()
+            // 2-B: the flagship People feature — a one-tap, AI-synthesized
+            // relationship brief drawn from meetings, tasks, talking points, and
+            // strength, streamed into a sheet.
+            Button { showBrief = true } label: {
+                Label("Brief Me", systemImage: "sparkles")
+            }
+            .buttonStyle(.borderedProminent)
             Button { showEdit = true } label: { Label("Edit", systemImage: "pencil") }
             Button(role: .destructive) { confirmDelete = true } label: {
                 Label("Delete", systemImage: "trash")
@@ -1645,8 +1659,42 @@ struct PersonDetailView: View {
                 Text("No tasks assigned to \(current.displayName) yet. Assign them as a task owner here or in the Actions tab.")
                     .font(NDS.small).foregroundStyle(NDS.textTertiary)
             } else {
-                ForEach(mine) { item in taskRow(item) }
+                commitmentLedger(mine)
             }
+        }
+    }
+
+    /// 2-C: per-person commitment ledger. Splits this person's tasks into what
+    /// you're waiting on them for (delegated + open) and their other open work,
+    /// so the owe/owed picture is visible without leaving the profile.
+    @ViewBuilder
+    private func commitmentLedger(_ tasks: [ActionItem]) -> some View {
+        let firstName = current.displayName.split(separator: " ").first.map(String.init) ?? current.displayName
+        let waitingOn = tasks.filter { $0.delegated == true && $0.status != .completed }
+        let theirOpen = tasks.filter { $0.delegated != true && $0.status != .completed }
+        let done = tasks.filter { $0.status == .completed }
+        VStack(alignment: .leading, spacing: 10) {
+            if !waitingOn.isEmpty {
+                ledgerGroup("Waiting on \(firstName)", icon: "hourglass", tint: NDS.gold, items: waitingOn)
+            }
+            if !theirOpen.isEmpty {
+                ledgerGroup("\(firstName)'s open items", icon: "circle", tint: NDS.textTertiary, items: theirOpen)
+            }
+            if !done.isEmpty {
+                ledgerGroup("Completed", icon: "checkmark.circle.fill", tint: NDS.brand, items: done)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ledgerGroup(_ title: String, icon: String, tint: Color, items: [ActionItem]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: icon).scaledFont(11).foregroundStyle(tint)
+                Text(title).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                Text("\(items.count)").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+            ForEach(items) { item in taskRow(item) }
         }
     }
 

@@ -21,6 +21,10 @@ struct Encounter: Identifiable, Codable, Hashable {
     var meetingID: String?
     var voiceNoteID: String?
     var createdAt: Date
+    /// Action items associated with this encounter (2-J) — populated from the
+    /// linked meeting's extracted tasks, closing the person ↔ encounter ↔ task
+    /// triangle. Optional/defaulted so older per-file encounters still decode.
+    var taskIDs: [String] = []
 
     init(id: String = UUID().uuidString,
          personID: String,
@@ -31,7 +35,8 @@ struct Encounter: Identifiable, Codable, Hashable {
          notes: String = "",
          meetingID: String? = nil,
          voiceNoteID: String? = nil,
-         createdAt: Date = Date()) {
+         createdAt: Date = Date(),
+         taskIDs: [String] = []) {
         self.id = id
         self.personID = personID
         self.eventTagID = eventTagID
@@ -42,5 +47,29 @@ struct Encounter: Identifiable, Codable, Hashable {
         self.meetingID = meetingID
         self.voiceNoteID = voiceNoteID
         self.createdAt = createdAt
+        self.taskIDs = taskIDs
+    }
+}
+
+extension Encounter {
+    private enum CodingKeys: String, CodingKey {
+        case id, personID, eventTagID, eventName, date, location, notes,
+             meetingID, voiceNoteID, createdAt, taskIDs
+    }
+
+    /// Tolerant decode so encounters written before `taskIDs` existed still load.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        personID = try c.decode(String.self, forKey: .personID)
+        eventTagID = try c.decodeIfPresent(String.self, forKey: .eventTagID)
+        eventName = (try? c.decode(String.self, forKey: .eventName)) ?? ""
+        date = (try? c.decode(Date.self, forKey: .date)) ?? Date()
+        location = try c.decodeIfPresent(String.self, forKey: .location)
+        notes = (try? c.decode(String.self, forKey: .notes)) ?? ""
+        meetingID = try c.decodeIfPresent(String.self, forKey: .meetingID)
+        voiceNoteID = try c.decodeIfPresent(String.self, forKey: .voiceNoteID)
+        createdAt = (try? c.decode(Date.self, forKey: .createdAt)) ?? Date()
+        taskIDs = (try? c.decode([String].self, forKey: .taskIDs)) ?? []
     }
 }

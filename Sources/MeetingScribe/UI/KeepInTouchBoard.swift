@@ -15,6 +15,12 @@ struct KeepInTouchBoard: View {
     /// Open a person by id (router-backed).
     let onOpen: (String) -> Void
 
+    // 2-D: hover-reveal one-tap actions on each card.
+    @State private var hoveredID: String?
+    @State private var starterFor: String?
+    @State private var starterText = ""
+    @State private var starterLoading = false
+
     private static let relative: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated; return f
     }()
@@ -125,7 +131,14 @@ struct KeepInTouchBoard: View {
                     }
                     Text(lastMet(person)).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 6)
+                // 2-H: 12-week encounter trajectory.
+                TrajectorySparkline(
+                    weeklyCounts: TrajectorySparkline.weeklyCounts(
+                        from: store.encounters(for: person.id).map(\.date)),
+                    tint: color)
+                    .frame(width: 48, height: 16)
+                    .help("Encounter trajectory — last 12 weeks")
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -136,6 +149,76 @@ struct KeepInTouchBoard: View {
         .buttonStyle(.plain)
         .help("Open \(person.displayName)")
         .accessibilityLabel("Open \(person.displayName)")
+        .overlay(alignment: .bottomTrailing) {
+            if hoveredID == person.id { cardActionStrip(person) }
+        }
+        .onHover { inside in
+            if inside { hoveredID = person.id }
+            else if hoveredID == person.id { hoveredID = nil }
+        }
+    }
+
+    /// 2-D: the "Clay moment" — log a check-in or get an AI conversation starter
+    /// without leaving the board. Sits on top of the card, revealed on hover.
+    @ViewBuilder
+    private func cardActionStrip(_ person: Person) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                _ = store.addEncounter(to: person.id, eventName: "Check-in", date: Date())
+                ToastCenter.shared.show("Logged a check-in with \(person.displayName)")
+            } label: {
+                Image(systemName: "checkmark.circle").scaledFont(13)
+            }
+            .buttonStyle(.borderless)
+            .help("Log a check-in now")
+
+            Button {
+                starterFor = person.id
+                generateStarter(for: person)
+            } label: {
+                Image(systemName: "sparkles").scaledFont(13)
+            }
+            .buttonStyle(.borderless)
+            .help("AI conversation starter")
+            .popover(isPresented: Binding(
+                get: { starterFor == person.id },
+                set: { if !$0 { starterFor = nil } })) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Conversation starters", systemImage: "sparkles")
+                        .font(NDS.small).foregroundStyle(NDS.brand)
+                    if starterLoading && starterText.isEmpty {
+                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Thinking…").font(NDS.small) }
+                    } else {
+                        Text(starterText.isEmpty ? "No suggestion available." : starterText)
+                            .font(NDS.small).foregroundStyle(NDS.textPrimary).textSelection(.enabled)
+                    }
+                }
+                .padding(12).frame(width: 280)
+            }
+        }
+        .padding(4)
+        .background(NDS.surface2, in: Capsule())
+        .overlay(Capsule().strokeBorder(NDS.hairline, lineWidth: 1))
+        .padding(6)
+    }
+
+    private func generateStarter(for person: Person) {
+        starterText = ""; starterLoading = true
+        let name = person.displayName
+        let role = person.relationshipType == .unset ? "" : person.relationshipType.displayName
+        let lastTopic = store.encounters(for: person.id).first?.eventName ?? ""
+        Task {
+            let prompt = """
+            Generate two short, casual conversation starter questions for \(name)\
+            \(role.isEmpty ? "" : " (\(role))")\(lastTopic.isEmpty ? "" : ", whose last logged interaction was \"\(lastTopic)\"").\
+            Return just the two questions, one per line, no numbering or preamble.
+            """
+            let result = (try? await OllamaService().generate(prompt: prompt, temperature: 0.5)) ?? ""
+            await MainActor.run {
+                self.starterText = result
+                self.starterLoading = false
+            }
+        }
     }
 
     private func lastMet(_ p: Person) -> String {

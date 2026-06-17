@@ -58,6 +58,11 @@ struct PersonContext {
         if let excerpt = relationshipSummaryExcerpt, !excerpt.isEmpty {
             lines.append("Summary so far: \(excerpt)")
         }
+        // 2-I: the most recent typed meeting mention with an excerpt.
+        if let mention = person.meetingMentionRecords.first(where: { ($0.excerpt ?? "").isEmpty == false }),
+           let ex = mention.excerpt {
+            lines.append("Recently noted in \(mention.meetingTitle): \"\(ex)\"")
+        }
         return lines.joined(separator: "\n")
     }
 
