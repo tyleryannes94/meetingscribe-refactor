@@ -167,7 +167,9 @@ struct PeopleListView: View {
                 )
             } else {
                 HSplitView {
-                    sidebar.frame(minWidth: 260, idealWidth: 320, maxWidth: 380)
+                    // L7: wider sidebar so the richer rows (overdue pill + task
+                    // chip) don't truncate role/company.
+                    sidebar.frame(minWidth: 280, idealWidth: 340, maxWidth: 420)
                     detail.frame(minWidth: 380)
                 }
             }
@@ -422,6 +424,20 @@ struct PeopleListView: View {
     @ViewBuilder
     private func personRowMenu(_ person: Person) -> some View {
         Button { selection = person.id } label: { Label("Open", systemImage: "arrow.forward") }
+        // L7: one-click reconnect on overdue people, so triage doesn't require
+        // opening the profile.
+        if people.isOverdueForCheckIn(person) {
+            Button {
+                people.bumpLastInteraction(personID: person.id, date: Date())
+            } label: { Label("Mark reached out", systemImage: "checkmark.circle") }
+        }
+        // L8: jump to this person's tasks (reuses the existing person-scoped
+        // Tasks route — no new plumbing).
+        if (taskCounts[person.id]?.open ?? 0) > 0 {
+            Button {
+                router.openTasks(route: ActionItemsView.personSentinel(person.id))
+            } label: { Label("Open tasks", systemImage: "checklist") }
+        }
         let unused = peopleTags.allTags.filter { !person.tagIDs.contains($0.id) }
         if !unused.isEmpty {
             Menu {
