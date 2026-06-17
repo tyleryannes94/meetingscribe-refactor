@@ -21,9 +21,15 @@ final class ChatSession: ObservableObject {
     /// assistant can answer "about this page" without being told. Updated by
     /// the views as the user navigates.
     @Published var pageContext: String = ""
+    /// P2: a short human label for the current scope (e.g. a meeting title or a
+    /// person's name) shown as a breadcrumb pill above the input so users see
+    /// what the assistant is grounded on without a heavy header. Empty on
+    /// top-level pages (no pill).
+    @Published var contextLabel: String = ""
 
-    func setContext(_ context: String) {
+    func setContext(_ context: String, label: String = "") {
         if context != pageContext { pageContext = context }
+        if label != contextLabel { contextLabel = label }
     }
 
     // Persist the conversation across relaunches (V5 TS-1) — it was in-memory

@@ -152,6 +152,26 @@ struct ChatPanel: View {
     }
 
     private var inputBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // P2: context breadcrumb — shows what the assistant is scoped to
+            // (a meeting / person) without a heavy header.
+            if !session.contextLabel.isEmpty {
+                HStack(spacing: 5) {
+                    Image(systemName: "scope").scaledFont(10).foregroundStyle(NDS.textTertiary)
+                    Text("About: \(session.contextLabel)")
+                        .scaledFont(11).foregroundStyle(NDS.textSecondary).lineLimit(1)
+                }
+                .padding(.horizontal, 9).padding(.vertical, 3)
+                .background(NDS.fieldBg, in: Capsule())
+                .help("The assistant is grounded on \(session.contextLabel)")
+            }
+            inputRow
+        }
+        .padding(.horizontal, density == .compact ? 10 : 14)
+        .padding(.vertical, density == .compact ? 8 : 10)
+    }
+
+    private var inputRow: some View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField("Message…", text: $input, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -176,8 +196,6 @@ struct ChatPanel: View {
             .disabled(!canSubmit)
             .keyboardShortcut(.return, modifiers: [.command])
         }
-        .padding(.horizontal, density == .compact ? 10 : 14)
-        .padding(.vertical, density == .compact ? 8 : 10)
     }
 
     private var canSubmit: Bool {

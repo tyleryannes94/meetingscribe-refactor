@@ -87,8 +87,9 @@ struct MSPillTabs<Tab: Hashable>: View {
 
     var body: some View {
         // Scroll horizontally so the tabs never cut off in a narrow column
-        // (the person-profile work area can be ~260pt wide).
-        ScrollView(.horizontal, showsIndicators: false) {
+        // (the person-profile work area can be ~260pt wide). P2: show the
+        // indicator so users discover there are more tabs off-edge.
+        ScrollView(.horizontal, showsIndicators: true) {
             HStack(spacing: 4) {
                 ForEach(tabs, id: \.tab) { item in
                     let active = item.tab == selection
