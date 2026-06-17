@@ -286,6 +286,10 @@ struct UnifiedMeetingDetail: View {
         ScrollViewReader { _ in
             ScrollView {
                 VStack(alignment: .leading, spacing: NDS.spaceXL) {
+                    // The Ask-AI section that used to live inside the canvas
+                    // is gone — the global right-side `ChatSidebar` is the one
+                    // chat surface, and it's already scoped to this meeting via
+                    // `chatSession.setContext`. No duplicate.
                     switch mode {
                     case .past:
                         outcomesSection.id(SectionAnchor.outcomes)
@@ -293,18 +297,15 @@ struct UnifiedMeetingDetail: View {
                         summarySection.id(SectionAnchor.summary)
                         notesSection
                         transcriptSection.id(SectionAnchor.transcript)
-                        chatSection
                         relatedSection
                     case .live:
                         notesSection
                         transcriptSection.id(SectionAnchor.transcript)
                         outcomesSection.id(SectionAnchor.outcomes)
                         highlightsSection
-                        chatSection
                     case .upcoming:
                         transcriptSection.id(SectionAnchor.transcript)   // = Pre-meeting brief
                         notesSection
-                        chatSection
                     }
                 }
                 .padding(.horizontal, NDS.spaceXL)
@@ -736,8 +737,8 @@ struct UnifiedMeetingDetail: View {
         // A warm cache hit is "loaded"; a cold miss stays "loading" until the
         // async refresh commits, so we show a skeleton instead of a false empty.
         bodyLoaded = !(cached.transcript.isEmpty && cached.summary.isEmpty)
-        noteDraft = cached.notes
-        lastSavedDraft = cached.notes
+        noteDraft = Self.stripBriefBlock(from: cached.notes)
+        lastSavedDraft = noteDraft
         titleDraft = m.userTitle ?? m.title
         descriptionDraft = m.userDescription ?? ""
         previousPrimaryTagID = manager.tagStore.primaryTag(for: m)?.id
@@ -762,8 +763,8 @@ struct UnifiedMeetingDetail: View {
             bodyLoaded = true   // refresh landed — empty now means truly empty (PP-1)
             if noteDraft == lastSavedDraft {
                 // Don't clobber in-progress edits.
-                noteDraft = fresh.notes
-                lastSavedDraft = fresh.notes
+                noteDraft = Self.stripBriefBlock(from: fresh.notes)
+                lastSavedDraft = noteDraft
             }
             // 3. Audio URL discovery off-main.
             let dir = storeRef.directory(for: m, primaryTag: primary)
@@ -859,5 +860,23 @@ struct UnifiedMeetingDetail: View {
         guard let m = meeting, noteDraft != lastSavedDraft else { return }
         manager.saveUserNotes(noteDraft, for: m)
         lastSavedDraft = noteDraft
+    }
+
+    /// The pre-meeting brief used to be injected into `notes.md` as an
+    /// auto-managed block so it'd live in the always-present Notes tab.
+    /// In the de-tabbed canvas the brief is its OWN section, so showing it a
+    /// second time inside the Notes editor was duplicate + confusing. Strip
+    /// the block here so the editor shows only the user's own notes; the
+    /// block on disk stays untouched in case other code paths need it, and
+    /// `attachBriefToNotes` is now a no-op (see `MeetingManager`).
+    static func stripBriefBlock(from raw: String) -> String {
+        let begin = MeetingManager.briefNoteBegin
+        let end = MeetingManager.briefNoteEnd
+        guard let r1 = raw.range(of: begin),
+              let r2 = raw.range(of: end),
+              r1.lowerBound < r2.upperBound else { return raw }
+        var cleaned = raw
+        cleaned.replaceSubrange(r1.lowerBound..<r2.upperBound, with: "")
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

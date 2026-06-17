@@ -1129,22 +1129,13 @@ final class MeetingManager: ObservableObject {
     /// replaces the existing block rather than stacking, and the user's own notes
     /// are preserved. `onlyIfRecorded` avoids materializing a vault folder for a
     /// calendar event that hasn't been recorded yet.
+    /// No-op since the de-tabbed canvas (ux-audit-2026-06b) renders the brief
+    /// in its own MSSection. Injecting it into `notes.md` made the editor show
+    /// the brief a second time — duplicate content the user couldn't delete.
+    /// The pre-existing markers in any meeting's notes are stripped at load
+    /// time by `UnifiedMeetingDetail.stripBriefBlock`.
     func attachBriefToNotes(_ brief: String, for meeting: Meeting, onlyIfRecorded: Bool = true) {
-        let trimmed = brief.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        let primary = tagStore.primaryTag(for: meeting)
-        let dir = store.directory(for: meeting, primaryTag: primary)
-        if onlyIfRecorded, !FileManager.default.fileExists(atPath: dir.path) { return }
-        let block = "\(Self.briefNoteBegin)\n## 🧭 Pre-meeting brief\n\n\(trimmed)\n\(Self.briefNoteEnd)"
-        var notes = userNotes(for: meeting)
-        if let r1 = notes.range(of: Self.briefNoteBegin),
-           let r2 = notes.range(of: Self.briefNoteEnd),
-           r1.lowerBound < r2.upperBound {
-            notes.replaceSubrange(r1.lowerBound..<r2.upperBound, with: block)
-        } else {
-            notes = notes.isEmpty ? block : block + "\n\n" + notes
-        }
-        saveUserNotes(notes, for: meeting)
+        // intentionally empty
     }
 
     func revealInFinder(_ meeting: Meeting) {
