@@ -265,6 +265,8 @@ struct MSSection<Content: View, Trailing: View>: View {
         }
     }
 
+    @State private var headerHovered = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: NDS.spaceSM) {
@@ -272,7 +274,7 @@ struct MSSection<Content: View, Trailing: View>: View {
                     HStack(spacing: NDS.spaceSM) {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .scaledFont(10, weight: .semibold)
-                            .foregroundStyle(NDS.textTertiary)
+                            .foregroundStyle(headerHovered ? NDS.textSecondary : NDS.textTertiary)
                             .frame(width: 12, alignment: .center)
                         if let systemImage {
                             Image(systemName: systemImage)
@@ -280,9 +282,6 @@ struct MSSection<Content: View, Trailing: View>: View {
                                 .foregroundStyle(NDS.brand.opacity(0.85))
                                 .frame(width: 16)
                         }
-                        // Visual polish: section titles read as a confident
-                        // heading, not the tiny eyebrow. Eyebrow tracking stays
-                        // for the design-system feel, but at a larger weight.
                         Text(title.uppercased())
                             .scaledFont(11, weight: .heavy, relativeTo: .caption)
                             .tracking(0.8)
@@ -302,6 +301,10 @@ struct MSSection<Content: View, Trailing: View>: View {
                 trailing()
             }
             .padding(.vertical, NDS.spaceSM)
+            .padding(.horizontal, NDS.spaceSM)
+            .background(headerHovered ? NDS.rowHover : Color.clear,
+                        in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+            .onHover { headerHovered = $0 }
             if isExpanded {
                 content()
                     .padding(.top, NDS.spaceSM)
