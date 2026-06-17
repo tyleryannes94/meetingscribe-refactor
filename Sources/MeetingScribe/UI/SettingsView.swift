@@ -287,6 +287,7 @@ struct SettingsView: View {
             }
             Section("Impromptu detection") {
                 Toggle("Prompt to record when a Zoom call / Meet tab is detected", isOn: $detectZoom)
+                MeetingDetectionSettingsView()
             }
         }
         .formStyle(.grouped)

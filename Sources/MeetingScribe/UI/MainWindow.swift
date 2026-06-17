@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// - Integrations moved to Settings (⚙️ gear icon at bottom of rail)
 /// - Notes kept as Voice Notes (distinct enough from Meetings to warrant its own slot)
 enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
-    case today, meetings, people, actions, notes
+    case today, meetings, people, actions, notes, integrations
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -16,6 +16,7 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
         case .people:   return "People"
         case .actions:  return "Tasks"
         case .notes:    return "Voice Notes"
+        case .integrations: return "Integrations"
         }
     }
     var systemImage: String {
@@ -28,13 +29,14 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
         case .people:   return "person.2.fill"
         case .actions:  return "checklist"
         case .notes:    return "waveform.badge.plus"
+        case .integrations: return "puzzlepiece.extension.fill"
         }
     }
     /// Which nav group this section belongs to (for section headers in the rail).
     var group: NavGroup {
         switch self {
         case .today, .meetings, .people: return .workspace
-        case .actions, .notes:           return .organize
+        case .actions, .notes, .integrations: return .organize
         }
     }
 }
@@ -338,7 +340,7 @@ struct MainWindow: View {
         case .people:
             let drifting = PeopleStore.shared.overdueCheckInCount
             return drifting > 0 ? .count(drifting, NDS.gold) : .none
-        case .today, .notes:
+        case .today, .notes, .integrations:
             return .none
         }
     }
@@ -365,6 +367,7 @@ struct MainWindow: View {
         case .people:   return "People — your second-brain contacts, searchable by name and event tag."
         case .actions:  return "The Tasks workspace — initiatives, projects (pages), and tasks."
         case .notes:    return "Voice Notes — recorded/imported notes with transcripts."
+        case .integrations: return "Integrations — set up, edit, and test every connector the app uses."
         }
     }
 
@@ -404,6 +407,7 @@ struct MainWindow: View {
         case .people:   PeopleListView()
         case .actions:  ActionItemsView(store: manager.actionItems)
         case .notes:    QuickNotesView()
+        case .integrations: IntegrationsView()
         }
     }
 

@@ -820,13 +820,6 @@ struct InitiativeNode: View {
     @State private var nameDraft = ""
     @State private var showIconPicker = false
 
-    /// A small palette of common initiative glyphs for the icon picker (3-5).
-    private static let iconChoices = [
-        "flag.fill", "target", "rocket", "star.fill", "bolt.fill", "leaf.fill",
-        "briefcase.fill", "chart.line.uptrend.xyaxis", "lightbulb.fill", "hammer.fill",
-        "person.2.fill", "building.2.fill", "globe", "heart.fill", "gearshape.fill", "calendar"
-    ]
-
     private var isOpen: Bool { expandedInitiatives.contains(initiative.id) }
     private var isSelected: Bool { env.selectedInitiativeID == initiative.id }
     private var projects: [Project] { store.projects(forInitiative: initiative.id) }
@@ -959,25 +952,13 @@ struct InitiativeNode: View {
         }
     }
 
-    /// SF Symbol grid for the initiative icon (3-5).
+    /// Searchable SF Symbol picker for the initiative icon (VD-16, 3-5).
     private var iconPicker: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(30)), count: 6), spacing: 8) {
-            ForEach(Self.iconChoices, id: \.self) { sym in
-                Button {
-                    store.setInitiativeIcon(initiative.id, icon: sym)
-                    showIconPicker = false
-                } label: {
-                    Image(systemName: sym)
-                        .scaledFont(14)
-                        .frame(width: 28, height: 28)
-                        .foregroundStyle(initiative.icon == sym ? NDS.brand : NDS.textSecondary)
-                        .background(initiative.icon == sym ? NDS.brand.opacity(0.14) : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(12)
-        .frame(width: 230)
+        SymbolPicker(
+            selection: Binding(
+                get: { initiative.icon ?? "flag.fill" },
+                set: { store.setInitiativeIcon(initiative.id, icon: $0) }
+            )
+        )
     }
 }

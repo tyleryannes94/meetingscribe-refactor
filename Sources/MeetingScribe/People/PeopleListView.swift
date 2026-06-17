@@ -20,6 +20,7 @@ struct PeopleListView: View {
     @State private var showTagManager = false
     @State private var selection: String?
     @State private var showAdd = false
+    @State private var showImportFromContacts = false
     @State private var showGhosts = false
     @State private var showDuplicates = false
     @State private var dedupResult: String?
@@ -128,6 +129,10 @@ struct PeopleListView: View {
                 .environmentObject(people)
                 .environmentObject(peopleTags)
         }
+        .sheet(isPresented: $showImportFromContacts) {
+            ContactsImportView()
+                .environmentObject(people)
+        }
         .sheet(isPresented: $showDuplicates) {
             DuplicateReviewSheet().environmentObject(people)
         }
@@ -175,6 +180,7 @@ struct PeopleListView: View {
     @ViewBuilder
     private var importMenuItems: some View {
         Button("Apple / iCloud Contacts") { Task { await importer.importAppleContacts() } }
+        Button("Search macOS Contacts…")   { showImportFromContacts = true }
         Button("Gmail / Google Contacts")  { Task { await importer.importGmail() } }
         Button("Calendar attendees")       { importer.importCalendarAttendees(from: manager.pastMeetings) }
         Button("From file (vCard / CSV)…")  { importer.importFromFile() }
