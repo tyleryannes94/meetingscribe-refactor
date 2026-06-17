@@ -179,14 +179,33 @@ struct PreMeetingBriefView: View {
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else if let brief, !brief.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Summary", systemImage: "sparkles")
-                    .font(.callout.weight(.semibold)).foregroundStyle(NDS.brand)
+                HStack {
+                    Label("Summary", systemImage: "sparkles")
+                        .font(.callout.weight(.semibold)).foregroundStyle(NDS.brand)
+                    Spacer()
+                    // P1-5: regenerate on demand — re-synthesizes from the latest
+                    // prior meetings + open items, bypassing the cached brief.
+                    Button { regenerateBrief() } label: {
+                        Label("Regenerate", systemImage: "arrow.clockwise").font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Re-synthesize this brief from the latest prior meetings and open items")
+                }
                 MarkdownText(brief)
             }
             .padding(12)
             .background(NDS.brand.opacity(0.06),
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
+    }
+
+    /// P1-5: force a fresh synthesis, ignoring the cached brief.
+    private func regenerateBrief() {
+        guard !generating else { return }
+        brief = nil
+        generating = true
+        let prior = priorMeetings, items = openItems
+        Task { await generateSynthesis(prior: prior, items: items) }
     }
 
     // MARK: - Sections
