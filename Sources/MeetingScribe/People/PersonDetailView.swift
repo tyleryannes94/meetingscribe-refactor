@@ -722,6 +722,13 @@ struct PersonDetailView: View {
                 }
             } else {
                 HStack(spacing: 6) {
+                    // 2-B: the flagship People feature — a one-tap, AI-synthesized
+                    // relationship brief drawn from meetings, tasks, talking points,
+                    // and strength, streamed into a sheet.
+                    Button { showBrief = true } label: {
+                        Label("Brief Me", systemImage: "sparkles")
+                    }
+                    .buttonStyle(MSPrimaryButtonStyle())
                     Button { beginIdentityEdit() } label: {
                         Label("Edit", systemImage: "pencil")
                     }

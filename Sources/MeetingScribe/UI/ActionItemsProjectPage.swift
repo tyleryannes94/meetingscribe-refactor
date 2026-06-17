@@ -20,21 +20,26 @@ struct ProjectPageHeader: View {
     @State private var expanded = true
     @State private var showTargetPicker = false
     @State private var targetDraft = Date()
+    @State private var showIconPicker = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             breadcrumbBar
             HStack(spacing: 11) {
-                Menu {
-                    ForEach(["doc.text", "folder.fill", "star.fill", "flag.fill", "bolt.fill",
-                             "target", "lightbulb.fill", "rocket", "chart.bar.fill", "person.2.fill"], id: \.self) { ic in
-                        Button { store.setProjectIcon(project.id, icon: ic) } label: { Label(ic, systemImage: ic) }
-                    }
-                } label: {
+                Button { showIconPicker = true } label: {
                     Image(systemName: project.icon ?? "doc.text")
                         .scaledFont(26).foregroundStyle(NDS.selectColor(project.name))
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .buttonStyle(.plain)
+                .popover(isPresented: $showIconPicker, arrowEdge: .bottom) {
+                    SymbolPicker(
+                        selection: Binding(
+                            get: { project.icon ?? "doc.text" },
+                            set: { store.setProjectIcon(project.id, icon: $0) }
+                        ),
+                        tint: NDS.selectColor(project.name)
+                    )
+                }
                 TextField("Untitled", text: $nameDraft, onCommit: {
                     store.setProjectName(project.id, name: nameDraft)
                 })
@@ -365,138 +370,5 @@ struct InitiativePage: View {
             .onAppear { nameDraft = ini.name; bodyDraft = ini.body }
             .onChange(of: initiativeID) { _, _ in nameDraft = ini.name; bodyDraft = ini.body }
         }
-    }
-}
-
-// MARK: - Meeting notes page (a meeting as an editable workspace page)
-
-@available(macOS 14.0, *)
-struct MeetingNotesPage: View {
-    let meeting: Meeting
-    @ObservedObject var store: ActionItemStore
-    @EnvironmentObject var manager: MeetingManager
-
-    @State private var noteDraft: String = ""
-    @State private var lastSaved: String = ""
-    @State private var saveTimer: Timer?
-
-    private var items: [ActionItem] { store.items(for: meeting.id) }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                header
-                Divider().opacity(0.5)
-
-                Label("Notes", systemImage: "note.text")
-                    .font(.headline)
-                RichMarkdownEditor(text: $noteDraft,
-                                   placeholder: "Write meeting notes in markdown…")
-                    .frame(minHeight: 220, maxHeight: 460)
-
-                HStack(spacing: 6) {
-                    Image(systemName: "checklist")
-                    Text("Action items from this call").font(.headline)
-                    Text("\(items.count)").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
-                }
-                .padding(.top, 6)
-                if items.isEmpty {
-                    Text("No action items extracted for you from this meeting.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    ForEach(items) { item in
-                        compactItemRow(item)
-                    }
-                }
-            }
-            .padding(.horizontal, 28).padding(.vertical, 18)
-            .frame(maxWidth: 900, alignment: .leading)
-            .frame(maxWidth: .infinity)
-        }
-        .onAppear { load() }
-        .onChange(of: meeting.id) { _, _ in flush(); load() }
-        .onChange(of: noteDraft) { _, _ in scheduleSave() }
-        .onDisappear { flush() }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(meeting.displayTitle).scaledFont(26, weight: .bold)
-            Text(Self.dateLine(meeting)).font(.callout).foregroundStyle(.secondary)
-            if !meeting.attendees.isEmpty {
-                Text(meeting.attendees.joined(separator: ", "))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            }
-            if let url = meeting.conferenceURL, let u = URL(string: url) {
-                Link(destination: u) { Label(url, systemImage: "link").font(.caption) }
-            }
-        }
-    }
-
-    private func compactItemRow(_ item: ActionItem) -> some View {
-        HStack(spacing: 10) {
-            Button {
-                store.setStatus(item.id, status: item.status == .completed ? .open : .completed)
-            } label: {
-                Image(systemName: item.status.systemImage)
-                    .foregroundStyle(item.status == .completed ? .green
-                                     : item.status == .inProgress ? .orange : .blue)
-            }
-            .buttonStyle(.plain)
-            Text(item.title).font(.callout)
-                .strikethrough(item.status == .completed)
-                .foregroundStyle(item.status == .completed ? .secondary : .primary)
-            Spacer()
-            Menu {
-                ForEach(ActionItem.Priority.allCases) { p in
-                    Button(p.label) { store.setPriority(item.id, priority: p) }
-                }
-            } label: {
-                Text(item.priority.label).font(.caption2)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Color.secondary.opacity(0.14), in: Capsule())
-            }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            Menu {
-                Button("No project") { store.setProject(item.id, projectID: nil) }
-                Divider()
-                ForEach(store.projects) { p in
-                    Button(p.name) { store.setProject(item.id, projectID: p.id) }
-                }
-            } label: {
-                if let name = store.project(for: item)?.name {
-                    Label(name, systemImage: "folder.fill").font(.caption2)
-                        .foregroundStyle(NDS.brand)
-                } else {
-                    Image(systemName: "folder.badge.plus").foregroundStyle(.secondary)
-                }
-            }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        }
-        .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(NDS.fieldBg,
-                    in: RoundedRectangle(cornerRadius: NDS.rowRadius))
-    }
-
-    private func load() {
-        let n = manager.userNotes(for: meeting)
-        noteDraft = n; lastSaved = n
-    }
-    private func scheduleSave() {
-        saveTimer?.invalidate()
-        saveTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { _ in
-            Task { @MainActor in flush() }
-        }
-    }
-    private func flush() {
-        saveTimer?.invalidate(); saveTimer = nil
-        guard noteDraft != lastSaved else { return }
-        manager.saveUserNotes(noteDraft, for: meeting)
-        lastSaved = noteDraft
-    }
-
-    private static func dateLine(_ m: Meeting) -> String {
-        let f = DateFormatter(); f.dateFormat = "EEEE, MMM d  ·  h:mm a"
-        return f.string(from: m.startDate)
     }
 }
