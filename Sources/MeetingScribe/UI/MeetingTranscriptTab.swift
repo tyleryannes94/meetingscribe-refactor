@@ -174,7 +174,7 @@ enum DetailTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .notes:      return "Notes"
+        case .notes:      return "Meeting"
         case .actions:    return "Actions"
         case .transcript: return "Transcript"
         case .chat:       return "Ask AI"
@@ -182,7 +182,7 @@ enum DetailTab: String, CaseIterable, Identifiable {
     }
     var systemImage: String {
         switch self {
-        case .notes:      return "note.text"
+        case .notes:      return "doc.text"
         case .actions:    return "checklist"
         case .transcript: return "text.alignleft"
         case .chat:       return "bubble.left.and.sparkles"
