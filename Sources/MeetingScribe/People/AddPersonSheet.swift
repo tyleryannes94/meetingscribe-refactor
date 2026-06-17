@@ -57,12 +57,14 @@ struct AddPersonSheet: View {
                     .font(.headline)
                 Spacer()
                 Button("Cancel") { dismiss() }
+                    .buttonStyle(MSSecondaryButtonStyle())
                     .keyboardShortcut(.cancelAction)
                 Button("Save", action: save)
+                    .buttonStyle(MSPrimaryButtonStyle())
                     .keyboardShortcut(.defaultAction)
                     .disabled(trimmedName.isEmpty)
             }
-            .padding(12)
+            .padding(.horizontal, 14).padding(.vertical, 10)
             Divider()
 
             ScrollView {
