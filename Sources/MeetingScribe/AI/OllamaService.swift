@@ -363,6 +363,7 @@ final class OllamaService {
     /// When `onToken` is nil the behavior is identical to the original blocking
     /// call, so every existing caller is unaffected.
     func summarize(meeting: Meeting, transcript: String,
+                   summaryGuidance: String? = nil,
                    onToken: (@Sendable (String) -> Void)? = nil) async throws -> String {
         let settings = AppSettings.shared
 
@@ -379,7 +380,7 @@ final class OllamaService {
         // E4-3: the transcript must not leave the device via a non-local URL.
         try EgressPolicy.assertOllamaEgressAllowed(url)
 
-        let prompt = Self.buildPrompt(meeting: meeting, transcript: transcript)
+        let prompt = Self.buildPrompt(meeting: meeting, transcript: transcript, summaryGuidance: summaryGuidance)
         if let onToken {
             return try await streamGenerate(prompt: prompt, temperature: 0.2, numCtx: 8192, onToken: onToken)
         }
@@ -417,7 +418,8 @@ final class OllamaService {
         }
     }
 
-    private static func buildPrompt(meeting: Meeting, transcript: String) -> String {
+    private static func buildPrompt(meeting: Meeting, transcript: String,
+                                    summaryGuidance: String? = nil) -> String {
         let userName = AppSettings.shared.userName
         let attendees = meeting.attendees.isEmpty ? "Unknown" : meeting.attendees.joined(separator: ", ")
         let formatter = DateFormatter()
@@ -433,9 +435,13 @@ final class OllamaService {
         // so untyped meetings get exactly the prompt they got before.
         let typeGuidance = MeetingType.infer(from: meeting).instructionBlock
         let typeBlock = typeGuidance.isEmpty ? "" : "\n\n\(typeGuidance)"
+        // Per-tag custom instructions (when the meeting's tag defines a template).
+        let tagBlock = (summaryGuidance?.isEmpty == false)
+            ? "\n\nAdditional instructions for this meeting's category:\n\(summaryGuidance!)"
+            : ""
 
         return """
-        You are an assistant that writes concise, action-oriented meeting summaries.\(feedback)\(typeBlock)
+        You are an assistant that writes concise, action-oriented meeting summaries.\(feedback)\(typeBlock)\(tagBlock)
 
         Meeting: \(meeting.title)
         When: \(when)
