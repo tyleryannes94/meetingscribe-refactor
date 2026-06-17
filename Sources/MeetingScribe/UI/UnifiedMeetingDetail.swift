@@ -278,45 +278,50 @@ struct UnifiedMeetingDetail: View {
     /// M3-M9 fill in the actual sections; today the top group hosts
     /// `combinedNotesBody` so the editor proves the bounded-height shape.
     @ViewBuilder var canvasBody: some View {
-        GeometryReader { _ in
-            VStack(spacing: 0) {
-                // SHORT sections — share one ScrollView with a ScrollViewReader
-                // so M8 can scroll-to anchors instead of swapping tabs.
-                ScrollViewReader { _ in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: NDS.spaceXL) {
-                            outcomesSection
-                                .id(SectionAnchor.outcomes)
-                            highlightsSection
-                            summarySection
-                                .id(SectionAnchor.summary)
-                            relatedSection
-                        }
-                        .padding(.horizontal, NDS.spaceXL)
-                        .padding(.vertical, NDS.spaceXL)
-                        .frame(maxWidth: Self.canvasContentMaxWidth)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    }
-                }
-                // M2 §4.4 separator: the user reads recap-area-above /
-                // work-area-below; one Divider keeps that mental model clear.
-                Divider().overlay(NDS.divider)
-                // LONG self-scrolling sections — Notes lands now (M5);
-                // Transcript + Ask AI follow in M7/M8.
-                ScrollView {
-                    VStack(alignment: .leading, spacing: NDS.spaceXL) {
+        // One scroll column, mode-aware section ordering — Notes and Brief
+        // come FIRST for upcoming/live (the prep/recording job), Outcomes
+        // and Summary first for past. Each section self-hides when it has
+        // nothing to show. Persistence keys are mode-suffixed so toggling
+        // collapse on a past meeting doesn't bury Brief on an upcoming one.
+        ScrollViewReader { _ in
+            ScrollView {
+                VStack(alignment: .leading, spacing: NDS.spaceXL) {
+                    switch mode {
+                    case .past:
+                        outcomesSection.id(SectionAnchor.outcomes)
+                        highlightsSection
+                        summarySection.id(SectionAnchor.summary)
                         notesSection
-                        transcriptSection
-                            .id(SectionAnchor.transcript)
+                        transcriptSection.id(SectionAnchor.transcript)
+                        chatSection
+                        relatedSection
+                    case .live:
+                        notesSection
+                        transcriptSection.id(SectionAnchor.transcript)
+                        outcomesSection.id(SectionAnchor.outcomes)
+                        highlightsSection
+                        chatSection
+                    case .upcoming:
+                        transcriptSection.id(SectionAnchor.transcript)   // = Pre-meeting brief
+                        notesSection
                         chatSection
                     }
-                    .padding(.horizontal, NDS.spaceXL)
-                    .padding(.vertical, NDS.spaceXL)
-                    .frame(maxWidth: Self.canvasContentMaxWidth)
-                    .frame(maxWidth: .infinity, alignment: .center)
                 }
+                .padding(.horizontal, NDS.spaceXL)
+                .padding(.vertical, NDS.spaceXL)
+                .frame(maxWidth: Self.canvasContentMaxWidth)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// Mode-suffixed persistence key so toggling Notes collapsed on a past
+    /// meeting doesn't carry over to upcoming/live.
+    private var modeKey: String {
+        switch mode {
+        case .past: return "past"
+        case .live: return "live"
+        case .upcoming: return "upcoming"
         }
     }
 
@@ -327,7 +332,7 @@ struct UnifiedMeetingDetail: View {
     @ViewBuilder var chatSection: some View {
         if meeting != nil {
             MSSection("Ask AI", systemImage: "bubble.left.and.sparkles",
-                      persistenceKey: "meeting.chat",
+                      persistenceKey: "meeting.chat.\(modeKey)",
                       defaultExpanded: false) {
                 GeometryReader { geo in
                     chatBody
@@ -361,7 +366,7 @@ struct UnifiedMeetingDetail: View {
         if !omit {
             MSSection(transcriptSectionTitle,
                       systemImage: "text.alignleft",
-                      persistenceKey: "meeting.transcript",
+                      persistenceKey: "meeting.transcript.\(modeKey)",
                       defaultExpanded: defaultExpanded) {
                 transcriptSectionBody
             }
@@ -414,7 +419,7 @@ struct UnifiedMeetingDetail: View {
     @ViewBuilder var notesSection: some View {
         if meeting != nil {
             MSSection("Your notes", systemImage: "doc.text",
-                      persistenceKey: "meeting.notes",
+                      persistenceKey: "meeting.notes.\(modeKey)",
                       defaultExpanded: true) {
                 notesSectionBody
             }
