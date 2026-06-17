@@ -39,7 +39,7 @@ struct SymbolPicker: View {
             }
         }
         .padding(NDS.spaceMD)
-        .frame(width: 320, minHeight: 360)
+        .frame(minWidth: 320, maxWidth: 320, minHeight: 360)
     }
 
     private var filtered: [String] {

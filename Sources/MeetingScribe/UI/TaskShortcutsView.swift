@@ -40,7 +40,7 @@ struct TaskShortcutsView: View {
             }
             Spacer()
         }
-        .frame(width: 440, minHeight: 300)
+        .frame(minWidth: 440, maxWidth: 440, minHeight: 300)
         .background(NDS.bg)
     }
 }

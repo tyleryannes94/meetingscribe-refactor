@@ -77,6 +77,6 @@ struct StandupDigestSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 520, minHeight: 540)
+        .frame(minWidth: 520, maxWidth: 520, minHeight: 540)
     }
 }
