@@ -74,12 +74,13 @@ struct ChatSidebar: View {
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "sparkles")
+                .scaledFont(12)
                 .foregroundStyle(NDS.brand)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Chat")
-                    .font(.headline)
+                    .scaledFont(13, weight: .semibold)
                 Text(captionText)
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .scaledFont(10).foregroundStyle(NDS.textTertiary)
             }
             Spacer()
             Button {
@@ -89,7 +90,8 @@ struct ChatSidebar: View {
                 Image(systemName: folders.isEmpty
                       ? "folder.badge.plus"
                       : "folder.fill")
-                    .foregroundStyle(.secondary)
+                    .scaledFont(12)
+                    .foregroundStyle(NDS.textTertiary)
             }
             .buttonStyle(.borderless)
             .help(folders.isEmpty
@@ -99,15 +101,16 @@ struct ChatSidebar: View {
                 session.reset()
             } label: {
                 Image(systemName: "plus.message")
-                    .foregroundStyle(.secondary)
+                    .scaledFont(12)
+                    .foregroundStyle(NDS.textTertiary)
             }
             .buttonStyle(.borderless)
             .disabled(session.messages.isEmpty)
             .help("Start a new chat")
         }
         .padding(.horizontal, 12)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
     }
 
     private var captionText: String {
