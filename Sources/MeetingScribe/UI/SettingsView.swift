@@ -74,7 +74,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            Text("Settings").font(.title2).bold()
+            Text("Settings").scaledFont(22, weight: .bold, kind: .display)
 
             // D5-6 / U4-2: a small top tab bar splits the old 24-section scroll
             // into ~5 plain-language tabs, with the technical bits (model
