@@ -379,6 +379,9 @@ struct PersonDetailView: View {
         .onChange(of: current.id) { _, _ in updateChatContext() }
         .task(id: current.id) { await loadCalendarMeetings() }
         .task(id: current.id) { computeInCommon() }
+        // P0-4: pull this person's latest iMessage recency so the overdue badge
+        // + insight reflect texts, not just meetings, the moment the profile opens.
+        .task(id: current.id) { people.refreshIMessageSignal(forPersonID: current.id) }
         .onDisappear {
             chatSession.setContext("The People tab — the user's second-brain contacts.")
         }

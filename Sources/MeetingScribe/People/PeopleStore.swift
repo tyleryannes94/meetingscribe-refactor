@@ -1297,9 +1297,29 @@ final class PeopleStore: ObservableObject {
         var updated = p
         updated.relationshipStrengthScore = score
         updated.strengthLastComputedAt = Date()
+        // P0-4: fold iMessage recency into lastInteractionAt so the "overdue"
+        // badge + insight reflect texts, not just meetings/encounters — a person
+        // you text daily should never read as months overdue.
+        if let imsg {
+            let textLast = Date().addingTimeInterval(-Double(imsg.days) * 86_400)
+            if (updated.lastInteractionAt ?? .distantPast) < textLast {
+                updated.lastInteractionAt = textLast
+            }
+        }
         people[idx] = updated
         writePerson(updated)
         return score
+    }
+
+    /// P0-4: refresh ONE person's iMessage signal + strength on demand (e.g. when
+    /// their profile opens) so the overdue/last-contact reflects texts right away
+    /// instead of waiting for the periodic background pass. Best-effort.
+    func refreshIMessageSignal(forPersonID id: String) {
+        guard let p = person(by: id), p.relationshipType != .unset else { return }
+        guard let (stats, _) = try? MessagesAnalyzer.analyze(person: p, recentLimit: 0),
+              stats.total > 0, let last = stats.lastDate else { return }
+        iMessageSignal[id] = (days: Int(Date().timeIntervalSince(last) / 86400), last30: stats.last30)
+        recomputeStrength(forPersonID: id)
     }
 
     /// Background pass: recompute strength for people whose score is stale
