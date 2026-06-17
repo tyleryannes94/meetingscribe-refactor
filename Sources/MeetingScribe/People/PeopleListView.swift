@@ -327,16 +327,13 @@ struct PeopleListView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("People").font(.title2).bold()
+                Text("\(people.people.count)")
+                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 Spacer()
                 if importer.isWorking { ProgressView().controlSize(.small) }
-                // Graph view is available but demoted — it's rarely useful
-                // with 500+ contacts and is just decorative at large scale.
-                // Accessible via a compact icon button, not a primary action.
                 if !people.people.isEmpty {
-                    // Keep-in-touch board (C2-2): triage typed relationships by
-                    // health band. Only useful once some people have a type.
                     if people.people.contains(where: { $0.relationshipType != .unset }) {
                         NotionIconButton(systemName: "rectangle.split.3x1",
                                          help: "Keep-in-touch board") {
@@ -349,26 +346,20 @@ struct PeopleListView: View {
                     }
                 }
             }
-            // Top padding bumped from default (~16pt) so the title and the
-            // action row underneath aren't clipped by the window toolbar
-            // overlay on macOS Tahoe. Matches the detail pane's 72pt top
-            // inset so the two panes line up visually.
-            .padding(.horizontal).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 6)
+            .padding(.horizontal).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 4)
 
-            // Always-visible actions — works whether the list is empty or full.
             actionsRow
 
             if let status = importer.status {
                 Text(status)
                     .font(NDS.tiny).foregroundStyle(NDS.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal).padding(.bottom, 6)
+                    .padding(.horizontal).padding(.bottom, 4)
             }
 
             MSSearchField(placeholder: "Search name, company, role…", text: $query)
-                .padding(.horizontal).padding(.bottom, 8)
+                .padding(.horizontal).padding(.bottom, 6)
 
-            // L5: triage — All / Needs attention / Has tasks, with live counts.
             if !people.people.isEmpty {
                 Picker("", selection: $triage) {
                     Text("All").tag(PeopleTriage.all)
@@ -377,7 +368,7 @@ struct PeopleListView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .padding(.horizontal).padding(.bottom, 8)
+                .padding(.horizontal).padding(.bottom, 6)
             }
 
             tagChips
