@@ -231,17 +231,65 @@ final class NotificationManager: NSObject, ObservableObject {
     }
 
     /// Schedules (or cancels) a repeating 8am "morning brief" nudge. (P2-5)
-    func scheduleDailyBrief() {
+    ///
+    /// 3-B: the body is now live-computed from the current data when scheduled
+    /// (rescheduled on launch/foreground so it stays fresh), and carries a
+    /// "View Standup" deep link. Because a repeating trigger can't recompute its
+    /// own body at delivery, the caller passes today's counts.
+    func scheduleDailyBrief(meetingCount: Int = 0,
+                            followUpsDue: Int = 0,
+                            checkInsOverdue: Int = 0) {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: ["daily-brief"])
         guard AppSettings.shared.dailyBriefEnabled else { return }
         let content = UNMutableNotificationContent()
         content.title = "Good morning"
-        content.body = "Your daily brief: yesterday's recap, today's meetings, and open commitments. Open MeetingScribe → Standup."
+        var parts: [String] = []
+        parts.append("\(meetingCount) meeting\(meetingCount == 1 ? "" : "s")")
+        if followUpsDue > 0 { parts.append("\(followUpsDue) follow-up\(followUpsDue == 1 ? "" : "s") due") }
+        if checkInsOverdue > 0 { parts.append("\(checkInsOverdue) check-in\(checkInsOverdue == 1 ? "" : "s") overdue") }
+        content.body = parts.joined(separator: " · ")
         content.sound = .default
+        content.categoryIdentifier = Self.categoryDailyBrief
+        content.userInfo[deepLinkKey] = "meetingscribe://standup"
         var when = DateComponents(); when.hour = 8; when.minute = 0
         let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: true)
         center.add(UNNotificationRequest(identifier: "daily-brief", content: content, trigger: trigger))
+    }
+
+    static let categoryDailyBrief = "daily-brief"
+
+    /// 3-A: schedules a T+45min "review your meeting" nudge after a meeting
+    /// finalizes, deep-linking to the meeting's post-meeting review mode (3-E).
+    func scheduleMeetingReview(meetingID: String, attendeeNames: [String],
+                              after seconds: TimeInterval = 2700) {
+        let content = UNMutableNotificationContent()
+        content.title = "Review your meeting"
+        let who = attendeeNames.isEmpty
+            ? "your last meeting"
+            : "with " + attendeeNames.prefix(3).joined(separator: ", ")
+        content.body = "You met \(who). Review the action items and decisions?"
+        content.sound = .default
+        content.userInfo[deepLinkKey] = "meetingscribe://meeting/\(meetingID)"
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "review-\(meetingID)", content: content, trigger: trigger))
+    }
+
+    /// 3-F: a Friday-afternoon weekly-review ritual nudge, deep-linking to the
+    /// native WeeklyReviewView.
+    func scheduleWeeklyReview() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["weekly-review"])
+        guard AppSettings.shared.dailyBriefEnabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Your week in review"
+        content.body = "Close the loop: meetings, decisions, and what to carry forward."
+        content.sound = .default
+        content.userInfo[deepLinkKey] = "meetingscribe://weekly-review"
+        var when = DateComponents(); when.weekday = 6; when.hour = 16; when.minute = 30   // Fri 4:30pm
+        let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: true)
+        center.add(UNNotificationRequest(identifier: "weekly-review", content: content, trigger: trigger))
     }
 
     /// Posts an immediate notification when an impromptu meeting is detected.

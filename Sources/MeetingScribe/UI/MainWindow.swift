@@ -64,6 +64,7 @@ struct MainWindow: View {
     /// The ⌘K command palette presents as a floating, blurred, spring-in surface
     /// (C3-2) — a Raycast-grade overlay, not a system sheet.
     @State private var showSearch = false
+    @State private var showWeeklyReview = false   // 3-F
     /// "New meeting" quick sheet (§1) + in-flight audio import flag.
     @State private var showNewMeeting = false
     @State private var importingMeeting = false
@@ -626,6 +627,10 @@ struct MainWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .meetingScribeOpenSearch)) { _ in
             showSearch = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .meetingScribeOpenWeeklyReview)) { _ in
+            showWeeklyReview = true   // 3-F
+        }
+        .sheet(isPresented: $showWeeklyReview) { WeeklyReviewView() }
         // ⇧⌘P — jump to People and open the add-person sheet. Owned here (not
         // in PeopleListView) so it works even before the People tab is built.
         .onReceive(NotificationCenter.default.publisher(for: .meetingScribeAddPerson)) { _ in

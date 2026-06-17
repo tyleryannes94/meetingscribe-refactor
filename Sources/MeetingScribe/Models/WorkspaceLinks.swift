@@ -106,6 +106,8 @@ extension Notification.Name {
     static let meetingScribeOpenEntity = Notification.Name("MeetingScribeOpenEntity")
     /// Posted by the ⌘K command to open the global search palette.
     static let meetingScribeOpenSearch = Notification.Name("MeetingScribeOpenSearch")
+    /// 3-F: posted by the Friday weekly-review deep link to present WeeklyReviewView.
+    static let meetingScribeOpenWeeklyReview = Notification.Name("MeetingScribeOpenWeeklyReview")
     /// Posted by the ⇧⌘P command to add a new person.
     static let meetingScribeAddPerson = Notification.Name("MeetingScribeAddPerson")
     /// Search-palette result of kind .person — userInfo["id"] = the

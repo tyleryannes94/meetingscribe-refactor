@@ -121,6 +121,19 @@ struct UnifiedMeetingDetail: View {
         return allOccurrences[idx]
     }
 
+    /// 3-E: post-meeting review checklist (extracted to keep the main body within
+    /// the Swift type-checker's budget).
+    @ViewBuilder
+    private var reviewBanner: some View {
+        if case .past(let m) = mode {
+            let aiCount = manager.actionItems.items.filter { $0.meetingID == m.id }.count
+            let decCount = manager.decisions.decisions.filter { $0.meetingID == m.id }.count
+            PostMeetingReviewBanner(meeting: m, actionItemCount: aiCount,
+                                    decisionCount: decCount,
+                                    onReviewTasks: { tab = .actions })
+        }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
         VStack(spacing: 0) {
@@ -130,6 +143,7 @@ struct UnifiedMeetingDetail: View {
             // People tab's identity-panel inset.
             Color.clear.frame(height: NDS.splitPaneTopInset)
             header
+            reviewBanner   // 3-E: 24h post-meeting review checklist
             Divider()
             audioBar
             Divider().opacity(audioURLs.isEmpty ? 0 : 1)
