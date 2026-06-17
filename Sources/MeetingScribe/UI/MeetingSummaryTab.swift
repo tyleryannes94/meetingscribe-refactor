@@ -14,7 +14,7 @@ extension UnifiedMeetingDetail {
             VStack(spacing: 0) {
                 outcomesStrip        // action items + decisions, always visible (TM-5)
                 highlightsStrip      // C1-2 "mark moment" anchors, if any
-                if summaryHasContent {
+                if hasRealSummary {
                     // P0-1: read the recap and write notes together in one canvas,
                     // with a draggable divider so neither is crushed — drag down for
                     // more summary, up for more notes.
@@ -23,6 +23,22 @@ extension UnifiedMeetingDetail {
                         notesEditor
                     }
                     .frame(maxHeight: .infinity)
+                } else if isSummaryGenerating {
+                    // P0-3: summary engine is running (incl. auto-retries) — show
+                    // progress instead of a blank/"no summary" canvas.
+                    VStack(spacing: 0) {
+                        summaryGeneratingBanner
+                        Divider().overlay(NDS.divider)
+                        notesEditor
+                    }
+                } else if bodyLoaded && !transcript.isEmpty {
+                    // P0-3: transcript exists but the recap failed (engine was off);
+                    // a clear one-tap retry beats a silent "No summary yet".
+                    VStack(spacing: 0) {
+                        summaryFailedBanner
+                        Divider().overlay(NDS.divider)
+                        notesEditor
+                    }
                 } else {
                     // No summary yet → notes editor takes the full canvas.
                     notesEditor
@@ -35,10 +51,69 @@ extension UnifiedMeetingDetail {
         }
     }
 
-    /// Whether a finished AI summary exists for this past meeting — gates the
-    /// summary/notes split so an empty recap doesn't leave a dead top pane.
-    private var summaryHasContent: Bool {
-        !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// A genuine finished recap — non-empty and not the "_Summary unavailable_"
+    /// failure placeholder. Gates the summary/notes split so a failed run shows
+    /// the retry banner, not a dead pane rendering the placeholder text.
+    private var hasRealSummary: Bool {
+        let s = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !s.isEmpty && !s.contains("_Summary unavailable")
+    }
+
+    /// True while the post-meeting summary is actively generating (or streaming).
+    private var isSummaryGenerating: Bool {
+        guard let id = meeting?.id else { return false }
+        return pipeline.summaryGeneratingIDs.contains(id)
+            || !(pipeline.liveSummaryByID[id] ?? "").isEmpty
+    }
+
+    @ViewBuilder
+    private var summaryGeneratingBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Generating summary…")
+                    .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+            }
+            if let id = meeting?.id, let live = pipeline.liveSummaryByID[id], !live.isEmpty {
+                ScrollView {
+                    MarkdownEditor(text: .constant(live), isEditable: false)
+                        .padding(.horizontal, 8)
+                }
+                .frame(maxHeight: 240)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NDS.sidebarBg)
+    }
+
+    @ViewBuilder
+    private var summaryFailedBanner: some View {
+        if let m = meeting {
+            let isRetrying = manager.transcribingMeetingIDs.contains(m.id)
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(NDS.gold)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("No summary yet")
+                        .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                    Text("The summary engine wasn't reachable when this finished. Your transcript is safe.")
+                        .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                }
+                Spacer(minLength: 8)
+                if isRetrying {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Generate summary") {
+                        manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle())
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(NDS.sidebarBg)
+        }
     }
 
     /// 4-F / 5-A: meetings the embedding index found similar to this one, loaded
