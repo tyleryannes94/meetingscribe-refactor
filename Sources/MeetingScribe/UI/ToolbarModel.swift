@@ -78,7 +78,7 @@ enum ToolbarModel {
         case .notes:
             return [.button(search), .divider,
                     primary(.newVoiceNote, "New voice note", "mic.badge.plus")]
-        case .integrations:
+        case .decisions, .integrations:
             return [.button(search)]
         }
     }
