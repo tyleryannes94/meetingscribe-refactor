@@ -567,24 +567,22 @@ struct PersonDetailView: View {
         return "Last connected \(days) day\(days == 1 ? "" : "s") ago — on track for your \(cadence)-day cadence with \(firstName)."
     }
 
-    /// Right pane: pill tab bar (§4B) + the selected tab's content.
+    /// P6 (ux-audit-2026-06b): right pane is now one scrolling canvas — the
+    /// `MSPillTabs` are gone, sections from every former tab stack inside one
+    /// `ScrollView` (see `workContent`). Each section owns its own
+    /// expand/collapse state, so the user controls what's open instead of the
+    /// tab bar gating four exclusive views.
     private var workArea: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: NDS.splitPaneTopInset)
-            HStack {
-                MSPillTabs(tabs: PersonTab.allCases.map { ($0, $0.label) }, selection: $personTab)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 20).padding(.bottom, 10)
-            Divider().overlay(NDS.divider)
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: NDS.spaceXL) {
                     workContent
                 }
-                .padding(20)
-                .frame(maxWidth: 760, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .animation(.easeOut(duration: 0.18), value: personTab)
+                .padding(.horizontal, NDS.spaceXL)
+                .padding(.vertical, NDS.spaceXL)
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .background(NDS.bg)
@@ -663,34 +661,85 @@ struct PersonDetailView: View {
         }
     }
 
+    /// P5 (ux-audit-2026-06b §4.2) — the de-tabbed canvas. Every former tab's
+    /// content is now wrapped in an `MSSection` and stacked one after another
+    /// in a single scrolling column. Each section persists its own
+    /// expand/collapse state via `section.person.<key>.expanded`. Tasks is
+    /// promoted to top-level + expanded; the previously buried "Add to a
+    /// meeting" action becomes the Meetings section's trailing accessory.
     @ViewBuilder
     private var workContent: some View {
-        switch personTab {
-        case .overview:
-            reconnectSection
-            inCommonSection
-            if !current.bio.isEmpty || editingIdentity { notes }
-            favoritesEditSection
-            aiSuggestionsSection
-            storySection        // P1-1: Story timeline folded into Overview
-            provenanceFooter
-        case .meetings:
-            Button { showAddToMeeting = true } label: {
-                Label("Add \(firstName) to a meeting", systemImage: "calendar.badge.plus")
+        // Reconnect / In common are always-on glance sections (self-hide
+        // when empty), so render them above the collapsible stack.
+        reconnectSection
+        inCommonSection
+
+        MSSection("Tasks", systemImage: "checklist",
+                  count: personTasks.filter { $0.status != .completed }.count,
+                  persistenceKey: "person.tasks",
+                  defaultExpanded: true) {
+            tasksSection
+        }
+        MSSection("Meetings", systemImage: "calendar",
+                  count: current.meetingMentions.count,
+                  persistenceKey: "person.meetings",
+                  defaultExpanded: true,
+                  trailing: {
+                      MSInlineButton("Add to a meeting", systemImage: "calendar.badge.plus") {
+                          showAddToMeeting = true
+                      }
+                  }) {
+            VStack(alignment: .leading, spacing: NDS.spaceMD) {
+                meetingHistorySection
+                if !current.meetingMentions.isEmpty { mentionedInSection }
+                decisionsSection
             }
-            .buttonStyle(MSSecondaryButtonStyle())
-            meetingHistorySection
-            if !current.meetingMentions.isEmpty { mentionedInSection }
-            tasksSection        // P1-1: this person's tasks live with their meetings
-            decisionsSection
-        case .messages:
+        }
+        MSSection("Messages", systemImage: "message",
+                  persistenceKey: "person.messages",
+                  defaultExpanded: false) {
             messagesSection
-        case .notes:
+        }
+        MSSection("Discuss next time", systemImage: "bubble.left",
+                  count: current.talkingPoints.count,
+                  persistenceKey: "person.talkingpoints",
+                  defaultExpanded: false) {
             talkingPointsSection
-            evidenceSection
+        }
+        MSSection("Memories", systemImage: "sparkles",
+                  count: current.memories.count,
+                  persistenceKey: "person.memories",
+                  defaultExpanded: false) {
             memoriesSection
+        }
+        MSSection("About", systemImage: "text.alignleft",
+                  persistenceKey: "person.bio",
+                  defaultExpanded: false) {
+            notes
+        }
+        MSSection("Saved analyses", systemImage: "doc.text",
+                  count: current.attachedNotes.count,
+                  persistenceKey: "person.attachednotes",
+                  defaultExpanded: false) {
             attachedNotesSection
         }
+        MSSection("AI suggestions", systemImage: "wand.and.stars",
+                  persistenceKey: "person.aisuggestions",
+                  defaultExpanded: false) {
+            aiSuggestionsSection
+        }
+        MSSection("Favorites", systemImage: "heart",
+                  count: current.favorites.count,
+                  persistenceKey: "person.favorites",
+                  defaultExpanded: false) {
+            favoritesEditSection
+        }
+        MSSection("Perf-review evidence", systemImage: "doc.text.magnifyingglass",
+                  persistenceKey: "person.evidence",
+                  defaultExpanded: false) {
+            evidenceSection
+        }
+        provenanceFooter
     }
 
     // MARK: - Inline identity editing
