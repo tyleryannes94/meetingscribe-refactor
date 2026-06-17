@@ -54,20 +54,20 @@ extension UnifiedMeetingDetail {
     /// A genuine finished recap — non-empty and not the "_Summary unavailable_"
     /// failure placeholder. Gates the summary/notes split so a failed run shows
     /// the retry banner, not a dead pane rendering the placeholder text.
-    private var hasRealSummary: Bool {
+    var hasRealSummary: Bool {
         let s = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         return !s.isEmpty && !s.contains("_Summary unavailable")
     }
 
     /// True while the post-meeting summary is actively generating (or streaming).
-    private var isSummaryGenerating: Bool {
+    var isSummaryGenerating: Bool {
         guard let id = meeting?.id else { return false }
         return pipeline.summaryGeneratingIDs.contains(id)
             || !(pipeline.liveSummaryByID[id] ?? "").isEmpty
     }
 
     @ViewBuilder
-    private var summaryGeneratingBanner: some View {
+    var summaryGeneratingBanner: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
@@ -88,7 +88,7 @@ extension UnifiedMeetingDetail {
     }
 
     @ViewBuilder
-    private var summaryFailedBanner: some View {
+    var summaryFailedBanner: some View {
         if let m = meeting {
             let isRetrying = manager.transcribingMeetingIDs.contains(m.id)
             HStack(spacing: 10) {
@@ -120,7 +120,7 @@ extension UnifiedMeetingDetail {
     /// in `reload()` into `relatedMeetings` but previously never rendered. Tapping
     /// one opens it.
     @ViewBuilder
-    private var relatedMeetingsStrip: some View {
+    var relatedMeetingsStrip: some View {
         if !relatedMeetings.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Related meetings")
@@ -299,7 +299,7 @@ extension UnifiedMeetingDetail {
 
     @ViewBuilder
     /// C1-6: copy the recap for the channel you're pasting into.
-    private var copyMenu: some View {
+    var copyMenu: some View {
         Menu {
             Button("Copy as plain text") { copyToClipboard(summary) }
             Button("Copy for Slack") { copyToClipboard(slackFormatted(summary)) }
@@ -436,7 +436,7 @@ extension UnifiedMeetingDetail {
         .padding()
     }
 
-    private var followUpButton: some View {
+    var followUpButton: some View {
         Button {
             showFollowUp = true
         } label: {
