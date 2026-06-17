@@ -92,6 +92,8 @@ struct SettingsView: View {
                     .tabItem { Label("Privacy & data", systemImage: "lock.shield") }
                 connectionsTab
                     .tabItem { Label("Connections", systemImage: "link") }
+                WebhookSettingsView()   // 6-F / 6-E
+                    .tabItem { Label("Automation", systemImage: "bolt.horizontal") }
                 advancedTab
                     .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
             }
