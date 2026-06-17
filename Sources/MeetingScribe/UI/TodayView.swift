@@ -49,6 +49,7 @@ struct TodayView: View {
                 manager.backfillSearchIndexIfNeeded()
                 manager.backfillEmbeddingsIfNeeded()
                 manager.backfillDecisionsIfNeeded()
+                PeopleStore.shared.refreshStaleStrengthScores()   // 1-F (ResourceGovernor-gated)
             }
     }
 
@@ -62,6 +63,11 @@ struct TodayView: View {
                 dayShapeStrip   // U3-3: the 7am coffee scan, answered in 10s
                 quickActions
                 upNextCard
+
+                // 1-G: time-sensitive follow-ups + decisions are surfaced here,
+                // not buried under "More". Each self-hides when it has no items.
+                followUpsSection
+                decisionsSection
 
                 oneOnOneDaySection   // U1-1: your 1:1s today, person-first
 
@@ -125,19 +131,13 @@ struct TodayView: View {
             .buttonStyle(.plain)
             .help(moreExpanded ? "Hide the rest of your day" : "Show the rest of your day")
             .accessibilityLabel(moreExpanded ? "More, expanded" : "More, collapsed")
-            .accessibilityHint("Weekly ledger, follow-ups, commitments, decisions, on this day, recent notes, and people")
+            .accessibilityHint("Weekly ledger, commitments, on this day, recent notes, and people")
 
             if moreExpanded {
                 weeklyLedgerSection   // U3-6: "what did I commit to this week"
 
-                // Forgotten follow-ups to send. (P2-6/U3-3)
-                followUpsSection
-
                 // Owe / Owed commitments split by direction. (U3-2/P2-7)
                 commitmentsSection
-
-                // Decision ledger — recent decisions across all meetings. (P1-1)
-                decisionsSection
 
                 // "On this day" — resurface meetings from prior weeks/months/
                 // years on today's date. (C2-9/C2-6)

@@ -19,6 +19,8 @@ struct UnifiedMeetingDetail: View {
     @EnvironmentObject var tagStore: TagStore
     @EnvironmentObject var recordingMonitor: RecordingMonitor
     @EnvironmentObject var router: WorkspaceRouter
+    /// Observed so the summary tab re-renders as tokens stream in (1-C).
+    @EnvironmentObject var pipeline: MeetingPipelineController
     @ObservedObject var drive = GoogleDriveService.shared
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 

@@ -86,6 +86,14 @@ enum PersonResolver {
             if let p = people.first(where: { PersonMatching.normalizeName($0.displayName) == target }) {
                 return p.id
             }
+            // 1-E: fall back to exact (normalized) alias match — "Ty" → "Tyler".
+            // Still exact, never substring, so it can't reintroduce the "Dan
+            // matches Daniel" bug.
+            if let p = people.first(where: { person in
+                person.aliases.contains { PersonMatching.normalizeName($0) == target }
+            }) {
+                return p.id
+            }
         }
         return nil
     }

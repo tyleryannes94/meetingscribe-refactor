@@ -588,9 +588,16 @@ final class SecondBrainDB {
 
     // MARK: - Embeddings (semantic recall, C2-1b)
 
+    /// In-memory memo of `allEmbeddings()` (1-H). Reading + deserializing every
+    /// vector from SQLite ran on the retrieval hot path of *every* hybrid query;
+    /// embeddings change only on writes, so we cache the deserialized set and
+    /// invalidate it whenever a vector is upserted or deleted.
+    private var embeddingsCache: [(entityID: String, entityKind: String, vector: [Float])]?
+
     /// Store/replace the embedding vector for an entity (Float32 BLOB).
     func upsertEmbedding(entityID: String, entityKind: String, vector: [Float]) {
         guard !vector.isEmpty else { return }
+        embeddingsCache = nil   // 1-H: invalidate the memo
         let sql = "INSERT OR REPLACE INTO vault_embeddings (entity_id, entity_kind, dim, vec) VALUES (?, ?, ?, ?);"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
@@ -605,12 +612,15 @@ final class SecondBrainDB {
     }
 
     func deleteEmbedding(entityID: String, entityKind: String) {
+        embeddingsCache = nil   // 1-H: invalidate the memo
         exec("DELETE FROM vault_embeddings WHERE entity_id='\(escape(entityID))' AND entity_kind='\(escape(entityKind))';")
     }
 
     /// All stored embeddings. Held in memory for cosine scoring — even thousands
-    /// of 768-d vectors are only a few MB.
+    /// of 768-d vectors are only a few MB. Memoized (1-H): the deserialized set is
+    /// cached and reused across queries until an embedding write invalidates it.
     func allEmbeddings() -> [(entityID: String, entityKind: String, vector: [Float])] {
+        if let cached = embeddingsCache { return cached }
         var out: [(String, String, [Float])] = []
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, "SELECT entity_id, entity_kind, dim, vec FROM vault_embeddings;", -1, &stmt, nil) == SQLITE_OK else { return [] }
@@ -627,6 +637,7 @@ final class SecondBrainDB {
             }
             out.append((id, kind, vec))
         }
+        embeddingsCache = out   // 1-H: memoize for subsequent queries
         return out
     }
 

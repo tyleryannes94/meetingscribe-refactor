@@ -287,6 +287,23 @@ struct Person: Identifiable, Codable, Hashable {
         checkInCadenceDays ?? relationshipType.defaultCheckInDays
     }
 
+    // MARK: - Phase 1 — robust resolution + persisted strength (1-E / 1-F)
+
+    /// Alternate names this person goes by ("Ty" for "Tyler"), so attendee
+    /// resolution matches a meeting that lists a nickname (1-E). Every unlinked
+    /// attendee is a silent data-loss event across strength scores, encounter
+    /// counts, and AI context, so resolution checks these.
+    var aliases: [String] = []
+    /// IDs in external systems keyed by system name, e.g. ["linear": "USR-123",
+    /// "notion": "<page>"]. Lets integrations resolve this person bidirectionally.
+    var linkedExternalIDs: [String: String] = [:]
+    /// Persisted 0…1 relationship strength (1-F), recomputed on meeting
+    /// finalization and on a gated background pass. Feeds Today ordering, the
+    /// KeepInTouchBoard ranking, and the WeeklyRecap health section.
+    var relationshipStrengthScore: Double = 0.0
+    /// When `relationshipStrengthScore` was last recomputed (nil = never).
+    var strengthLastComputedAt: Date? = nil
+
     init(id: String = UUID().uuidString,
          displayName: String,
          company: String = "",
@@ -312,7 +329,11 @@ struct Person: Identifiable, Codable, Hashable {
          attachedNotes: [AttachedNote] = [],
          relationshipType: RelationshipType = .unset,
          checkInCadenceDays: Int? = nil,
-         checkInGoalDays: Int? = nil) {
+         checkInGoalDays: Int? = nil,
+         aliases: [String] = [],
+         linkedExternalIDs: [String: String] = [:],
+         relationshipStrengthScore: Double = 0.0,
+         strengthLastComputedAt: Date? = nil) {
         self.id = id
         self.displayName = displayName
         self.company = company
@@ -339,6 +360,10 @@ struct Person: Identifiable, Codable, Hashable {
         self.relationshipType = relationshipType
         self.checkInCadenceDays = checkInCadenceDays
         self.checkInGoalDays = checkInGoalDays
+        self.aliases = aliases
+        self.linkedExternalIDs = linkedExternalIDs
+        self.relationshipStrengthScore = relationshipStrengthScore
+        self.strengthLastComputedAt = strengthLastComputedAt
     }
 
     /// Convenience accessors for the Phase A single-field sheet.
@@ -365,7 +390,8 @@ extension Person {
              createdAt, updatedAt, lastInteractionAt, meetingMentions, talkingPoints,
              birthday, specialDates, addresses, favorites, memories, photoRelativePaths,
              contactIdentifier, importSources, relationships, attachedNotes,
-             relationshipType, checkInCadenceDays, checkInGoalDays
+             relationshipType, checkInCadenceDays, checkInGoalDays,
+             aliases, linkedExternalIDs, relationshipStrengthScore, strengthLastComputedAt
     }
 
     /// Tolerant decoder. Like `Meeting`, every field added after the first
@@ -403,6 +429,11 @@ extension Person {
         relationshipType = (try? c.decodeIfPresent(RelationshipType.self, forKey: .relationshipType)) ?? .unset
         checkInCadenceDays = (try? c.decodeIfPresent(Int.self, forKey: .checkInCadenceDays)) ?? nil
         checkInGoalDays = (try? c.decodeIfPresent(Int.self, forKey: .checkInGoalDays)) ?? nil
+        // Phase 1 (1-E / 1-F) — tolerant defaults so pre-Phase-1 person.json loads.
+        aliases = (try? c.decode([String].self, forKey: .aliases)) ?? []
+        linkedExternalIDs = (try? c.decode([String: String].self, forKey: .linkedExternalIDs)) ?? [:]
+        relationshipStrengthScore = (try? c.decode(Double.self, forKey: .relationshipStrengthScore)) ?? 0.0
+        strengthLastComputedAt = (try? c.decodeIfPresent(Date.self, forKey: .strengthLastComputedAt)) ?? nil
     }
 
     /// A coarse relevance score (§12.4) used to surface high-signal people and

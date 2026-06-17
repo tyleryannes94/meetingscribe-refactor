@@ -1208,6 +1208,61 @@ final class PeopleStore: ObservableObject {
                          date: meeting.startDate,
                          meetingID: meeting.id)
         }
+        // 1-F: refresh persisted strength for everyone who was in this meeting,
+        // whether or not a new encounter was logged (the interaction still moves
+        // recency). Resolved attendees only — unlinked names have no Person.
+        for (pid, _) in matches { recomputeStrength(forPersonID: pid) }
+    }
+
+    // MARK: - Relationship strength (1-F)
+
+    /// Recompute and persist `relationshipStrengthScore` (0…1) for one person,
+    /// reusing the canonical `RelationshipHealth` 0–100 scorer so the persisted
+    /// value never drifts from the live health badge. Called on meeting
+    /// finalization (for attendees) and on the gated background refresh.
+    @discardableResult
+    func recomputeStrength(forPersonID id: String) -> Double? {
+        guard let idx = people.firstIndex(where: { $0.id == id }) else { return nil }
+        let p = people[idx]
+        let encs = encounters(for: id)
+        let dates = encs.map(\.date).sorted(by: >)
+        let medianGap: Int = {
+            guard dates.count >= 2 else { return 0 }
+            var gaps = (0..<(dates.count - 1)).map { Int(dates[$0].timeIntervalSince(dates[$0 + 1]) / 86400) }
+            gaps.sort()
+            return gaps[gaps.count / 2]
+        }()
+        let last = dates.first ?? p.lastInteractionAt
+        let daysSince = last.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 9_999
+        let health = RelationshipHealth(daysSinceLast: daysSince,
+                                        cadenceDays: p.effectiveCheckInDays,
+                                        encounterCount: encs.count,
+                                        medianGapDays: medianGap)
+        let score = Double(health.score) / 100.0
+        var updated = p
+        updated.relationshipStrengthScore = score
+        updated.strengthLastComputedAt = Date()
+        people[idx] = updated
+        writePerson(updated)
+        return score
+    }
+
+    /// Background pass: recompute strength for people whose score is stale
+    /// (older than `maxAgeHours`) or never computed. Gated by the ResourceGovernor
+    /// so it never competes with live capture (P0-C). Returns the count refreshed.
+    @discardableResult
+    func refreshStaleStrengthScores(maxAgeHours: Double = 24) -> Int {
+        guard ResourceGovernor.shared.canScheduleWork(tier: .backgroundEmbedding) else { return 0 }
+        let now = Date()
+        let stale = people.filter { p in
+            // Skip bare imports with no signal at all.
+            guard p.relationshipType != .unset || encounterCountIndex[p.id] ?? 0 > 0 else { return false }
+            guard let t = p.strengthLastComputedAt else { return true }
+            return now.timeIntervalSince(t) > maxAgeHours * 3600
+        }
+        for p in stale { recomputeStrength(forPersonID: p.id) }
+        if !stale.isEmpty { log.info("Refreshed strength for \(stale.count, privacy: .public) person(s)") }
+        return stale.count
     }
 
     /// How many typed relationships are overdue for a check-in (last interaction

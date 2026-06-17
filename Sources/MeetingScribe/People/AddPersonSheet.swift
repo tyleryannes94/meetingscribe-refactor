@@ -24,6 +24,7 @@ struct AddPersonSheet: View {
     @State private var specialDates: [SpecialDate]
     @State private var addresses: [String]
     @State private var favorites: String
+    @State private var aliases: String   // 1-E — comma-separated alternate names
     @State private var relationshipType: RelationshipType
 
     init(editing: Person? = nil, seedTagID: String? = nil) {
@@ -41,6 +42,7 @@ struct AddPersonSheet: View {
         _specialDates = State(initialValue: editing?.specialDates ?? [])
         _addresses = State(initialValue: (editing?.addresses.isEmpty == false) ? editing!.addresses : [""])
         _favorites = State(initialValue: (editing?.favorites ?? []).joined(separator: ", "))
+        _aliases = State(initialValue: (editing?.aliases ?? []).joined(separator: ", "))
         _relationshipType = State(initialValue: editing?.relationshipType ?? .unset)
     }
 
@@ -95,6 +97,8 @@ struct AddPersonSheet: View {
                     multiField("Phone", $phones, prompt: "(555) 123-4567")
                     multiField("Address", $addresses, prompt: "123 Main St, City")
                     field("Favorite things", text: $favorites, prompt: "coffee, hiking, sci-fi (comma-separated)")
+                    // 1-E — nicknames so a meeting that lists "Ty" still links to "Tyler".
+                    field("Also known as", text: $aliases, prompt: "Ty, T (comma-separated nicknames)")
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Birthday").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
@@ -183,6 +187,8 @@ struct AddPersonSheet: View {
         let cleanAddresses = addresses.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         let favs = favorites.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let cleanAliases = aliases.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
 
         // Start from the edited person (preserving imported extra values), or a
         // fresh one. `updatePerson` upserts, so this handles both create + edit.
@@ -194,6 +200,7 @@ struct AddPersonSheet: View {
         person.phones = cleanPhones
         person.addresses = cleanAddresses
         person.favorites = favs
+        person.aliases = cleanAliases
         person.bio = bio
         person.tagIDs = tagIDs
         person.birthday = hasBirthday ? birthday : nil
