@@ -66,7 +66,13 @@ final class PeopleStore: ObservableObject {
     /// SQLite + FTS5 query/index layer (audit §6). JSON stays canonical; this is
     /// a derived index. NOT touched during init (it must not reach into
     /// PeopleTagStore while that singleton may itself be initializing).
-    private let db = SecondBrainDB()
+    ///
+    /// P0-A: extracted out of this store into `VaultIndexService.shared` so other
+    /// stores (tasks, decisions, encounters) can index into the same vault. This
+    /// store no longer *owns* the database — it shares the one process-wide index.
+    /// The forwarding methods on the service mirror `SecondBrainDB`'s signatures,
+    /// so every `db.*` call below is unchanged.
+    private var db: VaultIndexService { .shared }
     private var didBuildIndex = false
 
     init() {
@@ -646,6 +652,11 @@ final class PeopleStore: ObservableObject {
             writePerson(people[idx])
             people.sort(by: Self.recencyThenName)
         }
+        // P0-A/P0-B: index the encounter into the shared vault and announce it so
+        // the relationship/health pipeline (Phase 2/3) can react without this
+        // store knowing those subscribers exist.
+        db.indexEncounter(encounter, personName: person(by: personID)?.displayName)
+        SecondBrainEventBus.shared.publish(.encounterLogged(encounter: encounter, personID: personID))
         return encounter
     }
 
@@ -664,6 +675,7 @@ final class PeopleStore: ObservableObject {
     func deleteEncounter(_ encounter: Encounter) {
         encounters.removeAll { $0.id == encounter.id }
         try? FileManager.default.removeItem(at: fileURL(for: encounter))
+        db.removeFromIndex(entityID: encounter.id, entityKind: "encounter")
         // Encounter count changed → refresh that person's relevance in the index.
         if didBuildIndex, let p = person(by: encounter.personID) { syncIndex(p) }
     }

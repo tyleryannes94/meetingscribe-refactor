@@ -250,8 +250,30 @@ final class MeetingPipelineController: ObservableObject {
 
         // Lift decisions out of the summary into the cross-meeting ledger. (P1-1)
         decisions.extract(from: summary, meeting: workingMeeting)
+        // P0-E: enrich each decision with a one-sentence rationale via a local
+        // LLM pass. Fire-and-forget so the round-trip never blocks finalize;
+        // decisions stay usable (and indexed) with a nil rationale on failure.
+        let rationaleSummary = summary
+        let rationaleMeetingID = workingMeeting.id
+        Task { await self.decisions.extractRationales(forMeeting: rationaleMeetingID,
+                                                      summary: rationaleSummary,
+                                                      using: self.summarizer) }
 
         MetricsStore.shared.record(.summaryGenerated)   // local-only metric (P5-1)
+
+        // P0-B: announce the finalized meeting on the typed event bus so the
+        // Phase 3 post-meeting pipeline (auto-encounters, owner resolution,
+        // integration push, insights) can react. Attendees are resolved Person
+        // ids. No subscribers in P0 — this is the seam they'll attach to.
+        let attendeePersonIDs = PersonResolver
+            .resolvedAttendees(workingMeeting.attendees, in: PeopleStore.shared.people)
+            .map(\.personID)
+        // P0-F: materialize the meeting → person join edges for O(log n) backlinks.
+        VaultIndexService.shared.setMeetingPersons(
+            meetingID: workingMeeting.id,
+            personRoles: attendeePersonIDs.map { (personID: $0, role: nil) })
+        SecondBrainEventBus.shared.publish(
+            .meetingFinalized(meetingID: workingMeeting.id, attendees: attendeePersonIDs))
 
         liveResetIfStillIdle()
 
@@ -362,6 +384,11 @@ final class MeetingPipelineController: ObservableObject {
                                                     summary: summary,
                                                     tags: tagNames.isEmpty ? nil : tagNames)
                     decisions.extract(from: summary, meeting: meeting)   // ledger (P1-1)
+                    let rationaleSummary = summary
+                    let rationaleMeetingID = meeting.id
+                    Task { await self.decisions.extractRationales(forMeeting: rationaleMeetingID,
+                                                                  summary: rationaleSummary,
+                                                                  using: self.summarizer) }
                 }
             } catch {
                 log.error("transcribeNow summary failed: \(error.localizedDescription, privacy: .public)")

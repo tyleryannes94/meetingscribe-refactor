@@ -314,6 +314,12 @@ struct MeetingScribeApp: App {
 
     /// Post a "Meeting ready" banner when transcription + summary finishes.
     private func wirePipelineNotification() {
+        // P0-C: let the ResourceGovernor work gate see live-capture state without
+        // depending on the MeetingManager layer. Background AI work (Phase 3)
+        // never runs while a meeting is being transcribed.
+        ResourceGovernor.shared.isTranscribingProvider = { [weak manager] in
+            manager?.transcribingMeetingIDs.isEmpty == false
+        }
         manager.pipelineController.onComplete = { [weak notifications, weak manager] meeting, summaryFailed in
             // U4-4: if the summary failed, the capture promise is half-kept —
             // say so instead of staying silent, and point at the in-app retry.

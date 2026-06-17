@@ -13,7 +13,7 @@ final class ActionItemStore: ObservableObject {
     /// Live tasks (deletedAt == nil). Every existing consumer binds to this and
     /// continues to see only non-deleted items.
     @Published private(set) var items: [ActionItem] = [] {
-        didSet { rebuildItemIndex() }
+        didSet { rebuildItemIndex(); syncTaskIndex(old: oldValue, new: items) }
     }
 
     /// O(1) `id → index` map into `items`, rebuilt whenever `items` changes
@@ -27,6 +27,48 @@ final class ActionItemStore: ObservableObject {
         itemIndex.removeAll(keepingCapacity: true)
         itemIndex.reserveCapacity(items.count)
         for (i, it) in items.enumerated() { itemIndex[it.id] = i }
+    }
+
+    /// True once the initial off-main hydration has published. Lets the index
+    /// sync distinguish "first load" (a one-time backfill) from later mutations.
+    private var didHydrateTaskIndex = false
+
+    /// Keep the shared vault index in step with `items` (P0-A / 1-A). This is the
+    /// single chokepoint every mutation flows through (append, subscript-set,
+    /// remove, wholesale assignment) — the same reason `rebuildItemIndex` lives
+    /// here — so no individual create/update/delete path can forget to index.
+    ///
+    /// On first hydration we backfill the whole set *only if* the index is empty,
+    /// so a normal launch with an already-populated index pays nothing. After
+    /// that we diff old→new and touch only the rows that actually changed.
+    private func syncTaskIndex(old: [ActionItem], new: [ActionItem]) {
+        let index = VaultIndexService.shared
+        if !didHydrateTaskIndex {
+            didHydrateTaskIndex = true
+            if index.vaultContentCount(kind: "action_item") == 0 {
+                for it in new where it.deletedAt == nil { index.indexTask(it) }
+            }
+            return
+        }
+        var oldByID: [String: ActionItem] = [:]
+        oldByID.reserveCapacity(old.count)
+        for it in old { oldByID[it.id] = it }
+        var newIDs = Set<String>()
+        newIDs.reserveCapacity(new.count)
+        for it in new {
+            newIDs.insert(it.id)
+            if let prev = oldByID[it.id] {
+                guard prev != it else { continue }
+                index.indexTask(it)
+                SecondBrainEventBus.shared.publish(.taskUpdated(task: it))
+            } else {
+                index.indexTask(it)
+                SecondBrainEventBus.shared.publish(.taskCreated(task: it))
+            }
+        }
+        for it in old where !newIDs.contains(it.id) {
+            index.removeFromIndex(entityID: it.id, entityKind: "action_item")
+        }
     }
     /// Soft-deleted tasks awaiting restore or purge (P0-3). Persisted in the
     /// same action_items.json so Trash survives relaunch; partitioned off

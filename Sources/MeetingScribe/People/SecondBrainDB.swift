@@ -34,7 +34,7 @@ struct VaultSearchResult {
 @MainActor
 final class SecondBrainDB {
     private let log = Logger(subsystem: "com.tyleryannes.MeetingScribe", category: "SecondBrainDB")
-    static let schemaVersion = 3
+    static let schemaVersion = 4
 
     private var handle: OpaquePointer?
     private var didOpen = false
@@ -181,6 +181,10 @@ final class SecondBrainDB {
             migrateToV3()
         }
 
+        if detectedVersion < 4 {
+            migrateToV4()
+        }
+
         // Embeddings for semantic recall (C2-1b). Idempotent; independent of the
         // FTS schema version so it lands for existing v2 databases too.
         exec("""
@@ -193,7 +197,149 @@ final class SecondBrainDB {
         );
         """)
 
+        // P0-F: cross-entity join tables. O(log n) person → meetings / decisions
+        // / tasks / projects edges, replacing in-memory full sweeps. Idempotent
+        // so they land for existing databases too.
+        exec("""
+        CREATE TABLE IF NOT EXISTS meeting_persons (
+            meeting_id TEXT NOT NULL, person_id TEXT NOT NULL, role TEXT,
+            PRIMARY KEY (meeting_id, person_id));
+        CREATE TABLE IF NOT EXISTS decision_persons (
+            decision_id TEXT NOT NULL, person_id TEXT NOT NULL,
+            PRIMARY KEY (decision_id, person_id));
+        CREATE TABLE IF NOT EXISTS task_persons (
+            task_id TEXT NOT NULL, person_id TEXT NOT NULL, role TEXT,
+            PRIMARY KEY (task_id, person_id));
+        CREATE TABLE IF NOT EXISTS person_projects (
+            person_id TEXT NOT NULL, project_id TEXT NOT NULL,
+            PRIMARY KEY (person_id, project_id));
+        CREATE INDEX IF NOT EXISTS idx_task_persons_person ON task_persons(person_id);
+        CREATE INDEX IF NOT EXISTS idx_meeting_persons_person ON meeting_persons(person_id);
+        CREATE INDEX IF NOT EXISTS idx_decision_persons_person ON decision_persons(person_id);
+        CREATE INDEX IF NOT EXISTS idx_person_projects_project ON person_projects(project_id);
+        """)
+
         exec("PRAGMA user_version=\(Self.schemaVersion);")
+    }
+
+    // MARK: - Schema v4 migration (P0-F — drop the vault_content kind CHECK)
+
+    /// Rebuilds `vault_content` without its `entity_kind` CHECK constraint. The
+    /// v2 schema hard-coded the kind to one of five values, which silently
+    /// rejected any INSERT for a new kind — `decision` (P0-E) would never land,
+    /// and the vault could never grow to "any future entity type" (audit C-4).
+    /// Dropping the CHECK makes the index open-ended; the external-content FTS is
+    /// rebuilt from the copied rows so search stays intact.
+    private func migrateToV4() {
+        log.info("Migrating SecondBrainDB to schema version 4 (open-ended vault_content kinds)")
+        guard tableExists("vault_content") else {
+            // Fresh DB that somehow skipped v2 — nothing to rebuild.
+            exec("INSERT OR REPLACE INTO schema_meta VALUES ('schema_version', '4');")
+            return
+        }
+        guard execChecked("BEGIN;") else {
+            log.error("migrateToV4 could not BEGIN — skipping")
+            return
+        }
+        // Run as an ordered list so a failure rolls back the whole rebuild (and
+        // keeps Swift's type-checker out of a giant boolean expression).
+        let steps: [String] = [
+            """
+            CREATE TABLE vault_content_new (
+                entity_id   TEXT NOT NULL,
+                entity_kind TEXT NOT NULL,
+                title       TEXT,
+                body        TEXT,
+                date_epoch  INTEGER,
+                tags        TEXT,
+                PRIMARY KEY (entity_id, entity_kind)
+            );
+            """,
+            """
+            INSERT INTO vault_content_new (rowid, entity_id, entity_kind, title, body, date_epoch, tags)
+                SELECT rowid, entity_id, entity_kind, title, body, date_epoch, tags FROM vault_content;
+            """,
+            "DROP TRIGGER IF EXISTS vault_fts_insert;",
+            "DROP TRIGGER IF EXISTS vault_fts_update;",
+            "DROP TRIGGER IF EXISTS vault_fts_delete;",
+            "DROP TABLE vault_content;",
+            "ALTER TABLE vault_content_new RENAME TO vault_content;",
+            """
+            CREATE TRIGGER IF NOT EXISTS vault_fts_insert AFTER INSERT ON vault_content BEGIN
+                INSERT INTO vault_fts(rowid, title, body, tags) VALUES (new.rowid, new.title, new.body, new.tags);
+            END;
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS vault_fts_update AFTER UPDATE ON vault_content BEGIN
+                INSERT INTO vault_fts(vault_fts, rowid, title, body, tags) VALUES ('delete', old.rowid, old.title, old.body, old.tags);
+                INSERT INTO vault_fts(rowid, title, body, tags) VALUES (new.rowid, new.title, new.body, new.tags);
+            END;
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS vault_fts_delete AFTER DELETE ON vault_content BEGIN
+                INSERT INTO vault_fts(vault_fts, rowid, title, body, tags) VALUES ('delete', old.rowid, old.title, old.body, old.tags);
+            END;
+            """,
+            "INSERT INTO vault_fts(vault_fts) VALUES('rebuild');",
+            "INSERT OR REPLACE INTO schema_meta VALUES ('schema_version', '4');",
+        ]
+        for step in steps where !execChecked(step) {
+            exec("ROLLBACK;")
+            log.error("migrateToV4 failed mid-rebuild — rolled back, will retry next launch")
+            return
+        }
+        if !execChecked("COMMIT;") {
+            exec("ROLLBACK;")
+            log.error("migrateToV4 COMMIT failed — rolled back")
+        }
+    }
+
+    // MARK: - Cross-entity join tables (P0-F)
+
+    /// Replace the person rows for a meeting (idempotent re-link on re-finalize).
+    func setMeetingPersons(meetingID: String, personRoles: [(personID: String, role: String?)]) {
+        exec("DELETE FROM meeting_persons WHERE meeting_id='\(escape(meetingID))';")
+        for pr in personRoles {
+            bindExec("INSERT OR REPLACE INTO meeting_persons (meeting_id, person_id, role) VALUES (?,?,?);",
+                     [.text(meetingID), .text(pr.personID), .text(pr.role ?? "")])
+        }
+    }
+
+    /// Replace the person rows for a decision.
+    func setDecisionPersons(decisionID: String, personIDs: [String]) {
+        exec("DELETE FROM decision_persons WHERE decision_id='\(escape(decisionID))';")
+        for pid in personIDs {
+            bindExec("INSERT OR REPLACE INTO decision_persons (decision_id, person_id) VALUES (?,?);",
+                     [.text(decisionID), .text(pid)])
+        }
+    }
+
+    /// Link a task to a person (role e.g. "owner" / "delegate").
+    func upsertTaskPerson(taskID: String, personID: String, role: String?) {
+        bindExec("INSERT OR REPLACE INTO task_persons (task_id, person_id, role) VALUES (?,?,?);",
+                 [.text(taskID), .text(personID), .text(role ?? "")])
+    }
+    func removeTaskPersons(taskID: String) {
+        exec("DELETE FROM task_persons WHERE task_id='\(escape(taskID))';")
+    }
+
+    /// Materialize the person → project reverse edge.
+    func upsertPersonProject(personID: String, projectID: String) {
+        bindExec("INSERT OR REPLACE INTO person_projects (person_id, project_id) VALUES (?,?);",
+                 [.text(personID), .text(projectID)])
+    }
+
+    func personsForMeeting(_ meetingID: String) -> [String] {
+        queryIDs("SELECT person_id FROM meeting_persons WHERE meeting_id=?;", bind: meetingID)
+    }
+    func decisionsForPerson(_ personID: String) -> [String] {
+        queryIDs("SELECT decision_id FROM decision_persons WHERE person_id=?;", bind: personID)
+    }
+    func projectsForPerson(_ personID: String) -> [String] {
+        queryIDs("SELECT project_id FROM person_projects WHERE person_id=?;", bind: personID)
+    }
+    func tasksForPerson(_ personID: String) -> [String] {
+        queryIDs("SELECT task_id FROM task_persons WHERE person_id=?;", bind: personID)
     }
 
     // MARK: - Schema v2 migration
