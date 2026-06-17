@@ -733,23 +733,23 @@ private struct NavRailItem: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 11) {
+            HStack(spacing: 10) {
                 Image(systemName: section.systemImage)
-                    .scaledFont(14, weight: selected ? .semibold : .regular)
+                    .scaledFont(13, weight: selected ? .semibold : .regular)
                     .foregroundStyle(selected ? NDS.lilac : NDS.textSecondary)
-                    .frame(width: 18)
+                    .frame(width: 16)
                 Text(section.label)
-                    .scaledFont(13.5, weight: selected ? .bold : .medium)
+                    .scaledFont(13, weight: selected ? .semibold : .medium)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                 Spacer(minLength: 0)
                 badgeView
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .padding(.horizontal, 10).padding(.vertical, 5)
             .background(
                 selected || isHovered ? NDS.lilacSoft : .clear,
-                in: Capsule()
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
-            .contentShape(Capsule())
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 9)
