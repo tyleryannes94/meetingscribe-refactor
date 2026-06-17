@@ -37,7 +37,7 @@ struct NeedsAttentionWidget: View {
                         Label("Open", systemImage: "arrow.up.right")
                             .labelStyle(.titleOnly).font(.caption)
                     }
-                    .buttonStyle(.bordered).controlSize(.small)
+                    .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small)
                     .accessibilityLabel("Open all action items")
                 }
                 VStack(spacing: 6) {

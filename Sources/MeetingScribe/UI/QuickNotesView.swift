@@ -498,7 +498,7 @@ struct QuickNoteDetail: View {
                     .labelStyle(.titleAndIcon)
                     .font(.caption)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(MSSecondaryButtonStyle())
             .controlSize(.small)
             .disabled(textIsEmpty)
             Button {
@@ -508,7 +508,7 @@ struct QuickNoteDetail: View {
                     .labelStyle(.iconOnly)
                     .font(.caption)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(MSSecondaryButtonStyle())
             .controlSize(.small)
             .disabled(rerunDisabled)
             .help(rerunLabel)
