@@ -51,14 +51,14 @@ struct MSTintedHeaderCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 7) {
-                Circle().fill(dotColor).frame(width: 8, height: 8)
+            HStack(spacing: 6) {
+                Circle().fill(dotColor).frame(width: 7, height: 7)
                 Text(label.uppercased())
-                    .scaledFont(11, weight: .bold, relativeTo: .caption).tracking(0.8)
+                    .scaledFont(10.5, weight: .bold, relativeTo: .caption).tracking(0.8)
                     .foregroundStyle(NDS.textSecondary)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
+            .padding(.horizontal, 12).padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 LinearGradient(
@@ -66,14 +66,15 @@ struct MSTintedHeaderCard<Content: View>: View {
                     startPoint: .topLeading, endPoint: .bottomTrailing)
             )
             content()
-                .padding(14)
+                .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(NDS.fieldBg)
         .clipShape(RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: NDS.cardRadius, style: .continuous)
-                .strokeBorder(accentBorder ? NDS.accent.opacity(0.45) : NDS.hairline, lineWidth: 1)
+                .strokeBorder(accentBorder ? NDS.accent.opacity(0.4) : NDS.hairline,
+                              lineWidth: accentBorder ? 1 : 0.5)
         )
     }
 }
