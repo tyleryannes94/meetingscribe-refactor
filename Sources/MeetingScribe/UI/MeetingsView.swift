@@ -672,6 +672,7 @@ private struct MeetingListRow: View {
                             .scaledFont(13, weight: isSelected ? .semibold : .regular)
                             .foregroundStyle(NDS.textPrimary)
                             .lineLimit(1)
+                            .help(meeting.displayTitle)
                         if (meeting.userTitle?.isEmpty ?? true),
                            !(meeting.autoTitle?.isEmpty ?? true) {
                             Image(systemName: "sparkles")

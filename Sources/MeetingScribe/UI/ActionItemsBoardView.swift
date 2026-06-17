@@ -124,7 +124,7 @@ extension ActionItemsView {
                         DueChip(date: item.dueDate, status: item.status, style: .plain)
                     }
                     if let name = store.project(for: item)?.name {
-                        Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1)
+                        Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1).help(name)
                     }
                     Spacer(minLength: 4)
                     if let owner = item.owner, !owner.isEmpty {
@@ -147,7 +147,7 @@ extension ActionItemsView {
                     }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 20)
                 }
-                Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                Text(item.meetingTitle).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).help(item.meetingTitle)
             }
         }
         .padding(10)
