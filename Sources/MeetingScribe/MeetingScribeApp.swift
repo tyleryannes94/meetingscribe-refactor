@@ -55,6 +55,16 @@ struct MeetingScribeApp: App {
                 // Resources/Info.plist (CFBundleURLTypes). Routes through the
                 // one canonical router. (D1-2)
                 .onOpenURL { url in
+                    // 3-B / 3-F: notification deep links with no entity id.
+                    switch url.host {
+                    case "weekly-review":
+                        NotificationCenter.default.post(name: .meetingScribeOpenWeeklyReview, object: nil)
+                        return
+                    case "standup":
+                        NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.today)
+                        return
+                    default: break
+                    }
                     guard let parsed = WorkspaceLink.parse(url) else { return }
                     router.route(kind: parsed.kind, id: parsed.id, manager: manager)
                 }
@@ -211,7 +221,8 @@ struct MeetingScribeApp: App {
 
         // BACKGROUND: notifications + Ollama. Neither blocks the UI.
         Task { await notifications.requestAuthorization() }
-        notifications.scheduleDailyBrief()   // morning brief, opt-in (P2-5)
+        scheduleEnrichedDailyBrief()         // 3-B: morning brief w/ live counts
+        notifications.scheduleWeeklyReview() // 3-F: Friday ritual nudge
         Task.detached(priority: .utility) { [manager] in
             await manager.ensureOllamaRunning()
         }
@@ -312,6 +323,20 @@ struct MeetingScribeApp: App {
         Task { await manager.startRecording(for: live) }
     }
 
+    /// 3-B: compute today's counts and schedule the enriched morning brief.
+    private func scheduleEnrichedDailyBrief() {
+        let cal = Calendar.current
+        let todayMeetings = calendar.upcoming.filter { cal.isDateInToday($0.startDate) }.count
+        let endOfToday = cal.date(bySettingHour: 23, minute: 59, second: 59, of: Date()) ?? Date()
+        let followUps = manager.actionItems.items.filter {
+            $0.status != .completed && ($0.dueDate.map { $0 <= endOfToday } ?? false)
+        }.count
+        let checkIns = PeopleStore.shared.overdueCheckInCount
+        notifications.scheduleDailyBrief(meetingCount: todayMeetings,
+                                         followUpsDue: followUps,
+                                         checkInsOverdue: checkIns)
+    }
+
     /// Post a "Meeting ready" banner when transcription + summary finishes.
     private func wirePipelineNotification() {
         // P0-C: let the ResourceGovernor work gate see live-capture state without
@@ -320,6 +345,12 @@ struct MeetingScribeApp: App {
         ResourceGovernor.shared.isTranscribingProvider = { [weak manager] in
             manager?.transcribingMeetingIDs.isEmpty == false
         }
+        // 3-A / 3-C: start the proactive backbone — the post-meeting pipeline
+        // (subscribes to meetingFinalized) and the background InsightEngine.
+        PostMeetingPipelineCoordinator.shared.start(decisions: manager.decisions,
+                                                    notifications: notifications)
+        InsightEngine.shared.start(actionItems: manager.actionItems,
+                                   decisions: manager.decisions)
         manager.pipelineController.onComplete = { [weak notifications, weak manager] meeting, summaryFailed in
             // U4-4: if the summary failed, the capture promise is half-kept —
             // say so instead of staying silent, and point at the in-app retry.
@@ -495,7 +526,7 @@ struct MeetingScribeApp: App {
                                              modifiers: s.meetingRecordHotkeyModifiers)
                 quickEntryHotkey.register(keyCode: s.quickEntryHotkeyKeyCode,
                                           modifiers: s.quickEntryHotkeyModifiers)
-                notifications.scheduleDailyBrief()
+                scheduleEnrichedDailyBrief()   // 3-B
                 Task { @MainActor in
                     calendar.refreshUpcoming(force: true)
                     let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)

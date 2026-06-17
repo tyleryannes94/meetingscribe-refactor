@@ -173,6 +173,21 @@ final class DecisionStore: ObservableObject {
         }
     }
 
+    /// 3-A: cross-link a meeting's decisions to its attendees (resolved Person
+    /// ids). Only fills decisions that have no people yet, so re-runs are safe.
+    /// Reindexing materializes the `decision_persons` join edge (P0-F).
+    func crossLinkPersons(meetingID: String, personIDs: [String]) {
+        guard !personIDs.isEmpty else { return }
+        var changed = false
+        for i in decisions.indices
+        where decisions[i].meetingID == meetingID && decisions[i].personIDs.isEmpty {
+            decisions[i].personIDs = personIDs
+            VaultIndexService.shared.indexDecision(decisions[i])
+            changed = true
+        }
+        if changed { save() }
+    }
+
     /// Re-index every decision (one-time backfill when the vault index is missing
     /// decisions, e.g. after the P0 upgrade or an index rebuild).
     func backfillVaultIndexIfNeeded() {
