@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import UserNotifications
 
 /// The home view. Single column on the left:
 ///   1. Header (date + quick actions).
@@ -719,6 +720,18 @@ struct TodayView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        Button("Nudge") {
+                            let content = UNMutableNotificationContent()
+                            content.title = "Follow up" + (who.map { ": \($0)" } ?? "")
+                            content.body = t.title
+                            content.sound = .default
+                            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2 * 86_400, repeats: false)
+                            UNUserNotificationCenter.current().add(
+                                UNNotificationRequest(identifier: "nudge-\(t.id)", content: content, trigger: trigger))
+                            ToastCenter.shared.show("Nudge set — reminder in 2 days")
+                        }
+                        .controlSize(.small)
+                        .help("Remind me to follow up in 2 days")
                         Button("Resolve") { actionItems.setStatus(t.id, status: .completed) }
                             .controlSize(.small)
                     }
