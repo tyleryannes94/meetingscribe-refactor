@@ -80,13 +80,25 @@ struct AddPersonSheet: View {
                     // which coaching content unlocks.
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Relationship").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                        Picker("Relationship", selection: $relationshipType) {
-                            ForEach(RelationshipType.allCases, id: \.self) { type in
-                                Text("\(type.emoji)  \(type.displayName)").tag(type)
+                        // Guided add (D2-6): large tap-target cards instead of a
+                        // menu, so the relationship type is a one-tap choice.
+                        FlowLayout(spacing: 8) {
+                            ForEach(RelationshipType.allCases.filter { $0 != .unset }, id: \.self) { type in
+                                Button { relationshipType = type } label: {
+                                    HStack(spacing: 6) {
+                                        Text(type.emoji)
+                                        Text(type.displayName).scaledFont(13, weight: .medium)
+                                    }
+                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(relationshipType == type ? NDS.brand.opacity(0.16) : NDS.fieldBg,
+                                                in: RoundedRectangle(cornerRadius: NDS.radius))
+                                    .overlay(RoundedRectangle(cornerRadius: NDS.radius)
+                                        .strokeBorder(relationshipType == type ? NDS.brand : Color.clear, lineWidth: 1.5))
+                                    .foregroundStyle(relationshipType == type ? NDS.textPrimary : NDS.textSecondary)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     HStack(spacing: 12) {
