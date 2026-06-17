@@ -282,21 +282,6 @@ struct PersonDetailView: View {
     @State private var analysisRunning: ConversationAnalysisPreset?
     @State private var customPromptDraft = ""
     @State private var showCustomPrompt = false
-    // Two-pane work area (§4B): which tab is showing in the right pane.
-    @State private var personTab: PersonTab = .overview
-    enum PersonTab: String, CaseIterable, Hashable {
-        // P1-1: 6 → 4 tabs — Story folds into Overview, Tasks into Meetings, so
-        // the profile is less overwhelming without burying texts or notes.
-        case overview, meetings, messages, notes
-        var label: String {
-            switch self {
-            case .overview: return "Overview"
-            case .meetings: return "Meetings"
-            case .messages: return "Messages"
-            case .notes:    return "Notes"
-            }
-        }
-    }
     // Inline add-email (§4A) and add-to-meeting (§4D).
     @State private var showAddEmail = false
     @State private var newEmailDraft = ""
@@ -371,7 +356,7 @@ struct PersonDetailView: View {
         // column (`personChatColumn`) — that's now gone because the global
         // right-side `ChatSidebar` is the one chat surface, scoped to this
         // person via `updateChatContext()`. No more duplicate chat panels.
-        detailPane
+        workArea
             .frame(maxWidth: .infinity)
             .background(NDS.bg)
             .background(keyboardVerbs)   // N / L / T
@@ -492,16 +477,12 @@ struct PersonDetailView: View {
     /// Fixed identity/contact pane on the left + tabbed work area on the right.
     /// Collapsed two-column person canvas — the 300pt identity rail is gone.
     /// Everything that used to live in it (compactHeader + insight + tags +
-    /// contact + relationships + encounters + photos) now sits at the top of
-    /// the right canvas above the rest of the MSSection stack.
-    private var detailPane: some View {
-        workArea
-    }
-
-    // `identityPane` (the 300pt left column) is gone — its content stacks at
-    // the top of the canvas now. Helpers (`tagsEditSection`, `contactRows`,
-    // `relationshipsSection`, `encountersSection`, `photosSection`) are still
-    // used by `workContent` so they stay.
+    // `identityPane` (the 300pt left column) and the `detailPane` wrapper
+    // that re-routed to `workArea` are both gone. The body now calls
+    // `workArea` directly; the identity-rail content stacks at the top of
+    // the canvas. Helpers (`tagsEditSection`, `contactRows`,
+    // `relationshipsSection`, `encountersSection`, `photosSection`) are
+    // still used by `workContent` so they stay.
 
     /// 5-E / C2-3: a pinned, deterministic relationship insight at the top of the
     /// profile — the "why" behind the health, computed instantly from cadence +
