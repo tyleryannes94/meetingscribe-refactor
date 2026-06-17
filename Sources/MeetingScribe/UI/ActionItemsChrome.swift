@@ -7,10 +7,10 @@ extension ActionItemsView {
 
     var tasksDashboard: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-                HStack(spacing: 9) {
-                    Text("✅").scaledFont(26)
-                    Text("Tasks").font(NDS.title)
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("✅").scaledFont(18)
+                    Text("Tasks").scaledFont(22, weight: .bold, kind: .display)
                     Spacer()
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)],
@@ -282,7 +282,7 @@ extension ActionItemsView {
 
     var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(headerTitle).font(NDS.title)
+            Text(headerTitle).scaledFont(22, weight: .bold, kind: .display)
             Text(subtitle)
                 .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
             Spacer()
@@ -292,7 +292,7 @@ extension ActionItemsView {
                 stat(label: "Done", value: store.items.filter { $0.status == .completed }.count, color: NDS.selectColor("green"))
             }
         }
-        .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 8)
+        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
     }
 
     var headerTitle: String {
