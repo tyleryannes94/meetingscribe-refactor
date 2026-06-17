@@ -12,6 +12,8 @@ struct TagPicker: View {
 
     @State private var showingPopover = false
     @State private var newTagName = ""
+    /// The tag whose per-tag summary instructions are being edited (5-? / per-tag templates).
+    @State private var editingTemplateTag: MeetingTag?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -32,6 +34,9 @@ struct TagPicker: View {
                     .frame(width: 260)
             }
         }
+        .sheet(item: $editingTemplateTag) { tag in
+            TagSummaryTemplateEditor(tag: tag).environmentObject(tagStore)
+        }
     }
 
     private var tagListPopover: some View {
@@ -42,6 +47,7 @@ struct TagPicker: View {
                 VStack(alignment: .leading, spacing: 2) {
                     let assigned = Set(tagStore.tagIDs(for: meeting))
                     ForEach(tagStore.allTags) { t in
+                      HStack(spacing: 2) {
                         Button {
                             if assigned.contains(t.id) {
                                 tagStore.removeTag(t.id, from: meeting,
@@ -64,6 +70,13 @@ struct TagPicker: View {
                             ? "Remove tag \(t.name)"
                             : "Add tag \(t.name)")
                         .accessibilityValue(assigned.contains(t.id) ? "selected" : "not selected")
+                        Button { editingTemplateTag = t } label: {
+                            Image(systemName: "text.alignleft").font(.caption2)
+                                .foregroundStyle(t.summaryTemplate == nil ? NDS.textTertiary : NDS.brand)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Custom summary instructions for this tag")
+                      }
                     }
                 }
                 .padding(.horizontal)
@@ -84,6 +97,37 @@ struct TagPicker: View {
             }
             .padding([.horizontal, .bottom], 8)
         }
+    }
+}
+
+/// Editor for a tag's per-meeting summary instructions (per-tag templates).
+@available(macOS 14.0, *)
+private struct TagSummaryTemplateEditor: View {
+    @EnvironmentObject var tagStore: TagStore
+    @Environment(\.dismiss) private var dismiss
+    let tag: MeetingTag
+    @State private var text: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Summary instructions — \(tag.name)").font(.headline)
+            Text("Extra guidance appended to the AI summary prompt for meetings with this tag. Leave blank for the default summary.")
+                .font(.caption).foregroundStyle(.secondary)
+            TextEditor(text: $text)
+                .font(.body).frame(minHeight: 140)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(NDS.divider))
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Save") {
+                    tagStore.setSummaryTemplate(id: tag.id, text)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20).frame(width: 420)
+        .onAppear { text = tag.summaryTemplate ?? "" }
     }
 }
 

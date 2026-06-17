@@ -101,6 +101,15 @@ final class TagStore: ObservableObject {
         return tag
     }
 
+    /// Per-tag summary instructions (used by the summary prompt for meetings
+    /// carrying this tag). Empty string clears it back to nil.
+    func setSummaryTemplate(id: String, _ template: String) {
+        guard let idx = allTags.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = template.trimmingCharacters(in: .whitespacesAndNewlines)
+        allTags[idx].summaryTemplate = trimmed.isEmpty ? nil : trimmed
+        persist()
+    }
+
     func renameTag(id: String, to newName: String, recordUndo: Bool = true) {
         guard let idx = allTags.firstIndex(where: { $0.id == id }) else { return }
         let oldFolderName = allTags[idx].folderName

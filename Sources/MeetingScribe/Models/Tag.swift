@@ -26,6 +26,10 @@ struct MeetingTag: Identifiable, Codable, Hashable {
     var startDate: Date?
     var endDate: Date?
     var locationHint: String?
+    /// Per-tag summary instructions appended to the summary prompt for meetings
+    /// carrying this tag — e.g. "Lead with risks, then decisions, then next
+    /// steps." Optional so older records decode unchanged.
+    var summaryTemplate: String?
 
     var resolvedKind: TagKind { kind ?? .generic }
 
@@ -36,7 +40,8 @@ struct MeetingTag: Identifiable, Codable, Hashable {
          kind: TagKind? = nil,
          startDate: Date? = nil,
          endDate: Date? = nil,
-         locationHint: String? = nil) {
+         locationHint: String? = nil,
+         summaryTemplate: String? = nil) {
         self.id = id
         self.name = name
         self.symbol = symbol
@@ -45,6 +50,7 @@ struct MeetingTag: Identifiable, Codable, Hashable {
         self.startDate = startDate
         self.endDate = endDate
         self.locationHint = locationHint
+        self.summaryTemplate = summaryTemplate
     }
 
     /// Folder-safe slug for this tag, used as a directory name.

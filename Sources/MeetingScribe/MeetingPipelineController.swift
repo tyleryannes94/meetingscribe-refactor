@@ -207,6 +207,7 @@ final class MeetingPipelineController: ObservableObject {
         do {
             summary = try await summarizer.summarize(
                 meeting: workingMeeting, transcript: transcript,
+                summaryGuidance: primary?.summaryTemplate,
                 onToken: { [weak self] piece in
                     Task { @MainActor in self?.appendLiveSummary(liveID, piece) }
                 })
@@ -391,6 +392,7 @@ final class MeetingPipelineController: ObservableObject {
             do {
                 let summary = try await summarizer.summarize(
                     meeting: meeting, transcript: transcript,
+                    summaryGuidance: primary?.summaryTemplate,
                     onToken: { [weak self] piece in
                         Task { @MainActor in self?.appendLiveSummary(liveID, piece) }
                     })
