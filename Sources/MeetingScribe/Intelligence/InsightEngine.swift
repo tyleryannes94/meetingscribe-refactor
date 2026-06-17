@@ -53,8 +53,10 @@ final class InsightEngine {
             log.debug("InsightEngine pass skipped — ResourceGovernor gate closed")
             return
         }
-        // 1. Relationship health: recompute anyone whose score is stale.
+        // 1. Relationship health: recompute anyone whose score is stale, then
+        //    fold in the iMessage signal (2-E) so texting counts toward health.
         PeopleStore.shared.refreshStaleStrengthScores()
+        await PeopleStore.shared.refreshIMessageSignals()
 
         // 2. Semantic nudges: surface recently-created tasks that relate to
         //    something already in the vault.
