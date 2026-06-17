@@ -141,18 +141,15 @@ struct MainWindow: View {
                     .tracking(-0.3)
                 Spacer()
             }
-            // P1-3: align to NDS tokens so the rail's left edge is consistent.
-            .padding(.horizontal, NDS.spaceLG).padding(.top, NDS.spaceLG).padding(.bottom, NDS.spaceMD)
+            .padding(.horizontal, NDS.spaceLG).padding(.top, NDS.spaceLG).padding(.bottom, NDS.spaceSM)
 
-            // WORKSPACE group
             navGroupLabel(NavGroup.workspace.rawValue)
             ForEach(TopLevelSection.allCases.filter { $0.group == .workspace }) { s in
                 navItem(s)
             }
 
-            Spacer().frame(height: 8)
+            Spacer().frame(height: 4)
 
-            // ORGANIZE group
             navGroupLabel(NavGroup.organize.rawValue)
             ForEach(TopLevelSection.allCases.filter { $0.group == .organize }) { s in
                 navItem(s)
@@ -317,12 +314,12 @@ struct MainWindow: View {
 
     private func navGroupLabel(_ text: String) -> some View {
         Text(text)
-            .scaledFont(10, weight: .semibold)
-            .tracking(0.8)
+            .scaledFont(9, weight: .semibold)
+            .tracking(0.6)
             .foregroundStyle(NDS.textTertiary)
             .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 2)
+            .padding(.top, 6)
+            .padding(.bottom, 1)
     }
 
     private func navItem(_ s: TopLevelSection) -> some View {
