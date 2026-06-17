@@ -113,7 +113,7 @@ struct MSErrorState: View {
                 HStack(spacing: 10) {
                     if let label = presented.fixLabel, let onFix {
                         Button(label, action: onFix)
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(MSPrimaryButtonStyle())
                             .controlSize(.small)
                             .tint(tint)
                     }

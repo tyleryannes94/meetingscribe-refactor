@@ -340,7 +340,7 @@ struct MeetingsView: View {
                 } label: {
                     Label("Record a meeting", systemImage: "record.circle")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(MSPrimaryButtonStyle())
             }
         }
     }

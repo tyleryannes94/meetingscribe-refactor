@@ -592,7 +592,7 @@ extension ActionItemsView {
                 } label: {
                     Label("New task", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(MSPrimaryButtonStyle())
                 Button {
                     manager.backfillActionItemsIfNeeded(force: true)
                 } label: {

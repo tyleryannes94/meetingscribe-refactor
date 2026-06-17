@@ -206,7 +206,7 @@ struct ChatFoldersSheet: View {
                 } label: {
                     Label("Add folder…", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(MSPrimaryButtonStyle())
                 Spacer()
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
