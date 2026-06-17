@@ -285,13 +285,13 @@ struct PersonDetailView: View {
     // Two-pane work area (§4B): which tab is showing in the right pane.
     @State private var personTab: PersonTab = .overview
     enum PersonTab: String, CaseIterable, Hashable {
-        case overview, story, meetings, tasks, messages, notes
+        // P1-1: 6 → 4 tabs — Story folds into Overview, Tasks into Meetings, so
+        // the profile is less overwhelming without burying texts or notes.
+        case overview, meetings, messages, notes
         var label: String {
             switch self {
             case .overview: return "Overview"
-            case .story:    return "Story"
             case .meetings: return "Meetings"
-            case .tasks:    return "Tasks"
             case .messages: return "Messages"
             case .notes:    return "Notes"
             }
@@ -348,7 +348,7 @@ struct PersonDetailView: View {
                 .keyboardShortcut("n", modifiers: [])
             Button("") { showAddEncounter = true }
                 .keyboardShortcut("l", modifiers: [])
-            Button("") { personTab = .tasks }
+            Button("") { personTab = .meetings }
                 .keyboardShortcut("t", modifiers: [])
             ForEach(Array(PersonTab.allCases.enumerated()), id: \.offset) { idx, tab in
                 Button("") { personTab = tab }
@@ -671,9 +671,8 @@ struct PersonDetailView: View {
             if !current.bio.isEmpty || editingIdentity { notes }
             favoritesEditSection
             aiSuggestionsSection
+            storySection        // P1-1: Story timeline folded into Overview
             provenanceFooter
-        case .story:
-            storySection
         case .meetings:
             Button { showAddToMeeting = true } label: {
                 Label("Add \(firstName) to a meeting", systemImage: "calendar.badge.plus")
@@ -681,9 +680,8 @@ struct PersonDetailView: View {
             .buttonStyle(MSSecondaryButtonStyle())
             meetingHistorySection
             if !current.meetingMentions.isEmpty { mentionedInSection }
+            tasksSection        // P1-1: this person's tasks live with their meetings
             decisionsSection
-        case .tasks:
-            tasksSection
         case .messages:
             messagesSection
         case .notes:
