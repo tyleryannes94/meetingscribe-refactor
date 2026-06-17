@@ -342,18 +342,25 @@ struct PersonDetailView: View {
     /// ⌘1–5 to switch tabs. Rendered as a hidden, zero-size shortcut layer; while
     /// a text field is focused the keystroke goes to the field, not these.
     @ViewBuilder
+    /// P7 (ux-audit-2026-06b §4.3): tabs are gone, so the keyboard verbs no
+    /// longer flip `personTab`. Memories defaults collapsed under the canvas;
+    /// the `N` verb expands that section first (writes its `MSSection`
+    /// persistence key) then focuses the new-memory field. The `T` verb
+    /// nudges focus toward the task quick-add field. ⌘1–5 tab shortcuts are
+    /// dropped entirely.
     private var keyboardVerbs: some View {
         Group {
-            Button("") { personTab = .overview; DispatchQueue.main.async { memoryFieldFocused = true } }
-                .keyboardShortcut("n", modifiers: [])
+            Button("") {
+                UserDefaults.standard.set(true, forKey: "section.person.memories.expanded")
+                DispatchQueue.main.async { memoryFieldFocused = true }
+            }
+            .keyboardShortcut("n", modifiers: [])
             Button("") { showAddEncounter = true }
                 .keyboardShortcut("l", modifiers: [])
-            Button("") { personTab = .meetings }
-                .keyboardShortcut("t", modifiers: [])
-            ForEach(Array(PersonTab.allCases.enumerated()), id: \.offset) { idx, tab in
-                Button("") { personTab = tab }
-                    .keyboardShortcut(KeyEquivalent(Character("\(idx + 1)")), modifiers: .command)
+            Button("") {
+                UserDefaults.standard.set(true, forKey: "section.person.tasks.expanded")
             }
+            .keyboardShortcut("t", modifiers: [])
         }
         .opacity(0).frame(width: 0, height: 0)
         .accessibilityHidden(true)
