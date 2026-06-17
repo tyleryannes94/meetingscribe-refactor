@@ -958,7 +958,7 @@ struct PersonDetailView: View {
             Button { showHealthWhy = false; showAddEncounter = true } label: {
                 Label("Log a check-in", systemImage: "plus.circle")
             }
-            .buttonStyle(.borderedProminent).controlSize(.small).tint(NDS.brand)
+            .buttonStyle(MSPrimaryButtonStyle())
         }
         .padding(14).frame(width: 260)
     }
