@@ -122,6 +122,24 @@ final class PeopleChatTools {
                         ])
                     ])
                 ])
+            ),
+            .init(
+                name: "ask_about_person_messages",
+                description: "Answer a free-text QUESTION about a person's past iMessages/SMS — e.g. 'what did they say about the launch date?', 'have they mentioned a new job?', 'when did they say they'd send the contract?'. Loads the conversation history and answers ONLY from what the messages actually say, quoting the relevant message + date when useful. Use this instead of get_person_messages when the user asks a specific question rather than wanting raw stats/snippets. Requires Full Disk Access. The `id` accepts a UUID / name / email / phone.",
+                input_schema: .object([
+                    "type": .string("object"),
+                    "required": .array([.string("id"), .string("question")]),
+                    "properties": .object([
+                        "id": .object([
+                            "type": .string("string"),
+                            "description": .string("Person UUID from list_people, OR display name / email / phone — the lookup is tolerant.")
+                        ]),
+                        "question": .object([
+                            "type": .string("string"),
+                            "description": .string("The natural-language question to answer from the person's message history.")
+                        ])
+                    ])
+                ])
             )
         ]
     }
@@ -133,6 +151,7 @@ final class PeopleChatTools {
         case "list_people":             return .success(listPeople(input))
         case "get_person":              return getPerson(input)
         case "get_person_messages":     return getPersonMessages(input)
+        case "ask_about_person_messages": return await askAboutPersonMessages(input)
         case "list_person_meetings":    return .success(listPersonMeetings(input))
         case "attach_note_to_person":   return attachNoteToPerson(input)
         default:                        return nil
@@ -334,6 +353,58 @@ final class PeopleChatTools {
             return .failure(AnthropicClient.ClientError
                 .toolExecutionFailed("get_person_messages",
                                      error.localizedDescription))
+        }
+    }
+
+    /// Answer a natural-language question about a person's iMessage history,
+    /// grounded only in their actual messages (local Ollama). Loads a wide
+    /// window so questions about older texts work, capped for the model's ctx.
+    private func askAboutPersonMessages(_ input: [String: JSONValue]) async -> Result<String, Error> {
+        guard let id = input["id"]?.asString else {
+            return .failure(personNotFoundError("ask_about_person_messages", input: "(missing id)"))
+        }
+        guard let p = resolvePerson(id) else {
+            return .failure(personNotFoundError("ask_about_person_messages", input: id))
+        }
+        guard let question = input["question"]?.asString,
+              !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .failure(AnthropicClient.ClientError
+                .toolExecutionFailed("ask_about_person_messages", "missing `question`."))
+        }
+        do {
+            let result = try MessagesAnalyzer.analyze(person: p, recentLimit: 4000)
+            guard !result.recent.isEmpty else {
+                return .success(ChatToolHelpers.jsonString([
+                    "personId": p.id, "answer": "No messages found with \(p.displayName).", "messageCount": 0
+                ]))
+            }
+            let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+            let transcript = result.recent
+                .map { "[\(df.string(from: $0.date))] \($0.fromMe ? "Me" : p.displayName): \($0.text)" }
+                .joined(separator: "\n")
+            let capped = String(transcript.suffix(24_000))
+            let prompt = """
+            Answer the question using ONLY the iMessage history below between Me and \(p.displayName). \
+            Quote the relevant message(s) with their date when helpful. If the messages do not contain \
+            the answer, say so plainly — do not guess or invent.
+
+            Question: \(question)
+
+            Messages (each line is "[date] sender: text"):
+            \(capped)
+            """
+            let answer = try await OllamaService().generate(prompt: prompt, temperature: 0.1, numCtx: 16_384)
+            return .success(ChatToolHelpers.jsonString([
+                "personId": p.id,
+                "personDisplayName": p.displayName,
+                "question": question,
+                "answer": answer,
+                "messageCount": result.stats.total,
+                "dateRange": "\(result.stats.firstDate.map(ChatToolHelpers.iso) ?? "?") to \(result.stats.lastDate.map(ChatToolHelpers.iso) ?? "?")"
+            ]))
+        } catch {
+            return .failure(AnthropicClient.ClientError
+                .toolExecutionFailed("ask_about_person_messages", error.localizedDescription))
         }
     }
 
