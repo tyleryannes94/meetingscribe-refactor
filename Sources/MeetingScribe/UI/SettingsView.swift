@@ -1353,6 +1353,15 @@ struct WebAccountsSection: View {
 
             if isExpanded {
                 Divider().padding(.vertical, 2)
+                let sessions = store.sessions(forAccountID: account.id)
+                if !sessions.isEmpty {
+                    Text("Signed-in devices")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(sessions) { session in
+                        deviceRow(session)
+                    }
+                    Divider().padding(.vertical, 2)
+                }
                 let draft = Binding<String>(
                     get: { newPasswordDraft[account.id] ?? "" },
                     set: { newPasswordDraft[account.id] = $0 })
@@ -1381,6 +1390,26 @@ struct WebAccountsSection: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func deviceRow(_ session: WebSession) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "iphone").foregroundStyle(.secondary).frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(session.deviceLabel?.isEmpty == false ? session.deviceLabel! : "Unnamed device")
+                    .font(.caption)
+                Text("Last used \(session.lastUsedAt.formatted(.relative(presentation: .named)))")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Sign out") {
+                store.revokeSession(id: session.id)
+            }
+            .buttonStyle(.borderless).font(.caption)
+            .help("Revoke just this device's session — others stay signed in.")
+        }
+        .padding(.vertical, 1)
     }
 }
 
