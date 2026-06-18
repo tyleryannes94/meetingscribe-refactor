@@ -1264,6 +1264,11 @@ struct WebAccountsSection: View {
     @State private var newPassword = ""
     @State private var newDisplayName = ""
     @State private var error: String?
+    /// Per-account expand state for the admin row (change-password +
+    /// sign-out-everywhere). Keyed by account id.
+    @State private var expanded: Set<String> = []
+    @State private var newPasswordDraft: [String: String] = [:]
+    @State private var rowError: [String: String] = [:]
 
     var body: some View {
         Section("Accounts") {
@@ -1276,22 +1281,7 @@ struct WebAccountsSection: View {
                     .padding(.vertical, 4)
             } else {
                 ForEach(store.accounts) { account in
-                    HStack(spacing: 10) {
-                        Image(systemName: "person.crop.circle.fill")
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(account.displayName).font(.callout)
-                            Text(account.email).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button(role: .destructive) {
-                            store.deleteAccount(id: account.id)
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Delete this account and sign out every device using it")
-                    }
+                    accountRow(account)
                 }
             }
 
@@ -1326,5 +1316,69 @@ struct WebAccountsSection: View {
                 .disabled(newEmail.isEmpty || newPassword.count < 8)
             }
         }
+    }
+
+    @ViewBuilder
+    private func accountRow(_ account: WebAccount) -> some View {
+        let isExpanded = expanded.contains(account.id)
+        let sessionCount = store.sessionCount(forAccountID: account.id)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: "person.crop.circle.fill")
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(account.displayName).font(.callout)
+                    Text(account.email).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(sessionCount == 1 ? "1 device" : "\(sessionCount) devices")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Button {
+                    if isExpanded { expanded.remove(account.id) }
+                    else { expanded.insert(account.id) }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .help(isExpanded ? "Hide admin options" : "Change password or sign out devices")
+                Button(role: .destructive) {
+                    store.deleteAccount(id: account.id)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Delete this account and sign out every device using it")
+            }
+
+            if isExpanded {
+                Divider().padding(.vertical, 2)
+                let draft = Binding<String>(
+                    get: { newPasswordDraft[account.id] ?? "" },
+                    set: { newPasswordDraft[account.id] = $0 })
+                SecureField("New password (8+ characters)", text: draft)
+                if let err = rowError[account.id] {
+                    Text(err).font(.caption2).foregroundStyle(.orange)
+                }
+                HStack {
+                    Button("Change password") {
+                        let pw = newPasswordDraft[account.id] ?? ""
+                        if store.updatePassword(id: account.id, newPassword: pw) {
+                            newPasswordDraft[account.id] = ""
+                            rowError[account.id] = nil
+                        } else {
+                            rowError[account.id] = "Password must be at least 8 characters."
+                        }
+                    }
+                    .disabled((newPasswordDraft[account.id]?.count ?? 0) < 8)
+                    Spacer()
+                    Button("Sign out all devices") {
+                        store.revokeAllSessions(forAccountID: account.id)
+                    }
+                    .disabled(sessionCount == 0)
+                    .help("Revoke every active session for this account. They'll need to sign in again.")
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
