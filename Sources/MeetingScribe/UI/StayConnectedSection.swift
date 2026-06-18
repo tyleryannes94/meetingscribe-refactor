@@ -75,9 +75,11 @@ struct StayConnectedSection: View {
                     let h = health(for: person)
                     let color = healthColor(h.band)
                     HStack(spacing: 12) {
-                        // Squircle avatar + typed-glyph type badge (C2-7)
+                        // Squircle avatar + typed-glyph type badge (C2-7) +
+                        // health-band ring (C2-10) — same band powers the row
+                        // tint, so the ring is just the glanceable form of it.
                         ZStack(alignment: .bottomTrailing) {
-                            MSAvatar(name: person.displayName, size: 36)
+                            MSAvatar(name: person.displayName, size: 36, ringColor: color)
                             RelationshipTypeChip(type: person.relationshipType, showLabel: false)
                                 .offset(x: 6, y: 6)
                         }

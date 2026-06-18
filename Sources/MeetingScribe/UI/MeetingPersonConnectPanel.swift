@@ -204,7 +204,8 @@ struct MeetingPersonConnectPanel: View {
     private func personRow(_ p: Person, isLinked: Bool) -> some View {
         Button { connect(to: p) } label: {
             HStack(spacing: 9) {
-                MSAvatar(name: p.displayName, size: 26)
+                MSAvatar(name: p.displayName, size: 26,
+                         ringColor: healthRingColor(for: p, in: people))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(p.displayName).scaledFont(12.5, weight: .medium)
                         .foregroundStyle(NDS.textPrimary).lineLimit(1)
