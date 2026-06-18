@@ -632,6 +632,7 @@ private struct MeetingListRow: View {
     let isLive: Bool
 
     @EnvironmentObject var tagStore: TagStore
+    @EnvironmentObject var actionItems: ActionItemStore
     @State private var isHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -693,6 +694,19 @@ private struct MeetingListRow: View {
                             // the meeting is with at a glance, matching MeetingCard.
                             MSAvatarStack(names: attendeeNames, size: 16, max: 3)
                         }
+                        // T8: a past meeting with open follow-ups doesn't read
+                        // as "done" — same badge MeetingCard already shows in
+                        // the upcoming rail.
+                        if openTaskCount > 0 {
+                            HStack(spacing: 3) {
+                                Image(systemName: "checklist").scaledFont(9)
+                                Text("\(openTaskCount)").scaledFont(10)
+                            }
+                            .foregroundStyle(NDS.brand)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(NDS.brand.opacity(0.10), in: Capsule())
+                            .help("\(openTaskCount) unfinished follow-up\(openTaskCount == 1 ? "" : "s")")
+                        }
                         let tags = tagStore.tags(for: meeting).prefix(2)
                         ForEach(Array(tags)) { t in
                             TagChipMini(tag: t)
@@ -751,6 +765,14 @@ private struct MeetingListRow: View {
     }
     private var durationMins: Int {
         max(0, Int(meeting.endDate.timeIntervalSince(meeting.startDate) / 60))
+    }
+
+    private var openTaskCount: Int {
+        // Match MeetingCard's "past meeting with open tasks" cue. Cheap O(n)
+        // on the in-memory store; the list pane never holds enough rows for
+        // this to register on a profile.
+        guard meeting.startDate < Date() else { return 0 }
+        return actionItems.items(for: meeting.id).filter { $0.status != .completed }.count
     }
 
     private var attendeeNames: [String] {
