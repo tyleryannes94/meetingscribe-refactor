@@ -39,6 +39,7 @@ enum WebAssets {
       .divider { display:flex; align-items:center; gap:.6rem; margin:1.4rem 0 .9rem; color:#5d6679; font-size:.75rem; }
       .divider::before, .divider::after { content:""; flex:1; height:1px; background:#1f2330; }
       details { color:#6b7280; font-size:.85rem; text-align:center; }
+      .hint { color:#6b7280; font-size:.78rem; text-align:center; margin:.85rem 0 0; line-height:1.45; }
       details summary { cursor:pointer; user-select:none; }
       details input { font-family:ui-monospace,SFMono-Regular,monospace; font-size:.88rem; margin-top:.7rem; }
       details button { margin-top:.6rem; background:#2a2f3a; }
@@ -57,6 +58,7 @@ enum WebAssets {
           <button id="loginBtn" type="submit">Sign in</button>
           <div class="err" id="err"></div>
         </form>
+        <p class="hint">Forgot your password? On the Mac mini, open MeetingScribe → Settings → Connections → Accounts to reset it.</p>
 
         <div class="divider">or</div>
         <details>
