@@ -329,39 +329,41 @@ struct InitiativePage: View {
                     .frame(minHeight: 100, maxHeight: 240)
 
                     let projects = store.projects(forInitiative: initiativeID)
-                    HStack {
-                        NotionEyebrow(text: "Projects", count: projects.count)
-                        Spacer()
-                        Button {
-                            let p = store.createProject(name: "Untitled")
-                            store.setProjectInitiative(p.id, initiativeID: initiativeID)
-                            onOpenProject(p.id)
-                        } label: { Label("Add project", systemImage: "plus") }
-                        .buttonStyle(.borderless).controlSize(.small) // design-lint:allow
-                    }
-                    if projects.isEmpty {
-                        Text("No projects yet. Add one to start organizing work under this initiative.")
-                            .font(NDS.small).foregroundStyle(NDS.textTertiary)
-                    } else {
-                        VStack(spacing: 1) {
-                            ForEach(projects) { p in
-                                Button { onOpenProject(p.id) } label: {
-                                    HStack(spacing: 9) {
-                                        Image(systemName: p.icon ?? "doc.text").foregroundStyle(NDS.selectColor(p.name))
-                                        Text(p.name).font(NDS.body)
-                                        Spacer()
-                                        let open = store.openCount(forProject: p.id)
-                                        if open > 0 { Text("\(open) open").font(NDS.tiny).foregroundStyle(NDS.textTertiary) }
-                                        Image(systemName: "chevron.right").scaledFont(10).foregroundStyle(NDS.textTertiary)
+                    MSSection("Projects", systemImage: "folder",
+                              count: projects.count,
+                              persistenceKey: "initiative.\(initiativeID).projects",
+                              trailing: {
+                                  Button {
+                                      let p = store.createProject(name: "Untitled")
+                                      store.setProjectInitiative(p.id, initiativeID: initiativeID)
+                                      onOpenProject(p.id)
+                                  } label: { Label("Add project", systemImage: "plus") }
+                                  .buttonStyle(.borderless).controlSize(.small) // design-lint:allow
+                              }) {
+                        if projects.isEmpty {
+                            Text("No projects yet. Add one to start organizing work under this initiative.")
+                                .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                        } else {
+                            VStack(spacing: 1) {
+                                ForEach(projects) { p in
+                                    Button { onOpenProject(p.id) } label: {
+                                        HStack(spacing: 9) {
+                                            Image(systemName: p.icon ?? "doc.text").foregroundStyle(NDS.selectColor(p.name))
+                                            Text(p.name).font(NDS.body)
+                                            Spacer()
+                                            let open = store.openCount(forProject: p.id)
+                                            if open > 0 { Text("\(open) open").font(NDS.tiny).foregroundStyle(NDS.textTertiary) }
+                                            Image(systemName: "chevron.right").scaledFont(10).foregroundStyle(NDS.textTertiary)
+                                        }
+                                        .padding(.horizontal, 10).padding(.vertical, 8)
+                                        .contentShape(Rectangle())
                                     }
-                                    .padding(.horizontal, 10).padding(.vertical, 8)
-                                    .contentShape(Rectangle())
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(NDS.hairline, lineWidth: 1))
                         }
-                        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(NDS.hairline, lineWidth: 1))
                     }
                 }
                 .notionPageColumn()
