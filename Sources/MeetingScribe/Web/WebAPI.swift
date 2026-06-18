@@ -128,10 +128,11 @@ final class WebAPI {
 
     private func handleAuth(_ request: HTTPRequest, rest: [String]) -> HTTPResponse {
         switch rest.first {
-        case "login":  return handleLogin(request)
-        case "logout": return handleLogout(request)
-        case "me":     return handleAuthMe(request)
-        default:       return .error(404, "Unknown auth endpoint")
+        case "login":           return handleLogin(request)
+        case "logout":          return handleLogout(request)
+        case "me":              return handleAuthMe(request)
+        case "change-password": return handleChangePassword(request)
+        default:                return .error(404, "Unknown auth endpoint")
         }
     }
 
@@ -186,6 +187,33 @@ final class WebAPI {
             return .jsonObject(["ok": true, "shared": true])
         }
         return .error(401, "Not signed in")
+    }
+
+    /// POST /api/auth/change-password { currentPassword, newPassword }
+    /// Requires a valid ms_session cookie. Verifies the current password before
+    /// rotating — the session cookie alone isn't enough, the user has to prove
+    /// they still know the password. Existing sessions stay valid by design
+    /// (matches macOS keychain semantics); the Settings UI exposes
+    /// "Sign out all devices" as the explicit revoke lever.
+    private func handleChangePassword(_ request: HTTPRequest) -> HTTPResponse {
+        guard request.method == "POST" else { return .error(405, "Method not allowed") }
+        guard let session = request.cookies["ms_session"],
+              let account = AccountStore.shared.validate(sessionToken: session) else {
+            return .error(401, "Sign in first")
+        }
+        struct Body: Decodable { let currentPassword: String; let newPassword: String }
+        guard let body = try? JSONDecoder().decode(Body.self, from: request.body) else {
+            return .error(400, "Expected JSON {currentPassword, newPassword}")
+        }
+        guard AccountStore.shared.authenticate(email: account.email,
+                                                password: body.currentPassword) != nil else {
+            return .error(401, "Current password is wrong")
+        }
+        guard AccountStore.shared.updatePassword(id: account.id,
+                                                  newPassword: body.newPassword) else {
+            return .error(400, "New password must be at least 8 characters")
+        }
+        return .jsonObject(["ok": true])
     }
 
     private func constantTimeEqual(_ a: String, _ b: String) -> Bool {
