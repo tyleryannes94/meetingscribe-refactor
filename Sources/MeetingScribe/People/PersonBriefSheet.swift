@@ -105,23 +105,25 @@ struct PersonBriefSheet: View {
 
     @ViewBuilder
     private func contextCards(_ ctx: PersonContext) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            NotionEyebrow(text: "Context")
-            if let s = ctx.strengthScore {
-                briefRow("heart.fill", "Relationship strength", "\(Int(s * 100))/100")
-            }
-            if let m = ctx.lastMeeting {
-                briefRow("calendar", "Last meeting", m.displayTitle)
-            }
-            briefRow("number", "Meetings together", "\(ctx.meetingCount)")
-            if !ctx.openTasksForPerson.isEmpty {
-                briefRow("checklist", "Open items they own", "\(ctx.openTasksForPerson.count)")
-            }
-            if !ctx.talkingPoints.isEmpty {
-                briefRow("text.bubble", "Talking points", ctx.talkingPoints.joined(separator: " · "))
-            }
-            if let e = ctx.nextSharedEvent {
-                briefRow("calendar.badge.clock", "Next meeting", e.displayTitle)
+        MSSection("Context", systemImage: "person.text.rectangle",
+                  persistenceKey: "personBrief.context") {
+            VStack(alignment: .leading, spacing: 10) {
+                if let s = ctx.strengthScore {
+                    briefRow("heart.fill", "Relationship strength", "\(Int(s * 100))/100")
+                }
+                if let m = ctx.lastMeeting {
+                    briefRow("calendar", "Last meeting", m.displayTitle)
+                }
+                briefRow("number", "Meetings together", "\(ctx.meetingCount)")
+                if !ctx.openTasksForPerson.isEmpty {
+                    briefRow("checklist", "Open items they own", "\(ctx.openTasksForPerson.count)")
+                }
+                if !ctx.talkingPoints.isEmpty {
+                    briefRow("text.bubble", "Talking points", ctx.talkingPoints.joined(separator: " · "))
+                }
+                if let e = ctx.nextSharedEvent {
+                    briefRow("calendar.badge.clock", "Next meeting", e.displayTitle)
+                }
             }
         }
     }

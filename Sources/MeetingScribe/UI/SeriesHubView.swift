@@ -164,8 +164,9 @@ struct SeriesHubView: View {
     @ViewBuilder
     private var rosterSection: some View {
         if !roster.isEmpty {
-            VStack(alignment: .leading, spacing: NDS.spaceMD) {
-                NotionEyebrow(text: "People", count: roster.count)
+            MSSection("People", systemImage: "person.2.fill",
+                      count: roster.count,
+                      persistenceKey: "series.roster") {
                 FlowLayout(spacing: 8) {
                     ForEach(roster, id: \.self) { a in
                         rosterChip(a)
@@ -193,8 +194,9 @@ struct SeriesHubView: View {
     // MARK: - Occurrence timeline
 
     private var timelineSection: some View {
-        VStack(alignment: .leading, spacing: NDS.spaceMD) {
-            NotionEyebrow(text: "Timeline", count: occurrences.count)
+        MSSection("Timeline", systemImage: "calendar",
+                  count: occurrences.count,
+                  persistenceKey: "series.timeline") {
             VStack(spacing: 2) {
                 ForEach(occurrences) { occ in
                     occurrenceRow(occ)
@@ -246,8 +248,9 @@ struct SeriesHubView: View {
     // MARK: - Rolling open items
 
     private var openItemsSection: some View {
-        VStack(alignment: .leading, spacing: NDS.spaceMD) {
-            NotionEyebrow(text: "Open follow-ups", count: openItems.count)
+        MSSection("Open follow-ups", systemImage: "checklist",
+                  count: openItems.count,
+                  persistenceKey: "series.openItems") {
             if openItems.isEmpty {
                 emptyRow(systemImage: "checkmark.circle",
                          text: "Nothing open across the series.")
@@ -297,8 +300,9 @@ struct SeriesHubView: View {
     // MARK: - Decisions ledger
 
     private var decisionsSection: some View {
-        VStack(alignment: .leading, spacing: NDS.spaceMD) {
-            NotionEyebrow(text: "Decisions", count: seriesDecisions.count)
+        MSSection("Decisions", systemImage: "checkmark.seal.fill",
+                  count: seriesDecisions.count,
+                  persistenceKey: "series.decisions") {
             if seriesDecisions.isEmpty {
                 emptyRow(systemImage: "checkmark.seal",
                          text: "No decisions recorded yet for this series.")
