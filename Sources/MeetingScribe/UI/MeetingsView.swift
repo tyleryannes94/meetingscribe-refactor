@@ -687,11 +687,11 @@ private struct MeetingListRow: View {
                         }
                     }
 
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         if !meeting.attendees.isEmpty {
-                            Text("\(meeting.attendees.count) attendees")
-                                .scaledFont(11)
-                                .foregroundStyle(NDS.textTertiary)
+                            // P1-7: face pile instead of "3 attendees" — scan who
+                            // the meeting is with at a glance, matching MeetingCard.
+                            MSAvatarStack(names: attendeeNames, size: 16, max: 3)
                         }
                         let tags = tagStore.tags(for: meeting).prefix(2)
                         ForEach(Array(tags)) { t in
@@ -751,5 +751,12 @@ private struct MeetingListRow: View {
     }
     private var durationMins: Int {
         max(0, Int(meeting.endDate.timeIntervalSince(meeting.startDate) / 60))
+    }
+
+    private var attendeeNames: [String] {
+        meeting.attendees.map { raw in
+            let id = PersonResolver.parse(raw)
+            return id.hasName ? id.name : PersonResolver.localPart(of: id.email)
+        }
     }
 }
