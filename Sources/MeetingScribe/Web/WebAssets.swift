@@ -21,27 +21,86 @@ enum WebAssets {
     <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>MeetingScribe — Connect</title>
+    <title>MeetingScribe — Sign in</title>
     <style>
       :root { color-scheme: dark; }
       body { font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:#0f1115; color:#e7e9ee;
              margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1.5rem; }
-      .card { max-width:340px; width:100%; text-align:center; }
-      h1 { font-size:1.3rem; margin:0 0 .5rem; }
-      p { color:#9aa3b2; line-height:1.5; }
-      input { width:100%; box-sizing:border-box; padding:.85rem; border-radius:12px; border:1px solid #2a2f3a;
-              background:#171a21; color:#fff; font-size:1rem; margin:1rem 0 .75rem; }
+      .card { max-width:360px; width:100%; }
+      h1 { font-size:1.35rem; margin:0 0 .35rem; text-align:center; }
+      .sub { color:#9aa3b2; line-height:1.5; text-align:center; margin:0 0 1.25rem; }
+      label { display:block; font-size:.78rem; color:#9aa3b2; margin:.85rem 0 .35rem; letter-spacing:.02em; }
+      input { width:100%; box-sizing:border-box; padding:.8rem .9rem; border-radius:12px; border:1px solid #2a2f3a;
+              background:#171a21; color:#fff; font-size:1rem; }
       button { width:100%; padding:.85rem; border:0; border-radius:12px; background:#3b82f6; color:#fff;
-               font-size:1rem; font-weight:600; }
+               font-size:1rem; font-weight:600; margin-top:1rem; cursor:pointer; }
+      button[disabled] { opacity:.55; cursor:default; }
+      .err { color:#f87171; font-size:.85rem; margin-top:.65rem; min-height:1.1rem; }
+      .divider { display:flex; align-items:center; gap:.6rem; margin:1.4rem 0 .9rem; color:#5d6679; font-size:.75rem; }
+      .divider::before, .divider::after { content:""; flex:1; height:1px; background:#1f2330; }
+      details { color:#6b7280; font-size:.85rem; text-align:center; }
+      details summary { cursor:pointer; user-select:none; }
+      details input { font-family:ui-monospace,SFMono-Regular,monospace; font-size:.88rem; margin-top:.7rem; }
+      details button { margin-top:.6rem; background:#2a2f3a; }
     </style>
     </head>
     <body>
-      <form class="card" action="/" method="get">
+      <div class="card">
         <h1>MeetingScribe</h1>
-        <p>Scan the QR code in MeetingScribe → Settings → Phone access, or paste your access token below.</p>
-        <input name="t" placeholder="Access token" autocapitalize="off" autocomplete="off" spellcheck="false">
-        <button type="submit">Connect</button>
-      </form>
+        <p class="sub">Sign in with your account, or use the access token from Settings → Phone access.</p>
+        <form id="loginForm">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" autocapitalize="off"
+                 spellcheck="false" required>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+          <button id="loginBtn" type="submit">Sign in</button>
+          <div class="err" id="err"></div>
+        </form>
+
+        <div class="divider">or</div>
+        <details>
+          <summary>Use an access token (QR code)</summary>
+          <form action="/" method="get">
+            <input name="t" placeholder="Access token" autocapitalize="off" autocomplete="off" spellcheck="false">
+            <button type="submit">Connect</button>
+          </form>
+        </details>
+      </div>
+
+      <script>
+        const form = document.getElementById('loginForm');
+        const errEl = document.getElementById('err');
+        const btn = document.getElementById('loginBtn');
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          errEl.textContent = '';
+          btn.disabled = true;
+          btn.textContent = 'Signing in…';
+          try {
+            const res = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: document.getElementById('email').value,
+                password: document.getElementById('password').value,
+                deviceLabel: navigator.userAgent.includes('iPhone') ? 'iPhone'
+                            : navigator.userAgent.includes('iPad') ? 'iPad'
+                            : navigator.userAgent.includes('Android') ? 'Android'
+                            : 'Browser'
+              })
+            });
+            if (res.ok) { window.location.href = '/'; return; }
+            const data = await res.json().catch(() => ({}));
+            errEl.textContent = data.error || 'Sign-in failed.';
+          } catch (err) {
+            errEl.textContent = 'Network error — is the Mac reachable?';
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Sign in';
+          }
+        });
+      </script>
     </body>
     </html>
     """
