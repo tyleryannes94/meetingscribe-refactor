@@ -349,6 +349,7 @@ struct SettingsView: View {
     @ViewBuilder private var connectionsTab: some View {
         Form {
             PhoneAccessSection()
+            TailscaleSyncSection()
             Section("Integrations — Task sync") {
                 Text("Pull issues/tasks into the Action Items tab. Both APIs are free — no usage charges, and nothing is sent to an AI. Notion uses the key set under Advanced → Notion MCP (plus its database ID).")
                     .font(.caption).foregroundStyle(.secondary)
@@ -1325,6 +1326,154 @@ struct WebAccountsSection: View {
                 }
                 .disabled(newEmail.isEmpty || newPassword.count < 8)
             }
+        }
+    }
+}
+
+/// Settings card for 2-way Tailscale sync. Lists each configured peer, the
+/// last sync timestamp + any error, a manual "Sync now" button, and a form
+/// to add a new peer.
+///
+/// Lives next to the Phone access card because they both stand on the same
+/// Tailscale plumbing — the QR token grants per-user UI access, this grants
+/// per-peer file sync.
+@available(macOS 14.0, *)
+struct TailscaleSyncSection: View {
+    @ObservedObject private var peerStore = SyncPeerStore.shared
+    @ObservedObject private var engine = SyncEngine.shared
+
+    @State private var newLabel = ""
+    @State private var newBaseURL = ""
+    @State private var newSecret = ""
+    @State private var revealSecrets: Set<String> = []
+
+    var body: some View {
+        Section("2-way Tailscale sync") {
+            Text("Configure another Mac running MeetingScribe as a peer. The engine pulls files newer than the last sync, then pushes any local changes since the last push. Last-write-wins per file by modification time — same model as `docs/CROSS_DEVICE_SYNC_MASTER_PLAN.md`. Both Macs need the same shared secret in their peer entry; copy it from the side that generated it.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            Toggle("Sync automatically", isOn: $engine.autoSyncEnabled)
+                .help("Run every configured peer on a timer in the background.")
+            if engine.autoSyncEnabled {
+                HStack {
+                    Text("Every")
+                    Picker("", selection: $engine.autoSyncInterval) {
+                        Text("1 minute").tag(TimeInterval(60))
+                        Text("5 minutes").tag(TimeInterval(300))
+                        Text("15 minutes").tag(TimeInterval(900))
+                        Text("1 hour").tag(TimeInterval(3600))
+                        Text("6 hours").tag(TimeInterval(21_600))
+                    }
+                    .labelsHidden().fixedSize()
+                    Spacer()
+                }
+            }
+
+            if peerStore.peers.isEmpty {
+                Text("No peers yet — add one below to start syncing.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(peerStore.peers) { peer in
+                    peerRow(peer)
+                }
+            }
+
+            Divider().padding(.vertical, 4)
+
+            Text("Add peer").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            TextField("Label (e.g. \"Work MacBook\")", text: $newLabel)
+            TextField("Base URL (http://100.x.y.z:8765)", text: $newBaseURL)
+                .disableAutocorrection(true)
+            HStack {
+                TextField("Shared secret", text: $newSecret)
+                    .disableAutocorrection(true)
+                Button("Generate") { newSecret = SyncPeer.newSecret() }
+                    .help("Generate a new random secret — copy it onto the other Mac's peer entry.")
+            }
+            Text("Both Macs must use the same shared secret. Generate once, paste on both ends. It's the only credential needed for sync — separate from any user-account passwords above.")
+                .font(.caption2).foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button("Add peer") {
+                    let secret = newSecret.isEmpty ? SyncPeer.newSecret() : newSecret
+                    if peerStore.addPeer(label: newLabel, baseURL: newBaseURL,
+                                          sharedSecret: secret) != nil {
+                        newLabel = ""
+                        newBaseURL = ""
+                        newSecret = ""
+                    }
+                }
+                .disabled(newLabel.isEmpty || newBaseURL.isEmpty)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func peerRow(_ peer: SyncPeer) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(peer.label).font(.callout)
+                    Text(peer.baseURL).font(.caption.monospaced()).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if engine.runningPeerIDs.contains(peer.id) {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Sync now") {
+                        Task { await engine.syncNow(peerID: peer.id) }
+                    }
+                }
+                Button(role: .destructive) {
+                    peerStore.deletePeer(id: peer.id)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+            }
+
+            statusLine(peer)
+
+            HStack(spacing: 8) {
+                Button(revealSecrets.contains(peer.id) ? "Hide secret" : "Show secret") {
+                    if revealSecrets.contains(peer.id) {
+                        revealSecrets.remove(peer.id)
+                    } else {
+                        revealSecrets.insert(peer.id)
+                    }
+                }
+                .buttonStyle(.borderless).font(.caption)
+                if revealSecrets.contains(peer.id) {
+                    Text(peer.sharedSecret)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                Spacer()
+                Button("Copy secret") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(peer.sharedSecret, forType: .string)
+                }
+                .buttonStyle(.borderless).font(.caption)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func statusLine(_ peer: SyncPeer) -> some View {
+        if let err = peer.lastError {
+            Label(err, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption2).foregroundStyle(.orange).lineLimit(2)
+        } else if let when = peer.lastSyncAt {
+            Text("Synced \(when.formatted(.relative(presentation: .named)))")
+                .font(.caption2).foregroundStyle(.secondary)
+        } else {
+            Text("Never synced.").font(.caption2).foregroundStyle(.secondary)
         }
     }
 }

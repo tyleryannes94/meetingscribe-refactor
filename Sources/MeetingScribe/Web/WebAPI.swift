@@ -50,6 +50,13 @@ final class WebAPI {
             return handleAuth(request, rest: Array(rest.dropFirst()))
         }
 
+        // Sync endpoints carry their own peer-shared-secret auth — they bypass
+        // the user-session gate so a sync peer with the right Bearer token
+        // can call /api/sync/* without holding a user session.
+        if rest.first == "sync" {
+            return await handleSync(request, rest: Array(rest.dropFirst()))
+        }
+
         guard isAuthorized(request) else {
             return .error(401, "Unauthorized — sign in, or open the link from the QR code in MeetingScribe → Settings.")
         }
@@ -1116,5 +1123,97 @@ final class WebAPI {
     private func parseDate(_ s: String?) -> Date? {
         guard let s, !s.isEmpty else { return nil }
         return Self.isoFormatter.date(from: s)
+    }
+
+    // MARK: - Sync endpoints
+
+    /// Bearer-token auth specifically for sync — independent of the user
+    /// account session so a sync peer can't be tricked into granting UI
+    /// access and vice-versa.
+    private func authorizedSyncPeer(_ request: HTTPRequest) -> SyncPeer? {
+        guard let auth = request.header("authorization"),
+              auth.lowercased().hasPrefix("bearer ") else { return nil }
+        let presented = String(auth.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+        return SyncPeerStore.shared.peerForIncomingSecret(presented)
+    }
+
+    private func handleSync(_ request: HTTPRequest, rest: [String]) async -> HTTPResponse {
+        guard authorizedSyncPeer(request) != nil else {
+            return .error(401, "Unauthorized sync peer.")
+        }
+        switch rest.first {
+        case "changes": return await syncChanges(request)
+        case "file":    return await syncFile(request)
+        default:        return .error(404, "Unknown sync endpoint")
+        }
+    }
+
+    /// `GET /api/sync/changes?since=<iso8601>` — returns the list of vault
+    /// files modified strictly after `since`. The format mirrors
+    /// `SyncIndex.Entry`.
+    private func syncChanges(_ request: HTTPRequest) async -> HTTPResponse {
+        guard request.method == "GET" else { return .error(405, "Method not allowed") }
+        let since = parseDate(request.query["since"])
+        let entries = SyncIndex.entries(under: AppSettings.shared.storageDir, since: since)
+        let df = ISO8601DateFormatter()
+        df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let payload: [String: Any] = [
+            "entries": entries.map { e -> [String: Any] in
+                ["path": e.path,
+                 "mtime": df.string(from: e.mtime),
+                 "size": e.size]
+            }
+        ]
+        return .jsonObject(payload)
+    }
+
+    /// `GET /api/sync/file?path=<rel>` returns the file bytes.
+    /// `PUT /api/sync/file?path=<rel>` writes the body atomically. The
+    /// X-MS-Mtime header (ISO 8601) is honored so both sides agree on the
+    /// authoritative timestamp.
+    private func syncFile(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let rel = request.query["path"], !rel.isEmpty else {
+            return .error(400, "Missing path")
+        }
+        let vaultRoot = AppSettings.shared.storageDir
+        guard let absURL = SyncIndex.absoluteURL(forRelative: rel, under: vaultRoot) else {
+            return .error(400, "Path is outside the vault or excluded from sync.")
+        }
+        switch request.method {
+        case "GET":
+            guard let data = try? Data(contentsOf: absURL) else {
+                return .error(404, "Not found")
+            }
+            return HTTPResponse(status: 200,
+                                headers: ["Content-Type": "application/octet-stream"],
+                                body: data)
+        case "PUT":
+            try? FileManager.default.createDirectory(at: absURL.deletingLastPathComponent(),
+                                                     withIntermediateDirectories: true)
+            do {
+                try request.body.write(to: absURL, options: .atomic)
+            } catch {
+                return .error(500, "Write failed: \(error.localizedDescription)")
+            }
+            if let stamp = parseSyncMTime(request.header("x-ms-mtime")) {
+                try? FileManager.default.setAttributes(
+                    [.modificationDate: stamp], ofItemAtPath: absURL.path)
+            }
+            return .jsonObject(["ok": true])
+        default:
+            return .error(405, "Method not allowed")
+        }
+    }
+
+    /// ISO 8601 parser tolerant of either fractional-seconds (engine path)
+    /// or whole-second (other clients) precision.
+    private func parseSyncMTime(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let f1 = ISO8601DateFormatter()
+        f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f1.date(from: raw) { return d }
+        let f2 = ISO8601DateFormatter()
+        f2.formatOptions = [.withInternetDateTime]
+        return f2.date(from: raw)
     }
 }
