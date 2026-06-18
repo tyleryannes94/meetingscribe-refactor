@@ -54,6 +54,36 @@ final class AccountStoreTests: XCTestCase {
         XCTAssertFalse(PasswordHasher.constantTimeEqual("abc", "abd"))
     }
 
+    func testHashRefusesEmptyPasswordAndSalt() {
+        let salt = PasswordHasher.newSalt()
+        XCTAssertNil(PasswordHasher.hash(password: "", saltBase64: salt),
+                     "empty password must not derive a key — CommonCrypto returns kCCParamError")
+        XCTAssertNil(PasswordHasher.hash(password: "correcthorsebatterystaple", saltBase64: ""),
+                     "empty salt must not derive a key")
+        XCTAssertNil(PasswordHasher.hash(password: "correcthorsebatterystaple",
+                                          saltBase64: "not-valid-base64!!!"),
+                     "non-base64 salt must reject")
+    }
+
+    func testSessionTokenIsURLSafeAndUnpadded() {
+        for _ in 0..<32 {
+            let tok = PasswordHasher.newSessionToken()
+            XCTAssertFalse(tok.contains("+"), "tokens go in cookies — drop \"+\"")
+            XCTAssertFalse(tok.contains("/"), "drop \"/\" too — URL-unsafe")
+            XCTAssertFalse(tok.contains("="), "trailing base64 padding stripped")
+            // 32 raw bytes → 43 base64 chars before padding removal.
+            XCTAssertEqual(tok.count, 43, "expected 32 random bytes encoded as URL-safe base64")
+        }
+    }
+
+    func testNewSaltIsUnique() {
+        var seen = Set<String>()
+        for _ in 0..<128 {
+            seen.insert(PasswordHasher.newSalt())
+        }
+        XCTAssertEqual(seen.count, 128, "salts come from CSPRNG; collisions in 128 draws is a bug")
+    }
+
     // MARK: - Account create / authenticate
 
     func testCreateAndAuthenticate() {
