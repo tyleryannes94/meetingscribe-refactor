@@ -1873,7 +1873,8 @@ struct PersonDetailView: View {
                 ForEach(inCommon) { entry in
                     Button { router.openPerson(entry.person.id) } label: {
                         HStack(spacing: 10) {
-                            MSAvatar(name: entry.person.displayName, size: 28)
+                            MSAvatar(name: entry.person.displayName, size: 28,
+                                     ringColor: healthRingColor(for: entry.person, in: people))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(entry.person.displayName)
                                     .scaledFont(13.5, weight: .semibold)
