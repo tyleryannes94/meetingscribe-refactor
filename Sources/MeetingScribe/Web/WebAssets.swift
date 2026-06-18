@@ -133,6 +133,9 @@ enum WebAssets {
                backdrop-filter:saturate(180%) blur(12px); border-bottom:1px solid var(--line); }
       header h1 { font-size:1.05rem; font-weight:600; margin:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       #back { background:none; border:0; color:var(--accent); font-size:1.7rem; line-height:1; padding:0 .4rem; }
+      #signout { background:none; border:0; color:var(--muted); font-size:.78rem; padding:.3rem .5rem;
+                 border-radius:8px; }
+      #signout:active { background:var(--panel); }
       main { padding:.5rem .75rem 6rem; max-width:720px; margin:0 auto; }
       nav { position:fixed; bottom:0; left:0; right:0; display:flex; background:rgba(15,17,21,.95);
             backdrop-filter:blur(12px); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom); }
@@ -233,7 +236,7 @@ enum WebAssets {
     </style>
     </head>
     <body>
-      <header><button id="back" hidden>&lsaquo;</button><h1 id="title">MeetingScribe</h1></header>
+      <header><button id="back" hidden>&lsaquo;</button><h1 id="title">MeetingScribe</h1><button id="signout">Sign out</button></header>
       <main id="view"></main>
       <!-- P3-2: section order mirrors the desktop rail (Today · Meetings ·
            People · Tasks · Projects · Notes) so muscle memory transfers. -->
@@ -273,6 +276,12 @@ enum WebAssets {
     function go(render, title){ stack.push({render,title}); paint(); }
     function back(){ if(stack.length>1){ stack.pop(); if(stack.length===1){ const a=document.querySelector('#tabs button.active'); if(a) setHash('#/'+a.dataset.tab); } paint(); } }
     backBtn.onclick = back;
+    document.getElementById('signout').onclick = async () => {
+      // POST /api/auth/logout revokes the session server-side and clears the
+      // ms_session cookie. Redirect to / so the unlock page shows.
+      try { await fetch('/api/auth/logout', { method:'POST' }); } catch (_) {}
+      location.href = '/';
+    };
     async function paint(){
       const top = stack[stack.length-1];
       titleEl.textContent = top.title;
