@@ -30,6 +30,7 @@ enum WebAssets {
       h1 { font-size:1.35rem; margin:0 0 .35rem; text-align:center; }
       .sub { color:#9aa3b2; line-height:1.5; text-align:center; margin:0 0 1.25rem; }
       label { display:block; font-size:.78rem; color:#9aa3b2; margin:.85rem 0 .35rem; letter-spacing:.02em; }
+      .lbl-sub { color:#5d6679; font-weight:400; letter-spacing:0; }
       input { width:100%; box-sizing:border-box; padding:.8rem .9rem; border-radius:12px; border:1px solid #2a2f3a;
               background:#171a21; color:#fff; font-size:1rem; }
       button { width:100%; padding:.85rem; border:0; border-radius:12px; background:#3b82f6; color:#fff;
@@ -55,6 +56,9 @@ enum WebAssets {
                  spellcheck="false" required>
           <label for="password">Password</label>
           <input id="password" name="password" type="password" autocomplete="current-password" required>
+          <label for="device">Device name <span class="lbl-sub">(shown in Settings)</span></label>
+          <input id="device" name="device" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="e.g. Tyler's iPhone">
           <button id="loginBtn" type="submit">Sign in</button>
           <div class="err" id="err"></div>
         </form>
@@ -86,10 +90,13 @@ enum WebAssets {
               body: JSON.stringify({
                 email: document.getElementById('email').value,
                 password: document.getElementById('password').value,
-                deviceLabel: navigator.userAgent.includes('iPhone') ? 'iPhone'
-                            : navigator.userAgent.includes('iPad') ? 'iPad'
-                            : navigator.userAgent.includes('Android') ? 'Android'
-                            : 'Browser'
+                // Prefer what the user typed; fall back to a sniff so old QR pairings
+                // (no field) still get a useful label in Settings → Accounts.
+                deviceLabel: (document.getElementById('device').value || '').trim()
+                  || (navigator.userAgent.includes('iPhone') ? 'iPhone'
+                      : navigator.userAgent.includes('iPad') ? 'iPad'
+                      : navigator.userAgent.includes('Android') ? 'Android'
+                      : 'Browser')
               })
             });
             if (res.ok) { window.location.href = '/'; return; }
