@@ -152,6 +152,25 @@ final class AccountStoreTests: XCTestCase {
         XCTAssertNil(store.validate(sessionToken: s2.id))
     }
 
+    func testSessionCountReflectsIssueAndRevoke() {
+        let store = AccountStore.shared
+        let alice = store.createAccount(email: "alice@example.com",
+                                        password: "password1234")!
+        let bob = store.createAccount(email: "bob@example.com",
+                                      password: "password1234")!
+        XCTAssertEqual(store.sessionCount(forAccountID: alice.id), 0)
+        _ = store.issueSession(for: alice.id)
+        _ = store.issueSession(for: alice.id)
+        _ = store.issueSession(for: bob.id)
+        XCTAssertEqual(store.sessionCount(forAccountID: alice.id), 2)
+        XCTAssertEqual(store.sessionCount(forAccountID: bob.id), 1,
+                       "Counts are per-account — bob's sessions don't leak into alice's tally")
+        store.revokeAllSessions(forAccountID: alice.id)
+        XCTAssertEqual(store.sessionCount(forAccountID: alice.id), 0)
+        XCTAssertEqual(store.sessionCount(forAccountID: bob.id), 1,
+                       "Revoking one account's sessions doesn't touch the other's")
+    }
+
     func testSessionTokensAreUnique() {
         // Sanity check on the RNG path — millions of calls would be needed
         // for a real collision but a quick smoke covers an obvious mistake.

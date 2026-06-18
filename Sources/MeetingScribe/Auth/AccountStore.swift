@@ -176,6 +176,7 @@ final class AccountStore: ObservableObject {
         let session = WebSession(id: token, accountID: accountID,
                                   createdAt: now, lastUsedAt: now,
                                   deviceLabel: deviceLabel?.trimmingCharacters(in: .whitespacesAndNewlines))
+        objectWillChange.send()
         sessions.append(session)
         persist()
         return session
@@ -195,13 +196,22 @@ final class AccountStore: ObservableObject {
     }
 
     func revoke(sessionToken: String) {
+        objectWillChange.send()
         sessions.removeAll { PasswordHasher.constantTimeEqual($0.id, sessionToken) }
         persist()
     }
 
     func revokeAllSessions(forAccountID id: String) {
+        objectWillChange.send()
         sessions.removeAll { $0.accountID == id }
         persist()
+    }
+
+    /// Number of live sessions belonging to an account. Surfaced in the Settings
+    /// admin row so the user can see how many devices are signed in before
+    /// choosing "sign out everywhere".
+    func sessionCount(forAccountID id: String) -> Int {
+        sessions.lazy.filter { $0.accountID == id }.count
     }
 
     // MARK: - Helpers
