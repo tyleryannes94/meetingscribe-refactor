@@ -217,9 +217,9 @@ extension ActionItemsView {
     }
 
     func subPagesSection(_ project: Project, kids: [Project]) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            NotionEyebrow(text: "Sub-pages", count: kids.count)
-                .padding(.bottom, 2)
+        MSSection("Sub-pages", systemImage: "doc.on.doc",
+                  count: kids.count,
+                  persistenceKey: "project.\(project.id).subPages") {
             ForEach(kids) { k in
                 Button {
                     env.selectedMeetingID = nil; env.selectedTaskID = nil; env.selectedProjectID = k.id
