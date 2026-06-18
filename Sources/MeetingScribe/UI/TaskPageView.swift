@@ -464,52 +464,54 @@ struct TaskPageView: View {
 
     @ViewBuilder
     private func subtasks(_ item: ActionItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                NotionEyebrow(text: "Subtasks", count: item.subtaskProgress.total > 0 ? item.subtaskProgress.total : nil)
-                if item.subtaskProgress.total > 0 {
-                    Text("\(item.subtaskProgress.done) done")
-                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+        MSSection("Subtasks", systemImage: "checklist",
+                  count: item.subtaskProgress.total > 0 ? item.subtaskProgress.total : nil,
+                  persistenceKey: "taskPage.subtasks",
+                  trailing: {
+                      if item.subtaskProgress.total > 0 {
+                          Text("\(item.subtaskProgress.done) done")
+                              .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                      }
+                  }) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(item.subtaskList) { sub in
+                    HStack(spacing: 9) {
+                        Button { store.toggleSubtask(itemID, subtaskID: sub.id) } label: {
+                            Image(systemName: sub.done ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(sub.done ? NDS.selectColor("green") : NDS.textTertiary)
+                        }.buttonStyle(.plain)
+                        Text(sub.title).font(NDS.body)
+                            .strikethrough(sub.done).foregroundStyle(sub.done ? NDS.textTertiary : NDS.textPrimary)
+                        Spacer()
+                        NotionIconButton(systemName: "xmark") { store.deleteSubtask(itemID, subtaskID: sub.id) }
+                    }
                 }
-            }
-            ForEach(item.subtaskList) { sub in
-                HStack(spacing: 9) {
-                    Button { store.toggleSubtask(itemID, subtaskID: sub.id) } label: {
-                        Image(systemName: sub.done ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(sub.done ? NDS.selectColor("green") : NDS.textTertiary)
-                    }.buttonStyle(.plain)
-                    Text(sub.title).font(NDS.body)
-                        .strikethrough(sub.done).foregroundStyle(sub.done ? NDS.textTertiary : NDS.textPrimary)
-                    Spacer()
-                    NotionIconButton(systemName: "xmark") { store.deleteSubtask(itemID, subtaskID: sub.id) }
+                HStack(spacing: 8) {
+                    Image(systemName: "plus").scaledFont(11).foregroundStyle(NDS.textTertiary)
+                    TextField("Add subtask…", text: $newSubtask, onCommit: addSubtask)
+                        .textFieldStyle(.plain).font(NDS.body)
+                        .focused($subtaskFocused)
+                        .onSubmit(addSubtask)
                 }
+                .padding(.horizontal, 9).padding(.vertical, 6)
+                .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
             }
-            HStack(spacing: 8) {
-                Image(systemName: "plus").scaledFont(11).foregroundStyle(NDS.textTertiary)
-                TextField("Add subtask…", text: $newSubtask, onCommit: addSubtask)
-                    .textFieldStyle(.plain).font(NDS.body)
-                    .focused($subtaskFocused)
-                    .onSubmit(addSubtask)
-            }
-            .padding(.horizontal, 9).padding(.vertical, 6)
-            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
         }
     }
 
     private var bodyEditor: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                NotionEyebrow(text: "Notes")
-                Spacer()
-                // 4-3: pull the source meeting's summary into the task notes.
-                if let item, !item.isManual {
-                    Button { insertMeetingContext(item) } label: {
-                        Label("Insert meeting notes", systemImage: "calendar.badge.plus")
-                            .font(NDS.small)
-                    }
-                    .buttonStyle(.borderless).foregroundStyle(NDS.brand)
-                }
-            }
+        MSSection("Notes", systemImage: "note.text",
+                  persistenceKey: "taskPage.notes",
+                  trailing: {
+                      // 4-3: pull the source meeting's summary into the task notes.
+                      if let item, !item.isManual {
+                          Button { insertMeetingContext(item) } label: {
+                              Label("Insert meeting notes", systemImage: "calendar.badge.plus")
+                                  .font(NDS.small)
+                          }
+                          .buttonStyle(.borderless).foregroundStyle(NDS.brand)
+                      }
+                  }) {
             RichMarkdownEditor(text: $noteDraft, placeholder: "Type / for blocks, or just start writing…")
                 .frame(minHeight: 240, maxHeight: 520)
         }
