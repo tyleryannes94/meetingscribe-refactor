@@ -182,6 +182,33 @@ final class AccountStoreTests: XCTestCase {
         XCTAssertNil(store.validate(sessionToken: s2.id))
     }
 
+    func testSessionsForAccountSortedByLastUsedDescending() {
+        let store = AccountStore.shared
+        let account = store.createAccount(email: "tyler@example.com",
+                                          password: "password1234")!
+        let phone = store.issueSession(for: account.id, deviceLabel: "Phone")
+        let pad = store.issueSession(for: account.id, deviceLabel: "iPad")
+        // Bump iPad's lastUsedAt by validating it — most recent should sort first.
+        _ = store.validate(sessionToken: pad.id)
+        let listed = store.sessions(forAccountID: account.id)
+        XCTAssertEqual(listed.map(\.id), [pad.id, phone.id],
+                       "most-recently-used session should be first")
+        XCTAssertEqual(listed.compactMap(\.deviceLabel), ["iPad", "Phone"])
+    }
+
+    func testRevokeSessionByID() {
+        let store = AccountStore.shared
+        let account = store.createAccount(email: "tyler@example.com",
+                                          password: "password1234")!
+        let a = store.issueSession(for: account.id, deviceLabel: "iPhone")
+        let b = store.issueSession(for: account.id, deviceLabel: "iPad")
+        store.revokeSession(id: a.id)
+        XCTAssertNil(store.validate(sessionToken: a.id),
+                     "Revoked session shouldn't validate anymore")
+        XCTAssertNotNil(store.validate(sessionToken: b.id),
+                        "Sibling session on the same account stays valid")
+    }
+
     func testSessionCountReflectsIssueAndRevoke() {
         let store = AccountStore.shared
         let alice = store.createAccount(email: "alice@example.com",

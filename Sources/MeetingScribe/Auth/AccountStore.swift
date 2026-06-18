@@ -214,6 +214,23 @@ final class AccountStore: ObservableObject {
         sessions.lazy.filter { $0.accountID == id }.count
     }
 
+    /// Sessions belonging to an account, most-recently-used first, so the
+    /// Settings admin row can list each device with its label + last-used time
+    /// and offer a per-device revoke.
+    func sessions(forAccountID id: String) -> [WebSession] {
+        sessions
+            .filter { $0.accountID == id }
+            .sorted { $0.lastUsedAt > $1.lastUsedAt }
+    }
+
+    /// Revoke a single session by its id. Used by the per-device "Sign out"
+    /// button in the Settings session list.
+    func revokeSession(id sessionID: String) {
+        objectWillChange.send()
+        sessions.removeAll { $0.id == sessionID }
+        persist()
+    }
+
     // MARK: - Helpers
 
     private func defaultDisplayName(from normalizedEmail: String) -> String {
