@@ -206,10 +206,18 @@ private struct BoardColumnView: View {
                         return true
                     } isTargeted: { setTargeted($0) }
             }
+            QuickAddTaskField(
+                placeholder: "Add to \(status.label)",
+                projectID: parent.quickAddProjectID,
+                sectionID: nil,
+                status: status,
+                contextDueDate: parent.quickAddContextDueDate
+            )
+            .environmentObject(store)
             // Tall droppable filler so the whole column accepts a drop (incl.
             // dropping onto an empty column → append at the end).
             Color.clear
-                .frame(maxWidth: .infinity, minHeight: 80)
+                .frame(maxWidth: .infinity, minHeight: 60)
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .dropDestination(for: String.self) { ids, _ in

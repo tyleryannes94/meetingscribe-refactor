@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var updater: UpdaterController
     @EnvironmentObject private var calendar: CalendarService
+    @EnvironmentObject private var actionItems: ActionItemStore
 
     @State private var storageDir: String = AppSettings.shared.storageDir.path
     @State private var whisperBinary: String = AppSettings.shared.whisperBinary
@@ -38,6 +39,10 @@ struct SettingsView: View {
     @State private var whisperLanguage: String = AppSettings.shared.whisperLanguage
     @State private var autoExtractPeople: Bool = AppSettings.shared.autoExtractPeople
     @State private var captureDelegated: Bool = AppSettings.shared.captureDelegatedTasks
+    @State private var defaultSmartViewID: String = AppSettings.shared.defaultSmartViewID ?? ""
+    @State private var defaultTaskAssignToMe: Bool = AppSettings.shared.defaultTaskAssignToMe
+    @State private var defaultTaskDueDate: String = AppSettings.shared.defaultTaskDueDate
+    @State private var defaultTaskPriority: String = AppSettings.shared.defaultTaskPriority
     @State private var userName: String = AppSettings.shared.userName
     @State private var userNameAliases: String = AppSettings.shared.userNameAliases.joined(separator: ", ")
     @State private var allowRemoteOllama: Bool = AppSettings.shared.allowRemoteOllamaEndpoint
@@ -160,6 +165,31 @@ struct SettingsView: View {
                 Text("“Add Google account…” opens System Settings → Internet Accounts — sign in to each Google account you want and its calendars sync into macOS. “Import Apple calendars” grants Calendar access and pulls in your Apple/iCloud calendars. Everything you connect shows up in the list below.")
                     .font(.caption2).foregroundStyle(.secondary)
                 CalendarPickerSection()
+            }
+            Section("Task defaults") {
+                Picker("Default smart view", selection: $defaultSmartViewID) {
+                    Text("All tasks (no preference)").tag("")
+                    ForEach(actionItems.savedTaskViews) { v in
+                        Text(v.name).tag(v.id)
+                    }
+                }
+                Text("Which Tasks view opens by default when you switch to the Tasks tab.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Assign new tasks to me", isOn: $defaultTaskAssignToMe)
+                Picker("Default due date", selection: $defaultTaskDueDate) {
+                    Text("None").tag("none")
+                    Text("Today").tag("today")
+                    Text("Tomorrow").tag("tomorrow")
+                    Text("Next week").tag("nextWeek")
+                }
+                Picker("Default priority", selection: $defaultTaskPriority) {
+                    Text("Low").tag("low")
+                    Text("Medium").tag("medium")
+                    Text("High").tag("high")
+                    Text("Urgent").tag("urgent")
+                }
+                Text("Used by the inline “+ Add task” field. You can still override per-task by typing !high, @sarah, +project, or a date.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -828,6 +858,10 @@ struct SettingsView: View {
         s.whisperLanguage = whisperLanguage
         s.autoExtractPeople = autoExtractPeople
         s.captureDelegatedTasks = captureDelegated
+        s.defaultSmartViewID = defaultSmartViewID.isEmpty ? nil : defaultSmartViewID
+        s.defaultTaskAssignToMe = defaultTaskAssignToMe
+        s.defaultTaskDueDate = defaultTaskDueDate
+        s.defaultTaskPriority = defaultTaskPriority
         let trimmedName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedName.isEmpty { s.userName = trimmedName }
         s.userNameAliases = userNameAliases

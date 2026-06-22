@@ -64,7 +64,7 @@ extension ActionItemsView {
                 return true
             }
             if rows.isEmpty {
-                Text("Drag a task here, or click +")
+                Text("Drag a task here, or type below")
                     .font(.caption2).foregroundStyle(.tertiary)
                     .padding(.vertical, 4)
             } else {
@@ -72,6 +72,12 @@ extension ActionItemsView {
                     row(for: item).draggable(item.id)
                 }
             }
+            QuickAddTaskField(placeholder: "Add task",
+                              projectID: pid,
+                              sectionID: sectionID,
+                              status: .open)
+                .environmentObject(store)
+                .padding(.top, 2)
         }
     }
 
@@ -131,6 +137,13 @@ extension ActionItemsView {
                             }
                         }
                     }
+                    QuickAddTaskField(placeholder: "Add task",
+                                      projectID: quickAddProjectID,
+                                      sectionID: nil,
+                                      status: .open,
+                                      contextDueDate: quickAddContextDueDate)
+                        .environmentObject(store)
+                        .padding(.top, 6)
                 }
                 .padding(16)
             }
@@ -519,5 +532,31 @@ extension ActionItemsView {
                 if let u = URL(string: url) { NSWorkspace.shared.open(u) }
             }
         )
+    }
+
+    // MARK: - Quick-add context (UX-Q1)
+
+    /// Project the inline quick-add field should pin new tasks to, derived from
+    /// the rail selection. Sentinels (smart views, "Unsorted", person scopes)
+    /// resolve to nil so a quick-added task isn't accidentally hammered into a
+    /// fake project id.
+    var quickAddProjectID: String? {
+        guard let pid = env.selectedProjectID, !pid.isEmpty,
+              !pid.hasPrefix("__"), !pid.hasPrefix(Self.personSentinelPrefix) else { return nil }
+        return pid
+    }
+
+    /// Default due-date the inline quick-add should apply when the user
+    /// didn't say. For the "Today" smart view (and built-in Due This Week),
+    /// land due today so the task stays visible. Otherwise leave nil and let
+    /// `ActionItemStore.quickCreate` fall back to AppSettings.
+    var quickAddContextDueDate: Date? {
+        let pid = env.selectedProjectID ?? ""
+        if pid == Self.todaySentinel { return Calendar.current.startOfDay(for: Date()) }
+        if pid == ActionItemsView.savedViewSentinel("builtin.thisweek")
+            || pid == ActionItemsView.savedViewSentinel("builtin.overdue") {
+            return Calendar.current.startOfDay(for: Date())
+        }
+        return nil
     }
 }

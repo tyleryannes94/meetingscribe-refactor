@@ -28,6 +28,13 @@ extension ActionItemsView {
                         tableRow(item)
                         Divider().opacity(0.4)
                     }
+                    QuickAddTaskField(placeholder: "Add task",
+                                      projectID: quickAddProjectID,
+                                      sectionID: nil,
+                                      status: .open,
+                                      contextDueDate: quickAddContextDueDate)
+                        .environmentObject(store)
+                        .padding(.top, 6)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
             }

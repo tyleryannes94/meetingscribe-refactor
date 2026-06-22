@@ -283,7 +283,17 @@ struct ActionItemsView: View {
     func restoreSceneSelection() {
         guard !didRestoreScene else { return }
         didRestoreScene = true
-        guard !sceneProject.isEmpty || !sceneTask.isEmpty || !sceneInitiative.isEmpty else { return }
+        guard !sceneProject.isEmpty || !sceneTask.isEmpty || !sceneInitiative.isEmpty else {
+            // First-time landing with no persisted scene state: honor the
+            // user's "Default smart view" preference (UX-Q1) so the tab opens
+            // on, say, "My Open Tasks" instead of the firehose All view.
+            if env.selectedProjectID == nil,
+               let id = AppSettings.shared.defaultSmartViewID,
+               store.savedView(id: id) != nil {
+                env.selectedProjectID = Self.savedViewSentinel(id)
+            }
+            return
+        }
         if !sceneProject.isEmpty { env.selectedProjectID = sceneProject }
         if !sceneInitiative.isEmpty { env.selectedInitiativeID = sceneInitiative }
         if !sceneTask.isEmpty, store.items.contains(where: { $0.id == sceneTask }) {

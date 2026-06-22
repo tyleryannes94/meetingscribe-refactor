@@ -375,6 +375,59 @@ final class AppSettings {
         set { defaults.set(newValue, forKey: "captureDelegatedTasks") }
     }
 
+    // MARK: - Task creation defaults (UX-Q1)
+    // Settings that the inline quick-add field reads when creating a task so
+    // the user doesn't have to set assignee / due date / priority every time.
+
+    /// SavedTaskView id the Tasks tab lands on when opened with no other
+    /// selection (no scene state, no deep link). nil = no preference → the
+    /// existing "All tasks" default. Built-in ids are "builtin.myopen",
+    /// "builtin.overdue", "builtin.thisweek"; user-saved views use their UUID.
+    var defaultSmartViewID: String? {
+        get {
+            let v = (defaults.string(forKey: "defaultSmartViewID") ?? "")
+                .trimmingCharacters(in: .whitespaces)
+            return v.isEmpty ? nil : v
+        }
+        set {
+            if let v = newValue?.trimmingCharacters(in: .whitespaces), !v.isEmpty {
+                defaults.set(v, forKey: "defaultSmartViewID")
+            } else {
+                defaults.removeObject(forKey: "defaultSmartViewID")
+            }
+        }
+    }
+
+    /// When ON, quick-added tasks are assigned to the user (linked to the
+    /// matching Person if one exists, otherwise the plain `owner` string is
+    /// set). Default ON — the obvious behavior for a personal task tool.
+    var defaultTaskAssignToMe: Bool {
+        get { defaults.object(forKey: "defaultTaskAssignToMe") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "defaultTaskAssignToMe") }
+    }
+
+    /// Default due-date applied to quick-added tasks when the user didn't
+    /// say. One of "none" / "today" / "tomorrow" / "nextWeek". Default
+    /// "none" so we don't silently date tasks for users who don't want it.
+    var defaultTaskDueDate: String {
+        get {
+            let v = defaults.string(forKey: "defaultTaskDueDate") ?? "none"
+            return ["none", "today", "tomorrow", "nextWeek"].contains(v) ? v : "none"
+        }
+        set { defaults.set(newValue, forKey: "defaultTaskDueDate") }
+    }
+
+    /// Default priority applied to quick-added tasks when the user didn't
+    /// type `!low/!medium/!high/!urgent`. Stored as ActionItem.Priority
+    /// rawValue. Default "medium" — matches the legacy `createTask` default.
+    var defaultTaskPriority: String {
+        get {
+            let v = defaults.string(forKey: "defaultTaskPriority") ?? "medium"
+            return ["low", "medium", "high", "urgent"].contains(v) ? v : "medium"
+        }
+        set { defaults.set(newValue, forKey: "defaultTaskPriority") }
+    }
+
     /// Per-project last-used task view mode (NP-3), so each project reopens in
     /// the view the user left it in.
     func savedTaskViewMode(forProject id: String) -> String? {
