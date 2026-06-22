@@ -49,7 +49,7 @@ struct MeetingPeopleRail: View {
                 .padding(.vertical, 6)
             }
         }
-        .frame(width: 280)
+        .frame(maxWidth: 280, maxHeight: .infinity)
         .background(NDS.rightRailBg)
     }
 
