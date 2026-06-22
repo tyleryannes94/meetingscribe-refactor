@@ -31,6 +31,39 @@ final class QuickNotesController: ObservableObject {
     @Published private(set) var structuringPrompt: Set<String> = []
     /// Per-note error string for the detail view to surface failures inline.
     @Published private(set) var errors: [String: String] = [:]
+    /// IDs of voice notes that produced one-or-more recommended tasks (the
+    /// transcript matched a task-mode trigger phrase like "tasks for the day").
+    /// Drives the floating overlay's "See Tasks" button and the in-app toast.
+    @Published private(set) var notesWithTasks: Set<String> = []
+
+    /// Phrases that opt a voice note into task extraction. Match is
+    /// case-insensitive against the polished transcript; any occurrence
+    /// anywhere in the note opts in (people usually say this up front, but
+    /// we don't want to be brittle about the exact opening).
+    private static let taskTriggerPhrases: [String] = [
+        "tasks for the day",
+        "tasks for today",
+        "turn these into tasks",
+        "turn this into tasks",
+        "turn these into a task",
+        "things i have to do today",
+        "things i need to do today",
+        "things to do today",
+        "here are the tasks",
+        "here are my tasks",
+        "hear the tasks",
+        "my tasks for",
+        "todo list",
+        "to-do list",
+        "to do list",
+        "make a task list",
+        "list of tasks",
+    ]
+
+    static func transcriptRequestsTasks(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return taskTriggerPhrases.contains { lower.contains($0) }
+    }
 
     private let store = QuickNoteStore()
     private let recorder = MicOnlyRecorder()
@@ -250,19 +283,43 @@ final class QuickNotesController: ObservableObject {
     /// note or surfaces an error to the user — the transcript is already saved.
     private func autoExtractActionItems(from polished: String, note: QuickNote) async {
         guard let store = actionItems else { return }
+        // Opt-in: only voice notes whose transcript signals "this is a task
+        // brain-dump" get extracted. Other voice notes stay pure text — we
+        // don't want every random recording polluting the task store.
+        guard Self.transcriptRequestsTasks(polished) else { return }
         do {
             let md = try await ollama.extractActionItems(from: polished)
             var items = ActionItemExtractor.extract(from: md, sourceID: note.id,
                                                      sourceTitle: note.title, sourceDate: note.createdAt)
             guard !items.isEmpty else { return }
             let known = PeopleStore.shared.people
+            let myName = AppSettings.shared.userName
+            let today = Calendar.current.startOfDay(for: Date())
             for i in items.indices {
                 items[i].source = "voice_note"
+                // Voice-note tasks are always the user's own (it's their note),
+                // so default owner to the user even if the extractor left it nil.
+                if items[i].owner?.trimmingCharacters(in: .whitespaces).isEmpty ?? true {
+                    items[i].owner = myName
+                }
                 if items[i].ownerPersonID == nil {
                     items[i].ownerPersonID = PersonResolver.resolveOwner(items[i].owner, in: known)
                 }
+                // Default due date = today when the user didn't say. They can
+                // edit it inline in the voice-note view.
+                if items[i].dueDate == nil { items[i].dueDate = today }
+                // Voice-note tasks the user dictated are confirmed by intent —
+                // no need to triage them like meeting extractions.
+                items[i].confirmedAt = Date()
+                items[i].delegated = nil
             }
             store.reconcileExtracted(items, for: note.id)
+            notesWithTasks.insert(note.id)
+            NotificationCenter.default.post(
+                name: .meetingScribeVoiceNoteTasksReady,
+                object: nil,
+                userInfo: ["id": note.id, "count": items.count, "title": note.title]
+            )
             AppLog.info("VoiceNote", "Auto-extracted action items",
                         ["note": note.id, "items": "\(items.count)"])
         } catch {

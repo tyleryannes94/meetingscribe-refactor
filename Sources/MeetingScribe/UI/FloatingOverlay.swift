@@ -26,6 +26,10 @@ final class FloatingOverlayController: ObservableObject {
     }
 
     @Published private(set) var state: State = .hidden
+    /// QuickNote ids whose task-mode extraction has landed. Mirrors
+    /// `QuickNotesController.notesWithTasks` so the floating DonePill view
+    /// re-renders (it observes this controller, not the sub-controller).
+    @Published private(set) var taskReadyNoteIDs: Set<String> = []
     private(set) weak var manager: MeetingManager?
 
     private var window: NSWindow?
@@ -65,6 +69,28 @@ final class FloatingOverlayController: ObservableObject {
         manager.$state
             .removeDuplicates()
             .sink { [weak self] s in self?.handleMeetingState(s) }
+            .store(in: &cancellables)
+
+        // Task-mode voice notes: surface a toast with a See Tasks shortcut
+        // the moment extraction lands, regardless of which app is frontmost.
+        NotificationCenter.default.publisher(for: .meetingScribeVoiceNoteTasksReady)
+            .sink { [weak self] notif in
+                guard let id = notif.userInfo?["id"] as? String,
+                      let count = notif.userInfo?["count"] as? Int else { return }
+                self?.taskReadyNoteIDs.insert(id)
+                let title = (notif.userInfo?["title"] as? String) ?? "Voice note"
+                let msg = count == 1
+                    ? "“\(title)” → 1 task suggestion"
+                    : "“\(title)” → \(count) task suggestions"
+                ToastCenter.shared.show(msg, actionTitle: "See tasks") {
+                    NSApp.activate(ignoringOtherApps: true)
+                    NotificationCenter.default.post(
+                        name: .meetingScribeOpenVoiceNote,
+                        object: nil,
+                        userInfo: ["id": id, "focusTasks": true]
+                    )
+                }
+            }
             .store(in: &cancellables)
     }
 
@@ -245,8 +271,8 @@ struct FloatingOverlayView: View {
                 MeetingRecordingPill(startedAt: startedAt, controller: controller)
             case .transcribing:
                 TranscribingPill(controller: controller)
-            case .done(_, let transcript):
-                DonePill(transcript: transcript, controller: controller)
+            case .done(let note, let transcript):
+                DonePill(note: note, transcript: transcript, controller: controller)
             case .error(let msg):
                 ErrorPill(message: msg, controller: controller)
             }
@@ -440,9 +466,14 @@ private struct TranscribingPill: View {
 
 @available(macOS 14.0, *)
 private struct DonePill: View {
+    let note: QuickNote
     let transcript: String
     @ObservedObject var controller: FloatingOverlayController
     @State private var copiedFlash = false
+
+    private var hasTasks: Bool {
+        controller.taskReadyNoteIDs.contains(note.id)
+    }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -458,6 +489,20 @@ private struct DonePill: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer(minLength: 8)
+            if hasTasks {
+                OverlayButton(label: "See Tasks",
+                              systemImage: "checklist",
+                              tint: NDS.brand,
+                              prominent: true) {
+                    NSApp.activate(ignoringOtherApps: true)
+                    NotificationCenter.default.post(
+                        name: .meetingScribeOpenVoiceNote,
+                        object: nil,
+                        userInfo: ["id": note.id, "focusTasks": true]
+                    )
+                    controller.cancelOverlay()
+                }
+            }
             OverlayButton(label: copiedFlash ? "Copied" : "Copy",
                           systemImage: copiedFlash ? "checkmark" : "doc.on.doc",
                           tint: copiedFlash ? .green : .primary,
@@ -574,4 +619,10 @@ extension Notification.Name {
     /// = QuickNote.id. MainWindow listens and switches to Notes tab +
     /// selects that note.
     static let meetingScribeOpenVoiceNote = Notification.Name("MeetingScribeOpenVoiceNote")
+
+    /// Posted by `QuickNotesController` after a task-mode voice note finishes
+    /// extracting tasks. userInfo: id (QuickNote.id), count (Int), title (String).
+    /// Drives the toast notification + opens the note's Recommended Tasks
+    /// section when the user clicks See Tasks.
+    static let meetingScribeVoiceNoteTasksReady = Notification.Name("MeetingScribeVoiceNoteTasksReady")
 }
