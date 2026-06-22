@@ -7,57 +7,66 @@ extension ActionItemsView {
 
     @ViewBuilder
     var detailPane: some View {
-        Group {
-            // A0-2: route on the typed `TasksRoute` projection instead of
-            // sentinel-string comparisons. Guards that fail fall through to
-            // `taskDatabasePane`.
-            switch env.route {
-            case .task(let tid) where store.items.contains(where: { $0.id == tid }):
-                TaskPageView(store: store, itemID: tid,
-                             breadcrumb: taskBreadcrumb,
-                             onClose: { env.selectedTaskID = nil },
-                             onNavigate: { env.go($0) })
-            case .initiative(let iid) where store.initiative(id: iid) != nil:
-                initiativeRollup(iid)
-            case .triage:
-                TriageInboxView(store: store,
-                                onOpenMeeting: { mid in
-                                    env.selectedMeetingID = mid
-                                    env.selectedProjectID = nil
-                                },
-                                onReextract: { manager.backfillActionItemsIfNeeded(force: true) })
-            case .home:
-                tasksDashboard
-            case .today:
-                todayPane
-            case .savedView(let vid) where store.savedView(id: vid) != nil:
-                savedViewPane(vid)
-            case .recurring:
-                recurringPane
-            case .myTasks:
-                myTasksPane
-            case .meeting(let mid) where manager.pastMeetings.contains(where: { $0.id == mid }):
-                Color.clear.onAppear {
-                    if let m = manager.pastMeetings.first(where: { $0.id == mid }) {
-                        router.openMeeting(m)
+        // GeometryReader wraps the detail content so the trailing property
+        // drawer can size itself responsively against the actual available
+        // width — fixed 360pt overflowed and got clipped when the window was
+        // resized narrow (UX-Q2). Switch routing stays unchanged.
+        GeometryReader { geo in
+            Group {
+                // A0-2: route on the typed `TasksRoute` projection instead of
+                // sentinel-string comparisons. Guards that fail fall through to
+                // `taskDatabasePane`.
+                switch env.route {
+                case .task(let tid) where store.items.contains(where: { $0.id == tid }):
+                    TaskPageView(store: store, itemID: tid,
+                                 breadcrumb: taskBreadcrumb,
+                                 onClose: { env.selectedTaskID = nil },
+                                 onNavigate: { env.go($0) })
+                case .initiative(let iid) where store.initiative(id: iid) != nil:
+                    initiativeRollup(iid)
+                case .triage:
+                    TriageInboxView(store: store,
+                                    onOpenMeeting: { mid in
+                                        env.selectedMeetingID = mid
+                                        env.selectedProjectID = nil
+                                    },
+                                    onReextract: { manager.backfillActionItemsIfNeeded(force: true) })
+                case .home:
+                    tasksDashboard
+                case .today:
+                    todayPane
+                case .savedView(let vid) where store.savedView(id: vid) != nil:
+                    savedViewPane(vid)
+                case .recurring:
+                    recurringPane
+                case .myTasks:
+                    myTasksPane
+                case .meeting(let mid) where manager.pastMeetings.contains(where: { $0.id == mid }):
+                    Color.clear.onAppear {
+                        if let m = manager.pastMeetings.first(where: { $0.id == mid }) {
+                            router.openMeeting(m)
+                        }
+                        env.selectedMeetingID = nil
                     }
-                    env.selectedMeetingID = nil
+                default:
+                    taskDatabasePane
                 }
-            default:
-                taskDatabasePane
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .trailing) { propertyDrawer(availableWidth: geo.size.width) }
         }
-        .overlay(alignment: .trailing) { propertyDrawer }
     }
 
     // MARK: - Property drawer (6-3)
 
-    /// A fixed-width drawer that slides in from the right when a row's "expand"
-    /// is toggled (`vm.editingID`), instead of pushing the row open in place.
-    /// The row stays compact; full editing happens here, with an "Open full
-    /// page" escape hatch.
+    /// A drawer that slides in from the right when a row's "expand" is toggled
+    /// (`vm.editingID`), instead of pushing the row open in place. Width adapts
+    /// to the available pane width so it never overflows a narrow window: on a
+    /// roomy pane it sits at a comfortable 360pt, on a tight pane it shrinks
+    /// (down to 280pt), and on an extremely tight pane it covers the full pane
+    /// so its contents never get clipped.
     @ViewBuilder
-    var propertyDrawer: some View {
+    func propertyDrawer(availableWidth: CGFloat) -> some View {
         if let eid = vm.editingID, store.items.contains(where: { $0.id == eid }) {
             HStack(spacing: 0) {
                 Divider().overlay(NDS.divider)
@@ -69,6 +78,7 @@ extension ActionItemsView {
                         } label: {
                             Label("Open full page", systemImage: "arrow.up.left.and.arrow.down.right")
                                 .font(NDS.small)
+                                .lineLimit(1)
                         }
                         .buttonStyle(.plain).foregroundStyle(NDS.brand)
                         Spacer()
@@ -83,11 +93,22 @@ extension ActionItemsView {
                                  onClose: { vm.editingID = nil },
                                  onNavigate: { env.go($0); vm.editingID = nil })
                 }
-                .frame(width: 360)
+                .frame(width: Self.drawerWidth(forAvailable: availableWidth))
                 .background(NDS.bg)
                 .shadow(color: .black.opacity(0.12), radius: 12, x: -4, y: 0)
             }
             .transition(.move(edge: .trailing))
         }
+    }
+
+    /// Drawer width as a function of the detail pane's available width. The
+    /// breakpoints keep the drawer usable from huge windows down to a phone-
+    /// width Mac window without ever spilling past the pane.
+    static func drawerWidth(forAvailable available: CGFloat) -> CGFloat {
+        // available can briefly be 0 during the first layout pass.
+        guard available > 0 else { return 360 }
+        if available >= 720 { return 360 }
+        if available >= 460 { return max(300, available - 140) }
+        return available
     }
 }

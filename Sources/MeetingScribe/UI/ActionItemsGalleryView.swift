@@ -55,7 +55,9 @@ extension ActionItemsView {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(NDS.divider, lineWidth: 0.5))
         .opacity(item.status == .completed ? 0.6 : 1)
         .contentShape(Rectangle())
-        .onTapGesture { env.selectedTaskID = item.id }
+        // Single-click → side property drawer; double-click → full page (UX-Q2).
+        .onTapGesture(count: 2) { env.selectedTaskID = item.id }
+        .onTapGesture { vm.editingID = item.id }
         .contextMenu { TaskQuickMenu(item: item, store: store, onOpen: { env.selectedTaskID = item.id }) }
     }
 }
