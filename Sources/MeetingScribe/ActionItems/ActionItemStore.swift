@@ -328,6 +328,73 @@ final class ActionItemStore: ObservableObject {
         save()
     }
 
+    /// Inline quick-add (UX-Q1): the path the in-view "+ Add task" fields
+    /// call. Parses `!priority` / `#label` / `@owner` / `+project` / due date
+    /// out of `raw` (via `createTask(parsing:)`), then overlays the user's
+    /// configured defaults (assignee=me, default due, default priority) and
+    /// the surrounding view's context (status, project, section, due date,
+    /// labels) so a task created in "Today" lands due today, a task created
+    /// in the "In Progress" board column lands in-progress, etc. Anything the
+    /// user typed wins over the defaults.
+    @discardableResult
+    func quickCreate(parsing raw: String,
+                     projectID: String? = nil,
+                     sectionID: String? = nil,
+                     status: ActionItem.Status = .open,
+                     contextDueDate: Date? = nil,
+                     contextLabelIDs: [String] = []) -> ActionItem {
+        let parsed = TaskQuickAddParser.parse(raw, now: Date())
+        let settings = AppSettings.shared
+        // Priority: typed value wins, then settings default, then medium.
+        let priority = parsed.priority
+            ?? ActionItem.Priority(rawValue: settings.defaultTaskPriority)
+            ?? .medium
+        // Create the task (parses owner/project/labels out of `raw`, applies
+        // priority). projectID passed here pins the project — don't override
+        // an explicit caller-supplied project with the parser's +Project.
+        let created = createTask(parsing: raw, projectID: projectID, sectionID: sectionID)
+        // Status: caller's column wins over the default. Only flip if we
+        // need to — `createTask(parsing:)` defaults to .open.
+        if status != .open { setStatus(created.id, status: status) }
+        if created.priority != priority { setPriority(created.id, priority: priority) }
+        // Due date: parsed > view context > setting > nothing.
+        if parsed.dueDate == nil {
+            let due = contextDueDate ?? Self.dueFromSetting(settings.defaultTaskDueDate)
+            if let due { setDueDate(created.id, dueDate: due) }
+        }
+        // Owner: parsed > "me" default > nothing. Only assign-to-me if the
+        // parser didn't already assign somebody and the setting is on.
+        if parsed.ownerToken == nil && settings.defaultTaskAssignToMe {
+            let me = settings.userName.trimmingCharacters(in: .whitespaces)
+            if !me.isEmpty {
+                let person = PeopleStore.shared.people.first {
+                    $0.displayName.caseInsensitiveCompare(me) == .orderedSame
+                }
+                if let person {
+                    setOwnerPerson(created.id, personID: person.id, ownerName: person.displayName)
+                } else {
+                    setOwner(created.id, owner: me)
+                }
+            }
+        }
+        // Inherited labels from a label-scoped smart view / tag column.
+        for lid in contextLabelIDs where !(items.first(where: { $0.id == created.id })?.labelIDs ?? []).contains(lid) {
+            toggleLabel(created.id, labelID: lid)
+        }
+        return items.first { $0.id == created.id } ?? created
+    }
+
+    private static func dueFromSetting(_ raw: String) -> Date? {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        switch raw {
+        case "today":    return today
+        case "tomorrow": return cal.date(byAdding: .day, value: 1, to: today)
+        case "nextWeek": return cal.date(byAdding: .day, value: 7, to: today)
+        default:         return nil
+        }
+    }
+
     /// Creates a brand-new manual task (not tied to any meeting). Optionally
     /// pre-assigned to a project / section and given a status.
     @discardableResult
