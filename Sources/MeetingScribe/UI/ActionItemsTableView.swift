@@ -209,7 +209,10 @@ extension ActionItemsView {
         .padding(.vertical, 7)
         .background(taskSelection.contains(item.id) ? NDS.brand.opacity(0.08) : Color.clear)
         .contentShape(Rectangle())
-        .onTapGesture { env.selectedTaskID = item.id }
+        // Single-click opens the side property drawer (consistent with the
+        // list and board); double-click jumps to the full page. (UX-Q2)
+        .onTapGesture(count: 2) { env.selectedTaskID = item.id }
+        .onTapGesture { vm.editingID = item.id }
         // ⌘/⇧-click multi-select in the table (5-8).
         .highPriorityGesture(TapGesture().modifiers(.command).onEnded {
             toggleTaskSelection(item.id); lastSelectedTaskID = item.id

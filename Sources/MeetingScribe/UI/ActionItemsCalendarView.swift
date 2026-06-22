@@ -71,7 +71,9 @@ extension ActionItemsView {
                         .background(taskDueTint(t).opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
                         .foregroundStyle(taskDueTint(t))
                         .contentShape(Rectangle())
-                        .onTapGesture { env.selectedTaskID = t.id }
+                        // Single-click → side property drawer; double-click → full page (UX-Q2).
+                        .onTapGesture(count: 2) { env.selectedTaskID = t.id }
+                        .onTapGesture { vm.editingID = t.id }
                         // 6-2: drag a chip to another day to reschedule it.
                         .draggable(t.id)
                         .contextMenu { TaskQuickMenu(item: t, store: store, onOpen: { env.selectedTaskID = t.id }) }

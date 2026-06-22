@@ -82,15 +82,15 @@ struct TaskQuickMenu: View {
 
 @available(macOS 14.0, *)
 extension View {
-    /// Attaches the shared quick-edit context menu and a double-click-to-open
-    /// gesture to any task row/card. `simultaneousGesture` is used so the
-    /// double-click coexists with a card's drag gesture (board) and with any
-    /// existing single-tap handler.
+    /// Attaches the shared quick-edit context menu to any task row/card. The
+    /// open / single-tap / double-tap gestures live at each call site so the
+    /// gesture chain stays explicit and SwiftUI can disambiguate cleanly
+    /// (a simultaneousGesture here used to double-fire alongside the call
+    /// site's own tap handlers). The context menu still exposes "Open" so
+    /// keyboard-only / trackpad-only flows have the same affordance.
     func taskQuickActions(item: ActionItem,
                           store: ActionItemStore,
                           onOpen: @escaping () -> Void) -> some View {
-        self
-            .contextMenu { TaskQuickMenu(item: item, store: store, onOpen: onOpen) }
-            .simultaneousGesture(TapGesture(count: 2).onEnded { onOpen() })
+        self.contextMenu { TaskQuickMenu(item: item, store: store, onOpen: onOpen) }
     }
 }

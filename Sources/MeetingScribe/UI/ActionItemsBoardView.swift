@@ -193,6 +193,12 @@ private struct BoardColumnView: View {
             header
             ForEach(items) { item in
                 parent.boardCard(item)
+                    // Single-click opens the side property drawer (consistent
+                    // with the list); double-click jumps to the full page —
+                    // the 2-count gesture must precede the 1-count for SwiftUI
+                    // to disambiguate. (UX-Q2)
+                    .onTapGesture(count: 2) { selectedTaskID = item.id }
+                    .onTapGesture { parent.vm.editingID = item.id }
                     .taskQuickActions(item: item, store: store) { selectedTaskID = item.id }
                     .draggable(item.id) {
                         Text(item.title).font(.caption).lineLimit(2)
