@@ -205,7 +205,11 @@ struct UnifiedMeetingDetail: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Trailing inspector: the connect panel (transient) takes priority;
-            // otherwise the persistent "Who's here" people rail (P1-2).
+            // otherwise the persistent "Who's here" people rail (P1-2). Both
+            // use `.frame(maxWidth:)` + `.layoutPriority(1)` so they keep their
+            // preferred width when the window has room and shrink to fit when
+            // it doesn't — the previous fixed `frame(width:)` overflowed past
+            // the pane on narrow windows.
             if let attendee = connectingAttendee, let m = meeting {
                 Divider().overlay(NDS.divider)
                 MeetingPersonConnectPanel(
@@ -213,13 +217,15 @@ struct UnifiedMeetingDetail: View {
                     meeting: m,
                     onClose: { connectingAttendee = nil }
                 )
-                .frame(width: 320)
+                .frame(maxWidth: 320, maxHeight: .infinity)
+                .layoutPriority(1)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             } else if peopleRailVisible, let m = meeting, !m.attendees.isEmpty {
                 Divider().overlay(NDS.divider)
                 MeetingPeopleRail(meeting: m,
                                   onConnect: { connectingAttendee = $0 },
                                   onHide: { peopleRailVisible = false })
+                    .layoutPriority(1)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -387,6 +393,7 @@ struct UnifiedMeetingDetail: View {
     }
 
     @AppStorage("meeting.notes.height") private var notesPaneHeight: Double = 320
+    @AppStorage("meeting.summary.height") private var summaryPaneHeight: Double = 320
 
     @ViewBuilder
     private var notesSectionBody: some View {
@@ -461,27 +468,43 @@ struct UnifiedMeetingDetail: View {
     @ViewBuilder
     private func summarySectionBody(meetingID: String) -> some View {
         if hasRealSummary {
-            GeometryReader { geo in
-                let h = min(420, max(180, geo.size.height * 0.45))
-                VStack(alignment: .leading, spacing: NDS.spaceMD) {
-                    ScrollView {
-                        MarkdownEditor(text: .constant(summary), isEditable: false)
+            // No GeometryReader here: the meeting canvas lives inside an outer
+            // vertical ScrollView, so a GeometryReader collapses to its
+            // `minHeight` and lays out the trailing children (edit-by-asking,
+            // feedback row, "Draft follow-up" button) inside that tiny frame.
+            // They visually overflowed and overlapped the next section
+            // ("Your notes" header + editor placeholder), which read as the
+            // summary being blank AND the notes header being "borked".
+            // Use a fixed-height scroll view + a drag grabber, same as the
+            // notes section, so the section sizes itself unambiguously and
+            // its children land at the right Y offsets.
+            VStack(alignment: .leading, spacing: NDS.spaceMD) {
+                ScrollView {
+                    MarkdownEditor(text: .constant(summary), isEditable: false)
+                }
+                .frame(height: max(180, summaryPaneHeight))
+                Rectangle().fill(Color.clear)
+                    .frame(height: 6)
+                    .contentShape(Rectangle())
+                    .overlay(Capsule().fill(NDS.textTertiary.opacity(0.35))
+                        .frame(width: 36, height: 3))
+                    .gesture(DragGesture().onChanged { v in
+                        let next = summaryPaneHeight + Double(v.translation.height)
+                        summaryPaneHeight = min(max(180, next), 900)
+                    })
+                    .help("Drag to resize summary")
+                if let m = meeting {
+                    if manager.ollamaReachable, !summary.isEmpty {
+                        SummaryEditByAsking(meeting: m, current: summary,
+                                            onChanged: { summary = $0 })
                     }
-                    .frame(height: h)
-                    if let m = meeting {
-                        if manager.ollamaReachable, !summary.isEmpty {
-                            SummaryEditByAsking(meeting: m, current: summary,
-                                                onChanged: { summary = $0 })
-                        }
-                        SummaryFeedbackRow(meetingID: m.id) {
-                            manager.pipelineController.transcribeNow(meeting: m,
-                                                                     regenerateSummary: true)
-                        }
-                        followUpButton
+                    SummaryFeedbackRow(meetingID: m.id) {
+                        manager.pipelineController.transcribeNow(meeting: m,
+                                                                 regenerateSummary: true)
                     }
+                    followUpButton
                 }
             }
-            .frame(minHeight: 260)
         } else if isSummaryGenerating {
             summaryGeneratingBanner
         } else if bodyLoaded && !transcript.isEmpty {
