@@ -14,6 +14,7 @@ struct QuickNotesView: View {
     @EnvironmentObject var router: WorkspaceRouter
     @State private var selection: String?
     @State private var importing = false
+    @State private var pendingFocusTasksID: String?
 
     var body: some View {
         HSplitView {
@@ -25,6 +26,9 @@ struct QuickNotesView: View {
             if let id = notif.userInfo?["id"] as? String {
                 manager.refreshQuickNotes()
                 selection = id
+                if (notif.userInfo?["focusTasks"] as? Bool) == true {
+                    pendingFocusTasksID = id
+                }
             }
         }
         // Deep-link routing via the router mailbox (D1-3): consumed on appear so
@@ -148,7 +152,9 @@ struct QuickNotesView: View {
     @ViewBuilder
     private var detail: some View {
         if let id = selection, let note = manager.quickNotes.first(where: { $0.id == id }) {
-            QuickNoteDetail(note: note)
+            QuickNoteDetail(note: note,
+                            focusTasksOnAppear: pendingFocusTasksID == id,
+                            onConsumeFocus: { pendingFocusTasksID = nil })
         } else {
             VStack(spacing: 8) {
                 Image(systemName: "doc.text.magnifyingglass")
@@ -220,8 +226,12 @@ struct QuickNoteRow: View {
 @available(macOS 14.0, *)
 struct QuickNoteDetail: View {
     let note: QuickNote
+    var focusTasksOnAppear: Bool = false
+    var onConsumeFocus: () -> Void = {}
     @EnvironmentObject var manager: MeetingManager
+    @EnvironmentObject var actionItems: ActionItemStore
     @ObservedObject private var drive = GoogleDriveService.shared
+    @State private var tasksHighlight = false
 
     @State private var rawDraft: String = ""
     @State private var polishedDraft: String = ""
@@ -245,10 +255,20 @@ struct QuickNoteDetail: View {
                 Divider()
                 errorBanner(err)
             }
+            recommendedTasksSection
             Divider()
             sideBySide
         }
-        .onAppear { reload() }
+        .onAppear {
+            reload()
+            if focusTasksOnAppear {
+                withAnimation(.easeOut(duration: 0.4)) { tasksHighlight = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                    withAnimation(.easeOut(duration: 0.6)) { tasksHighlight = false }
+                }
+                onConsumeFocus()
+            }
+        }
         .onChange(of: manager.quickNotesTranscribing) { _, _ in reloadIfNoUserEdits() }
         .onChange(of: manager.quickNotesPolishing) { _, _ in reloadIfNoUserEdits() }
         .onChange(of: manager.quickNotesStructuringPrompt) { _, _ in reloadIfNoUserEdits() }
@@ -605,5 +625,263 @@ struct QuickNoteDetail: View {
         pb.setString(text, forType: .string)
         flag.wrappedValue = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { flag.wrappedValue = false }
+    }
+
+    // MARK: - Recommended Tasks
+
+    private var noteTasks: [ActionItem] {
+        actionItems.items(for: note.id).filter { !$0.isTrashed }
+    }
+
+    @ViewBuilder
+    private var recommendedTasksSection: some View {
+        let tasks = noteTasks
+        if !tasks.isEmpty {
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checklist").foregroundStyle(NDS.brand)
+                    Text("Recommended Tasks").font(.callout.weight(.semibold))
+                    Text("\(tasks.count)")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                    Spacer()
+                    Text("Auto-extracted from this voice note")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+                ForEach(tasks) { task in
+                    RecommendedTaskRow(task: task)
+                        .environmentObject(actionItems)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(tasksHighlight ? NDS.brand.opacity(0.10) : Color.clear)
+            )
+            .padding(.horizontal, 8)
+            .padding(.top, 4)
+        }
+    }
+}
+
+/// One row in the voice-note Recommended Tasks section: status toggle,
+/// editable title, plus inline menus for project, labels, due date, and
+/// priority. Each control writes through ActionItemStore on click — no
+/// confirmation step — matching the user's "one-click edits" intent.
+@available(macOS 14.0, *)
+private struct RecommendedTaskRow: View {
+    let task: ActionItem
+    @EnvironmentObject var actionItems: ActionItemStore
+    @State private var titleDraft: String = ""
+    @State private var editingTitle = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            statusButton
+            VStack(alignment: .leading, spacing: 6) {
+                titleField
+                HStack(spacing: 6) {
+                    projectMenu
+                    labelsMenu
+                    dueDateMenu
+                    priorityMenu
+                    Spacer()
+                    Button {
+                        actionItems.delete(task.id)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove this suggestion")
+                }
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 8))
+        .onAppear { titleDraft = task.title }
+        .onChange(of: task.title) { _, new in
+            if !editingTitle { titleDraft = new }
+        }
+    }
+
+    private var statusButton: some View {
+        Button {
+            let next: ActionItem.Status = task.status == .completed ? .open : .completed
+            actionItems.setStatus(task.id, status: next)
+        } label: {
+            Image(systemName: task.status.systemImage)
+                .font(.title3)
+                .foregroundStyle(task.status == .completed ? .green : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help(task.status.label)
+    }
+
+    private var titleField: some View {
+        TextField("Task", text: $titleDraft, onEditingChanged: { began in
+            editingTitle = began
+            if !began {
+                let trimmed = titleDraft.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty, trimmed != task.title {
+                    actionItems.setTitle(task.id, title: trimmed)
+                }
+            }
+        })
+        .textFieldStyle(.plain)
+        .font(.callout)
+        .strikethrough(task.status == .completed, color: .secondary)
+        .foregroundStyle(task.status == .completed ? .secondary : .primary)
+    }
+
+    private var projectMenu: some View {
+        Menu {
+            Button("None") { actionItems.setProject(task.id, projectID: nil) }
+            if !actionItems.initiatives.isEmpty {
+                ForEach(actionItems.initiatives) { initiative in
+                    let projects = actionItems.projects.filter {
+                        $0.initiativeID == initiative.id && $0.status == .active
+                    }
+                    if !projects.isEmpty {
+                        Section(initiative.name) {
+                            ForEach(projects) { p in
+                                Button(p.name) { actionItems.setProject(task.id, projectID: p.id) }
+                            }
+                        }
+                    }
+                }
+            }
+            let unfiled = actionItems.projects.filter {
+                ($0.initiativeID ?? "").isEmpty && $0.status == .active
+            }
+            if !unfiled.isEmpty {
+                Section("Other Projects") {
+                    ForEach(unfiled) { p in
+                        Button(p.name) { actionItems.setProject(task.id, projectID: p.id) }
+                    }
+                }
+            }
+        } label: {
+            chipLabel(icon: "folder",
+                      text: currentProjectName ?? "Project",
+                      muted: task.projectID == nil)
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+    }
+
+    private var currentProjectName: String? {
+        guard let pid = task.projectID,
+              let p = actionItems.projects.first(where: { $0.id == pid }) else { return nil }
+        if let iid = p.initiativeID,
+           let initiative = actionItems.initiatives.first(where: { $0.id == iid }) {
+            return "\(initiative.name) › \(p.name)"
+        }
+        return p.name
+    }
+
+    private var labelsMenu: some View {
+        Menu {
+            if actionItems.labels.isEmpty {
+                Text("No tags yet — create one from the Tasks view")
+            } else {
+                ForEach(actionItems.labels) { label in
+                    Button {
+                        actionItems.toggleLabel(task.id, labelID: label.id)
+                    } label: {
+                        if (task.labelIDs ?? []).contains(label.id) {
+                            Label(label.name, systemImage: "checkmark")
+                        } else {
+                            Text(label.name)
+                        }
+                    }
+                }
+            }
+        } label: {
+            chipLabel(icon: "tag",
+                      text: labelChipText,
+                      muted: (task.labelIDs ?? []).isEmpty)
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+    }
+
+    private var labelChipText: String {
+        let ids = task.labelIDs ?? []
+        if ids.isEmpty { return "Tag" }
+        let names = ids.compactMap { id in
+            actionItems.labels.first(where: { $0.id == id })?.name
+        }
+        if names.count == 1 { return names[0] }
+        return "\(names.count) tags"
+    }
+
+    private var dueDateMenu: some View {
+        Menu {
+            Button("Today") {
+                actionItems.setDueDate(task.id, dueDate: Calendar.current.startOfDay(for: Date()))
+            }
+            Button("Tomorrow") {
+                let cal = Calendar.current
+                let d = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: Date()))
+                actionItems.setDueDate(task.id, dueDate: d)
+            }
+            Button("Next week") {
+                let cal = Calendar.current
+                let d = cal.date(byAdding: .day, value: 7, to: cal.startOfDay(for: Date()))
+                actionItems.setDueDate(task.id, dueDate: d)
+            }
+            Divider()
+            Button("Clear due date") { actionItems.setDueDate(task.id, dueDate: nil) }
+        } label: {
+            chipLabel(icon: "calendar",
+                      text: dueChipText,
+                      muted: task.dueDate == nil,
+                      tint: dueChipTint)
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+    }
+
+    private var dueChipText: String {
+        guard let due = task.dueDate else { return "Due" }
+        let cal = Calendar.current
+        if cal.isDateInToday(due) { return "Today" }
+        if cal.isDateInTomorrow(due) { return "Tomorrow" }
+        if cal.isDateInYesterday(due) { return "Yesterday" }
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f.string(from: due)
+    }
+
+    private var dueChipTint: Color? {
+        guard let due = task.dueDate else { return nil }
+        if due < Calendar.current.startOfDay(for: Date()) { return .red }
+        if Calendar.current.isDateInToday(due) { return .orange }
+        return nil
+    }
+
+    private var priorityMenu: some View {
+        Menu {
+            ForEach(ActionItem.Priority.allCases) { p in
+                Button(p.label) { actionItems.setPriority(task.id, priority: p) }
+            }
+        } label: {
+            chipLabel(icon: "flag",
+                      text: task.priority.label,
+                      muted: task.priority == .medium)
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+    }
+
+    private func chipLabel(icon: String, text: String, muted: Bool, tint: Color? = nil) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.caption2)
+            Text(text).font(.caption)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .foregroundStyle(tint ?? (muted ? .secondary : .primary))
+        .background(
+            Capsule().fill((tint ?? Color.secondary).opacity(muted ? 0.08 : 0.14))
+        )
     }
 }
