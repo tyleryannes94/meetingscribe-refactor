@@ -550,11 +550,6 @@ final class MeetingManager: ObservableObject {
 
     func transcribeNow(meeting: Meeting, regenerateSummary: Bool = true) {
         pipelineController.transcribeNow(meeting: meeting, regenerateSummary: regenerateSummary)
-        // Also refresh the past-meetings list + invalidate the body cache
-        // after the pipeline finishes — the controller updates summaries /
-        // action items in place, but the list snapshot here is the publish
-        // source for views and the body cache must drop the now-stale entry
-        // so the next read pulls the fresh transcript / summary.
         Task { [weak self] in
             while self?.pipelineController.isTranscribing(meeting) == true {
                 try? await Task.sleep(nanoseconds: 800_000_000)
@@ -564,6 +559,19 @@ final class MeetingManager: ObservableObject {
                 self?.refreshPastMeetings(force: true)
             }
         }
+    }
+
+    /// Regenerate summary from the existing transcript only — never re-runs
+    /// Whisper. Falls back to `transcribeNow` when no transcript exists yet.
+    func regenerateSummaryOnly(meeting: Meeting) {
+        // Wire the cache-invalidation callback if not already set.
+        if pipelineController.onInvalidateCache == nil {
+            pipelineController.onInvalidateCache = { [weak self] id in
+                self?.bodyCache.invalidate(id)
+                self?.refreshPastMeetings(force: true)
+            }
+        }
+        pipelineController.regenerateSummaryOnly(meeting: meeting)
     }
 
     var lastCompletedMeetingDir: URL? { pipelineController.lastCompletedDir }

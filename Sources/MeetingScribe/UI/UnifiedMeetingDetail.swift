@@ -396,6 +396,7 @@ struct UnifiedMeetingDetail: View {
                     Spacer()
                     if let m = meeting {
                         let isWorking = manager.transcribingMeetingIDs.contains(m.id)
+                            || pipeline.summaryGeneratingIDs.contains(m.id)
                         if isWorking {
                             HStack(spacing: 6) {
                                 ProgressView().controlSize(.small)
@@ -403,7 +404,7 @@ struct UnifiedMeetingDetail: View {
                             }
                         } else {
                             Button("Regenerate") {
-                                manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
+                                manager.regenerateSummaryOnly(meeting: m)
                             }
                             .buttonStyle(MSSecondaryButtonStyle())
                         }
@@ -434,7 +435,7 @@ struct UnifiedMeetingDetail: View {
                             SummaryEditByAsking(meeting: m, current: summary, onChanged: { summary = $0 })
                         }
                         SummaryFeedbackRow(meetingID: m.id) {
-                            manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
+                            manager.regenerateSummaryOnly(meeting: m)
                         }
                         followUpButton
                     }
@@ -697,22 +698,21 @@ struct UnifiedMeetingDetail: View {
                     }
                     HStack(spacing: 8) {
                         let isWorking = manager.transcribingMeetingIDs.contains(m.id)
+                            || pipeline.summaryGeneratingIDs.contains(m.id)
                         if isWorking {
                             ProgressView().controlSize(.small)
                             Text("Regenerating…")
                                 .font(NDS.small).foregroundStyle(NDS.textTertiary)
                         } else {
                             Button("Regenerate summary") {
-                                manager.pipelineController.transcribeNow(meeting: m,
-                                                                         regenerateSummary: true)
+                                manager.regenerateSummaryOnly(meeting: m)
                             }
                             .buttonStyle(MSSecondaryButtonStyle())
                         }
                         Spacer()
                     }
                     SummaryFeedbackRow(meetingID: m.id) {
-                        manager.pipelineController.transcribeNow(meeting: m,
-                                                                 regenerateSummary: true)
+                        manager.regenerateSummaryOnly(meeting: m)
                     }
                     followUpButton
                 }

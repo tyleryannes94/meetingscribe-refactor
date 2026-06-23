@@ -83,6 +83,9 @@ final class MeetingPipelineController: ObservableObject {
     /// but no summary) so the notification layer can tell the user instead of
     /// failing silently (U4-4). Wire this to show a notification.
     var onComplete: ((Meeting, Bool) -> Void)?
+    /// Injected by MeetingManager so the pipeline can invalidate the body cache
+    /// after writing a new summary (without a hard dependency on MeetingManager).
+    var onInvalidateCache: ((String) -> Void)?
 
     private let store: MeetingStore
     private let tagStore: TagStore
@@ -367,6 +370,51 @@ final class MeetingPipelineController: ObservableObject {
                                              regenerateSummary: regenerateSummary)
             await MainActor.run {
                 self.transcribingIDs.remove(meeting.id)
+            }
+        }
+    }
+
+    /// Regenerate the summary from the existing on-disk transcript — never
+    /// touches audio. Use this for the "Regenerate" button; only fall back to
+    /// `transcribeNow` when there is no transcript yet.
+    func regenerateSummaryOnly(meeting: Meeting) {
+        guard !summaryGeneratingIDs.contains(meeting.id) else { return }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            let primary = await MainActor.run { self.tagStore.primaryTag(for: meeting) }
+            // Read the existing transcript from disk — no Whisper, no audio.
+            let transcript = await MainActor.run {
+                self.store.readTranscript(for: meeting, primaryTag: primary)
+            }
+            guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                // No transcript on disk — fall back to the full pipeline.
+                await self.transcribeNow(meeting: meeting, regenerateSummary: true)
+                return
+            }
+            await MainActor.run { self.liveSummaryByID[meeting.id] = "" }
+            do {
+                let summary = try await self.generateSummary(
+                    meeting: meeting,
+                    transcript: transcript,
+                    summaryGuidance: primary?.summaryTemplate)
+                await MainActor.run {
+                    try? self.store.writeSummary(summary, for: meeting, primaryTag: primary)
+                    self.onInvalidateCache?(meeting.id)
+                    var extracted = ActionItemExtractor.extract(from: summary, meeting: meeting)
+                    let knownPeople = PeopleStore.shared.people
+                    for i in extracted.indices where extracted[i].ownerPersonID == nil {
+                        extracted[i].ownerPersonID = PersonResolver.resolveOwner(
+                            extracted[i].owner, in: knownPeople)
+                    }
+                    self.actionItems.reconcileExtracted(extracted, for: meeting.id)
+                    self.decisions.extract(from: summary, meeting: meeting)
+                    self.clearLiveSummary(meeting.id)
+                }
+            } catch {
+                await MainActor.run {
+                    self.clearLiveSummary(meeting.id)
+                    self.lastError = "Summary failed: \(error.localizedDescription)"
+                }
             }
         }
     }

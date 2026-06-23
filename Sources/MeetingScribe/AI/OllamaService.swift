@@ -441,37 +441,34 @@ final class OllamaService {
             : ""
 
         return """
-        You are a professional meeting summarizer. Your job is to produce a complete, standalone summary of the meeting below — thorough enough that someone who wasn't on the call can fully understand everything that was discussed, decided, and left open. The reader should not need to consult the transcript.\(feedback)\(typeBlock)\(tagBlock)
+        You are a senior executive assistant summarizing a meeting for a busy professional. Every sentence must earn its place. Cut anything that is small talk, obvious context, or could be inferred. The reader was NOT on the call and needs to understand exactly what happened, what was decided, and what is owed — nothing more.\(feedback)\(typeBlock)\(tagBlock)
 
         Meeting: \(meeting.title)
-        When: \(when)
+        Date: \(when)
         Attendees: \(attendees)
 
-        Transcript ("Me" = \(userName), "Them" = all other speakers):
+        Transcript ("Me" = \(userName)):
 
         \(transcript)
 
         ---
 
-        Write the summary now using EXACTLY these sections in order. Do not skip any section. Do not add new sections. No preamble before the title.
+        Write the summary using EXACTLY these four sections. No preamble, no extra sections.
 
-        # \(meeting.title) — Meeting Summary
+        # \(meeting.title) — Summary
 
         ## What Was Discussed
-        Write a detailed narrative paragraph (not bullets) for each major topic, in the order it came up. Each paragraph should cover: what was raised, the full substance of the conversation around it, any disagreements or open exploration, and how or whether it was resolved. Be thorough — a reader must understand the full context of each topic without the transcript. Include specifics: numbers, names, deadlines, product names, amounts, percentages — anything concrete that was mentioned. If a topic had multiple sub-threads, cover each one. Aim for completeness over brevity.
+        One focused paragraph per meaningful topic, in chronological order. For each topic: state what the issue or question was, summarize the substance of what was actually said (positions taken, information shared, numbers mentioned, concerns raised), and state the outcome — resolved, tabled, or ongoing. Skip pleasantries, scheduling logistics, and anything that didn't materially affect the outcome. Use specific names, numbers, dates, and product/project names from the transcript. If a topic went in circles without resolution, say so directly.
 
-        ## Key Decisions
-        A bulleted list of every concrete decision reached. Each bullet: what was decided, who decided it, and why (the reasoning given in the call). If a decision was tentative or conditional, say so. If no decisions were made, write "No formal decisions were made."
+        ## Decisions Made
+        Bullet each firm decision. Include who made it and the key reason or trade-off that drove it. If a decision was conditional or provisional, label it as such. Write "None." if there were no decisions.
 
         ## Action Items
-        A task checklist of every commitment made. Format each as:
-        - [ ] **[Owner]** — [exactly what they will do] (due: [date if mentioned, otherwise "unspecified"])
-        Only assign \(userName) as owner when they personally committed on the call. Use full names or roles for others. Be precise — "review the contract draft" is better than "follow up." If none, write "No action items."
+        - [ ] **[Owner]** — [specific task] (due: [date or "unspecified"])
+        Rules: Only name \(userName) if they explicitly committed. Use real names. Be precise about the task. Write "None." if there were no commitments.
 
         ## Open Questions
-        A bulleted list of every unresolved question, blocker, or topic that needs follow-up. Include who raised it if relevant. Be specific about what is unknown or undecided. If none, write "None identified."
-
-        Keep every section. Be direct and specific throughout. No filler phrases like "the team discussed" or "it was noted that."
+        Bullet each unresolved question, blocker, or pending decision, with who owns it or who raised it. Write "None." if everything was resolved.
         """
     }
 }

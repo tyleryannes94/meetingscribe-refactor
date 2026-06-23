@@ -70,7 +70,7 @@ extension UnifiedMeetingDetail {
                     }
                 } else {
                     Button("Summarize meeting") {
-                        manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
+                        manager.regenerateSummaryOnly(meeting: m)
                     }
                     .buttonStyle(MSSecondaryButtonStyle())
                 }
