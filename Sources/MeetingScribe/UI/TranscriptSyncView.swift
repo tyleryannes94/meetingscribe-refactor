@@ -124,7 +124,23 @@ struct TranscriptSyncView: View {
         .onAppear {
             isVisible = true; parse()
             if let seed = initialSearch, !seed.isEmpty, searchText.isEmpty { searchText = seed }
-            if let id = meetingID { speakerMap = SpeakerMap.load(id) }
+            if let id = meetingID {
+                speakerMap = SpeakerMap.load(id)
+                // Auto-apply global speaker assignments for known attendees
+                let resolvedAttendees = attendees.compactMap { raw -> (String, String)? in
+                    let allPeople = people.people
+                    guard let pid = PersonResolver.resolve(raw, in: allPeople),
+                          let person = allPeople.first(where: { $0.id == pid }) else { return nil }
+                    return (pid, person.displayName)
+                }
+                let knownLabels = Set(segments.map(\.speaker))
+                let autoMap = GlobalSpeakerMap.autoAssign(
+                    personIDs: resolvedAttendees.map(\.0),
+                    existingLabels: knownLabels)
+                for (label, pid) in autoMap where speakerMap[label] == nil {
+                    speakerMap[label] = pid
+                }
+            }
         }
         .onDisappear { isVisible = false }
         .onChange(of: rawTranscript) { _, _ in parse() }
@@ -250,6 +266,8 @@ struct TranscriptSyncView: View {
     private func mapSpeaker(_ label: String, to personID: String?) {
         if let personID { speakerMap[label] = personID } else { speakerMap[label] = nil }
         if let id = meetingID { SpeakerMap.save(speakerMap, for: id) }
+        // Also persist globally so this person is auto-assigned in future meetings
+        if let personID { GlobalSpeakerMap.record(personID: personID, speakerLabel: label) }
     }
 
     // MARK: - Scroll body
@@ -258,6 +276,27 @@ struct TranscriptSyncView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    // Auto-assign banner: shown when "Them" is unassigned and
+                    // there are known attendees to map it to.
+                    if !mappableAttendees.isEmpty && speakerMap["Them"] == nil {
+                        HStack(spacing: 8) {
+                            Image(systemName: "person.badge.key").foregroundStyle(Color.orange)
+                            Text("Assign speakers to attendees for better transcript readability")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Menu("Assign") {
+                                ForEach(mappableAttendees, id: \.id) { person in
+                                    Button(person.displayName) {
+                                        mapSpeaker("Them", to: person.id)
+                                    }
+                                }
+                            }
+                            .menuStyle(.borderlessButton)
+                            .font(.caption.weight(.semibold))
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.08))
+                    }
                     ForEach(filteredSegments) { seg in
                         TranscriptRow(
                             segment: seg,
