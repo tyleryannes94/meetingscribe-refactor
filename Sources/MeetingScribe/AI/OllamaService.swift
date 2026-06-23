@@ -382,13 +382,13 @@ final class OllamaService {
 
         let prompt = Self.buildPrompt(meeting: meeting, transcript: transcript, summaryGuidance: summaryGuidance)
         if let onToken {
-            return try await streamGenerate(prompt: prompt, temperature: 0.2, numCtx: 8192, onToken: onToken)
+            return try await streamGenerate(prompt: prompt, temperature: 0.2, numCtx: 6144, onToken: onToken)
         }
         let body = GenerateRequest(
             model: settings.ollamaModel,
             prompt: prompt,
             stream: false,
-            options: .init(temperature: 0.2, num_ctx: 8192)
+            options: .init(temperature: 0.2, num_ctx: 6144)
         )
 
         var req = URLRequest(url: url)
@@ -441,40 +441,38 @@ final class OllamaService {
             : ""
 
         return """
-        You are an assistant that writes structured, Google Meet-style meeting summaries.\(feedback)\(typeBlock)\(tagBlock)
+        You are an expert meeting analyst. Produce a comprehensive, detailed, and highly specific post-meeting brief.\(feedback)\(typeBlock)\(tagBlock)
 
         Meeting: \(meeting.title)
         When: \(when)
         Attendees: \(attendees)
 
-        Transcript (lines labeled with speakers — "Me" is the user \(userName), "Them" is everyone else):
+        Transcript (labeled — "Me" is \(userName), "Them" is everyone else):
 
         \(transcript)
 
-        Produce a Markdown document with EXACTLY these sections in this order. Use the headings verbatim.
+        Produce a Markdown document with ALL of these sections. Use the headings verbatim. Be specific — use exact names, numbers, dates, and quotes from the transcript. Never be vague.
 
         # \(meeting.title) — Summary
 
         ## Topics Discussed
-        A bulleted list of every major topic or subject covered during the call. Be comprehensive — list all distinct topics discussed, not just the most important ones.
+        A comprehensive bulleted list of EVERY topic covered. For each topic, add 1-2 sentences of context on what was discussed/concluded. Cover minor topics too, not just the main ones.
 
-        ## Decisions Made
-        Bulleted list of concrete decisions reached during the call. If none, write "None.".
+        ## Key Decisions
+        Bulleted decisions with the person who made or approved them. Include context on WHY the decision was made. If none, write "None.".
 
         ## Action Items
-        Bulleted checklist. Each item MUST use this exact format:
-        - [ ] <owner> — <action> (due: <date or "unspecified">)
-        EVERY item must start with an owner. Use "Me" for the user (the "Me"
-        speaker, named \(userName)) — but ONLY assign "Me" when the user explicitly
-        committed to the task, or another speaker explicitly delegated it to the
-        user by name (e.g. "\(userName), can you…"). For tasks owned by other
-        participants, use their name. Do not invent owners. If no action items,
-        write "None.".
+        Bulleted checklist. Format: - [ ] <owner> — <specific action> (due: <date or "unspecified">)
+        Rules: "Me" = \(userName) ONLY if they explicitly committed. Use real names for others. Never invent owners. Be specific about the action — not "follow up" but "send the Q3 budget report to Jane by Friday."
+        If none, write "None.".
 
-        ## Open Questions
-        Bulleted list of questions raised but not resolved. If none, write "None.".
+        ## Open Questions & Next Steps
+        Bulleted unresolved questions and items to address next time. Be specific.
 
-        Keep it tight. No preamble, no closing remarks. Every section must appear even if its value is "None.".
+        ## Notable Moments
+        1-3 direct quotes or specific exchanges that capture key positions, tensions, or commitments. Format: **[Speaker]:** "exact quote"
+
+        Keep it detailed and specific. Every section must appear. No preamble.
         """
     }
 }
