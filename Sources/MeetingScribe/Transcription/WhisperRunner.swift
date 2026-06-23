@@ -267,17 +267,40 @@ struct WhisperRunner {
         case .segments:
             let segs = decoded.transcription.compactMap { s -> Segment? in
                 let trimmed = s.text.trimmingCharacters(in: .whitespaces)
-                guard !trimmed.isEmpty, let off = s.offsets else { return nil }
+                guard !trimmed.isEmpty, !Self.isHallucination(trimmed), let off = s.offsets else { return nil }
                 return Segment(startMs: off.from, endMs: off.to, text: trimmed)
             }
             return .segments(segs)
         case .plainText:
             let joined = decoded.transcription
                 .map { $0.text.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
+                .filter { !$0.isEmpty && !Self.isHallucination($0) }
                 .joined(separator: " ")
             return .text(joined)
         }
+    }
+
+    // MARK: - Hallucination filter
+
+    /// Whisper emits these strings when audio is silent or too noisy to decode.
+    /// Keeping them in the transcript produces misleading "[silence]" / "dramatic
+    /// music" entries that confuse both readers and the summary LLM.
+    private static let hallucinationPatterns: [String] = [
+        "[silence]", "[BLANK_AUDIO]", "[Music]", "[music]",
+        "(silence)", "(dramatic music)", "(tense music)", "(ambient music)",
+        "(music)", "(piano music)", "(classical music)", "(upbeat music)",
+        "(mumbling)", "(indistinct chatter)", "(crowd noise)"
+    ]
+
+    static func isHallucination(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        // Exact-match known hallucination strings
+        if hallucinationPatterns.contains(where: { lower == $0.lowercased() }) { return true }
+        // Segments that are ONLY bracketed/parenthesized tokens with no real words
+        let stripped = text.replacingOccurrences(of: #"[\[\(][^\]\)]+[\]\)]"#, with: "",
+                                                   options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        return stripped.isEmpty
     }
 
     // MARK: - Model checksum (ENG-D)

@@ -57,19 +57,53 @@ final class WhisperTranscriber {
         return all
     }
 
-    // MARK: - afconvert
+    // MARK: - Audio conversion + normalization
 
+    /// Convert m4a → 16 kHz mono WAV using ffmpeg with loudness normalization.
+    /// Normalization is critical for mic channels, which are often 10-15 dB
+    /// quieter than system audio — without it, Whisper base/small hallucinate
+    /// silence markers ([silence], [BLANK_AUDIO]) instead of transcribing speech.
     private func convertToWav(input: URL, output: URL) throws {
         try? FileManager.default.removeItem(at: output)
+
+        // Prefer ffmpeg (supports -af filters) over afconvert.
+        let ffmpegPaths = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
+        if let ffmpeg = ffmpegPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            try convertWithFFmpeg(ffmpeg: ffmpeg, input: input, output: output)
+            return
+        }
+
+        // Fallback: afconvert (no normalization, original behavior).
+        try convertWithAfconvert(input: input, output: output)
+    }
+
+    private func convertWithFFmpeg(ffmpeg: String, input: URL, output: URL) throws {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: ffmpeg)
+        // loudnorm brings quiet mic channels (often -37 dB) up to broadcast
+        // standard (-16 LUFS), dramatically improving Whisper accuracy on mics
+        // with low input gain. highpass removes low-freq rumble / HVAC noise.
+        proc.arguments = [
+            "-y", "-i", input.path,
+            "-af", "highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar", "16000", "-ac", "1",
+            "-f", "wav", output.path
+        ]
+        let err = Pipe()
+        proc.standardError = err
+        proc.standardOutput = Pipe()
+        try proc.run()
+        proc.waitUntilExit()
+        if proc.terminationStatus != 0 {
+            let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            throw TranscribeError.afconvertFailed(proc.terminationStatus, "ffmpeg: \(msg.suffix(300))")
+        }
+    }
+
+    private func convertWithAfconvert(input: URL, output: URL) throws {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
-        proc.arguments = [
-            input.path,
-            output.path,
-            "-d", "LEI16@16000",
-            "-c", "1",
-            "-f", "WAVE"
-        ]
+        proc.arguments = [input.path, output.path, "-d", "LEI16@16000", "-c", "1", "-f", "WAVE"]
         let err = Pipe()
         proc.standardError = err
         proc.standardOutput = Pipe()

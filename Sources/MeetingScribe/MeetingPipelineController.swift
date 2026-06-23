@@ -49,6 +49,17 @@ final class MeetingPipelineController: ObservableObject {
     private func generateSummary(meeting: Meeting, transcript: String,
                                  summaryGuidance: String?,
                                  maxAttempts: Int = 3) async throws -> String {
+        // Refuse to summarize empty or near-empty transcripts — the LLM
+        // will hallucinate plausible-sounding but completely fabricated content
+        // when there's nothing real to summarize.
+        let meaningfulWords = transcript
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .count
+        guard meaningfulWords >= 50 else {
+            throw SummaryUnavailable()
+        }
+
         let liveID = meeting.id
         summaryGeneratingIDs.insert(liveID)
         defer { summaryGeneratingIDs.remove(liveID) }
