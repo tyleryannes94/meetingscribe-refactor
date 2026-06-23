@@ -382,13 +382,13 @@ final class OllamaService {
 
         let prompt = Self.buildPrompt(meeting: meeting, transcript: transcript, summaryGuidance: summaryGuidance)
         if let onToken {
-            return try await streamGenerate(prompt: prompt, temperature: 0.2, numCtx: 6144, onToken: onToken)
+            return try await streamGenerate(prompt: prompt, temperature: 0.2, numCtx: 8192, onToken: onToken)
         }
         let body = GenerateRequest(
             model: settings.ollamaModel,
             prompt: prompt,
             stream: false,
-            options: .init(temperature: 0.2, num_ctx: 6144)
+            options: .init(temperature: 0.2, num_ctx: 8192)
         )
 
         var req = URLRequest(url: url)
@@ -441,7 +441,11 @@ final class OllamaService {
             : ""
 
         return """
-        You are a senior executive assistant summarizing a meeting for a busy professional. Every sentence must earn its place. Cut anything that is small talk, obvious context, or could be inferred. The reader was NOT on the call and needs to understand exactly what happened, what was decided, and what is owed — nothing more.\(feedback)\(typeBlock)\(tagBlock)
+        You are a senior executive assistant producing a meeting brief. Extract every meaningful signal from this transcript: decisions made, commitments given, plans confirmed, numbers shared, concerns raised, open questions. Cut only true filler — pleasantries, "can you hear me" tech checks, throat-clearing.\(feedback)\(typeBlock)\(tagBlock)
+
+        CRITICAL: Informal statements count. When someone says "we will build this in two weeks," "I'm going to ping Jacey," "our plan is to add this in coming weeks," or "let's do X" — those are decisions and action items. Do NOT require formal unanimous agreement to list something as a decision. Do NOT require an explicit "I commit to" phrasing to list something as an action item. Capture the substance of what was said.
+
+        CRITICAL: When one person dominates the conversation, their statements contain the meeting's decisions and commitments — extract all of them. A meeting is not without decisions just because they were stated casually.
 
         Meeting: \(meeting.title)
         Date: \(when)
@@ -453,22 +457,22 @@ final class OllamaService {
 
         ---
 
-        Write the summary using EXACTLY these four sections. No preamble, no extra sections.
+        Write the summary using EXACTLY these four sections. No preamble, no extra sections, no meta-commentary about the transcript.
 
         # \(meeting.title) — Summary
 
         ## What Was Discussed
-        One focused paragraph per meaningful topic, in chronological order. For each topic: state what the issue or question was, summarize the substance of what was actually said (positions taken, information shared, numbers mentioned, concerns raised), and state the outcome — resolved, tabled, or ongoing. Skip pleasantries, scheduling logistics, and anything that didn't materially affect the outcome. Use specific names, numbers, dates, and product/project names from the transcript. If a topic went in circles without resolution, say so directly.
+        One focused paragraph per meaningful topic, in chronological order. For each topic: name the specific issue, summarize what was actually said (positions, data, numbers, concerns, product names, customer names), and state the outcome — resolved, tabled, ongoing, or agreed. Never write a generic label like "migration strategy" — instead describe what was said about it. Use exact numbers, dates, names, and product names from the transcript. If something went unresolved, say so explicitly.
 
         ## Decisions Made
-        Bullet each firm decision. Include who made it and the key reason or trade-off that drove it. If a decision was conditional or provisional, label it as such. Write "None." if there were no decisions.
+        Bullet every direction set, plan confirmed, priority established, or "we will / won't" conclusion — even informal ones. Include who drove it and why. Conditional or provisional decisions should be labeled as such. This section should be substantive for any real meeting — write "None." only if the meeting was purely informational with zero conclusions.
 
         ## Action Items
         - [ ] **[Owner]** — [specific task] (due: [date or "unspecified"])
-        Rules: Only name \(userName) if they explicitly committed. Use real names. Be precise about the task. Write "None." if there were no commitments.
+        Capture every commitment, plan, or follow-up mentioned in the transcript — including off-hand ones ("I'll send that over," "ping me after," "get those definitions to them"). When the speaker states their own intentions, list them. Only attribute to \(userName) if they explicitly committed or were explicitly assigned. Use real names. Write "None." only if there were truly zero commitments of any kind.
 
         ## Open Questions
-        Bullet each unresolved question, blocker, or pending decision, with who owns it or who raised it. Write "None." if everything was resolved.
+        Bullet each unresolved question, pending decision, or raised concern that was not answered in the meeting. Include who raised it or who owns resolving it. Write "None." only if every question and concern raised was fully resolved.
         """
     }
 }
