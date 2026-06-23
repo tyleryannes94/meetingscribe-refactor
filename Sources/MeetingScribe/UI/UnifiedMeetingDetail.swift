@@ -586,6 +586,38 @@ struct UnifiedMeetingDetail: View {
                     pushNoteTodosToTasks(m)
                 }
             }
+            // Note timestamps panel — clickable [M:SS] / [H:MM:SS] markers
+            let timestamps = parseNoteTimestamps(noteDraft)
+            if !timestamps.isEmpty && !audioURLs.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Jump to timestamp", systemImage: "clock.arrow.circlepath")
+                        .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                    FlowLayout(spacing: 6) {
+                        ForEach(Array(timestamps.enumerated()), id: \.offset) { _, ts in
+                            Button {
+                                audioController.scrub(to: ts.seconds)
+                                audioController.commitScrub()
+                                pendingScrollAnchor = .transcript
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle.fill").font(.caption)
+                                    Text(ts.label).font(.caption.monospacedDigit().weight(.semibold))
+                                    if !ts.context.isEmpty {
+                                        Text(ts.context).font(.caption).lineLimit(1)
+                                    }
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Color.accentColor.opacity(0.1))
+                                .foregroundStyle(Color.accentColor)
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(NDS.sidebarBg)
+            }
         }
     }
 

@@ -1,6 +1,42 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Note timestamp helpers
+
+struct NoteTimestamp {
+    let seconds: TimeInterval
+    let label: String
+    let context: String
+}
+
+func parseNoteTimestamps(_ text: String) -> [NoteTimestamp] {
+    var results: [NoteTimestamp] = []
+    let pattern = #"\[(\d+):(\d{2})(?::(\d{2}))?\]([^\n]*)"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+    let range = NSRange(text.startIndex..., in: text)
+    for match in regex.matches(in: text, range: range) {
+        func group(_ i: Int) -> String? {
+            guard let r = Range(match.range(at: i), in: text), !r.isEmpty else { return nil }
+            return String(text[r])
+        }
+        let a = Double(group(1) ?? "0") ?? 0
+        let b = Double(group(2) ?? "0") ?? 0
+        let c = Double(group(3) ?? "")
+        let seconds: TimeInterval
+        let label: String
+        if let c = c {
+            seconds = a * 3600 + b * 60 + c
+            label = String(format: "%d:%02d:%02d", Int(a), Int(b), Int(c))
+        } else {
+            seconds = a * 60 + b
+            label = String(format: "%d:%02d", Int(a), Int(b))
+        }
+        let ctx = group(4).map { String($0.trimmingCharacters(in: .whitespaces).prefix(50)) } ?? ""
+        results.append(NoteTimestamp(seconds: seconds, label: label, context: ctx))
+    }
+    return results
+}
+
 @available(macOS 14.0, *)
 extension UnifiedMeetingDetail {
     /// Parse the notes editor for action-item-like lines (checkboxes / TODO:)
