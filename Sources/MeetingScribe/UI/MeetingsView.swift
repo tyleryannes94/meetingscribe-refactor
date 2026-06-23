@@ -30,11 +30,10 @@ struct MeetingsView: View {
     // visits (was a transient `.all` @State that reset every time the tab
     // was rebuilt). Scope is a String-backed enum so @AppStorage can persist it.
     @AppStorage("meetings.scope") private var scope: Scope = .upcoming
-    // List vs Month view inside the Meetings tab — re-exposes the month grid
-    // (option B). Month mode is wired to `selectedMeeting`, not inline expand.
+    // List vs Week view inside the Meetings tab. Week mode is wired to
+    // `selectedMeeting`, not inline expand.
     @State private var listMode: ListMode = .list
-    @State private var monthCursor = Calendar.current.startOfDay(for: Date())
-    @State private var selectedDay = Calendar.current.startOfDay(for: Date())
+    @State private var weekOffset: Int = 0
 
     // MARK: Filters + saved views (C1-5)
     // Ad-hoc filter chips. Selecting a saved view just populates these (+ scope);
@@ -54,9 +53,14 @@ struct MeetingsView: View {
     }
 
     enum ListMode: String, CaseIterable, Identifiable {
-        case list, month
+        case list, week
         var id: String { rawValue }
-        var label: String { rawValue.capitalized }
+        var label: String {
+            switch self {
+            case .list: return "List"
+            case .week: return "Week"
+            }
+        }
         var systemImage: String { self == .list ? "list.bullet" : "calendar" }
     }
 
@@ -76,7 +80,7 @@ struct MeetingsView: View {
                 Color.clear.frame(height: NDS.splitPaneTopInset)
                 listHeader
                 Divider().overlay(NDS.divider)
-                if listMode == .list { meetingList } else { monthView }
+                if listMode == .list { meetingList } else { weekView }
             }
             .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
             .background(NDS.sidebarBg)
@@ -294,13 +298,27 @@ struct MeetingsView: View {
 
     // MARK: - Meeting list
 
+    /// Sort groups so "Today" and "NOW" sections always appear first, then the rest
+    /// in original MeetingGrouping order.
+    private var sortedGroups: [(String, [Meeting])] {
+        let todayFirst = groups.sorted { a, b in
+            let aFirst = a.0 == "NOW" || a.0 == "TODAY" || a.0 == "UPCOMING TODAY"
+            let bFirst = b.0 == "NOW" || b.0 == "TODAY" || b.0 == "UPCOMING TODAY"
+            if aFirst != bFirst { return aFirst }
+            return false  // preserve original relative order otherwise
+        }
+        return todayFirst
+    }
+
     private var meetingList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
-                ForEach(groups, id: \.0) { title, items in
+                ForEach(sortedGroups, id: \.0) { title, items in
                     if !items.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            NotionEyebrow(text: title, count: items.count)
+                            Text(title)
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(NDS.textSecondary)
                                 .padding(.horizontal, 12)
                                 .padding(.top, 8)
                             ForEach(items) { m in
@@ -309,7 +327,7 @@ struct MeetingsView: View {
                         }
                     }
                 }
-                if groups.allSatisfy({ $0.1.isEmpty }) { emptyState }
+                if sortedGroups.allSatisfy({ $0.1.isEmpty }) { emptyState }
             }
             .padding(.bottom, 20)
         }
@@ -470,9 +488,9 @@ struct MeetingsView: View {
         return variant == .upcoming ? .upcoming(m) : .past(m)
     }
 
-    // MARK: - Month view (option B — re-exposed calendar)
+    // MARK: - Week view
 
-    /// All meetings (past + upcoming, deduped), honoring the search box. Month
+    /// All meetings (past + upcoming, deduped), honoring the search box. Week
     /// mode ignores the scope pills — it always shows the whole calendar.
     private var calendarMeetings: [Meeting] {
         var seen = Set<String>()
@@ -483,140 +501,142 @@ struct MeetingsView: View {
         return out
     }
 
-    private var monthView: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                monthHeader
-                weekdayRow
-                monthGrid
-                Divider().overlay(NDS.divider).padding(.vertical, 10)
-                selectedDayList
-            }
-            .padding(.bottom, 16)
-        }
-    }
-
-    private var monthHeader: some View {
-        HStack {
-            Button { shiftMonth(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
-                .accessibilityLabel("Previous month")
-            Spacer()
-            Text(monthTitle).scaledFont(14, weight: .semibold).foregroundStyle(NDS.textPrimary)
-            Spacer()
-            Button { shiftMonth(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
-                .accessibilityLabel("Next month")
-            Button {
-                let t = Calendar.current.startOfDay(for: Date()); monthCursor = t; selectedDay = t
-            } label: { Text("Today").font(.caption) }
-                .buttonStyle(.plain).foregroundStyle(NDS.brand)
-        }
-        .foregroundStyle(NDS.textSecondary)
-        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 6)
-    }
-
-    private var weekdayRow: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, s in
-                Text(s).scaledFont(9, weight: .semibold)
-                    .foregroundStyle(NDS.textTertiary)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.horizontal, 10)
-    }
-    private var weekdaySymbols: [String] {
-        DateFormatter().veryShortWeekdaySymbols ?? ["S", "M", "T", "W", "T", "F", "S"]
-    }
-
-    private var monthGrid: some View {
-        let days = daysGrid(for: monthCursor)
+    var weekStart: Date {
         let cal = Calendar.current
-        return VStack(spacing: 3) {
-            ForEach(0..<6, id: \.self) { row in
-                HStack(spacing: 3) {
-                    ForEach(0..<7, id: \.self) { col in
-                        let idx = row * 7 + col
-                        if idx < days.count {
-                            dayCell(days[idx],
-                                    inMonth: cal.isDate(days[idx], equalTo: monthCursor, toGranularity: .month))
-                        }
+        let today = cal.startOfDay(for: Date())
+        let weekday = cal.component(.weekday, from: today)
+        // Start from Monday (weekday=2 in Gregorian; weekday=1 is Sunday)
+        let daysFromMonday = (weekday + 5) % 7  // days since last Monday
+        return cal.date(byAdding: .day, value: -daysFromMonday + (weekOffset * 7), to: today) ?? today
+    }
+
+    var weekDays: [Date] {
+        let cal = Calendar.current
+        return (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
+    }
+
+    var weekRangeLabel: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d"
+        let endDate = Calendar.current.date(byAdding: .day, value: 6, to: weekStart) ?? weekStart
+        let startStr = fmt.string(from: weekStart)
+        let startMonth = Calendar.current.component(.month, from: weekStart)
+        let endMonth = Calendar.current.component(.month, from: endDate)
+        fmt.dateFormat = startMonth == endMonth ? "d, yyyy" : "MMM d, yyyy"
+        let endStr = fmt.string(from: endDate)
+        return "\(startStr) – \(endStr)"
+    }
+
+    func meetingsOnDay(_ day: Date) -> [Meeting] {
+        let cal = Calendar.current
+        return calendarMeetings.filter { cal.isDate($0.startDate, inSameDayAs: day) }
+            .sorted { $0.startDate < $1.startDate }
+    }
+
+    var weekView: some View {
+        VStack(spacing: 0) {
+            // Header: prev / week range / next / Today
+            HStack(spacing: 12) {
+                Button { weekOffset -= 1 } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                Text(weekRangeLabel)
+                    .font(.callout.weight(.semibold))
+                    .frame(minWidth: 180, alignment: .center)
+                Button { weekOffset += 1 } label: {
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                if weekOffset != 0 {
+                    Button("Today") { weekOffset = 0 }
+                        .buttonStyle(.borderless)
+                        .font(.callout)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            Divider()
+            // Day columns
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(weekDays, id: \.self) { day in
+                        weekDayColumn(day)
+                        if day != weekDays.last { Divider() }
                     }
                 }
+                .frame(minWidth: 560)
             }
         }
-        .padding(.horizontal, 10).padding(.top, 4)
     }
 
-    private func dayCell(_ day: Date, inMonth: Bool) -> some View {
+    private static let weekDayNameFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "EEE"; return f
+    }()
+    private static let weekDayNumberFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "d"; return f
+    }()
+    private static let weekMeetingTimeFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "h:mm a"; return f
+    }()
+
+    @ViewBuilder func weekDayColumn(_ day: Date) -> some View {
         let cal = Calendar.current
         let isToday = cal.isDateInToday(day)
-        let isSelected = cal.isDate(day, inSameDayAs: selectedDay)
-        let hasMeetings = calendarMeetings.contains { cal.isDate($0.startDate, inSameDayAs: day) }
-        return Button {
-            selectedDay = cal.startOfDay(for: day)
-            if !cal.isDate(day, equalTo: monthCursor, toGranularity: .month) { monthCursor = day }
-        } label: {
+        let meetings = meetingsOnDay(day)
+        VStack(alignment: .leading, spacing: 0) {
+            // Day header
             VStack(spacing: 2) {
-                Text("\(cal.component(.day, from: day))")
-                    .font(.system(size: 11).monospacedDigit()) // design-lint:allow
-                    .foregroundStyle(inMonth ? (isToday ? NDS.brand : NDS.textPrimary)
-                                             : NDS.textTertiary.opacity(0.6))
-                Circle().fill(hasMeetings ? NDS.brand : .clear).frame(width: 4, height: 4)
+                Text(MeetingsView.weekDayNameFormatter.string(from: day))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(isToday ? Color.accentColor : Color.secondary)
+                Text(MeetingsView.weekDayNumberFormatter.string(from: day))
+                    .font(.title3.weight(isToday ? .bold : .regular))
+                    .foregroundStyle(isToday ? Color.accentColor : Color.primary)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(isToday ? Color.accentColor.opacity(0.12) : Color.clear)
+                    .clipShape(Circle())
             }
-            .frame(maxWidth: .infinity, minHeight: 32)
-            .background(RoundedRectangle(cornerRadius: 6)
-                .fill(isSelected ? NDS.brand.opacity(0.18)
-                                 : (isToday ? NDS.brand.opacity(0.06) : .clear)))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var selectedDayList: some View {
-        let cal = Calendar.current
-        let items = calendarMeetings
-            .filter { cal.isDate($0.startDate, inSameDayAs: selectedDay) }
-            .sorted { $0.startDate < $1.startDate }
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(dayTitle).scaledFont(12, weight: .semibold)
-                .foregroundStyle(NDS.textSecondary)
-                .padding(.horizontal, 14).padding(.bottom, 4)
-            if items.isEmpty {
-                Text("No meetings this day").font(.caption)
-                    .foregroundStyle(NDS.textTertiary)
-                    .padding(.horizontal, 14).padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            Divider()
+            // Meeting pills
+            if meetings.isEmpty {
+                Spacer()
             } else {
-                ForEach(items) { m in
-                    Button { router.selectedMeetingID = m.id } label: {
-                        MeetingListRow(meeting: m,
-                                       isSelected: selectedMeeting?.id == m.id,
-                                       isLive: manager.activeMeeting?.id == m.id)
-                            .environmentObject(tagStore)
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(meetings) { m in
+                            Button { router.openMeeting(m) } label: {
+                                weekMeetingPill(m)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(6)
                 }
             }
         }
+        .frame(minWidth: 80, maxWidth: .infinity)
     }
 
-    private func shiftMonth(_ delta: Int) {
-        if let n = Calendar.current.date(byAdding: .month, value: delta, to: monthCursor) { monthCursor = n }
-    }
-    private var monthTitle: String {
-        let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; return f.string(from: monthCursor)
-    }
-    private var dayTitle: String {
-        let cal = Calendar.current
-        if cal.isDateInToday(selectedDay) { return "Today" }
-        if cal.isDateInTomorrow(selectedDay) { return "Tomorrow" }
-        if cal.isDateInYesterday(selectedDay) { return "Yesterday" }
-        let f = DateFormatter(); f.dateFormat = "EEE, MMM d"; return f.string(from: selectedDay)
-    }
-    private func daysGrid(for month: Date) -> [Date] {
-        let cal = Calendar.current
-        guard let firstOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: month)) else { return [] }
-        let leadDays = cal.component(.weekday, from: firstOfMonth) - 1
-        guard let gridStart = cal.date(byAdding: .day, value: -leadDays, to: firstOfMonth) else { return [] }
-        return (0..<42).compactMap { cal.date(byAdding: .day, value: $0, to: gridStart) }
+    @ViewBuilder func weekMeetingPill(_ m: Meeting) -> some View {
+        let isPast = m.startDate < Date()
+        VStack(alignment: .leading, spacing: 2) {
+            Text(MeetingsView.weekMeetingTimeFormatter.string(from: m.startDate))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(isPast ? Color.secondary : Color.accentColor)
+            Text(m.displayTitle)
+                .font(.caption)
+                .foregroundStyle(Color.primary)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 7).padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isPast ? Color.secondary.opacity(0.08) : Color.accentColor.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(
+            isPast ? Color.secondary.opacity(0.2) : Color.accentColor.opacity(0.3), lineWidth: 1))
     }
 }
 
