@@ -7,11 +7,21 @@ extension UnifiedMeetingDetail {
 
     @ViewBuilder
     var audioBar: some View {
-        if !audioURLs.isEmpty {
-            AudioPlayerBar(title: audioURLs.count > 1 ? "Audio (mic + system)" : "Audio",
-                           controller: audioController)
-                .padding(.horizontal)
-                .padding(.vertical, 6)
+        if !audioURLs.isEmpty || !importedRecordingURLs.isEmpty {
+            VStack(spacing: 0) {
+                if !audioURLs.isEmpty {
+                    AudioPlayerBar(title: audioURLs.count > 1 ? "Recording (mic + system)" : "Recording",
+                                   controller: audioController)
+                        .padding(.horizontal)
+                        .padding(.vertical, 6)
+                }
+                ForEach(Array(importedRecordingURLs.enumerated()), id: \.offset) { idx, url in
+                    Divider()
+                    AudioPlayerView(title: "Imported Recording \(idx + 1)", urls: [url])
+                        .padding(.horizontal)
+                        .padding(.vertical, 6)
+                }
+            }
         }
     }
 

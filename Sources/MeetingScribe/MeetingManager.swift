@@ -693,18 +693,16 @@ final class MeetingManager: ObservableObject {
     func importAudioFile(_ source: URL, into meeting: Meeting) {
         let primary = tagStore.primaryTag(for: meeting)
         let dir = store.directory(for: meeting, primaryTag: primary)
-        let audioDir = dir.appendingPathComponent("audio", isDirectory: true)
+        let importsDir = dir.appendingPathComponent("imports", isDirectory: true)
         let fm = FileManager.default
         do {
-            try fm.createDirectory(at: audioDir, withIntermediateDirectories: true)
-            let (mic, sys) = AudioRecovery.discoverSegments(in: dir)
-            let nextIndex = max(mic.count, sys.count) + 1
+            try fm.createDirectory(at: importsDir, withIntermediateDirectories: true)
+            let existing = (try? fm.contentsOfDirectory(at: importsDir, includingPropertiesForKeys: nil)) ?? []
+            let nextIndex = existing.count + 1
             let ext = source.pathExtension.isEmpty ? "m4a" : source.pathExtension.lowercased()
-            // Uploaded audio is treated as a "mic" (Me) source for transcription.
-            let dest = audioDir.appendingPathComponent(String(format: "mic-%03d.%@", nextIndex, ext))
+            let dest = importsDir.appendingPathComponent(String(format: "import-%03d.%@", nextIndex, ext))
             if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
             try fm.copyItem(at: source, to: dest)
-            AudioRecovery.rebuildManifest(in: dir)
             refreshPastMeetings(force: true)
             transcribeNow(meeting: meeting)
         } catch {
@@ -713,6 +711,20 @@ final class MeetingManager: ObservableObject {
                                         context: ["phase": "import-audio-file", "meeting": meeting.id])
             lastError = "Couldn't import audio: \(error.localizedDescription)"
         }
+    }
+
+    func importedRecordingURLs(for meeting: Meeting) -> [URL] {
+        let dir = store.directory(for: meeting, primaryTag: tagStore.primaryTag(for: meeting))
+        let importsDir = dir.appendingPathComponent("imports", isDirectory: true)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: importsDir.path),
+              let contents = try? fm.contentsOfDirectory(at: importsDir, includingPropertiesForKeys: nil) else {
+            return []
+        }
+        let audioExts = Set(["m4a", "mp4", "mp3", "wav", "caf", "aac", "flac", "ogg", "opus"])
+        return contents
+            .filter { audioExts.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     /// Manually set a meeting's transcript from a file (.txt/.md/.srt/.vtt).

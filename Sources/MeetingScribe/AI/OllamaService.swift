@@ -441,13 +441,13 @@ final class OllamaService {
             : ""
 
         return """
-        You are an assistant that writes concise, action-oriented meeting summaries.\(feedback)\(typeBlock)\(tagBlock)
+        You are an assistant that writes structured, Google Meet-style meeting summaries.\(feedback)\(typeBlock)\(tagBlock)
 
         Meeting: \(meeting.title)
         When: \(when)
         Attendees: \(attendees)
 
-        Transcript (lines are labeled with speakers — "Me" is the user, "Them" is everyone else on the call):
+        Transcript (lines labeled with speakers — "Me" is the user \(userName), "Them" is everyone else):
 
         \(transcript)
 
@@ -455,11 +455,11 @@ final class OllamaService {
 
         # \(meeting.title) — Summary
 
-        ## TL;DR
-        2–4 sentence overview of what happened and what comes next.
+        ## Topics Discussed
+        A bulleted list of every major topic or subject covered during the call. Be comprehensive — list all distinct topics discussed, not just the most important ones.
 
-        ## Key Decisions
-        Bulleted decisions made on the call. If none, write "None.".
+        ## Decisions Made
+        Bulleted list of concrete decisions reached during the call. If none, write "None.".
 
         ## Action Items
         Bulleted checklist. Each item MUST use this exact format:
@@ -472,12 +472,9 @@ final class OllamaService {
         write "None.".
 
         ## Open Questions
-        Bulleted. If none, write "None.".
+        Bulleted list of questions raised but not resolved. If none, write "None.".
 
-        ## Notable Quotes
-        0–3 direct quotes (with speaker label) that capture the key positions or asks.
-
-        Keep it tight. No preamble, no closing remarks.
+        Keep it tight. No preamble, no closing remarks. Every section must appear even if its value is "None.".
         """
     }
 }

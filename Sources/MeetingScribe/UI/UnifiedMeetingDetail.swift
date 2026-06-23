@@ -49,6 +49,7 @@ struct UnifiedMeetingDetail: View {
     @State var editingHeader: Bool = false
     @State var previousPrimaryTagID: String?
     @State var audioURLs: [URL] = []
+    @State var importedRecordingURLs: [URL] = []
     /// One audio player shared by the transport bar and the synced transcript
     /// so tapping a transcript timestamp seeks the same player you can hear
     /// (C1-3). Reloaded whenever `audioURLs` changes on a meeting switch.
@@ -151,7 +152,7 @@ struct UnifiedMeetingDetail: View {
             reviewBanner   // 3-E: 24h post-meeting review checklist
             Divider()
             audioBar
-            Divider().opacity(audioURLs.isEmpty ? 0 : 1)
+            Divider().opacity((audioURLs.isEmpty && importedRecordingURLs.isEmpty) ? 0 : 1)
             canvasBody
         }
         .onAppear {
@@ -359,6 +360,7 @@ struct UnifiedMeetingDetail: View {
             case .upcoming(let m):
                 PreMeetingBriefView(meeting: m)
                     .environmentObject(manager)
+                    .environmentObject(chatSession)
                     .frame(height: h)
             case .past:
                 if !bodyLoaded {
@@ -671,6 +673,7 @@ struct UnifiedMeetingDetail: View {
             }.value
             guard !Task.isCancelled, meeting?.id == viewedID else { return }
             audioURLs = urls
+            importedRecordingURLs = Self.discoverImportedURLs(in: dir)
             // 4. Backlinks last — most expensive, least time-critical.
             if let mgr = manager {
                 let found = await mgr.backlinks(toMeetingID: viewedID)
@@ -683,6 +686,19 @@ struct UnifiedMeetingDetail: View {
                 relatedMeetings = related
             }
         }
+    }
+
+    nonisolated private static func discoverImportedURLs(in dir: URL) -> [URL] {
+        let importsDir = dir.appendingPathComponent("imports", isDirectory: true)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: importsDir.path),
+              let contents = try? fm.contentsOfDirectory(at: importsDir, includingPropertiesForKeys: nil) else {
+            return []
+        }
+        let audioExts = Set(["m4a", "mp4", "mp3", "wav", "caf", "aac", "flac", "ogg", "opus"])
+        return contents
+            .filter { audioExts.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     nonisolated private static func discoverAudioURLs(in dir: URL) -> [URL] {
@@ -720,6 +736,9 @@ struct UnifiedMeetingDetail: View {
             manager.handleTagChange(for: m, previousPrimary: prev)
             previousPrimaryTagID = newPrimaryID
             audioURLs = manager.audioURLs(for: m)
+            let primary = manager.tagStore.primaryTag(for: m)
+            let dir = manager.store.directory(for: m, primaryTag: primary)
+            importedRecordingURLs = Self.discoverImportedURLs(in: dir)
         }
     }
 

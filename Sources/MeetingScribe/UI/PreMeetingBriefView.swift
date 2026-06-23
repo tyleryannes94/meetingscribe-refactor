@@ -13,6 +13,8 @@ struct PreMeetingBriefView: View {
     let meeting: Meeting
 
     @EnvironmentObject var manager: MeetingManager
+    @EnvironmentObject var chatSession: ChatSession
+    @AppStorage("chatRailVisible") private var chatVisible: Bool = false
 
     // Computed once on appear; stored in state so the view doesn't
     // recompute on every re-render triggered by unrelated manager changes.
@@ -37,6 +39,9 @@ struct PreMeetingBriefView: View {
                 synthesizedSection
                 if !seriesRecap.isEmpty { seriesRecapSection }   // recurring only
                 talkingPointsSection
+                if !meeting.attendees.isEmpty {
+                    askAboutParticipantsButton
+                }
                 relationshipSummarySection
                 if !openItems.isEmpty   { openItemsSection }
                 if !priorMeetings.isEmpty { priorMeetingsSection }
@@ -291,28 +296,31 @@ struct PreMeetingBriefView: View {
         }
 
         let emails = attendeeEmails(from: meeting.attendees)
-        guard !emails.isEmpty else {
-            priorMeetings = []
-            openItems = []
+        // For recurring meetings, scope prior meetings and open items to the same series.
+        // For one-off meetings, look across all shared-attendee meetings.
+        let related: [Meeting]
+        if let sid = meeting.seriesID, !sid.isEmpty {
+            related = manager.pastMeetings
+                .filter { $0.seriesID == sid && $0.id != meeting.id }
+                .sorted { $0.startDate > $1.startDate }
+        } else if !emails.isEmpty {
+            related = manager.pastMeetings.filter { past in
+                let pastEmails = attendeeEmails(from: past.attendees)
+                return !pastEmails.isDisjoint(with: emails)
+            }.sorted { $0.startDate > $1.startDate }
+        } else {
+            related = []
+        }
+
+        priorMeetings = Array(related.prefix(10))
+        openItems = related.flatMap { m in
+            manager.actionItems.items(for: m.id).filter { $0.status != .completed }
+        }.sorted { $0.createdAt > $1.createdAt }
+
+        guard !emails.isEmpty || (meeting.seriesID?.isEmpty == false) else {
             maybeSynthesize()
             return
         }
-
-        // All past meetings that share at least one attendee email.
-        let related = manager.pastMeetings.filter { past in
-            let pastEmails = attendeeEmails(from: past.attendees)
-            return !pastEmails.isDisjoint(with: emails)
-        }
-        .sorted { $0.startDate > $1.startDate }
-
-        priorMeetings = Array(related.prefix(10))
-
-        // Collect open action items from those meetings.
-        openItems = related.flatMap { m in
-            manager.actionItems.items(for: m.id).filter { $0.status != .completed }
-        }
-        .sorted { $0.createdAt > $1.createdAt }
-
         maybeSynthesize()
     }
 
@@ -380,11 +388,11 @@ struct PreMeetingBriefView: View {
         }
         let prompt = """
         You are preparing the user for an upcoming meeting. Using ONLY the context below, write a tight pre-meeting brief in Markdown with these sections (omit any with no content):
-        - **Where you left off** — 1–2 sentences on last time (only if recurring context is given).
-        - **Recap of the last 2 meetings** — bullets covering the key topics discussed and the action items from each (only if recurring context is given).
-        - **Open commitments to follow up** — bullets: who owes what.
-        - **Suggested talking points** — 2–4 bullets.
-        Under 180 words. No preamble, no closing remarks.
+        - **Where you left off** — 1–2 sentences on what was covered last time (only if recurring series context is given).
+        - **Recap of the last 2 meetings** — for each, bullet the key topics discussed and any open action items (only if recurring series context is given).
+        - **Open commitments** — bullets: who owes what from prior meetings in this series.
+        - **Recommended topics for this meeting** — 2–4 bullet points suggesting what should be addressed given the prior meeting history and open items.
+        Under 200 words. No preamble, no closing remarks. Focus on being directly useful for walking into this meeting.
 
         CONTEXT:
         \(ctx)
@@ -405,6 +413,22 @@ struct PreMeetingBriefView: View {
         } catch {
             await MainActor.run { self.generating = false }  // fall back to static lists
         }
+    }
+
+    @ViewBuilder
+    private var askAboutParticipantsButton: some View {
+        Button {
+            let names = meeting.attendees.prefix(5).joined(separator: ", ")
+            let prompt = "Based on past meetings, what should I know going into this meeting with \(names)? What topics or concerns have come up with them before?"
+            chatVisible = true
+            Task { await chatSession.sendUserMessage(prompt) }
+        } label: {
+            Label("Ask about participants", systemImage: "person.2.circle")
+                .font(.callout)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(NDS.accent)
+        .padding(.top, 2)
     }
 
     /// Normalized emails for a meeting's attendees, via the one identity layer.

@@ -407,6 +407,14 @@ final class MeetingPipelineController: ObservableObject {
         else if let first = mics.first { sources.append(.init(label: "Me", url: first)) }
         if let sys = mergedSys { sources.append(.init(label: "Them", url: sys)) }
         else if let first = systems.first { sources.append(.init(label: "Them", url: first)) }
+        // Include any externally-imported recordings from imports/ subdirectory.
+        let importsDir = dir.appendingPathComponent("imports", isDirectory: true)
+        if let importFiles = try? FileManager.default.contentsOfDirectory(at: importsDir, includingPropertiesForKeys: nil) {
+            let audioExts = Set(["m4a", "mp4", "mp3", "wav", "caf", "aac", "flac", "ogg", "opus"])
+            for file in importFiles.filter({ audioExts.contains($0.pathExtension.lowercased()) }).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                sources.append(.init(label: "Imported", url: file))
+            }
+        }
         guard !sources.isEmpty else { return }
 
         let transcript: String
