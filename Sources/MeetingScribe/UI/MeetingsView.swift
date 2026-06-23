@@ -29,7 +29,7 @@ struct MeetingsView: View {
     // Default to upcoming-first and remember the user's last choice across
     // visits (was a transient `.all` @State that reset every time the tab
     // was rebuilt). Scope is a String-backed enum so @AppStorage can persist it.
-    @AppStorage("meetings.scope") private var scope: Scope = .upcoming
+    @AppStorage("meetings.scope") private var scope: Scope = .all
     // List vs Month view inside the Meetings tab — re-exposes the month grid
     // (option B). Month mode is wired to `selectedMeeting`, not inline expand.
     @State private var listMode: ListMode = .list
