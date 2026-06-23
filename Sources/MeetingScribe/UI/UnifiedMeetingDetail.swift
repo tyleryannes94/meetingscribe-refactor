@@ -479,10 +479,10 @@ struct UnifiedMeetingDetail: View {
             // notes section, so the section sizes itself unambiguously and
             // its children land at the right Y offsets.
             VStack(alignment: .leading, spacing: NDS.spaceMD) {
-                ScrollView {
-                    MarkdownEditor(text: .constant(summary), isEditable: false)
-                }
-                .frame(height: max(180, summaryPaneHeight))
+                // MarkdownEditor is itself an NSScrollView — don't wrap it in
+                // another SwiftUI ScrollView or the content collapses invisible.
+                MarkdownEditor(text: .constant(summary), isEditable: false)
+                    .frame(height: max(180, summaryPaneHeight))
                 Rectangle().fill(Color.clear)
                     .frame(height: 6)
                     .contentShape(Rectangle())
@@ -497,6 +497,21 @@ struct UnifiedMeetingDetail: View {
                     if manager.ollamaReachable, !summary.isEmpty {
                         SummaryEditByAsking(meeting: m, current: summary,
                                             onChanged: { summary = $0 })
+                    }
+                    HStack(spacing: 8) {
+                        let isWorking = manager.transcribingMeetingIDs.contains(m.id)
+                        if isWorking {
+                            ProgressView().controlSize(.small)
+                            Text("Regenerating…")
+                                .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                        } else {
+                            Button("Regenerate summary") {
+                                manager.pipelineController.transcribeNow(meeting: m,
+                                                                         regenerateSummary: true)
+                            }
+                            .buttonStyle(MSSecondaryButtonStyle())
+                        }
+                        Spacer()
                     }
                     SummaryFeedbackRow(meetingID: m.id) {
                         manager.pipelineController.transcribeNow(meeting: m,

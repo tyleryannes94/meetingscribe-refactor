@@ -29,11 +29,8 @@ extension UnifiedMeetingDetail {
                     .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
             }
             if let id = meeting?.id, let live = pipeline.liveSummaryByID[id], !live.isEmpty {
-                ScrollView {
-                    MarkdownEditor(text: .constant(live), isEditable: false)
-                        .padding(.horizontal, 8)
-                }
-                .frame(maxHeight: 240)
+                MarkdownEditor(text: .constant(live), isEditable: false)
+                    .frame(height: 240)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
