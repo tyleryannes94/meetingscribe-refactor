@@ -33,7 +33,7 @@ extension UnifiedMeetingDetail {
     func consumeTranscriptQuery() {
         guard let q = router.pendingTranscriptQuery, !q.isEmpty else { return }
         transcriptSearchSeed = q
-        pendingScrollAnchor = .transcript
+        activeTab = .transcript
         router.pendingTranscriptQuery = nil
     }
 

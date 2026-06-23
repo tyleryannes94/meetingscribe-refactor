@@ -82,6 +82,31 @@ struct UnifiedMeetingDetail: View {
     /// callers need at least internal access, so this is not `private`.
     @State var pendingScrollAnchor: SectionAnchor? = nil
 
+    // MARK: - Tab navigation
+
+    enum MeetingTab: String, CaseIterable {
+        case brief, outcomes, notes, transcript, related
+        var label: String {
+            switch self {
+            case .brief: return "Brief"
+            case .outcomes: return "Outcomes"
+            case .notes: return "Notes"
+            case .transcript: return "Transcript"
+            case .related: return "Related"
+            }
+        }
+        var icon: String {
+            switch self {
+            case .brief: return "doc.text"
+            case .outcomes: return "checklist"
+            case .notes: return "note.text"
+            case .transcript: return "text.quote"
+            case .related: return "link"
+            }
+        }
+    }
+    @State var activeTab: MeetingTab = .brief
+
     var meeting: Meeting? {
         switch mode {
         case .live: return manager.activeMeeting
@@ -136,7 +161,7 @@ struct UnifiedMeetingDetail: View {
             let decCount = manager.decisions.decisions.filter { $0.meetingID == m.id }.count
             PostMeetingReviewBanner(meeting: m, actionItemCount: aiCount,
                                     decisionCount: decCount,
-                                    onReviewTasks: { pendingScrollAnchor = .outcomes })
+                                    onReviewTasks: { activeTab = .outcomes })
         }
     }
 
@@ -151,8 +176,6 @@ struct UnifiedMeetingDetail: View {
             header
             reviewBanner   // 3-E: 24h post-meeting review checklist
             Divider()
-            audioBar
-            Divider().opacity((audioURLs.isEmpty && importedRecordingURLs.isEmpty) ? 0 : 1)
             canvasBody
         }
         .onAppear {
@@ -243,64 +266,206 @@ struct UnifiedMeetingDetail: View {
         // Switching meetings closes any open connect panel.
         .onChange(of: meeting?.id) { _, _ in connectingAttendee = nil }
     }
-    // MARK: - Canvas body
+    // MARK: - Canvas body (tab-based)
 
-    /// Section anchors for the canvas's `ScrollViewReader`. The highlights chip
-    /// and the post-meeting review banner set `pendingScrollAnchor` to one of
-    /// these to jump in-canvas instead of teleporting between tabs (was M8's
-    /// goal; landed in M10 with the rest of the tab cleanup).
+    /// Section anchors — kept for backward-compat with any callers that still
+    /// assign `pendingScrollAnchor`; they are translated to `activeTab` in the
+    /// `.onChange` below.
     enum SectionAnchor: Hashable { case outcomes, summary, transcript }
 
-    /// Detail reading measure for the canvas column (01 §5.1).
-    static let canvasContentMaxWidth: CGFloat = 760
-
-    /// Single-column meeting canvas — mode-aware section ordering, MSSection
-    /// per block. Notes and Brief come first for upcoming/live (prep/recording
-    /// job), Outcomes and Summary first for past. Each section self-hides
-    /// when it has nothing to show. Persistence keys are mode-suffixed so
-    /// toggling collapse on a past meeting doesn't bury Brief on an upcoming
-    /// one. The chat panel that used to live as a tab is now the global
-    /// right-side `ChatSidebar`, scoped to this meeting via
-    /// `chatSession.setContext` in the live body's `.onAppear`.
     @ViewBuilder var canvasBody: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    switch mode {
-                    case .past:
-                        outcomesSection.id(SectionAnchor.outcomes)
-                        highlightsSection
-                        summarySection.id(SectionAnchor.summary)
-                        notesSection
-                        transcriptSection.id(SectionAnchor.transcript)
-                        relatedSection
-                    case .live:
-                        notesSection
-                        transcriptSection.id(SectionAnchor.transcript)
-                        outcomesSection.id(SectionAnchor.outcomes)
-                        highlightsSection
-                    case .upcoming:
-                        transcriptSection.id(SectionAnchor.transcript)   // = Pre-meeting brief
-                        notesSection
+        HStack(spacing: 0) {
+            meetingTabRail
+                .padding(.top, NDS.spaceSM)
+            Divider()
+            meetingTabPane
+        }
+        .onAppear { resetTab() }
+        .onChange(of: meeting?.id) { _, _ in resetTab() }
+        // Translate legacy pendingScrollAnchor assignments to tab switches.
+        .onChange(of: pendingScrollAnchor) { _, anchor in
+            guard let anchor else { return }
+            switch anchor {
+            case .outcomes: activeTab = .outcomes
+            case .summary:  activeTab = .brief
+            case .transcript: activeTab = .transcript
+            }
+            pendingScrollAnchor = nil
+        }
+    }
+
+    private func resetTab() {
+        switch mode {
+        case .past: activeTab = .brief
+        case .live: activeTab = .transcript
+        case .upcoming: activeTab = .brief
+        }
+    }
+
+    @ViewBuilder private var meetingTabRail: some View {
+        let tabs: [MeetingTab] = {
+            switch mode {
+            case .past: return [.brief, .outcomes, .notes, .transcript, .related]
+            case .live: return [.transcript, .notes, .outcomes]
+            case .upcoming: return [.brief, .notes]
+            }
+        }()
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(tabs, id: \.rawValue) { tab in
+                meetingTabButton(tab)
+            }
+            Spacer()
+        }
+        .frame(width: 150)
+    }
+
+    @ViewBuilder private func meetingTabButton(_ tab: MeetingTab) -> some View {
+        let isActive = activeTab == tab
+        Button { withAnimation(.easeOut(duration: 0.12)) { activeTab = tab } } label: {
+            HStack(spacing: 8) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                    .frame(width: 16, alignment: .center)
+                Text(tab.label)
+                    .font(isActive ? .callout.weight(.semibold) : .callout)
+                Spacer()
+                if tab == .outcomes, let m = meeting {
+                    let count = manager.actionItems.items(for: m.id).count
+                    if count > 0 {
+                        Text("\(count)")
+                            .font(.caption2.bold()).foregroundStyle(.white)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(isActive ? Color.white.opacity(0.3) : Color.accentColor)
+                            .clipShape(Capsule())
                     }
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
+            .foregroundStyle(isActive ? Color.accentColor : Color.primary.opacity(0.7))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+    }
+
+    @ViewBuilder private var meetingTabPane: some View {
+        switch activeTab {
+        case .brief:
+            briefTabContent
+        case .outcomes:
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    outcomesSection
+                    highlightsSection
                 }
                 .padding(.horizontal, NDS.spaceXL)
                 .padding(.vertical, NDS.spaceXL)
-                .frame(maxWidth: Self.canvasContentMaxWidth)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onChange(of: pendingScrollAnchor) { _, anchor in
-                guard let anchor else { return }
-                withAnimation(.easeOut(duration: 0.25)) {
-                    proxy.scrollTo(anchor, anchor: .top)
+        case .notes:
+            notesTabContent
+        case .transcript:
+            transcriptTabContent
+        case .related:
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    relatedMeetingsStrip
+                    backlinksPanel
                 }
-                pendingScrollAnchor = nil
+                .padding(.horizontal, NDS.spaceXL)
+                .padding(.vertical, NDS.spaceXL)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    /// Mode-suffixed persistence key so toggling Notes collapsed on a past
-    /// meeting doesn't carry over to upcoming/live.
+    @ViewBuilder private var briefTabContent: some View {
+        switch mode {
+        case .upcoming(let m):
+            PreMeetingBriefView(meeting: m)
+                .environmentObject(manager)
+                .environmentObject(chatSession)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .past, .live:
+            VStack(alignment: .leading, spacing: NDS.spaceMD) {
+                // Toolbar row: copy menu + regenerate
+                HStack {
+                    copyMenu
+                    Spacer()
+                    if let m = meeting {
+                        let isWorking = manager.transcribingMeetingIDs.contains(m.id)
+                        if isWorking {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Regenerating…").font(NDS.small).foregroundStyle(NDS.textTertiary)
+                            }
+                        } else {
+                            Button("Regenerate") {
+                                manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
+                            }
+                            .buttonStyle(MSSecondaryButtonStyle())
+                        }
+                    }
+                }
+                .padding(.horizontal, NDS.spaceXL)
+                .padding(.top, NDS.spaceMD)
+                Divider()
+                // Summary content
+                if hasRealSummary {
+                    MarkdownEditor(text: .constant(summary), isEditable: false)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, NDS.spaceXL)
+                } else if isSummaryGenerating {
+                    summaryGeneratingBanner.padding(.horizontal, NDS.spaceXL)
+                    Spacer()
+                } else if !bodyLoaded {
+                    MSSkeleton(lines: 4).padding(.vertical, NDS.spaceSM).padding(.horizontal, NDS.spaceXL)
+                    Spacer()
+                } else {
+                    summaryEmptyState.padding(.horizontal, NDS.spaceXL)
+                    Spacer()
+                }
+                // Edit-by-asking and feedback
+                if hasRealSummary, let m = meeting {
+                    VStack(alignment: .leading, spacing: NDS.spaceSM) {
+                        if manager.ollamaReachable, !summary.isEmpty {
+                            SummaryEditByAsking(meeting: m, current: summary, onChanged: { summary = $0 })
+                        }
+                        SummaryFeedbackRow(meetingID: m.id) {
+                            manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
+                        }
+                        followUpButton
+                    }
+                    .padding(.horizontal, NDS.spaceXL)
+                    .padding(.bottom, NDS.spaceXL)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    @ViewBuilder private var notesTabContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            notesSectionBody
+                .padding(.horizontal, NDS.spaceXL)
+                .padding(.vertical, NDS.spaceXL)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder private var transcriptTabContent: some View {
+        VStack(spacing: 0) {
+            audioBar
+            Divider().opacity(audioURLs.isEmpty && importedRecordingURLs.isEmpty ? 0 : 1)
+            transcriptSectionBody
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Mode-suffixed persistence key (kept for MSSection persistence keys).
     private var modeKey: String {
         switch mode {
         case .past: return "past"
@@ -542,7 +707,7 @@ struct UnifiedMeetingDetail: View {
                           persistenceKey: "meeting.highlights.v2") {
                     FlowLayout(spacing: NDS.spaceSM) {
                         ForEach(marks) { mark in
-                            Button { pendingScrollAnchor = .transcript } label: {
+                            Button { activeTab = .transcript } label: {
                                 HStack(spacing: 5) {
                                     Text(mark.timestamp)
                                         .scaledFont(11, weight: .semibold).monospacedDigit()
