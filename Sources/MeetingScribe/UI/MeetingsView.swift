@@ -23,7 +23,7 @@ struct MeetingsView: View {
     /// filter can't blank the open detail.
     private var selectedMeeting: Meeting? {
         guard let id = router.selectedMeetingID else { return nil }
-        return (calendar.upcoming + manager.pastMeetings).first { $0.id == id }
+        return (manager.pastMeetings + calendar.upcoming + calendar.rangeEvents).first { $0.id == id }
     }
     @State private var search: String = ""
     // Default to upcoming-first and remember the user's last choice across
@@ -105,6 +105,11 @@ struct MeetingsView: View {
         .onAppear {
             calendar.refreshUpcoming()
             manager.refreshPastMeetings()
+            // Also pull today's earlier calls (refreshUpcoming now starts from
+            // startOfDay, but rangeEvents warms the list view too).
+            let today = Calendar.current.startOfDay(for: Date())
+            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today
+            calendar.fetchRange(from: today, to: tomorrow)
         }
     }
 
@@ -490,12 +495,17 @@ struct MeetingsView: View {
 
     // MARK: - Week view
 
-    /// All meetings (past + upcoming, deduped), honoring the search box. Week
-    /// mode ignores the scope pills — it always shows the whole calendar.
+    /// All meetings from all sources (upcoming, past recorded, and any
+    /// on-demand range fetches), deduped by ID. calendar.upcoming is
+    /// preferred over rangeEvents when IDs collide (upcoming has fresher
+    /// metadata like title overrides). pastMeetings wins over both for
+    /// meetings that have been recorded (has the on-disk data).
     private var calendarMeetings: [Meeting] {
         var seen = Set<String>()
         var out: [Meeting] = []
-        for m in calendar.upcoming + manager.pastMeetings where seen.insert(m.id).inserted {
+        // pastMeetings first so recorded meetings keep their on-disk metadata
+        for m in manager.pastMeetings + calendar.upcoming + calendar.rangeEvents
+            where seen.insert(m.id).inserted {
             if matches(m) { out.append(m) }
         }
         return out
@@ -533,6 +543,14 @@ struct MeetingsView: View {
             .sorted { $0.startDate < $1.startDate }
     }
 
+    /// Trigger an EventKit fetch for the currently-displayed week so that
+    /// unrecorded calendar events (no folder on disk) appear in the week view.
+    private func fetchCurrentWeek() {
+        let cal = Calendar.current
+        let end = cal.date(byAdding: .day, value: 7, to: weekStart) ?? weekStart
+        calendar.fetchRange(from: weekStart, to: end)
+    }
+
     var weekView: some View {
         VStack(spacing: 0) {
             // Header: prev / week range / next / Today
@@ -568,6 +586,8 @@ struct MeetingsView: View {
                 .frame(minWidth: 560)
             }
         }
+        .onAppear { fetchCurrentWeek() }
+        .onChange(of: weekOffset) { _, _ in fetchCurrentWeek() }
     }
 
     private static let weekDayNameFormatter: DateFormatter = {

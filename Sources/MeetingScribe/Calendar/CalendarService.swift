@@ -27,6 +27,10 @@ final class CalendarService: ObservableObject {
 
     @Published var upcoming: [Meeting] = []
     @Published var authorized: Bool = false
+    /// Extra calendar events fetched on demand for arbitrary date ranges
+    /// (e.g. past weeks in the week view, today's earlier calls). Merged
+    /// with `upcoming` + `pastMeetings` by the UI, deduped by meeting ID.
+    @Published var rangeEvents: [Meeting] = []
 
     private var cacheURL: URL {
         AppSettings.shared.storageDir.appendingPathComponent(".upcoming-cache.json")
@@ -119,11 +123,11 @@ final class CalendarService: ObservableObject {
         let now = Date()
         let startWindow = cal.startOfDay(for: now)
         let endWindow = cal.date(byAdding: .day, value: 8, to: startWindow) ?? now.addingTimeInterval(7 * 86400)
-        // Look back far enough that a meeting stays in the upcoming list through
-        // the whole "join & record" window (45 min past its end). EventKit
-        // includes any event whose end is >= `from`, so 46 min covers a call
-        // that ended 45 min ago without dropping it from the UI mid-window.
-        let from = now.addingTimeInterval(-46 * 60)
+        // Start from the beginning of today so every call from this morning
+        // onwards appears — not just the 46-min "join & record" window. The
+        // old lookback meant anything that ended before ~45 min ago dropped
+        // off the list and couldn't be recovered from the UI.
+        let from = cal.startOfDay(for: now)
         let enabledIDs = AppSettings.shared.enabledCalendarIDs
         let filter = AppSettings.shared.filterToConferenceLinks
         Task {
@@ -132,6 +136,26 @@ final class CalendarService: ObservableObject {
                                                                   filterConferenceURLs: filter)
             self.upcoming = result
             self.saveCache(result)
+        }
+    }
+
+    /// Fetch all calendar events in an arbitrary range and merge them into
+    /// `rangeEvents` (deduped by ID). Used by the week view when navigating
+    /// to past weeks, and by the list to surface unrecorded past calls.
+    func fetchRange(from: Date, to: Date) {
+        guard authorized else { return }
+        let enabledIDs = AppSettings.shared.enabledCalendarIDs
+        let filter = AppSettings.shared.filterToConferenceLinks
+        Task {
+            let result = await CalendarStoreActor.shared.meetings(from: from, to: to,
+                                                                  enabledIDs: enabledIDs,
+                                                                  filterConferenceURLs: filter)
+            var merged = self.rangeEvents
+            var seen = Set(merged.map(\.id))
+            for m in result where seen.insert(m.id).inserted {
+                merged.append(m)
+            }
+            self.rangeEvents = merged
         }
     }
 
