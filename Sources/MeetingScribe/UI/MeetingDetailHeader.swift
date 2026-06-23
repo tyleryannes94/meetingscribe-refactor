@@ -283,12 +283,20 @@ extension UnifiedMeetingDetail {
                 }
             }
 
-            if case .past(let m) = mode {
+            // Show full settings for all non-live meetings (past AND upcoming).
+            // The user needs access to transcribe, recover, and export regardless
+            // of whether the meeting is in the future or past.
+            if let m: Meeting = {
+                switch mode {
+                case .past(let m): return m
+                case .upcoming(let m): return m
+                case .live: return nil
+                }
+            }() {
                 Divider()
 
-                // Transcription — re-run on the recorded audio. Always available
-                // when audio exists (even mid-"Processing", so a stuck or bad
-                // job can be retried). Label adapts to a clear retry.
+                // Transcription — available for past recordings; disabled for
+                // upcoming meetings that haven't been recorded yet.
                 Button {
                     manager.transcribeNow(meeting: m)
                 } label: {
@@ -297,7 +305,7 @@ extension UnifiedMeetingDetail {
                 }
                 .disabled(!manager.hasAudio(for: m))
 
-                // Join actions (if URL exists)
+                // Join actions
                 if m.conferenceURL != nil {
                     Button {
                         if let url = m.conferenceURL.flatMap(URL.init(string:)) {
@@ -308,19 +316,21 @@ extension UnifiedMeetingDetail {
                     }
                 }
 
-                // Add new recording
-                Button {
-                    Task {
-                        if case .recording = manager.state {
-                            await manager.stopRecording()
-                            try? await Task.sleep(nanoseconds: 300_000_000)
+                // Add / continue recording
+                if case .past = mode {
+                    Button {
+                        Task {
+                            if case .recording = manager.state {
+                                await manager.stopRecording()
+                                try? await Task.sleep(nanoseconds: 300_000_000)
+                            }
+                            await manager.continueRecording(for: m)
                         }
-                        await manager.continueRecording(for: m)
+                    } label: {
+                        Label("Add New Recording", systemImage: "plus.circle")
                     }
-                } label: {
-                    Label("Add New Recording", systemImage: "plus.circle")
+                    .help("Appends a new audio segment to this meeting.")
                 }
-                .help("Appends a new audio segment to this meeting.")
 
                 Divider()
 
@@ -379,7 +389,7 @@ extension UnifiedMeetingDetail {
                     }
                 }
 
-                // Calendar write-back (P4-1)
+                // Calendar write-back
                 Menu("Calendar…") {
                     if isCalendarLinked(m) {
                         Button { addRecapToCalendar(m) } label: {

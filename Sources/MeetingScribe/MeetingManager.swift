@@ -238,6 +238,19 @@ final class MeetingManager: ObservableObject {
                 tagStore.addTag("preset-impromptu", to: m, propagateToSeries: false)
             }
             m.segmentCount = 1
+            // Prevent recurring-series ID collisions: EKEvent.eventIdentifier is
+            // the same for every occurrence of a recurring series. If a folder
+            // already exists for this ID but belongs to a *different day*, this is
+            // a distinct occurrence — give it a fresh UUID so it never overwrites
+            // a prior recording.
+            if let existingDir = store.findExistingDirectory(forMeetingID: m.id),
+               let existing = store.readMeeting(at: existingDir) {
+                let cal = Calendar.current
+                if !cal.isDate(existing.startDate, equalTo: m.startDate, toGranularity: .day) {
+                    m.id = UUID().uuidString
+                    m.relativeFolderPath = nil
+                }
+            }
             activeMeeting = m
             liveTranscriber.reset()
             let primary = tagStore.primaryTag(for: m)
