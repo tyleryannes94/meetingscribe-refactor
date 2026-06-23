@@ -454,15 +454,13 @@ struct UnifiedMeetingDetail: View {
     /// duplicates were retired in M10.
     @ViewBuilder var summarySection: some View {
         if case .past = mode, let m = meeting {
-            let showSection = hasRealSummary || isSummaryGenerating
-                || (bodyLoaded && !transcript.isEmpty) || !bodyLoaded
-            if showSection {
-                MSSection("Summary", systemImage: "doc.text",
-                          persistenceKey: "meeting.summary.v2",
-                          defaultExpanded: true,
-                          trailing: { copyMenu }) {
-                    summarySectionBody(meetingID: m.id)
-                }
+            // Always present for past meetings — shows a call-to-action while
+            // pending so the section is never invisibly absent after a recording.
+            MSSection("Post-meeting brief", systemImage: "doc.text",
+                      persistenceKey: "meeting.summary.v2",
+                      defaultExpanded: true,
+                      trailing: { copyMenu }) {
+                summarySectionBody(meetingID: m.id)
             }
         }
     }
@@ -509,10 +507,12 @@ struct UnifiedMeetingDetail: View {
             }
         } else if isSummaryGenerating {
             summaryGeneratingBanner
-        } else if bodyLoaded && !transcript.isEmpty {
-            summaryFailedBanner
         } else if !bodyLoaded {
             MSSkeleton(lines: 4).padding(.vertical, NDS.spaceSM)
+        } else {
+            // No summary yet — transcript present or absent. Always show the
+            // call-to-action so the section is never a silent empty pane.
+            summaryEmptyState
         }
     }
 

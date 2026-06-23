@@ -43,22 +43,36 @@ extension UnifiedMeetingDetail {
 
     @ViewBuilder
     var summaryFailedBanner: some View {
+        summaryEmptyState
+    }
+
+    /// Shown whenever there is no summary yet — whether the pipeline failed,
+    /// was never triggered, or the transcript is still absent. Always shows a
+    /// "Summarize meeting" button so the user can manually kick it off.
+    @ViewBuilder
+    var summaryEmptyState: some View {
         if let m = meeting {
-            let isRetrying = manager.transcribingMeetingIDs.contains(m.id)
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(NDS.gold)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("No summary yet")
-                        .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
-                    Text("The summary engine wasn't reachable when this finished. Your transcript is safe.")
-                        .font(NDS.small).foregroundStyle(NDS.textTertiary)
+            let isWorking = manager.transcribingMeetingIDs.contains(m.id)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .foregroundStyle(NDS.textTertiary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No summary yet")
+                            .font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                        Text(transcript.isEmpty
+                             ? "Tap below to generate the post-meeting brief from the recording."
+                             : "The summary engine wasn't reachable when this finished. Your transcript is safe.")
+                            .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                    }
                 }
-                Spacer(minLength: 8)
-                if isRetrying {
-                    ProgressView().controlSize(.small)
+                if isWorking {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Working…").font(NDS.small).foregroundStyle(NDS.textTertiary)
+                    }
                 } else {
-                    Button("Generate summary") {
+                    Button("Summarize meeting") {
                         manager.pipelineController.transcribeNow(meeting: m, regenerateSummary: true)
                     }
                     .buttonStyle(MSSecondaryButtonStyle())
