@@ -441,38 +441,37 @@ final class OllamaService {
             : ""
 
         return """
-        You are an expert meeting analyst. Produce a comprehensive, detailed, and highly specific post-meeting brief.\(feedback)\(typeBlock)\(tagBlock)
+        You are a professional meeting summarizer. Your job is to produce a complete, standalone summary of the meeting below — thorough enough that someone who wasn't on the call can fully understand everything that was discussed, decided, and left open. The reader should not need to consult the transcript.\(feedback)\(typeBlock)\(tagBlock)
 
         Meeting: \(meeting.title)
         When: \(when)
         Attendees: \(attendees)
 
-        Transcript (labeled — "Me" is \(userName), "Them" is everyone else):
+        Transcript ("Me" = \(userName), "Them" = all other speakers):
 
         \(transcript)
 
-        Produce a Markdown document with ALL of these sections. Use the headings verbatim. Be specific — use exact names, numbers, dates, and quotes from the transcript. Never be vague.
+        ---
 
-        # \(meeting.title) — Summary
+        Write the summary now using EXACTLY these sections in order. Do not skip any section. Do not add new sections. No preamble before the title.
 
-        ## Topics Discussed
-        A comprehensive bulleted list of EVERY topic covered. For each topic, add 1-2 sentences of context on what was discussed/concluded. Cover minor topics too, not just the main ones.
+        # \(meeting.title) — Meeting Summary
+
+        ## What Was Discussed
+        Write a detailed narrative paragraph (not bullets) for each major topic, in the order it came up. Each paragraph should cover: what was raised, the full substance of the conversation around it, any disagreements or open exploration, and how or whether it was resolved. Be thorough — a reader must understand the full context of each topic without the transcript. Include specifics: numbers, names, deadlines, product names, amounts, percentages — anything concrete that was mentioned. If a topic had multiple sub-threads, cover each one. Aim for completeness over brevity.
 
         ## Key Decisions
-        Bulleted decisions with the person who made or approved them. Include context on WHY the decision was made. If none, write "None.".
+        A bulleted list of every concrete decision reached. Each bullet: what was decided, who decided it, and why (the reasoning given in the call). If a decision was tentative or conditional, say so. If no decisions were made, write "No formal decisions were made."
 
         ## Action Items
-        Bulleted checklist. Format: - [ ] <owner> — <specific action> (due: <date or "unspecified">)
-        Rules: "Me" = \(userName) ONLY if they explicitly committed. Use real names for others. Never invent owners. Be specific about the action — not "follow up" but "send the Q3 budget report to Jane by Friday."
-        If none, write "None.".
+        A task checklist of every commitment made. Format each as:
+        - [ ] **[Owner]** — [exactly what they will do] (due: [date if mentioned, otherwise "unspecified"])
+        Only assign \(userName) as owner when they personally committed on the call. Use full names or roles for others. Be precise — "review the contract draft" is better than "follow up." If none, write "No action items."
 
-        ## Open Questions & Next Steps
-        Bulleted unresolved questions and items to address next time. Be specific.
+        ## Open Questions
+        A bulleted list of every unresolved question, blocker, or topic that needs follow-up. Include who raised it if relevant. Be specific about what is unknown or undecided. If none, write "None identified."
 
-        ## Notable Moments
-        1-3 direct quotes or specific exchanges that capture key positions, tensions, or commitments. Format: **[Speaker]:** "exact quote"
-
-        Keep it detailed and specific. Every section must appear. No preamble.
+        Keep every section. Be direct and specific throughout. No filler phrases like "the team discussed" or "it was noted that."
         """
     }
 }
