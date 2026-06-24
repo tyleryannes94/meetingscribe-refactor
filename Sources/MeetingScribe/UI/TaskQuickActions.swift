@@ -17,6 +17,12 @@ struct TaskQuickMenu: View {
 
     private var assigned: Set<String> { Set(item.labelIDs ?? []) }
 
+    /// `offset` days from today at start-of-day, for the quick due-date menu.
+    private static func day(_ offset: Int) -> Date {
+        let cal = Calendar.current
+        return cal.date(byAdding: .day, value: offset, to: cal.startOfDay(for: Date())) ?? Date()
+    }
+
     var body: some View {
         if let onOpen {
             Button { onOpen() } label: { Label("Open", systemImage: "arrow.up.forward.square") }
@@ -43,6 +49,16 @@ struct TaskQuickMenu: View {
                 Button { store.setPriority(item.id, priority: p) } label: {
                     Label(p.label, systemImage: item.priority == p ? "checkmark" : "circle")
                 }
+            }
+        }
+
+        Menu("Due") {
+            Button("Today") { store.setDueDate(item.id, dueDate: Self.day(0)) }
+            Button("Tomorrow") { store.setDueDate(item.id, dueDate: Self.day(1)) }
+            Button("Next week") { store.setDueDate(item.id, dueDate: Self.day(7)) }
+            if item.dueDate != nil {
+                Divider()
+                Button("Clear due date") { store.setDueDate(item.id, dueDate: nil) }
             }
         }
 

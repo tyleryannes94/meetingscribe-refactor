@@ -79,6 +79,29 @@ struct ActionItemsView: View {
     @State var todayScratchError: String?
     @State var todayPlan: String?
 
+    // Home dashboard: which tab, and board-vs-list, both persisted.
+    @AppStorage("home.tab") var homeTabRaw = HomeTab.tasks.rawValue
+    @AppStorage("home.view") var homeViewBoard = true
+
+    enum HomeTab: String, CaseIterable, Identifiable {
+        case tasks, projects, meetings
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .tasks: return "Open tasks"
+            case .projects: return "Projects"
+            case .meetings: return "Meetings"
+            }
+        }
+        var systemImage: String {
+            switch self {
+            case .tasks: return "checklist"
+            case .projects: return "folder"
+            case .meetings: return "doc.text"
+            }
+        }
+    }
+
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board, calendar, gallery
         var id: String { rawValue }
@@ -168,6 +191,23 @@ struct ActionItemsView: View {
         case anyone, mine, delegated
         var id: String { rawValue }
     }
+    /// Secondary ordering applied *within* each group (and within each board
+    /// column) — e.g. "group by project, sort each project by due date". `.smart`
+    /// keeps the established default (due → priority) for lists and the manual
+    /// drag order for boards.
+    enum GroupSort: String, CaseIterable, Identifiable {
+        case smart, dueDate, priority, title, created
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .smart: return "Smart"
+            case .dueDate: return "Due date"
+            case .priority: return "Priority"
+            case .title: return "Title"
+            case .created: return "Date created"
+            }
+        }
+    }
     enum GroupBy: String, CaseIterable, Identifiable {
         case none, meeting, priority, status, dueDate, owner, project, initiative, label, sprint
         var id: String { rawValue }
@@ -231,6 +271,10 @@ struct ActionItemsView: View {
             .onChange(of: vm.groupBy) { _, g in
                 AppSettings.shared.setTaskGroupBy(g.rawValue, forRoute: groupByRouteKey)
             }
+            .onChange(of: groupSortSignature) { _, _ in
+                AppSettings.shared.setTaskGroupSort(
+                    "\(vm.groupSort.rawValue)|\(vm.groupSortAscending)", forRoute: groupByRouteKey)
+            }
             // Sticky per-route filters (All tasks tabs).
             .onChange(of: filterSignature) { _, _ in persistFilterState() }
             .onChange(of: env.selectedMeetingID) { _, _ in env.selectedTaskID = nil }
@@ -258,6 +302,11 @@ struct ActionItemsView: View {
     /// `onChange` instead of three keeps `decoratedPane` cheap to type-check.
     var filterSignature: String {
         "\(vm.filter.rawValue)|\(vm.priorityFilter.rawValue)|\(vm.ownerScope.rawValue)"
+    }
+
+    /// Changes whenever the secondary sort changes — one onChange persists both.
+    var groupSortSignature: String {
+        "\(vm.groupSort.rawValue)|\(vm.groupSortAscending)"
     }
 
     /// The rail + draggable divider + detail pane. The Tasks tab lives inside the
@@ -336,6 +385,13 @@ struct ActionItemsView: View {
         }
         if let raw = AppSettings.shared.taskGroupBy(forRoute: groupByRouteKey),
            let g = GroupBy(rawValue: raw) { vm.groupBy = g }
+        if let raw = AppSettings.shared.taskGroupSort(forRoute: groupByRouteKey) {
+            let parts = raw.split(separator: "|", maxSplits: 1).map(String.init)
+            if let s = GroupSort(rawValue: parts.first ?? "") { vm.groupSort = s }
+            vm.groupSortAscending = (parts.count > 1 ? parts[1] : "true") == "true"
+        } else {
+            vm.groupSort = .smart; vm.groupSortAscending = true
+        }
         restoreFilterState()
     }
 

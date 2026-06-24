@@ -117,7 +117,7 @@ extension ActionItemsView {
                 LazyVStack(spacing: 8) {
                     switch vm.groupBy {
                     case .none:
-                        ForEach(projectFiltered) { item in
+                        ForEach(itemsSorted(projectFiltered)) { item in
                             selectableRow(item)
                                 .background(focusedTaskID == item.id ? NDS.brand.opacity(0.07) : Color.clear)
                                 .overlay(alignment: .leading) {
@@ -133,7 +133,7 @@ extension ActionItemsView {
                     default:
                         ForEach(groupedKeys, id: \.self) { key in
                             if let rows = grouped[key] {
-                                section(title: key, items: rows)
+                                section(title: key, items: itemsSorted(rows))
                             }
                         }
                     }
@@ -381,6 +381,26 @@ extension ActionItemsView {
 
     func sort(_ a: ActionItem, _ b: ActionItem) -> Bool {
         ActionItemsViewModel.defaultSort(a, b)
+    }
+
+    /// Applies the chosen secondary sort (`vm.groupSort`) to a set of items —
+    /// the within-group / within-column ordering. `.smart` falls back to the
+    /// established default sort so nothing changes until the user picks a sort.
+    func itemsSorted(_ items: [ActionItem]) -> [ActionItem] {
+        let asc = vm.groupSortAscending
+        func cmp<T: Comparable>(_ x: T, _ y: T) -> Bool { asc ? x < y : x > y }
+        switch vm.groupSort {
+        case .smart:
+            return items.sorted(by: sort)
+        case .dueDate:
+            return items.sorted { cmp($0.dueDate ?? .distantFuture, $1.dueDate ?? .distantFuture) }
+        case .priority:
+            return items.sorted { cmp($0.priority.weight, $1.priority.weight) }
+        case .title:
+            return items.sorted { cmp($0.title.lowercased(), $1.title.lowercased()) }
+        case .created:
+            return items.sorted { cmp($0.createdAt, $1.createdAt) }
+        }
     }
 
     // MARK: - Grouping

@@ -35,14 +35,17 @@ extension ActionItemsView {
                 todayBrainDumpColumn
                     .frame(width: 420)
             }
+            .frame(maxHeight: .infinity)
+            Divider().overlay(NDS.divider)
+            todayBoardSection
         }
     }
 
     // MARK: Header
 
     private var todayScratchHeader: some View {
+        let open = todayOpenTasks.count
         let overdue = contextFiltered(store.overdueTasks).count
-        let dueToday = contextFiltered(store.myDayTasks).count
         return HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
@@ -57,48 +60,50 @@ extension ActionItemsView {
             Spacer()
             HStack(spacing: 6) {
                 if overdue > 0 { stat(label: "Overdue", value: overdue, color: NDS.selectColor("red")) }
-                stat(label: "Due today", value: dueToday, color: NDS.brand)
+                stat(label: "Open", value: open, color: NDS.brand)
             }
         }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
     }
 
+    /// Everything you could be working on: open + in-progress, non-triage,
+    /// scoped to the active context, smart-sorted (overdue floats to the top).
+    var todayOpenTasks: [ActionItem] {
+        contextFiltered(store.items.filter { !$0.needsTriage && $0.status != .completed })
+            .sorted { sort($0, $1) }
+    }
+
     // MARK: Left — quick capture
 
     private var todayCaptureColumn: some View {
-        let overdue = contextFiltered(store.overdueTasks)
-            .sorted { ($0.dueDate ?? .distantPast) < ($1.dueDate ?? .distantPast) }
-        let dueToday = contextFiltered(store.myDayTasks).sorted { sort($0, $1) }
-        let seen = Set(overdue.map(\.id)).union(dueToday.map(\.id))
-        let pinnedExtra = pinnedTodayTasks.filter { !seen.contains($0.id) }
-        let todayItems = (dueToday + pinnedExtra)
-
+        let items = todayOpenTasks
         return VStack(spacing: 0) {
             todayQuickAddRow
-            if overdue.isEmpty && todayItems.isEmpty {
+            if items.isEmpty {
                 todayCaptureEmpty
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        if !overdue.isEmpty {
-                            todaySection("Overdue", items: overdue, tint: NDS.selectColor("red"))
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Text("All tasks")
+                                .scaledFont(13, weight: .semibold).foregroundStyle(.secondary)
+                                .textCase(.uppercase).tracking(0.6)
+                            Text("\(items.count)").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+                            Spacer()
                         }
-                        if !todayItems.isEmpty {
-                            todaySection("Today", items: todayItems, tint: NDS.brand)
+                        .padding(.bottom, 2)
+                        // Right-click any row to set priority / due / labels / project
+                        // without opening it; a single click opens the editor drawer.
+                        ForEach(items) { item in
+                            row(for: item)
+                                .draggable(item.id)
+                                .taskQuickActions(item: item, store: store) { env.selectedTaskID = item.id }
                         }
                     }
                     .padding(16)
                 }
             }
         }
-    }
-
-    /// Tasks the user explicitly pinned into today (5-2), still open.
-    private var pinnedTodayTasks: [ActionItem] {
-        let pinned = PinnedToday.ids(pinnedTodayCSV)
-        return contextFiltered(store.items.filter {
-            pinned.contains($0.id) && $0.status != .completed && !$0.needsTriage
-        })
     }
 
     private var todayQuickAddRow: some View {
@@ -126,18 +131,80 @@ extension ActionItemsView {
         .padding(32)
     }
 
-    private func todaySection(_ title: String, items: [ActionItem], tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Circle().fill(tint).frame(width: 7, height: 7)
-                Text(title)
-                    .scaledFont(13, weight: .semibold).foregroundStyle(tint)
-                    .textCase(.uppercase).tracking(0.6)
-                Text("\(items.count)").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+    // MARK: Bottom — status board
+
+    /// The set the Today board shows: open + in-progress, plus tasks completed
+    /// today (so the Done column reflects today's wins instead of vanishing).
+    var todayBoardTasks: [ActionItem] {
+        contextFiltered(store.items.filter { item in
+            guard !item.needsTriage else { return false }
+            if item.status != .completed { return true }
+            if let c = item.completedAt, Calendar.current.isDateInToday(c) { return true }
+            return false
+        })
+    }
+
+    func todayBoardColumnItems(_ status: ActionItem.Status) -> [ActionItem] {
+        todayBoardTasks.filter { $0.status == status }
+            .sorted { a, b in
+                let sa = a.sortIndex ?? .greatestFiniteMagnitude
+                let sb = b.sortIndex ?? .greatestFiniteMagnitude
+                if sa != sb { return sa < sb }
+                return sort(a, b)
+            }
+    }
+
+    /// Drag-to-status reorder for the Today board (mirrors `dropCard`, scoped to
+    /// the Today set so neighbors come from the right column).
+    func dropTodayCard(_ id: String, toStatus status: ActionItem.Status, beforeID: String?) {
+        guard id != beforeID, store.items.contains(where: { $0.id == id }) else { return }
+        let col = todayBoardColumnItems(status).filter { $0.id != id }
+        let targetIndex: Int = {
+            if let beforeID, let idx = col.firstIndex(where: { $0.id == beforeID }) { return idx }
+            return col.count
+        }()
+        let prev = targetIndex > 0 ? col[targetIndex - 1].sortIndex : nil
+        let next = targetIndex < col.count ? col[targetIndex].sortIndex : nil
+        let newIndex: Double = {
+            switch (prev, next) {
+            case let (p?, n?): return (p + n) / 2
+            case let (p?, nil): return p + 1
+            case let (nil, n?): return n - 1
+            case (nil, nil): return 0
+            }
+        }()
+        if store.items.first(where: { $0.id == id })?.status != status { store.setStatus(id, status: status) }
+        store.setSortIndex(id, sortIndex: newIndex)
+    }
+
+    private var todayBoardSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 7) {
+                Image(systemName: "rectangle.split.3x1").scaledFont(13).foregroundStyle(NDS.brand)
+                Text("Board").scaledFont(14, weight: .bold)
+                Text("Drag to organize").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 Spacer()
             }
-            ForEach(items) { row(for: $0) }
+            .padding(.horizontal, 16).padding(.vertical, 8)
+            ScrollView([.horizontal, .vertical]) {
+                HStack(alignment: .top, spacing: 14) {
+                    ForEach(ActionItem.Status.allCases) { status in
+                        StatusBoardColumn(parent: self, store: store, status: status,
+                                          items: todayBoardColumnItems(status),
+                                          onDrop: { id, beforeID in
+                                              dropTodayCard(id, toStatus: status, beforeID: beforeID)
+                                          },
+                                          onAdd: {
+                                              let t = store.createTask(title: "New task", projectID: nil, status: status)
+                                              PinnedToday.toggle(t.id, in: &pinnedTodayCSV)
+                                              env.selectedTaskID = t.id
+                                          })
+                    }
+                }
+                .padding(.horizontal, 16).padding(.bottom, 16)
+            }
         }
+        .frame(height: 320)
     }
 
     // MARK: Right — AI brain dump
@@ -340,8 +407,7 @@ extension ActionItemsView {
         todayScratchError = nil
         todayPlanning = true
         let dump = todayBrainDump
-        let current = (contextFiltered(store.overdueTasks) + contextFiltered(store.myDayTasks)
-                       + pinnedTodayTasks).map(\.title)
+        let current = todayOpenTasks.map(\.title)
         Task {
             do {
                 let plan = try await OllamaService().planTodayPriorities(brainDump: dump, currentTasks: current)
@@ -367,3 +433,4 @@ extension ActionItemsView {
         return f.string(from: Date())
     }
 }
+

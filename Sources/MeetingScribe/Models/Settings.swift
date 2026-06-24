@@ -472,6 +472,16 @@ final class AppSettings {
         defaults.set(d, forKey: "tasks.groupBy")
     }
 
+    /// Per-route secondary sort, stored as "sortRaw|ascending" (5-12).
+    func taskGroupSort(forRoute key: String) -> String? {
+        (defaults.dictionary(forKey: "tasks.groupSort") as? [String: String])?[key]
+    }
+    func setTaskGroupSort(_ raw: String, forRoute key: String) {
+        var d = (defaults.dictionary(forKey: "tasks.groupSort") as? [String: String]) ?? [:]
+        d[key] = raw
+        defaults.set(d, forKey: "tasks.groupSort")
+    }
+
     var detectZoomImpromptu: Bool {
         get { defaults.object(forKey: Keys.detectZoomImpromptu) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.detectZoomImpromptu) }

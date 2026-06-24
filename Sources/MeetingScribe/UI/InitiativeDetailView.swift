@@ -321,7 +321,7 @@ struct InitiativeDetailView: View {
 // MARK: - One project column on the initiative board
 
 @available(macOS 14.0, *)
-private struct InitiativeProjectColumn: View {
+struct InitiativeProjectColumn: View {
     let parent: ActionItemsView
     @ObservedObject var store: ActionItemStore
     let project: Project
@@ -404,14 +404,16 @@ extension ActionItemsView {
     /// Open, non-triage tasks in a project, ordered by manual sortIndex (drag
     /// order) then the default sort — the membership for one board column.
     func initiativeProjectColumnItems(_ projectID: String) -> [ActionItem] {
-        store.items
+        let base = store.items
             .filter { $0.projectID == projectID && $0.status != .completed && !$0.needsTriage }
-            .sorted { a, b in
-                let sa = a.sortIndex ?? .greatestFiniteMagnitude
-                let sb = b.sortIndex ?? .greatestFiniteMagnitude
-                if sa != sb { return sa < sb }
-                return sort(a, b)
-            }
+        // Honor the secondary sort (e.g. by due date / priority) within columns.
+        if vm.groupSort != .smart { return itemsSorted(base) }
+        return base.sorted { a, b in
+            let sa = a.sortIndex ?? .greatestFiniteMagnitude
+            let sb = b.sortIndex ?? .greatestFiniteMagnitude
+            if sa != sb { return sa < sb }
+            return sort(a, b)
+        }
     }
 
     /// Moves `id` into `projectID` (reassigning its project) and reorders it

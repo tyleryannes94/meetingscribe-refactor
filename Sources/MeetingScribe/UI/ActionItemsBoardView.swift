@@ -35,13 +35,16 @@ extension ActionItemsView {
     /// Cards in a status column, ordered by manual sortIndex (drag order),
     /// falling back to the default sort for items never dragged.
     func columnItems(_ status: ActionItem.Status) -> [ActionItem] {
-        projectFiltered.filter { $0.status == status }
-            .sorted { a, b in
-                let sa = a.sortIndex ?? .greatestFiniteMagnitude
-                let sb = b.sortIndex ?? .greatestFiniteMagnitude
-                if sa != sb { return sa < sb }
-                return sort(a, b)
-            }
+        let base = projectFiltered.filter { $0.status == status }
+        // A non-smart secondary sort overrides the manual drag order so "sort by
+        // due date / priority" works inside columns too (5-12).
+        if vm.groupSort != .smart { return itemsSorted(base) }
+        return base.sorted { a, b in
+            let sa = a.sortIndex ?? .greatestFiniteMagnitude
+            let sb = b.sortIndex ?? .greatestFiniteMagnitude
+            if sa != sb { return sa < sb }
+            return sort(a, b)
+        }
     }
 
     func boardColumn(_ status: ActionItem.Status) -> some View {

@@ -5,114 +5,265 @@ import AppKit
 extension ActionItemsView {
     // MARK: - Dashboard (default Tasks landing)
 
+    private var homeTab: ActionItemsView.HomeTab {
+        HomeTab(rawValue: homeTabRaw) ?? .tasks
+    }
+
     var tasksDashboard: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("✅").scaledFont(18)
-                    Text("Tasks").scaledFont(22, weight: .bold, kind: .display)
-                    Spacer()
-                }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)],
-                          alignment: .leading, spacing: 10) {
-                    QuickActionCard("New task", subtitle: "Add a task", systemImage: "plus",
-                                    tint: NDS.selectColor("green")) {
-                        let t = store.createTask(title: "New task"); env.selectedProjectID = nil; env.selectedTaskID = t.id
-                    }
-                    QuickActionCard("New page", subtitle: "Add to your workspace",
-                                    systemImage: "doc.badge.plus", tint: NDS.brand) {
-                        let p = store.createProject(name: "Untitled"); env.selectedTaskID = nil; env.selectedProjectID = p.id
-                    }
-                    QuickActionCard("All tasks", subtitle: "\(store.openItems().count) open",
-                                    systemImage: "tray.full", tint: NDS.selectColor("blue")) {
-                        env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = nil
-                    }
-                    QuickActionCard("Board", subtitle: "Kanban view",
-                                    systemImage: "rectangle.split.3x1", tint: NDS.selectColor("orange")) {
-                        vm.viewMode = .board; env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = nil
-                    }
-                }
-
-                dashboardSection("Open tasks", count: store.openItems().count) {
-                    let items = Array(store.openItems().prefix(6))
-                    if items.isEmpty {
-                        dashEmpty("No open tasks. Nice.")
-                    } else {
-                        ForEach(items) { item in
-                            Button { env.selectedProjectID = nil; env.selectedTaskID = item.id } label: {
-                                HStack(spacing: 9) {
-                                    Image(systemName: item.status.systemImage)
-                                        .foregroundStyle(item.status == .inProgress ? NDS.selectColor("orange") : NDS.selectColor("blue"))
-                                    Text(item.title).font(NDS.body).lineLimit(1).help(item.title)
-                                    Spacer()
-                                    if let p = store.project(for: item) {
-                                        NotionChip(p.name, color: NDS.selectColor(p.name))
-                                    }
-                                    Text(item.priority.label).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                                }
-                                .padding(.horizontal, 10).padding(.vertical, 7)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                dashboardSection("Pages", count: store.childProjects(of: nil).count) {
-                    let pages = Array(store.childProjects(of: nil).prefix(8))
-                    if pages.isEmpty { dashEmpty("No pages yet — create one above.") }
-                    else {
-                        ForEach(pages) { p in
-                            Button { env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = p.id } label: {
-                                HStack(spacing: 9) {
-                                    Image(systemName: p.icon ?? "doc.text").foregroundStyle(NDS.selectColor(p.name))
-                                    Text(p.name).font(NDS.body).lineLimit(1).help(p.name)
-                                    Spacer()
-                                    let open = store.openCount(forProject: p.id)
-                                    if open > 0 { Text("\(open)").font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary) }
-                                }
-                                .padding(.horizontal, 10).padding(.vertical, 7)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                dashboardSection("Recent meeting notes", count: nil) {
-                    let recent = Array(manager.pastMeetings.prefix(6))
-                    if recent.isEmpty { dashEmpty("No meetings yet.") }
-                    else {
-                        ForEach(recent) { m in
-                            Button { env.selectedTaskID = nil; env.selectedProjectID = nil; env.selectedMeetingID = m.id } label: {
-                                HStack(spacing: 9) {
-                                    Image(systemName: "doc.text").foregroundStyle(NDS.textSecondary)
-                                    Text(m.displayTitle).font(NDS.body).lineLimit(1).help(m.displayTitle)
-                                    Spacer()
-                                    Text(Self.dashDate(m.startDate)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                                }
-                                .padding(.horizontal, 10).padding(.vertical, 7)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-            .notionPageColumn()
+        VStack(spacing: 0) {
+            homeHeader
+            Divider().overlay(NDS.divider)
+            homeContent
         }
         .background(NDS.bg)
     }
 
+    private var homeHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("✅").scaledFont(18)
+                Text("Home").scaledFont(22, weight: .bold, kind: .display)
+                Spacer()
+                Button {
+                    let t = store.createTask(title: "New task"); env.selectedProjectID = nil; env.selectedTaskID = t.id
+                } label: { Label("New task", systemImage: "plus").font(NDS.small) }
+                .buttonStyle(MSPrimaryButtonStyle())
+            }
+            HStack(spacing: 8) {
+                ForEach(HomeTab.allCases) { tab in homeTabButton(tab) }
+                Spacer()
+                if homeTab != .meetings { homeViewToggle }
+            }
+        }
+        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
+    }
+
+    private func homeTabButton(_ tab: ActionItemsView.HomeTab) -> some View {
+        let selected = homeTab == tab
+        return Button { homeTabRaw = tab.rawValue } label: {
+            HStack(spacing: 5) {
+                Image(systemName: tab.systemImage).scaledFont(11)
+                Text(tab.label).scaledFont(13, weight: selected ? .semibold : .regular)
+            }
+            .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(selected ? NDS.rowSelected : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var homeViewToggle: some View {
+        HStack(spacing: 2) {
+            homeViewButton(board: true, icon: "rectangle.split.3x1", help: "Board")
+            homeViewButton(board: false, icon: "list.bullet", help: "List")
+        }
+        .padding(2).background(NDS.fieldBg, in: Capsule())
+    }
+
+    private func homeViewButton(board: Bool, icon: String, help: String) -> some View {
+        let selected = homeViewBoard == board
+        return Button { homeViewBoard = board } label: {
+            Image(systemName: icon)
+                .scaledFont(12, weight: selected ? .semibold : .regular)
+                .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(selected ? NDS.rowSelected : .clear, in: Capsule())
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).help(help)
+    }
+
     @ViewBuilder
-    func dashboardSection<Content: View>(_ title: String, count: Int?,
-                                                 @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            NotionEyebrow(text: title, count: count)
-                .padding(.horizontal, 10).padding(.bottom, 2)
-            VStack(spacing: 1) { content() }
-                .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(NDS.hairline, lineWidth: 1))
+    private var homeContent: some View {
+        switch homeTab {
+        case .tasks:    if homeViewBoard { homeTasksBoard } else { homeTasksList }
+        case .projects: if homeViewBoard { homeProjectsBoard } else { homeProjectsList }
+        case .meetings: homeMeetingsList
+        }
+    }
+
+    // MARK: Home — open-tasks board/list
+
+    /// Tasks the home boards show: open + in-progress, plus tasks completed today.
+    var homeBoardTasks: [ActionItem] {
+        store.items.filter { item in
+            guard !item.needsTriage else { return false }
+            if item.status != .completed { return true }
+            if let c = item.completedAt, Calendar.current.isDateInToday(c) { return true }
+            return false
+        }
+    }
+    var homeOpenTasks: [ActionItem] {
+        store.items.filter { !$0.needsTriage && $0.status != .completed }.sorted { sort($0, $1) }
+    }
+    func homeBoardColumnItems(_ status: ActionItem.Status) -> [ActionItem] {
+        homeBoardTasks.filter { $0.status == status }.sorted { a, b in
+            let sa = a.sortIndex ?? .greatestFiniteMagnitude
+            let sb = b.sortIndex ?? .greatestFiniteMagnitude
+            if sa != sb { return sa < sb }
+            return sort(a, b)
+        }
+    }
+    func dropHomeCard(_ id: String, toStatus status: ActionItem.Status, beforeID: String?) {
+        guard id != beforeID, store.items.contains(where: { $0.id == id }) else { return }
+        let col = homeBoardColumnItems(status).filter { $0.id != id }
+        let targetIndex: Int = {
+            if let beforeID, let idx = col.firstIndex(where: { $0.id == beforeID }) { return idx }
+            return col.count
+        }()
+        let prev = targetIndex > 0 ? col[targetIndex - 1].sortIndex : nil
+        let next = targetIndex < col.count ? col[targetIndex].sortIndex : nil
+        let newIndex: Double = {
+            switch (prev, next) {
+            case let (p?, n?): return (p + n) / 2
+            case let (p?, nil): return p + 1
+            case let (nil, n?): return n - 1
+            case (nil, nil): return 0
+            }
+        }()
+        if store.items.first(where: { $0.id == id })?.status != status { store.setStatus(id, status: status) }
+        store.setSortIndex(id, sortIndex: newIndex)
+    }
+
+    private var homeTasksBoard: some View {
+        ScrollView([.horizontal, .vertical]) {
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(ActionItem.Status.allCases) { status in
+                    StatusBoardColumn(parent: self, store: store, status: status,
+                                      items: homeBoardColumnItems(status),
+                                      onDrop: { id, beforeID in dropHomeCard(id, toStatus: status, beforeID: beforeID) },
+                                      onAdd: {
+                                          let t = store.createTask(title: "New task", projectID: nil, status: status)
+                                          env.selectedTaskID = t.id
+                                      })
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private var homeTasksList: some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                if homeOpenTasks.isEmpty {
+                    dashEmpty("No open tasks. Nice.")
+                } else {
+                    ForEach(homeOpenTasks) { item in
+                        row(for: item)
+                            .draggable(item.id)
+                            .taskQuickActions(item: item, store: store) { env.selectedTaskID = item.id }
+                    }
+                }
+                QuickAddTaskField(placeholder: "Add task", projectID: nil, sectionID: nil, status: .open)
+                    .environmentObject(store).padding(.top, 4)
+            }
+            .padding(16)
+        }
+    }
+
+    // MARK: Home — projects board/list
+
+    private var homeProjects: [Project] {
+        store.projects.filter { $0.status != .archived }
+    }
+
+    private func openHomeProject(_ pid: String) {
+        env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = pid
+    }
+
+    @ViewBuilder
+    private var homeProjectsBoard: some View {
+        if homeProjects.isEmpty {
+            homeProjectsEmpty
+        } else {
+            ScrollView([.horizontal, .vertical]) {
+                HStack(alignment: .top, spacing: 14) {
+                    ForEach(homeProjects) { p in
+                        InitiativeProjectColumn(parent: self, store: store, project: p,
+                                                onOpen: { openHomeProject($0) })
+                    }
+                }
+                .padding(16)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var homeProjectsList: some View {
+        if homeProjects.isEmpty {
+            homeProjectsEmpty
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(homeProjects) { p in
+                        let items = initiativeProjectColumnItems(p.id)
+                        MSSection(p.name, systemImage: p.icon ?? "doc.text",
+                                  count: items.count,
+                                  persistenceKey: "home.proj.\(p.id)",
+                                  trailing: {
+                                      Button { openHomeProject(p.id) } label: {
+                                          Image(systemName: "arrow.up.right.square").scaledFont(12)
+                                      }
+                                      .buttonStyle(.plain).foregroundStyle(NDS.textTertiary)
+                                  }) {
+                            if items.isEmpty {
+                                Text("No open tasks").font(NDS.small).foregroundStyle(NDS.textTertiary).padding(.vertical, 4)
+                            } else {
+                                ForEach(items) { item in
+                                    row(for: item)
+                                        .taskQuickActions(item: item, store: store) { env.selectedTaskID = item.id }
+                                }
+                            }
+                            QuickAddTaskField(placeholder: "Add to \(p.name)", projectID: p.id,
+                                              sectionID: nil, status: .open)
+                                .environmentObject(store).padding(.top, 4)
+                        }
+                    }
+                }
+                .padding(16)
+            }
+        }
+    }
+
+    private var homeProjectsEmpty: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "folder.badge.plus").scaledFont(36).foregroundStyle(NDS.textTertiary)
+            Text("No projects yet").scaledFont(15, weight: .semibold)
+            Button {
+                let p = store.createProject(name: "Untitled"); openHomeProject(p.id)
+            } label: { Label("Create a project", systemImage: "plus") }
+            .buttonStyle(MSPrimaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(40)
+    }
+
+    // MARK: Home — meetings
+
+    private var homeMeetingsList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 4) {
+                let recent = manager.pastMeetings
+                if recent.isEmpty { dashEmpty("No meetings yet.") }
+                else {
+                    ForEach(recent.prefix(40)) { m in
+                        Button { env.selectedTaskID = nil; env.selectedProjectID = nil; env.selectedMeetingID = m.id } label: {
+                            HStack(spacing: 9) {
+                                Image(systemName: "doc.text").foregroundStyle(NDS.textSecondary)
+                                Text(m.displayTitle).font(NDS.body).lineLimit(1).help(m.displayTitle)
+                                Spacer()
+                                let open = store.items(for: m.id).filter { $0.status != .completed }.count
+                                if open > 0 { Text("\(open) open").font(NDS.tiny).foregroundStyle(NDS.textTertiary) }
+                                Text(Self.dashDate(m.startDate)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            }
+                            .padding(.horizontal, 10).padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(16)
         }
     }
 
@@ -387,11 +538,20 @@ extension ActionItemsView {
                         ForEach(GroupBy.allCases) { Text($0.label).tag($0) }
                     }
                 }
+                Divider()
+                // Secondary sort applied within each group / board column (5-12)
+                // — e.g. group by project, then sort each project by due date.
+                Picker("Sort within group", selection: $vm.groupSort) {
+                    ForEach(GroupSort.allCases) { Text($0.label).tag($0) }
+                }
+                if vm.groupSort != .smart {
+                    Toggle("Ascending order", isOn: $vm.groupSortAscending)
+                }
             } label: {
                 Image(systemName: "line.3.horizontal.decrease.circle")
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .help("Filter & group")
+            .help("Filter, group & sort")
 
             // Search (icon-style compact field)
             HStack(spacing: 4) {

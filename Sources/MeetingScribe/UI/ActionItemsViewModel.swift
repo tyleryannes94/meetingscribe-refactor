@@ -28,6 +28,7 @@ final class ActionItemsViewModel {
     typealias GroupBy = ActionItemsView.GroupBy
     typealias ViewMode = ActionItemsView.ViewMode
     typealias TableSort = ActionItemsView.TableSort
+    typealias GroupSort = ActionItemsView.GroupSort
 
     // MARK: - View state (was ~11 @State vars on ActionItemsView)
 
@@ -36,6 +37,9 @@ final class ActionItemsViewModel {
     var ownerScope: OwnerScope = .anyone
     var search: String = ""
     var groupBy: GroupBy = .none
+    /// Secondary sort applied within each group / board column (5-12).
+    var groupSort: GroupSort = .smart
+    var groupSortAscending: Bool = true
     var viewMode: ViewMode = .list
     var tableSort: TableSort = .priority
     var tableSortAscending: Bool = false
