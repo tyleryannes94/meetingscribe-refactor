@@ -18,6 +18,14 @@ final class AppSettings {
         static let autoRecord = "autoRecord"
         static let captureMic = "captureMic"
         static let captureSystem = "captureSystem"
+        static let whisperVADEnabled = "whisperVADEnabled"
+        static let whisperVADModel = "whisperVADModel"
+        static let whisperVADDownloadFailedAt = "whisperVADDownloadFailedAt"
+        static let preferBluetoothMic = "preferBluetoothMic"
+        static let backupEnabled = "backupEnabled"
+        static let backupDir = "backupDir"
+        static let backupIncludeAudio = "backupIncludeAudio"
+        static let lastBackupAt = "lastBackupAt"
         static let liveTranscriptionEnabled = "liveTranscriptionEnabled"
         static let deferLiveTranscriptionOnBattery = "deferLiveTranscriptionOnBattery"
         static let filterToConferenceLinks = "filterToConferenceLinks"
@@ -265,8 +273,76 @@ final class AppSettings {
     /// Default "auto" — detection is fast and avoids broken output when the
     /// user switches languages.
     var whisperLanguage: String {
-        get { defaults.string(forKey: Keys.whisperLanguage) ?? "auto" }
+        // Default "en", NOT "auto": auto-detect on low-SNR mic audio destabilizes
+        // the decoder into repetition loops ("It's rain" ×N). English-only models
+        // (.en) force "en" regardless of this setting — see WhisperRunner.argv.
+        get { defaults.string(forKey: Keys.whisperLanguage) ?? "en" }
         set { defaults.set(newValue, forKey: Keys.whisperLanguage) }
+    }
+
+    /// Voice Activity Detection: only transcribe speech regions, so Whisper
+    /// never hallucinates filler over non-speech gaps. On by default; uses a
+    /// small Silero VAD ggml model (auto-downloaded best-effort).
+    var whisperVADEnabled: Bool {
+        get { defaults.object(forKey: Keys.whisperVADEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.whisperVADEnabled) }
+    }
+
+    /// Path to the Silero VAD ggml model. Defaults next to the whisper model.
+    var whisperVADModel: String {
+        get {
+            if let s = defaults.string(forKey: Keys.whisperVADModel) { return s }
+            return storageDir.appendingPathComponent("models/ggml-silero-v5.1.2.bin").path
+        }
+        set { defaults.set(newValue, forKey: Keys.whisperVADModel) }
+    }
+
+    /// Throttle for best-effort VAD-model auto-download (epoch seconds of last
+    /// failed attempt) so a wrong URL / offline state isn't retried every run.
+    var whisperVADDownloadFailedAt: Double {
+        get { defaults.double(forKey: Keys.whisperVADDownloadFailedAt) }
+        set { defaults.set(newValue, forKey: Keys.whisperVADDownloadFailedAt) }
+    }
+
+    /// Prefer a Bluetooth/AirPods microphone for recording when one is
+    /// connected, and never fall back to the Mac's built-in mic while it is.
+    var preferBluetoothMic: Bool {
+        get { defaults.object(forKey: Keys.preferBluetoothMic) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.preferBluetoothMic) }
+    }
+
+    // MARK: - Backup (local-first vault → iCloud copy)
+
+    /// Whether to additively back up the local vault to an iCloud folder.
+    /// Off by default (opt-in, since it writes to iCloud).
+    var backupEnabled: Bool {
+        get { defaults.object(forKey: Keys.backupEnabled) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Keys.backupEnabled) }
+    }
+
+    /// Destination folder for backups. Defaults to an iCloud Drive folder.
+    var backupDir: URL {
+        get {
+            if let raw = defaults.string(forKey: Keys.backupDir),
+               !raw.trimmingCharacters(in: .whitespaces).isEmpty {
+                return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
+            }
+            return VaultStorageManager.defaultBackupURL
+        }
+        set { defaults.set(newValue.path, forKey: Keys.backupDir) }
+    }
+
+    /// Include large audio files in the backup. When false, only transcripts,
+    /// notes, and JSON are backed up (much smaller iCloud footprint).
+    var backupIncludeAudio: Bool {
+        get { defaults.object(forKey: Keys.backupIncludeAudio) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.backupIncludeAudio) }
+    }
+
+    /// Epoch seconds of the last successful backup (0 = never).
+    var lastBackupAt: Double {
+        get { defaults.double(forKey: Keys.lastBackupAt) }
+        set { defaults.set(newValue, forKey: Keys.lastBackupAt) }
     }
 
     var autoRecord: Bool {

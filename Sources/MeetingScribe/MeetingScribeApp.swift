@@ -76,6 +76,8 @@ struct MeetingScribeApp: App {
                     }
                     startServices()
                     await ActivityLog.shared.log(.appLaunch)  // 1C funnel
+                    // Best-effort vault backup to iCloud (throttled to ~once/day).
+                    await VaultStorageManager.runScheduledBackupIfDue()
                 }
                 // Vault layout migration — shown once when the vault is still
                 // in the old tag-grouped layout. VaultMigrationManager sets

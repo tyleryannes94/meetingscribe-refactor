@@ -224,7 +224,12 @@ struct WhisperRunner {
     static func argv(audio: URL, model: String, prefix: URL, forceCPU: Bool) -> [String] {
         let cores = max(2, ProcessInfo.processInfo.activeProcessorCount - 1)
         let settings = AppSettings.shared
-        let lang = settings.whisperLanguage
+        // English-only models (.en) MUST be told `en`: passing `--language auto`
+        // to an .en model on low-SNR mic audio destabilizes the decoder into
+        // repetition loops ("It's rain" ×N). For multilingual models, honor the
+        // user's setting.
+        let isEnglishModel = URL(fileURLWithPath: model).lastPathComponent.contains(".en")
+        let lang = isEnglishModel ? "en" : settings.whisperLanguage
         var args = [
             "-m", model,
             "-f", audio.path,
@@ -234,8 +239,18 @@ struct WhisperRunner {
             "--language", lang,
             "--best-of", "1",
             "--beam-size", "1",
-            "--threads", "\(cores)"
+            "--threads", "\(cores)",
+            // Suppress non-speech tokens so breaths/noise aren't decoded as words.
+            "--suppress-nst"
         ]
+        // Voice Activity Detection: only feed speech to the decoder, so non-speech
+        // gaps (the user's mic while the other party talks) can't be hallucinated
+        // into filler. Only when the VAD model is actually present on disk —
+        // `preflight` downloads it best-effort.
+        if settings.whisperVADEnabled,
+           FileManager.default.fileExists(atPath: settings.whisperVADModel) {
+            args.append(contentsOf: ["--vad", "--vad-model", settings.whisperVADModel])
+        }
         // flash-attn off by default — empty transcripts on pre-M5 Apple Silicon.
         if !settings.whisperFlashAttention { args.append("--no-flash-attn") }
         if forceCPU || !settings.whisperUseGPU { args.append("--no-gpu") }
@@ -266,18 +281,60 @@ struct WhisperRunner {
         switch mode {
         case .segments:
             let segs = decoded.transcription.compactMap { s -> Segment? in
-                let trimmed = s.text.trimmingCharacters(in: .whitespaces)
+                let trimmed = Self.collapseInlineRepeats(s.text.trimmingCharacters(in: .whitespaces))
                 guard !trimmed.isEmpty, !Self.isHallucination(trimmed), let off = s.offsets else { return nil }
                 return Segment(startMs: off.from, endMs: off.to, text: trimmed)
             }
-            return .segments(segs)
+            return .segments(Self.dropRepetitionLoops(segs))
         case .plainText:
-            let joined = decoded.transcription
-                .map { $0.text.trimmingCharacters(in: .whitespaces) }
+            let kept = decoded.transcription
+                .map { Self.collapseInlineRepeats($0.text.trimmingCharacters(in: .whitespaces)) }
                 .filter { !$0.isEmpty && !Self.isHallucination($0) }
-                .joined(separator: " ")
-            return .text(joined)
+            // Reuse the loop filter on text-only segments too.
+            let deduped = Self.dropRepetitionLoops(kept.enumerated().map {
+                Segment(startMs: $0.offset, endMs: $0.offset, text: $0.element)
+            }).map(\.text)
+            return .text(deduped.joined(separator: " "))
         }
+    }
+
+    // MARK: - Repetition / loop filtering
+    //
+    // Whisper's signature failure on continuous low-SNR audio is to emit the
+    // SAME short phrase across many consecutive segments ("It's rain" ×230) — a
+    // decoder loop, not real speech. The bracket filter (`isHallucination`)
+    // can't catch plain-word loops, so we collapse them here.
+
+    /// Collapses an immediately-repeated 1–5-word phrase inside one segment,
+    /// e.g. "It's rain It's rain" → "It's rain".
+    static func collapseInlineRepeats(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        let pattern = #"\b([\w']+(?:\s+[\w']+){0,4})(?:\s+\1\b)+"#
+        return text.replacingOccurrences(of: pattern, with: "$1",
+                                         options: [.regularExpression, .caseInsensitive])
+    }
+
+    /// Drops runaway repeated segments: a short phrase (≤6 words) repeated more
+    /// than twice, or appearing back-to-back, is a hallucination loop. Longer
+    /// segments are real speech and kept even if they recur.
+    static func dropRepetitionLoops(_ segs: [WhisperRunner.Segment]) -> [WhisperRunner.Segment] {
+        func norm(_ s: String) -> String {
+            s.lowercased().trimmingCharacters(in: .punctuationCharacters)
+                .trimmingCharacters(in: .whitespaces)
+        }
+        var out: [WhisperRunner.Segment] = []
+        var counts: [String: Int] = [:]
+        for seg in segs {
+            let key = norm(seg.text)
+            let wordCount = key.split(whereSeparator: { $0 == " " }).count
+            guard wordCount <= 6 else { out.append(seg); continue }
+            // Back-to-back duplicate of the previous kept short phrase.
+            if let last = out.last, norm(last.text) == key { continue }
+            counts[key, default: 0] += 1
+            if counts[key]! > 2 { continue }   // 3rd+ occurrence of a short phrase
+            out.append(seg)
+        }
+        return out
     }
 
     // MARK: - Hallucination filter
@@ -352,6 +409,11 @@ struct WhisperRunner {
         if modelSize < 10_000_000 {
             throw RunnerError.modelTooSmall(model, modelSize)
         }
+        // Best-effort: make sure the VAD model is present so argv can enable VAD.
+        // Never blocks transcription — failure just means we transcribe without it.
+        if AppSettings.shared.whisperVADEnabled {
+            await Self.ensureVADModel()
+        }
         guard fm.fileExists(atPath: audio.path) else { throw RunnerError.audioMissing(audio.path) }
         let audioSize = (try? fm.attributesOfItem(atPath: audio.path)[.size] as? Int64) ?? 0
         if audioSize < 1024 { throw RunnerError.audioEmpty(audio.path) }
@@ -384,6 +446,46 @@ struct WhisperRunner {
         let path = AppSettings.shared.whisperModel
         guard isDefaultBaseEnPath(path) else { return false }
         return await tryAutoDownloadBaseEnModel(to: path)
+    }
+
+    /// Best-effort fetch of the small Silero VAD ggml model so whisper-cli's
+    /// `--vad` can run. Never throws — on any failure it records a timestamp and
+    /// won't retry for 24h, and transcription proceeds without VAD.
+    static func ensureVADModel() async {
+        let log = Logger(subsystem: "com.tyleryannes.MeetingScribe", category: "WhisperRunner")
+        let fm = FileManager.default
+        let path = AppSettings.shared.whisperVADModel
+        if fm.fileExists(atPath: path),
+           let size = try? fm.attributesOfItem(atPath: path)[.size] as? Int64, size > 100_000 {
+            return
+        }
+        let lastFail = AppSettings.shared.whisperVADDownloadFailedAt
+        if lastFail > 0, Date().timeIntervalSince1970 - lastFail < 86_400 { return }
+
+        func recordFailure() { AppSettings.shared.whisperVADDownloadFailedAt = Date().timeIntervalSince1970 }
+
+        let url = URL(string: "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin")!
+        let dest = URL(fileURLWithPath: path)
+        do {
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let session = URLSession(configuration: .ephemeral)
+            let (tempURL, response) = try await session.download(for: URLRequest(url: url, timeoutInterval: 120))
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                log.error("VAD model download HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+                recordFailure(); return
+            }
+            let scratch = fm.temporaryDirectory.appendingPathComponent("vad-\(UUID().uuidString).bin")
+            try fm.moveItem(at: tempURL, to: scratch)
+            let size = (try? fm.attributesOfItem(atPath: scratch.path)[.size] as? Int64) ?? 0
+            guard size > 100_000 else { try? fm.removeItem(at: scratch); recordFailure(); return }
+            if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+            try fm.moveItem(at: scratch, to: dest)
+            AppSettings.shared.whisperVADDownloadFailedAt = 0
+            log.info("Installed Silero VAD model (\(size) bytes)")
+        } catch {
+            log.error("VAD model download failed: \(error.localizedDescription, privacy: .public)")
+            recordFailure()
+        }
     }
 
     /// Download ggml-base.en.bin from the canonical whisper.cpp HF host

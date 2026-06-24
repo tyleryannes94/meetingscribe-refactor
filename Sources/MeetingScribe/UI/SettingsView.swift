@@ -45,6 +45,14 @@ struct SettingsView: View {
     @State private var defaultTaskPriority: String = AppSettings.shared.defaultTaskPriority
     @State private var userName: String = AppSettings.shared.userName
     @State private var userNameAliases: String = AppSettings.shared.userNameAliases.joined(separator: ", ")
+    // Mic / transcription / backup
+    @State private var preferBluetoothMic: Bool = AppSettings.shared.preferBluetoothMic
+    @State private var whisperVADEnabled: Bool = AppSettings.shared.whisperVADEnabled
+    @State private var backupEnabled: Bool = AppSettings.shared.backupEnabled
+    @State private var backupDir: String = AppSettings.shared.backupDir.path
+    @State private var backupIncludeAudio: Bool = AppSettings.shared.backupIncludeAudio
+    @State private var storageBusy = false
+    @State private var storageStatus: String = ""
     @State private var allowRemoteOllama: Bool = AppSettings.shared.allowRemoteOllamaEndpoint
     @State private var collectMetrics: Bool = AppSettings.shared.collectMetrics
     @State private var obsidianVaultPath: String = ExportSettings().vaultPath
@@ -332,6 +340,61 @@ struct SettingsView: View {
                     TextField("Storage folder", text: $storageDir)
                     Button("Choose…") { pickFolder() }
                 }
+                if VaultStorageManager.isInICloud(URL(fileURLWithPath: (storageDir as NSString).expandingTildeInPath)) {
+                    Text("Your vault is in an iCloud-synced folder. iCloud can evict files to the cloud, so they aren't always downloaded — which can break recording/transcription. Move it to fast local storage and back up to iCloud instead.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button {
+                        migrateToLocalStorage()
+                    } label: {
+                        Label("Move vault to local storage", systemImage: "internaldrive")
+                    }
+                    .disabled(storageBusy)
+                }
+                if !storageStatus.isEmpty {
+                    HStack(spacing: 6) {
+                        if storageBusy { ProgressView().controlSize(.small) } // design-lint:allow
+                        Text(storageStatus).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("Backup") {
+                Toggle("Back up vault to iCloud", isOn: $backupEnabled)
+                    .onChange(of: backupEnabled) { _, v in AppSettings.shared.backupEnabled = v }
+                Text("Additive backup — files are only ever copied to iCloud, never deleted there. Runs automatically about once a day.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                if backupEnabled {
+                    HStack {
+                        TextField("Backup folder", text: $backupDir)
+                        Button("Choose…") { pickBackupFolder() }
+                    }
+                    Toggle("Include audio files in backup", isOn: $backupIncludeAudio)
+                        .onChange(of: backupIncludeAudio) { _, v in AppSettings.shared.backupIncludeAudio = v }
+                    Text(backupIncludeAudio
+                         ? "Backs up everything (audio + transcripts + notes). Safest, uses the most iCloud space."
+                         : "Backs up transcripts, notes, and data only — large audio stays local.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    HStack {
+                        Button { backUpNow() } label: { Label("Back up now", systemImage: "arrow.up.doc") }
+                            .disabled(storageBusy)
+                        Spacer()
+                        if AppSettings.shared.lastBackupAt > 0 {
+                            Text("Last: \(Self.relativeDate(AppSettings.shared.lastBackupAt))")
+                                .font(.caption2).foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+            }
+
+            Section("Microphone & transcription") {
+                Toggle("Prefer AirPods / Bluetooth mic", isOn: $preferBluetoothMic)
+                    .onChange(of: preferBluetoothMic) { _, v in AppSettings.shared.preferBluetoothMic = v }
+                Text("When AirPods or another Bluetooth mic is connected, record from it and never fall back to the Mac's built-in mic.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Toggle("Speech detection (VAD) before transcription", isOn: $whisperVADEnabled)
+                    .onChange(of: whisperVADEnabled) { _, v in AppSettings.shared.whisperVADEnabled = v }
+                Text("Only transcribes speech, so silent/non-speech stretches can't be hallucinated into repeated nonsense. Downloads a small model the first time.")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             Section("People (second brain)") {
                 Toggle("Auto-extract people from meetings", isOn: $autoExtractPeople)
@@ -768,6 +831,78 @@ struct SettingsView: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url { storageDir = url.path }
+    }
+
+    private func pickBackupFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            backupDir = url.path
+            AppSettings.shared.backupDir = url
+        }
+    }
+
+    /// Copies the vault from its current (iCloud) location to fast local storage,
+    /// then points the app at the local copy. Non-destructive — the original is
+    /// left in place; the user can delete it once they've confirmed the move.
+    private func migrateToLocalStorage() {
+        let src = AppSettings.shared.storageDir
+        let dst = VaultStorageManager.localDefaultURL
+        storageBusy = true
+        storageStatus = "Copying vault to local storage…"
+        Task.detached(priority: .utility) {
+            do {
+                let p = try VaultStorageManager.copyVault(from: src, to: dst) { prog in
+                    let mb = Double(prog.bytes) / 1_000_000
+                    Task { @MainActor in storageStatus = "Copying… \(prog.files) files (\(Int(mb)) MB)" }
+                }
+                await MainActor.run {
+                    AppSettings.shared.storageDir = dst
+                    storageDir = dst.path
+                    storageBusy = false
+                    let mb = Double(p.bytes) / 1_000_000
+                    storageStatus = "Moved to \(dst.path). Copied \(p.files) files (\(Int(mb)) MB). Your original folder was left untouched — delete it once you've confirmed everything's here."
+                }
+            } catch {
+                await MainActor.run {
+                    storageBusy = false
+                    storageStatus = "Move failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func backUpNow() {
+        let vault = AppSettings.shared.storageDir
+        let dst = AppSettings.shared.backupDir
+        let includeAudio = AppSettings.shared.backupIncludeAudio
+        storageBusy = true
+        storageStatus = "Backing up…"
+        Task.detached(priority: .utility) {
+            do {
+                let p = try VaultStorageManager.backup(vault: vault, to: dst, includeAudio: includeAudio) { prog in
+                    Task { @MainActor in storageStatus = "Backing up… \(prog.files) files" }
+                }
+                await MainActor.run {
+                    AppSettings.shared.lastBackupAt = Date().timeIntervalSince1970
+                    storageBusy = false
+                    let mb = Double(p.bytes) / 1_000_000
+                    storageStatus = "Backup complete: \(p.files) files (\(Int(mb)) MB) → \(dst.lastPathComponent)."
+                }
+            } catch {
+                await MainActor.run {
+                    storageBusy = false
+                    storageStatus = "Backup failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    static func relativeDate(_ epoch: Double) -> String {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated
+        return f.localizedString(for: Date(timeIntervalSince1970: epoch), relativeTo: Date())
     }
 
     private func installInClaudeDesktop() {

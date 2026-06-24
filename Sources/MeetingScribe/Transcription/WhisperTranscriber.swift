@@ -41,6 +41,10 @@ final class WhisperTranscriber {
             let wav = workDir.appendingPathComponent(
                 "\(source.url.deletingPathExtension().lastPathComponent).wav")
             try convertToWav(input: source.url, output: wav)
+            // The 16 kHz PCM WAV is a transcription scratch file (~84 MB/hr) — it
+            // is NOT a recording. Delete it once Whisper has read it so it never
+            // lingers next to the compressed .m4a. Re-transcription regenerates it.
+            defer { try? FileManager.default.removeItem(at: wav) }
             let runner = WhisperRunner(workDir: workDir)
             do {
                 let result = try await runner.run(audio: wav, output: .segments)
@@ -83,9 +87,13 @@ final class WhisperTranscriber {
         // loudnorm brings quiet mic channels (often -37 dB) up to broadcast
         // standard (-16 LUFS), dramatically improving Whisper accuracy on mics
         // with low input gain. highpass removes low-freq rumble / HVAC noise.
+        // highpass removes rumble. loudnorm targets a slightly conservative
+        // -18 LUFS (was -16): a quieter mic gets less aggressive make-up gain, so
+        // its noise floor isn't lifted into speech-like energy that Whisper
+        // hallucinates over. VAD + suppress-nst handle the rest of the noise.
         proc.arguments = [
             "-y", "-i", input.path,
-            "-af", "highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-af", "highpass=f=80,loudnorm=I=-18:TP=-2:LRA=11",
             "-ar", "16000", "-ac", "1",
             "-f", "wav", output.path
         ]

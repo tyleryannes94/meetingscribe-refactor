@@ -75,6 +75,10 @@ final class MicRecorder {
     private func startEngine(outputURL: URL, reopenFile: Bool = true) throws {
         let engine = AVAudioEngine()
         let input = engine.inputNode
+        // Prefer AirPods / Bluetooth as the recording input when one is connected,
+        // and never silently fall back to the built-in mic while it is. Pinning
+        // the engine's device (not the system default) keeps it scoped to us.
+        Self.applyPreferredInput(to: input, log: log)
         let inputFormat = input.outputFormat(forBus: 0)
 
         if reopenFile || file == nil {
@@ -112,6 +116,27 @@ final class MicRecorder {
         try engine.start()
         self.engine = engine
         log.info("Mic capture started: \(outputURL.path, privacy: .public)")
+    }
+
+    /// Pins the engine's input to the preferred Bluetooth/AirPods device when
+    /// the "prefer Bluetooth mic" setting is on and one is connected. No-ops
+    /// (leaving the system default) when the setting is off or no Bluetooth input
+    /// exists. Must be called before reading the input format / starting.
+    private static func applyPreferredInput(to input: AVAudioInputNode, log: Logger) {
+        guard AppSettings.shared.preferBluetoothMic else { return }
+        guard let dev = AudioInputDevices.preferredBluetoothInput() else {
+            let def = AudioInputDevices.defaultInput()
+            if def?.isBuiltIn == true {
+                log.notice("Prefer-Bluetooth is on but no AirPods/Bluetooth mic is connected — recording with the built-in mic (\(def?.name ?? "?", privacy: .public)).")
+            }
+            return
+        }
+        do {
+            try input.auAudioUnit.setDeviceID(dev.id)
+            log.info("Pinned mic input to \(dev.name, privacy: .public) (Bluetooth)")
+        } catch {
+            log.error("Could not pin mic to \(dev.name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Open the per-segment mic file for writing.
