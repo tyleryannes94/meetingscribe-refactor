@@ -86,7 +86,9 @@ extension ActionItemsView {
         let f = DateFormatter(); f.dateFormat = "MMM d"; return f
     }()
 
-    func boardCard(_ item: ActionItem) -> some View {
+    /// `showProject` hides the per-card project name — redundant on the
+    /// initiative board where each column already IS a project.
+    func boardCard(_ item: ActionItem, showProject: Bool = true) -> some View {
         HStack(alignment: .top, spacing: NDS.spaceSM) {
             // Left priority accent bar — redundant with the badge glyph below so
             // priority reads without relying on color alone (AV-4).
@@ -123,7 +125,7 @@ extension ActionItemsView {
                     if item.dueDate != nil {
                         DueChip(date: item.dueDate, status: item.status, style: .plain)
                     }
-                    if let name = store.project(for: item)?.name {
+                    if showProject, let name = store.project(for: item)?.name {
                         Text(name).font(.caption2).foregroundStyle(NDS.brand).lineLimit(1).help(name)
                     }
                     Spacer(minLength: 4)

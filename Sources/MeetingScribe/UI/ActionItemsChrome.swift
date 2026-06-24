@@ -251,6 +251,9 @@ extension ActionItemsView {
                 projectPane(project)
             } else {
                 header
+                // Grouping tabs (All · By project · By due date · By priority)
+                // for the All-tasks firehose only.
+                if env.route == .allTasks { allTasksGroupingTabs }
                 Divider().overlay(NDS.divider)
                 toolbar
                 Divider().overlay(NDS.divider)
@@ -323,11 +326,6 @@ extension ActionItemsView {
 
     var toolbar: some View {
         HStack(spacing: 8) {
-            // View switcher (text tabs)
-            ForEach(ViewMode.allCases) { m in
-                viewTab(m)
-            }
-            Divider().frame(height: 16).overlay(NDS.divider)
             // One-click saved-slice chips (P2-2 / UX-10) — the daily views that
             // were previously buried in the filter menu.
             quickViewChip("All", active: vm.filter == .all && vm.priorityFilter == .any && vm.ownerScope == .anyone) {
@@ -403,6 +401,10 @@ extension ActionItemsView {
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 7))
 
+            // View switcher — moved to the side as a compact menu; the choice is
+            // persisted per surface (see `onChange(of: vm.viewMode)`).
+            viewModeSwitcher
+
             if manager.isSyncingTasks { ProgressView().controlSize(.small) }
 
             Button { quickAdding = true } label: { Label("New", systemImage: "plus") }
@@ -466,6 +468,69 @@ extension ActionItemsView {
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         }
         .padding(.horizontal, 28).padding(.vertical, 10)
+    }
+
+    /// Compact view-mode picker for the toolbar's right side. Replaces the old
+    /// inline row of text tabs; the selection persists per surface.
+    var viewModeSwitcher: some View {
+        Menu {
+            ForEach(ViewMode.allCases) { m in
+                Button { vm.viewMode = m } label: {
+                    if vm.viewMode == m {
+                        Label(m.label, systemImage: "checkmark")
+                    } else {
+                        Label(m.label, systemImage: m.systemImage)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: vm.viewMode.systemImage).scaledFont(11)
+                Text(vm.viewMode.label).scaledFont(12.5, weight: .medium)
+                Image(systemName: "chevron.down").scaledFont(8, weight: .semibold)
+            }
+            .foregroundStyle(NDS.textSecondary)
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 7))
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .help("Switch view — list, table, board, calendar, gallery")
+    }
+
+    /// Grouping tabs shown above the All-tasks list: All (flat) · By project ·
+    /// By due date · By priority. Each sets `vm.groupBy` (persisted per route);
+    /// "All" is the ungrouped firehose. Grouping renders in the List view.
+    var allTasksGroupingTabs: some View {
+        let tabs: [(String, GroupBy)] = [
+            ("All", .none), ("By project", .project),
+            ("By due date", .dueDate), ("By priority", .priority),
+        ]
+        return HStack(spacing: 4) {
+            ForEach(tabs, id: \.0) { (label, group) in
+                groupTab(label, group: group)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 24).padding(.top, 6)
+    }
+
+    func groupTab(_ label: String, group: GroupBy) -> some View {
+        let selected = vm.groupBy == group
+        return Button {
+            vm.groupBy = group
+            // Grouping is a List concept; if we're in a flat mode, jump to List
+            // so the chosen grouping is actually visible.
+            if group != .none, vm.viewMode == .table { vm.viewMode = .list }
+        } label: {
+            Text(label)
+                .scaledFont(13, weight: selected ? .semibold : .regular)
+                .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+                .padding(.horizontal, 11).padding(.vertical, 6)
+                .background(selected ? NDS.rowSelected : .clear,
+                            in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     func viewTab(_ m: ViewMode) -> some View {

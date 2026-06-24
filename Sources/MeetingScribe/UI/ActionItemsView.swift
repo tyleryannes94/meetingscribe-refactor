@@ -58,9 +58,6 @@ struct ActionItemsView: View {
     @State var kbEditID: String?
     @State var kbEditKind: KbEdit?
     enum KbEdit { case date, estimate, move }
-    // Initiative roll-up quick-add (3-2).
-    @State var initiativeAddText = ""
-    @State var initiativeAddProjectID: String?
     // Save-current-filter-as-view popover (5-1).
     @State var savingView = false
     @State var newViewName = ""
@@ -70,6 +67,17 @@ struct ActionItemsView: View {
     @State var tableTitleDraft = ""
     // Tasks pinned into "Today" regardless of due date (5-2).
     @AppStorage(PinnedToday.key) var pinnedTodayCSV = ""
+
+    // Today scratchpad: rapid quick-capture + an AI brain-dump that extracts
+    // tasks and suggests projects.
+    @State var todayQuickAddText = ""
+    @FocusState var todayQuickAddFocused: Bool
+    @State var todayBrainDump = ""
+    @State var todayDrafts: [ExtractedTaskDraft] = []
+    @State var todayAnalyzing = false
+    @State var todayPlanning = false
+    @State var todayScratchError: String?
+    @State var todayPlan: String?
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case list, table, board, calendar, gallery
@@ -180,11 +188,83 @@ struct ActionItemsView: View {
     }
 
     var body: some View {
-        // The Tasks tab lives inside the app's custom rail + keep-alive tab host
-        // (MainWindow), under a native window toolbar — so it uses a plain
-        // HStack + drag divider, NOT a NavigationSplitView (which fights the
-        // window toolbar's safe area and clipped the content's top). `detailPane`
-        // is extracted to keep this body under SwiftUI's type-check budget.
+        // Split into stages (paneSplit → lifecycle onChanges → sheets) so each
+        // sub-expression stays under SwiftUI's type-check budget. `detailPane`
+        // is likewise extracted.
+        decoratedPane
+            .sheet(isPresented: $showTrash) { TaskTrashView(store: store) }
+            .sheet(isPresented: $showInsights) { TaskInsightsView(store: store) }
+            .sheet(isPresented: $showShortcuts) { TaskShortcutsView() }
+            .sheet(isPresented: $showJumpPalette) {
+                TasksJumpPalette(store: store, isPresented: $showJumpPalette, onSelect: { env.go($0) })
+            }
+            .background {
+                // Invisible ⌘K hotkey (3-1).
+                Button("") { showJumpPalette = true }
+                    .keyboardShortcut("k", modifiers: .command)
+                    .opacity(0).frame(width: 0, height: 0)
+            }
+    }
+
+    /// `paneSplit` plus the selection/persistence `onChange` chain. Kept as a
+    /// computed property of the view (not a ViewModifier) so the closures mutate
+    /// the real `@State vm` and `@SceneStorage`, and split out of `body` to stay
+    /// under SwiftUI's type-check budget.
+    private var decoratedPane: some View {
+        paneSplit
+            .onChange(of: router.pendingTaskID) { _, _ in consumePendingTask() }
+            .onChange(of: router.pendingTasksRoute) { _, _ in consumePendingTasksRoute() }
+            .onChange(of: env.selectedProjectID) { _, _ in
+                env.selectedTaskID = nil
+                restoreViewPrefsForRoute()
+            }
+            .onChange(of: vm.viewMode) { _, mode in
+                // Persist the chosen view per surface so it sticks: real projects
+                // key by id (NP-3); everything else — chiefly All tasks — keys by
+                // route, so List/Table/Board no longer snaps back to List.
+                if let pid = realSelectedProjectID {
+                    AppSettings.shared.setSavedTaskViewMode(mode.rawValue, forProject: pid)
+                } else {
+                    AppSettings.shared.setSavedTaskViewMode(mode.rawValue, forRoute: groupByRouteKey)
+                }
+            }
+            .onChange(of: vm.groupBy) { _, g in
+                AppSettings.shared.setTaskGroupBy(g.rawValue, forRoute: groupByRouteKey)
+            }
+            // Sticky per-route filters (All tasks tabs).
+            .onChange(of: filterSignature) { _, _ in persistFilterState() }
+            .onChange(of: env.selectedMeetingID) { _, _ in env.selectedTaskID = nil }
+            .onChange(of: env.selectedInitiativeID) { _, v in
+                if v != nil { env.selectedTaskID = nil; env.selectedMeetingID = nil }
+                sceneInitiative = v ?? ""
+            }
+            // Persist Tasks selection across relaunch / new windows (3-10).
+            .onChange(of: env.selectedProjectID) { _, v in sceneProject = v ?? ""; pushRouterTasksSelection() }
+            .onChange(of: env.selectedTaskID) { _, v in sceneTask = v ?? ""; pushRouterTasksSelection() }
+            .onChange(of: env.selectedMeetingID) { _, _ in pushRouterTasksSelection() }
+            .onChange(of: env.selectedInitiativeID) { _, _ in pushRouterTasksSelection() }
+            // Restore Tasks selection when global back/forward steps to a Tasks state (3-8).
+            .onChange(of: router.tasksRestore) { _, snap in
+                guard let snap else { return }
+                env.selectedProjectID = snap.project
+                env.selectedTaskID = snap.task
+                env.selectedInitiativeID = snap.initiative
+                env.selectedMeetingID = snap.meeting
+                router.consumeTasksRestore()
+            }
+    }
+
+    /// Single value that changes whenever any sticky filter facet changes — one
+    /// `onChange` instead of three keeps `decoratedPane` cheap to type-check.
+    var filterSignature: String {
+        "\(vm.filter.rawValue)|\(vm.priorityFilter.rawValue)|\(vm.ownerScope.rawValue)"
+    }
+
+    /// The rail + draggable divider + detail pane. The Tasks tab lives inside the
+    /// app's custom rail + keep-alive tab host (MainWindow), under a native window
+    /// toolbar — so it uses a plain HStack + drag divider, NOT a
+    /// NavigationSplitView (which fights the window toolbar's safe area).
+    private var paneSplit: some View {
         HStack(spacing: 0) {
             ProjectRail(store: store, meetings: manager.pastMeetings)
                 .environmentObject(env)
@@ -214,64 +294,6 @@ struct ActionItemsView: View {
             consumePendingTask()
             consumePendingTasksRoute()
         }
-        .onChange(of: router.pendingTaskID) { _, _ in consumePendingTask() }
-        .onChange(of: router.pendingTasksRoute) { _, _ in consumePendingTasksRoute() }
-        .onChange(of: env.selectedProjectID) { _, _ in
-            env.selectedTaskID = nil
-            // Restore the project's last-used view (NP-3) + group-by (5-5).
-            if let pid = realSelectedProjectID,
-               let saved = AppSettings.shared.savedTaskViewMode(forProject: pid),
-               let mode = ViewMode(rawValue: saved) {
-                vm.viewMode = mode
-            }
-            if let raw = AppSettings.shared.taskGroupBy(forRoute: groupByRouteKey),
-               let g = GroupBy(rawValue: raw) { vm.groupBy = g }
-        }
-        .onChange(of: vm.viewMode) { _, mode in
-            if let pid = realSelectedProjectID {
-                AppSettings.shared.setSavedTaskViewMode(mode.rawValue, forProject: pid)
-            }
-        }
-        .onChange(of: vm.groupBy) { _, g in
-            AppSettings.shared.setTaskGroupBy(g.rawValue, forRoute: groupByRouteKey)
-        }
-        .onChange(of: env.selectedMeetingID) { _, _ in env.selectedTaskID = nil }
-        .onChange(of: env.selectedInitiativeID) { _, v in
-            if v != nil { env.selectedTaskID = nil; env.selectedMeetingID = nil }
-            sceneInitiative = v ?? ""
-        }
-        // Persist Tasks selection across relaunch / new windows (3-10).
-        .onChange(of: env.selectedProjectID) { _, v in sceneProject = v ?? ""; pushRouterTasksSelection() }
-        .onChange(of: env.selectedTaskID) { _, v in sceneTask = v ?? ""; pushRouterTasksSelection() }
-        .onChange(of: env.selectedMeetingID) { _, _ in pushRouterTasksSelection() }
-        .onChange(of: env.selectedInitiativeID) { _, _ in pushRouterTasksSelection() }
-        // Restore Tasks selection when global back/forward steps to a Tasks state (3-8).
-        .onChange(of: router.tasksRestore) { _, snap in
-            guard let snap else { return }
-            env.selectedProjectID = snap.project
-            env.selectedTaskID = snap.task
-            env.selectedInitiativeID = snap.initiative
-            env.selectedMeetingID = snap.meeting
-            router.consumeTasksRestore()
-        }
-        .sheet(isPresented: $showTrash) {
-            TaskTrashView(store: store)
-        }
-        .sheet(isPresented: $showInsights) {
-            TaskInsightsView(store: store)
-        }
-        .sheet(isPresented: $showShortcuts) {
-            TaskShortcutsView()
-        }
-        .sheet(isPresented: $showJumpPalette) {
-            TasksJumpPalette(store: store, isPresented: $showJumpPalette, onSelect: { env.go($0) })
-        }
-        .background {
-            // Invisible ⌘K hotkey (3-1).
-            Button("") { showJumpPalette = true }
-                .keyboardShortcut("k", modifiers: .command)
-                .opacity(0).frame(width: 0, height: 0)
-        }
     }
 
     /// Opens a task deep-linked from outside the Tasks tab (e.g. the home-page
@@ -284,14 +306,9 @@ struct ActionItemsView: View {
         guard !didRestoreScene else { return }
         didRestoreScene = true
         guard !sceneProject.isEmpty || !sceneTask.isEmpty || !sceneInitiative.isEmpty else {
-            // First-time landing with no persisted scene state: honor the
-            // user's "Default smart view" preference (UX-Q1) so the tab opens
-            // on, say, "My Open Tasks" instead of the firehose All view.
-            if env.selectedProjectID == nil,
-               let id = AppSettings.shared.defaultSmartViewID,
-               store.savedView(id: id) != nil {
-                env.selectedProjectID = Self.savedViewSentinel(id)
-            }
+            // First-time landing with no persisted scene state: stay on the
+            // Today scratchpad (the `TasksEnvironment` init default) — Today is
+            // the home view you land on when opening Tasks.
             return
         }
         if !sceneProject.isEmpty { env.selectedProjectID = sceneProject }
@@ -303,8 +320,44 @@ struct ActionItemsView: View {
 
     /// Mirror the Tasks pane selection into the router so global back/forward
     /// can restore it (3-8).
-    /// Per-route key for remembering group-by (5-5).
+    /// Per-route key for remembering group-by (5-5), view mode, and filters.
     var groupByRouteKey: String { env.selectedProjectID ?? "all" }
+
+    /// Restores the view mode, group-by, and sticky filters for the route just
+    /// selected. Real projects key the view mode by id; other surfaces (chiefly
+    /// All tasks) key everything by route so each remembers its own setup.
+    func restoreViewPrefsForRoute() {
+        if let pid = realSelectedProjectID {
+            if let saved = AppSettings.shared.savedTaskViewMode(forProject: pid),
+               let mode = ViewMode(rawValue: saved) { vm.viewMode = mode }
+        } else if let saved = AppSettings.shared.savedTaskViewMode(forRoute: groupByRouteKey),
+                  let mode = ViewMode(rawValue: saved) {
+            vm.viewMode = mode
+        }
+        if let raw = AppSettings.shared.taskGroupBy(forRoute: groupByRouteKey),
+           let g = GroupBy(rawValue: raw) { vm.groupBy = g }
+        restoreFilterState()
+    }
+
+    /// Loads the saved status / priority / owner filter for a non-project route
+    /// (All tasks tabs). Project pages keep their live filter untouched.
+    func restoreFilterState() {
+        guard realSelectedProjectID == nil else { return }
+        let s = AppSettings.shared.taskFilterState(forRoute: groupByRouteKey) ?? [:]
+        vm.filter = s["filter"].flatMap(Filter.init(rawValue:)) ?? .all
+        vm.priorityFilter = s["priority"].flatMap(PriorityFilter.init(rawValue:)) ?? .any
+        vm.ownerScope = s["owner"].flatMap(OwnerScope.init(rawValue:)) ?? .anyone
+    }
+
+    /// Persists the live filter for the current non-project route so it sticks.
+    func persistFilterState() {
+        guard realSelectedProjectID == nil else { return }
+        AppSettings.shared.setTaskFilterState([
+            "filter": vm.filter.rawValue,
+            "priority": vm.priorityFilter.rawValue,
+            "owner": vm.ownerScope.rawValue,
+        ], forRoute: groupByRouteKey)
+    }
 
     func pushRouterTasksSelection() {
         router.setTasksSelection(project: env.selectedProjectID, task: env.selectedTaskID,

@@ -439,6 +439,29 @@ final class AppSettings {
         defaults.set(d, forKey: "tasks.projectViews")
     }
 
+    /// Per-route last-used view mode (list/table/board…), so non-project
+    /// surfaces — chiefly "All tasks" — reopen in the view the user left them
+    /// in instead of always snapping back to List.
+    func savedTaskViewMode(forRoute key: String) -> String? {
+        (defaults.dictionary(forKey: "tasks.routeViews") as? [String: String])?[key]
+    }
+    func setSavedTaskViewMode(_ mode: String, forRoute key: String) {
+        var d = (defaults.dictionary(forKey: "tasks.routeViews") as? [String: String]) ?? [:]
+        d[key] = mode
+        defaults.set(d, forKey: "tasks.routeViews")
+    }
+
+    /// Per-route sticky task filters (status · priority · owner), so each Tasks
+    /// surface remembers the filter you left it on across relaunches.
+    func taskFilterState(forRoute key: String) -> [String: String]? {
+        (defaults.dictionary(forKey: "tasks.filterState") as? [String: [String: String]])?[key]
+    }
+    func setTaskFilterState(_ state: [String: String], forRoute key: String) {
+        var d = (defaults.dictionary(forKey: "tasks.filterState") as? [String: [String: String]]) ?? [:]
+        d[key] = state
+        defaults.set(d, forKey: "tasks.filterState")
+    }
+
     /// Per-route group-by, so each Tasks surface remembers how it was grouped (5-5).
     func taskGroupBy(forRoute key: String) -> String? {
         (defaults.dictionary(forKey: "tasks.groupBy") as? [String: String])?[key]

@@ -52,9 +52,8 @@ struct ProjectRail: View {
 
     /// Flat, ordered list of keyboard-navigable rail destinations (6-6).
     private var navRoutes: [TasksRoute] {
-        var routes: [TasksRoute] = [.home, .today, .myTasks, .triage, .allTasks, .noProject]
+        var routes: [TasksRoute] = [.today, .home, .triage, .allTasks, .noProject]
         if store.items.contains(where: { !$0.needsTriage && $0.recurrence != nil }) { routes.append(.recurring) }
-        routes += store.sortedSavedViews().map { .savedView($0.id) }
         routes += visibleInitiatives.map { .initiative($0.id) }
         routes += store.standaloneTopProjects().map { .project($0.id) }
         return routes
@@ -99,15 +98,12 @@ struct ProjectRail: View {
                     contextSwitcher
                     pinnedSection
                     zoneLabel("Smart views")
-                    railItem(title: "Home", icon: "house.fill", count: 0,
-                             id: ActionItemsView.homeSentinel)
-                    // Today smart view — default landing (1-3).
+                    // Today — the default landing and daily scratchpad (1-3).
                     railItem(title: "Today", icon: "sun.max.fill",
                              count: todayBadgeCount,
                              id: ActionItemsView.todaySentinel)
-                    // My Tasks (5-2).
-                    railItem(title: "My Tasks", icon: "person.fill", count: 0,
-                             id: ActionItemsView.myTasksSentinel)
+                    railItem(title: "Home", icon: "house.fill", count: 0,
+                             id: ActionItemsView.homeSentinel)
                     // Triage inbox — meeting-extracted items awaiting review (§5B).
                     railItem(title: "Triage inbox", icon: "tray.and.arrow.down.fill",
                              count: store.pendingTriage.count,
@@ -125,12 +121,8 @@ struct ProjectRail: View {
                                  count: recurringCount, id: ActionItemsView.recurringSentinel)
                     }
 
-                    // People facet (P2-2) + Waiting-on lifecycle (P2-6).
-                    peopleSection
+                    // Waiting-on lifecycle (P2-6).
                     waitingSection
-
-                    // Saved views (5-1).
-                    savedViewsSection
 
                     // Zone 2: the user's own structured workspace (3-4).
                     Divider().overlay(NDS.divider).padding(.horizontal, 10).padding(.top, 8)
