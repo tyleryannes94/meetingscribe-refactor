@@ -800,14 +800,14 @@ struct PersonDetailView: View {
     @ViewBuilder
     private var compactHeader: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 14) {
-                MSAvatar(name: current.displayName, size: 56,
+            HStack(alignment: .center, spacing: 16) {
+                MSAvatar(name: current.displayName, size: 72,
                          ringColor: healthRingColor(for: current, in: people))
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     // R1 fit guardrail: name truncates so Primary + overflow
                     // stay right-anchored on narrow canvases.
                     Text(current.displayName)
-                        .scaledFont(22, weight: .bold, kind: .display)
+                        .scaledFont(26, weight: .heavy, kind: .display)
                         .foregroundStyle(NDS.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -866,7 +866,46 @@ struct PersonDetailView: View {
                     Text(since).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 }
             }
+            factsStrip
         }
+    }
+
+    /// Comp facts strip: a wrapping row of glanceable pill cards (Email, Phone,
+    /// Location, Birthday, Cadence, First met). Read-only glance; full editing
+    /// stays in the Contact section + inline add-email below.
+    @ViewBuilder
+    private var factsStrip: some View {
+        let email = current.emails.first(where: { !$0.isEmpty })
+        let phone = current.phones.first(where: { !$0.isEmpty })
+        let location = current.addresses.first(where: { !$0.isEmpty })
+        let bday = current.birthday.map { Self.birthdayFormatter.string(from: $0) }
+        let firstMet = knownSinceLine?.replacingOccurrences(of: "Known since ", with: "")
+        FlowLayout(spacing: 10) {
+            if let email { factPill(icon: "envelope", label: "Email", value: email) }
+            if let phone { factPill(icon: "phone", label: "Phone", value: phone) }
+            if let location { factPill(icon: "mappin.and.ellipse", label: "Location", value: location) }
+            if let bday { factPill(icon: "gift", label: "Birthday", value: bday) }
+            factPill(icon: "clock", label: "Cadence",
+                     value: "~\(current.effectiveCheckInDays)d")
+            if let firstMet { factPill(icon: "calendar", label: "First met", value: firstMet) }
+        }
+    }
+
+    private func factPill(icon: String, label: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).scaledFont(13).foregroundStyle(NDS.textTertiary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label.uppercased())
+                    .scaledFont(9, weight: .bold).tracking(0.6)
+                    .foregroundStyle(NDS.textTertiary)
+                Text(value)
+                    .scaledFont(12.5).foregroundStyle(NDS.textPrimary).lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(NDS.divider, lineWidth: 1))
     }
 
     // MARK: - Identity panel (left column)

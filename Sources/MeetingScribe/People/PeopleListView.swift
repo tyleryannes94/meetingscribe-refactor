@@ -328,7 +328,7 @@ struct PeopleListView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("People").scaledFont(22, weight: .bold, kind: .display)
+                Text("People").scaledFont(20, weight: .heavy, kind: .display)
                 Text("\(people.people.count)")
                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 Spacer()
@@ -345,6 +345,11 @@ struct PeopleListView: View {
                         graphMode = true
                     }
                 }
+                // Comp: a single coral "Add" on the title row.
+                Button { showAdd = true } label: {
+                    Label("Add", systemImage: "plus")
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
             }
             .padding(.horizontal).padding(.top, NDS.splitPaneTopInset).padding(.bottom, 4)
 
@@ -788,7 +793,7 @@ private struct PersonRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            MSAvatar(name: person.displayName, size: density == .compact ? 22 : 28,
+            MSAvatar(name: person.displayName, size: density == .compact ? 22 : 36,
                      ringColor: healthRingColor(for: person, in: people))
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
