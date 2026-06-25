@@ -101,6 +101,7 @@ struct TranscriptSyncView: View {
     var attendees: [String] = []
     @EnvironmentObject private var people: PeopleStore
     @State private var speakerMap: [String: String] = [:]   // label → personID
+    @State private var segmentMap: [String: String] = [:]   // segmentKey → personID (per-line override)
 
     @State private var segments: [TranscriptSegment] = []
     @State private var isVisible = false
@@ -126,6 +127,7 @@ struct TranscriptSyncView: View {
             if let seed = initialSearch, !seed.isEmpty, searchText.isEmpty { searchText = seed }
             if let id = meetingID {
                 speakerMap = SpeakerMap.load(id)
+                segmentMap = SegmentSpeakerMap.load(id)
                 // Auto-apply global speaker assignments for known attendees
                 let resolvedAttendees = attendees.compactMap { raw -> (String, String)? in
                     let allPeople = people.people
@@ -270,6 +272,36 @@ struct TranscriptSyncView: View {
         if let personID { GlobalSpeakerMap.record(personID: personID, speakerLabel: label) }
     }
 
+    // MARK: - Per-segment assignment (split "Them" across multiple people)
+
+    /// A stable key for a single transcript line — timestamp + a text prefix —
+    /// so a per-line override survives transcript reloads/re-parsing.
+    private func segmentKey(_ seg: TranscriptSegment) -> String {
+        "\(Int(seg.startSeconds.rounded()))|\(seg.text.prefix(24))"
+    }
+
+    private func hasSegmentOverride(_ seg: TranscriptSegment) -> Bool {
+        segmentMap[segmentKey(seg)] != nil
+    }
+
+    /// The display name for one line: a per-line override wins; otherwise fall
+    /// back to the label-level speaker mapping.
+    private func resolvedSpeakerName(for seg: TranscriptSegment) -> String {
+        if let pid = segmentMap[segmentKey(seg)], let p = people.person(by: pid) {
+            return p.displayName
+        }
+        return speakerDisplay(seg.speaker)
+    }
+
+    /// Assign (or clear) a single line's speaker. `nil` removes the override so
+    /// the line reverts to its label's mapping. Per-line overrides are NOT
+    /// recorded globally — they're exceptions, not the label's true identity.
+    private func assignSegment(_ seg: TranscriptSegment, to personID: String?) {
+        let key = segmentKey(seg)
+        if let personID { segmentMap[key] = personID } else { segmentMap.removeValue(forKey: key) }
+        if let id = meetingID { SegmentSpeakerMap.save(segmentMap, for: id) }
+    }
+
     // MARK: - Scroll body
 
     private var transcriptScroll: some View {
@@ -300,11 +332,15 @@ struct TranscriptSyncView: View {
                     ForEach(filteredSegments) { seg in
                         TranscriptRow(
                             segment: seg,
-                            speakerName: speakerDisplay(seg.speaker),
+                            speakerName: resolvedSpeakerName(for: seg),
                             isActive: seg.id == activeSegmentID,
                             speakerColor: speakerColors[seg.speaker] ?? NDS.brand,
                             searchHighlight: searchText,
-                            hasAudio: audioController != nil
+                            hasAudio: audioController != nil,
+                            assignablePeople: mappableAttendees,
+                            hasSegmentOverride: hasSegmentOverride(seg),
+                            onAssignSegment: { pid in assignSegment(seg, to: pid) },
+                            onAssignAllOfLabel: { pid in mapSpeaker(seg.speaker, to: pid) }
                         ) {
                             // Tap timestamp → seek
                             audioController?.commitScrub()  // flush any pending
@@ -389,6 +425,14 @@ private struct TranscriptRow: View {
     let speakerColor: Color
     let searchHighlight: String
     let hasAudio: Bool
+    /// Attendees that this line can be (re)assigned to (per-segment split).
+    var assignablePeople: [Person] = []
+    /// True when this specific line has a per-line speaker override.
+    var hasSegmentOverride: Bool = false
+    /// Assign just this line to a person (nil clears the override).
+    var onAssignSegment: (String?) -> Void = { _ in }
+    /// Assign every line with this label to a person (bulk, label-level).
+    var onAssignAllOfLabel: (String?) -> Void = { _ in }
     let onSeek: () -> Void
 
     @State private var isHovered = false
@@ -423,12 +467,46 @@ private struct TranscriptRow: View {
                 .padding(.vertical, 2)
                 .padding(.horizontal, 6)
 
-            // Speaker label
-            Text(speakerName.isEmpty ? segment.speaker : speakerName)
-                .scaledFont(12, weight: .semibold)
-                .foregroundStyle(speakerColor)
+            // Speaker label — a menu that assigns this one line to a person, or
+            // every line of this label, so a generic "Them" can be split up.
+            Menu {
+                if assignablePeople.isEmpty {
+                    Text("Add attendees to assign speakers")
+                } else {
+                    Section("This line is…") {
+                        ForEach(assignablePeople, id: \.id) { p in
+                            Button(p.displayName) { onAssignSegment(p.id) }
+                        }
+                    }
+                    if hasSegmentOverride {
+                        Button("Reset this line to “\(segment.speaker)”") { onAssignSegment(nil) }
+                    }
+                    Divider()
+                    Section("Assign every “\(segment.speaker)” line to…") {
+                        ForEach(assignablePeople, id: \.id) { p in
+                            Button(p.displayName) { onAssignAllOfLabel(p.id) }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(speakerName.isEmpty ? segment.speaker : speakerName)
+                        .scaledFont(12, weight: .semibold)
+                        .foregroundStyle(speakerColor)
+                        .lineLimit(1)
+                    if hasSegmentOverride {
+                        Image(systemName: "person.crop.circle.badge.checkmark")
+                            .scaledFont(8).foregroundStyle(speakerColor.opacity(0.7))
+                    }
+                }
                 .frame(width: 64, alignment: .leading)
                 .padding(.top, 2)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Assign this line — or all “\(segment.speaker)” lines — to a person")
 
             // Utterance text
             highlightedText
