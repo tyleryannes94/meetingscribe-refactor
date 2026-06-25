@@ -85,43 +85,102 @@ struct SettingsView: View {
         return "\(short) (\(build))"
     }
 
-    var body: some View {
-        VStack(alignment: .leading) {
-            Text("Settings").scaledFont(22, weight: .bold, kind: .display)
-
-            // D5-6 / U4-2: a small top tab bar splits the old 24-section scroll
-            // into ~5 plain-language tabs, with the technical bits (model
-            // selection, Whisper.cpp, MCP, cross-device sync, build-from-source
-            // updates) tucked into an Advanced basement so a non-technical user
-            // never scrolls past terminal commands to reach "Your name".
-            TabView {
-                generalTab
-                    .tabItem { Label("General", systemImage: "gearshape") }
-                recordingTab
-                    .tabItem { Label("Recording", systemImage: "mic") }
-                notificationsTab
-                    .tabItem { Label("Notifications", systemImage: "bell") }
-                privacyTab
-                    .tabItem { Label("Privacy & data", systemImage: "lock.shield") }
-                connectionsTab
-                    .tabItem { Label("Connections", systemImage: "link") }
-                WebhookSettingsView()   // 6-F / 6-E
-                    .tabItem { Label("Automation", systemImage: "bolt.horizontal") }
-                advancedTab
-                    .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
-            }
-            .frame(minHeight: 360)
-
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }
-                Button("Save") { save() }.keyboardShortcut(.defaultAction)
+    /// Settings categories (comp: a left category rail rather than top tabs).
+    /// Same content as before — the technical bits stay in an Advanced basement.
+    enum SettingsCategory: String, CaseIterable, Identifiable {
+        case general, recording, notifications, privacy, connections, automation, advanced
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .general: return "General"
+            case .recording: return "Recording"
+            case .notifications: return "Notifications"
+            case .privacy: return "Privacy & data"
+            case .connections: return "Connections"
+            case .automation: return "Automation"
+            case .advanced: return "Advanced"
             }
         }
-        .padding()
+        var icon: String {
+            switch self {
+            case .general: return "gearshape"
+            case .recording: return "mic"
+            case .notifications: return "bell"
+            case .privacy: return "lock.shield"
+            case .connections: return "link"
+            case .automation: return "bolt.horizontal"
+            case .advanced: return "wrench.and.screwdriver"
+            }
+        }
+    }
+    @State private var category: SettingsCategory = .general
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Left category rail (comp).
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Settings")
+                    .scaledFont(17, weight: .heavy, kind: .display)
+                    .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 12)
+                ForEach(SettingsCategory.allCases) { c in
+                    categoryRow(c)
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(MSSecondaryButtonStyle())
+                    Button("Done") { save(); dismiss() }
+                        .buttonStyle(MSPrimaryButtonStyle())
+                        .keyboardShortcut(.defaultAction)
+                }
+                .padding(.top, 8)
+            }
+            .padding(12)
+            .frame(width: 220)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(NDS.sidebarBg)
+
+            Divider().overlay(NDS.divider)
+
+            // Content pane — each category is a self-scrolling Form.
+            categoryContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
         .onAppear { mcp.refreshStatus() }
         .sheet(isPresented: $showHealthCheck) {
             HealthCheckSheet(isPresented: $showHealthCheck)
+        }
+    }
+
+    private func categoryRow(_ c: SettingsCategory) -> some View {
+        let active = category == c
+        return Button { category = c } label: {
+            HStack(spacing: 10) {
+                Image(systemName: c.icon)
+                    .scaledFont(13, weight: active ? .semibold : .regular)
+                    .foregroundStyle(active ? NDS.lilac : NDS.textSecondary)
+                    .frame(width: 18)
+                Text(c.label)
+                    .scaledFont(13, weight: active ? .bold : .medium)
+                    .foregroundStyle(active ? NDS.textPrimary : NDS.textSecondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(active ? NDS.rowSelected : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private var categoryContent: some View {
+        switch category {
+        case .general:       generalTab
+        case .recording:     recordingTab
+        case .notifications: notificationsTab
+        case .privacy:       privacyTab
+        case .connections:   connectionsTab
+        case .automation:    WebhookSettingsView()   // 6-F / 6-E
+        case .advanced:      advancedTab
         }
     }
 
