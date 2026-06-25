@@ -71,12 +71,139 @@ struct MeetingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
-            // MARK: Left pane — meeting list
+        // Prototype model (MeetingScribe.dc.html): a single centred column that
+        // shows the time-grouped list, and swaps to the full-page meeting detail
+        // when one is selected (mList vs mDetail) — not a persistent split view.
+        Group {
+            if let m = selectedMeeting {
+                detailFullPage(m)
+            } else {
+                protoListPane
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(NDS.bg)
+        .onAppear {
+            calendar.refreshUpcoming()
+            manager.refreshPastMeetings()
+            let today = Calendar.current.startOfDay(for: Date())
+            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today
+            calendar.fetchRange(from: today, to: tomorrow)
+        }
+    }
+
+    // MARK: - Prototype list pane (centred single column)
+
+    private var protoListPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Color.clear.frame(height: NDS.splitPaneTopInset)
+                // Header: big Bricolage title + meta line.
+                Text("Meetings")
+                    .scaledFont(30, weight: .heavy, relativeTo: .largeTitle, kind: .display)
+                    .tracking(-0.8)
+                    .foregroundStyle(NDS.textPrimary)
+                Text("\(todayCount) today · \(past.count) recorded")
+                    .scaledFont(13.5).foregroundStyle(NDS.textSecondary)
+                    .padding(.top, 3)
+                // Filter chips (All / Upcoming / Past).
+                FlowLayout(spacing: 6) {
+                    ForEach(Scope.allCases) { s in
+                        MSFilterChip(label: s.label, active: scope == s, tint: NDS.accent) {
+                            scope = s
+                        }
+                    }
+                }
+                .padding(.top, 20)
+                // Time-grouped rows.
+                LazyVStack(alignment: .leading, spacing: 22) {
+                    ForEach(sortedGroups, id: \.0) { title, items in
+                        if !items.isEmpty {
+                            protoGroup(title: title, items: items)
+                        }
+                    }
+                    if sortedGroups.allSatisfy({ $0.1.isEmpty }) { emptyState }
+                }
+                .padding(.top, 22)
+            }
+            .padding(.horizontal, 36)
+            .padding(.vertical, 30)
+            .frame(maxWidth: 1000, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    @ViewBuilder
+    private func protoGroup(title: String, items: [Meeting]) -> some View {
+        let clean = title.replacingOccurrences(of: "● ", with: "").uppercased()
+        let isNow = clean.hasPrefix("NOW")
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 7) {
+                if isNow {
+                    Circle().fill(NDS.danger).frame(width: 9, height: 9)
+                }
+                Text(clean)
+                    .scaledFont(10, weight: .bold).tracking(1)
+                    .foregroundStyle(isNow ? NDS.danger : NDS.textTertiary)
+            }
+            .padding(.horizontal, 6).padding(.bottom, 11)
             VStack(spacing: 0) {
-                // Clear the translucent window toolbar (Tahoe) so the "Meetings"
-                // title + counts aren't slid under it and clipped. Matches the
-                // detail pane's top inset.
+                ForEach(items) { m in
+                    Button { router.selectedMeetingID = m.id } label: {
+                        MeetingProtoRow(meeting: m,
+                                        isLive: manager.activeMeeting?.id == m.id,
+                                        variant: variant(for: m))
+                    }
+                    .buttonStyle(.plain)
+                    Divider().overlay(NDS.divider)
+                }
+            }
+        }
+    }
+
+    // MARK: - Full-page detail (with back-to-list breadcrumb)
+
+    @ViewBuilder
+    private func detailFullPage(_ m: Meeting) -> some View {
+        let variant = variant(for: m)
+        VStack(spacing: 0) {
+            Color.clear.frame(height: NDS.splitPaneTopInset)
+            // Breadcrumb back row (prototype: "← Meetings / <title>").
+            HStack(spacing: 10) {
+                Button { router.selectedMeetingID = nil } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "chevron.left").scaledFont(11, weight: .semibold)
+                        Text("Meetings").scaledFont(12.5, weight: .semibold)
+                    }
+                    .padding(.horizontal, 12).frame(height: 30)
+                    .foregroundStyle(NDS.textSecondary)
+                    .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(NDS.hairline, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                Text("/").scaledFont(12.5).foregroundStyle(NDS.textTertiary)
+                Text(m.displayTitle).scaledFont(12.5, weight: .semibold)
+                    .foregroundStyle(NDS.textSecondary).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 26).padding(.vertical, 11)
+            Divider().overlay(NDS.divider)
+            UnifiedMeetingDetail(mode: detailMode(m, variant: variant))
+                .environmentObject(manager)
+                .environmentObject(manager.recordingMonitor)
+                .environmentObject(manager.tagStore)
+                .environmentObject(calendar)
+                .environmentObject(manager.actionItems)
+                .environmentObject(manager.pipelineController)
+                .id(m.id)
+        }
+    }
+
+    @available(*, deprecated, message: "Replaced by the prototype single-column pane")
+    private var legacyBody: some View {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            VStack(spacing: 0) {
                 Color.clear.frame(height: NDS.splitPaneTopInset)
                 listHeader
                 Divider().overlay(NDS.divider)
@@ -86,7 +213,6 @@ struct MeetingsView: View {
             .background(NDS.sidebarBg)
 
         } detail: {
-            // MARK: Right pane — meeting detail (full page)
             if let m = selectedMeeting {
                 let variant = variant(for: m)
                 UnifiedMeetingDetail(mode: detailMode(m, variant: variant))
@@ -687,6 +813,86 @@ struct MeetingsView: View {
 /// Shows just enough: time, title, attendee count, status dot.
 /// The full MeetingCard with actions is used in TodayView.
 @available(macOS 14.0, *)
+/// Full-width meeting row matching `MeetingScribe.dc.html` (Meetings list):
+/// live dot · tabular time (74pt) · title + "dur · source" · attendee stack ·
+/// status badge · chevron. Used by the prototype single-column list.
+@available(macOS 14.0, *)
+private struct MeetingProtoRow: View {
+    let meeting: Meeting
+    let isLive: Bool
+    let variant: MeetingCard.Variant
+
+    var body: some View {
+        HStack(spacing: 14) {
+            if isLive {
+                Circle().fill(NDS.danger).frame(width: 9, height: 9)
+            }
+            Text(timeString)
+                .scaledFont(13, weight: .bold).monospacedDigit()
+                .foregroundStyle(NDS.textSecondary)
+                .frame(width: 74, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meeting.displayTitle)
+                    .scaledFont(15, weight: .semibold).foregroundStyle(NDS.textPrimary)
+                    .lineLimit(1)
+                Text(metaLine)
+                    .scaledFont(12).foregroundStyle(NDS.textTertiary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !meeting.attendees.isEmpty {
+                MSAvatarStack(names: attendeeNames, size: 24, max: 3)
+            }
+            statusBadge
+            Image(systemName: "chevron.right")
+                .scaledFont(13).foregroundStyle(NDS.textTertiary)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        switch variant {
+        case .live:
+            HStack(spacing: 5) {
+                Circle().fill(NDS.danger).frame(width: 8, height: 8)
+                Text("Live").scaledFont(11, weight: .heavy)
+            }
+            .foregroundStyle(NDS.danger)
+        case .upcoming:
+            Text("Scheduled")
+                .scaledFont(10.5, weight: .bold).foregroundStyle(NDS.sky)
+                .padding(.horizontal, 9).padding(.vertical, 3)
+                .background(NDS.sky.opacity(0.16), in: Capsule())
+        case .past:
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles").scaledFont(10)
+                Text("Summary").scaledFont(10.5, weight: .bold)
+            }
+            .foregroundStyle(NDS.mint)
+            .padding(.horizontal, 9).padding(.vertical, 3)
+            .background(NDS.mint.opacity(0.16), in: Capsule())
+        }
+    }
+
+    private var timeString: String {
+        let f = DateFormatter(); f.dateFormat = "h:mm a"
+        return f.string(from: meeting.startDate)
+    }
+    private var metaLine: String {
+        let mins = max(0, Int(meeting.endDate.timeIntervalSince(meeting.startDate) / 60))
+        let src = meeting.effectiveSource?.displayName
+        return [mins > 0 ? "\(mins)m" : nil, src].compactMap { $0 }.joined(separator: " · ")
+    }
+    private var attendeeNames: [String] {
+        meeting.attendees.map { raw in
+            let id = PersonResolver.parse(raw)
+            return id.hasName ? id.name : PersonResolver.localPart(of: id.email)
+        }
+    }
+}
+
 private struct MeetingListRow: View {
     let meeting: Meeting
     let isSelected: Bool
