@@ -163,23 +163,19 @@ extension UnifiedMeetingDetail {
     var captureSourcesEditor: some View {
         let micOn = captureMicDraft ?? AppSettings.shared.captureMic
         let sysOn = captureSystemDraft ?? AppSettings.shared.captureSystem
-        VStack(alignment: .leading, spacing: 5) {
-            Text("CAPTURE SOURCES")
-                .scaledFont(10, weight: .bold)
-                .tracking(0.8)
-                .foregroundStyle(NDS.textTertiary)
-            HStack(spacing: 7) {
-                captureChip("Microphone", systemImage: "mic.fill", on: micOn) {
-                    captureMicDraft = !micOn
-                }
-                captureChip("System audio", systemImage: "speaker.wave.2.fill", on: sysOn) {
-                    captureSystemDraft = !sysOn
-                }
+        // Matches screens/04: chips inline with a trailing helper string
+        // ("Capture sources for this meeting"), wrapping on narrow widths.
+        FlowLayout(spacing: 8) {
+            captureChip("Microphone", systemImage: "mic.fill", on: micOn) {
+                captureMicDraft = !micOn
             }
-            if !micOn && !sysOn {
-                Text("Pick at least one source to record.")
-                    .scaledFont(11).foregroundStyle(NDS.danger)
+            captureChip("System audio", systemImage: "speaker.wave.2.fill", on: sysOn) {
+                captureSystemDraft = !sysOn
             }
+            Text(micOn || sysOn ? "Capture sources for this meeting"
+                                : "Pick at least one source to record.")
+                .scaledFont(11)
+                .foregroundStyle(micOn || sysOn ? NDS.textTertiary : NDS.danger)
         }
         .padding(.top, 2)
     }
