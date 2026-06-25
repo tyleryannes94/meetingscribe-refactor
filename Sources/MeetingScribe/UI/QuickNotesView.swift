@@ -47,15 +47,17 @@ struct QuickNotesView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Notes").scaledFont(22, weight: .bold, kind: .display)
-                Text("\(manager.quickNotes.count)")
-                    .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                Spacer()
-                importButton
-                recordButton
+            VStack(spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Voice Notes").scaledFont(20, weight: .heavy, kind: .display)
+                    Text("\(manager.quickNotes.count)")
+                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                    Spacer()
+                    importButton
+                }
+                bigRecordButton
             }
-            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 6)
+            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
             Divider().overlay(NDS.divider)
             if manager.quickNotes.isEmpty {
                 MSEmptyState(systemImage: "waveform.badge.plus",
@@ -124,28 +126,52 @@ struct QuickNotesView: View {
         }
     }
 
+    /// Comp: full-width record button — coral "New voice note" idle, danger
+    /// "Stop recording" while live, disabled progress while transcribing.
     @ViewBuilder
-    private var recordButton: some View {
+    private var bigRecordButton: some View {
         switch manager.quickRecordState {
         case .idle:
             Button {
                 Task { await manager.startQuickNote() }
             } label: {
-                Label("New Note", systemImage: "mic.circle.fill")
+                HStack(spacing: 8) {
+                    Image(systemName: "mic.fill").scaledFont(15)
+                    Text("New voice note").scaledFont(13.5, weight: .bold)
+                }
+                .frame(maxWidth: .infinity).frame(height: 42)
             }
+            .buttonStyle(MSPrimaryButtonStyle())
         case .recording:
-            Button(role: .destructive) {
+            Button {
                 Task { await manager.stopQuickNote() }
             } label: {
-                Label("Stop", systemImage: "stop.circle.fill")
+                HStack(spacing: 8) {
+                    Image(systemName: "stop.fill").scaledFont(15)
+                    Text("Stop recording").scaledFont(13.5, weight: .bold)
+                }
+                .frame(maxWidth: .infinity).frame(height: 42)
             }
+            .buttonStyle(MSDangerButtonStyle())
         case .transcribing:
-            HStack(spacing: 4) {
+            HStack(spacing: 8) {
                 ProgressView().controlSize(.small) // design-lint:allow
-                Text("Transcribing…").font(.caption)
+                Text("Transcribing…").scaledFont(13, weight: .semibold)
+                    .foregroundStyle(NDS.textSecondary)
             }
+            .frame(maxWidth: .infinity).frame(height: 42)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(NDS.hairline, lineWidth: 1))
         case .error(let msg):
-            Button("Retry") { Task { await manager.startQuickNote() } }.help(msg)
+            Button { Task { await manager.startQuickNote() } } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill").scaledFont(14)
+                    Text("Retry").scaledFont(13.5, weight: .bold)
+                }
+                .frame(maxWidth: .infinity).frame(height: 42)
+            }
+            .buttonStyle(MSSecondaryButtonStyle()).help(msg)
         }
     }
 
@@ -172,20 +198,26 @@ struct QuickNoteRow: View {
     let note: QuickNote
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 9) {
+            // Comp: 30px surface tile with a waveform glyph.
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(NDS.surface2)
+                .frame(width: 30, height: 30)
+                .overlay(Image(systemName: "waveform")
+                    .scaledFont(13).foregroundStyle(NDS.textSecondary))
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
-                    Text(note.title).font(.callout).lineLimit(1)
+                    Text(note.title).scaledFont(13.5, weight: .semibold).lineLimit(1)
                     if note.wasDictation {
                         Image(systemName: "keyboard").font(.caption2).foregroundStyle(.secondary)
                     }
                     if manager.isTranscribingQuickNote(note) {
                         ProgressView().controlSize(.mini) // design-lint:allow
                     } else if manager.isPolishingQuickNote(note) {
-                        Image(systemName: "sparkles").font(.caption2).foregroundStyle(.purple)
+                        Image(systemName: "sparkles").font(.caption2).foregroundStyle(NDS.lilac)
                     } else if manager.lastErrorForQuickNote(note) != nil {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2).foregroundStyle(.orange)
+                            .font(.caption2).foregroundStyle(NDS.danger)
                     }
                 }
                 Text(note.snippet.isEmpty
@@ -280,8 +312,9 @@ struct QuickNoteDetail: View {
 
     private var header: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(note.title).font(.title2).bold()
+            VStack(alignment: .leading, spacing: 4) {
+                Text(note.title)
+                    .scaledFont(24, weight: .heavy, relativeTo: .title, kind: .display)
                 Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption).foregroundStyle(.secondary)
             }
