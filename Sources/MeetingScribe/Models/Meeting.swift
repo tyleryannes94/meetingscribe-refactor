@@ -108,6 +108,12 @@ struct Meeting: Identifiable, Codable, Hashable {
     /// set, overrides the URL-derived guess. Lets the user correctly classify
     /// impromptu recordings or invites whose link isn't in `conferenceURL`.
     var userSource: MeetingSource?
+    /// Per-meeting capture override (v3 redesign). `nil` = inherit the global
+    /// Settings default (`AppSettings.captureMic` / `.captureSystem`). When set,
+    /// this meeting records only the chosen source(s) regardless of the global
+    /// default — set in the meeting's Edit mode.
+    var captureMic: Bool?
+    var captureSystem: Bool?
 
     var displayTitle: String {
         if let t = userTitle?.trimmingCharacters(in: .whitespaces), !t.isEmpty {
@@ -160,7 +166,7 @@ extension Meeting {
         case id, title, startDate, endDate, attendees, notes, location,
              conferenceURL, calendarName, seriesID, userDescription, userTitle,
              autoTitle, isImpromptu, isImported, segmentCount, relativeFolderPath,
-             health, userSource
+             health, userSource, captureMic, captureSystem
     }
 
     /// Tolerant decoder. Swift's *synthesized* Codable requires every
@@ -192,6 +198,8 @@ extension Meeting {
         relativeFolderPath = (try? c.decodeIfPresent(String.self, forKey: .relativeFolderPath)) ?? nil
         health = (try? c.decodeIfPresent(MeetingHealthDTO.self, forKey: .health)) ?? nil
         userSource = (try? c.decodeIfPresent(MeetingSource.self, forKey: .userSource)) ?? nil
+        captureMic = (try? c.decodeIfPresent(Bool.self, forKey: .captureMic)) ?? nil
+        captureSystem = (try? c.decodeIfPresent(Bool.self, forKey: .captureSystem)) ?? nil
     }
 }
 

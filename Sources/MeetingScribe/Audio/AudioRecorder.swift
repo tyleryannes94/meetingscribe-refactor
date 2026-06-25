@@ -33,6 +33,12 @@ final class AudioRecorder {
     private(set) var systemChunkWriter: ChunkedAudioWriter?
     private(set) var currentDirectory: URL?
     private(set) var currentSegment: Int = 0
+    /// Effective capture flags for the active recording (per-meeting override
+    /// resolved against the global default at `start`). Read by finalize so its
+    /// "captured no audio" warnings stay consistent with what was actually
+    /// enabled for this meeting.
+    private var activeCaptureMic = true
+    private var activeCaptureSystem = true
 
     private var watchdog: Timer?
     private var activityToken: NSObjectProtocol?
@@ -86,7 +92,11 @@ final class AudioRecorder {
     var onSystemChunk: ((URL, Int, Double, Double) -> Void)?
 
     /// Starts recording a new segment. `segment` is 1-indexed.
-    func start(in directory: URL, segment: Int) async throws {
+    /// `micOverride`/`systemOverride` are the per-meeting capture choice (v3).
+    /// `nil` inherits the global Settings default — so existing callers and
+    /// quick/ad-hoc recordings behave exactly as before.
+    func start(in directory: URL, segment: Int,
+               micOverride: Bool? = nil, systemOverride: Bool? = nil) async throws {
         try FileManager.default.createDirectory(at: directory,
                                                 withIntermediateDirectories: true)
         let audioDir = directory.appendingPathComponent("audio", isDirectory: true)
@@ -103,6 +113,12 @@ final class AudioRecorder {
         let systemURL = audioDir.appendingPathComponent(systemName)
 
         let settings = AppSettings.shared
+        // Per-meeting override wins; otherwise the global default. Stored so
+        // finalize's warnings match what was actually enabled here.
+        let captureMic = micOverride ?? settings.captureMic
+        let captureSystem = systemOverride ?? settings.captureSystem
+        activeCaptureMic = captureMic
+        activeCaptureSystem = captureSystem
         var errors: [Error] = []
 
         // Surface health changes from each source into the unified callback.
@@ -112,7 +128,7 @@ final class AudioRecorder {
         var enabledMic = false
         var enabledSystem = false
 
-        if settings.captureMic {
+        if captureMic {
             let writer = ChunkedAudioWriter(dir: chunksDir, label: "mic-seg\(segment)", chunkSeconds: 300)
             writer.onChunkReady = { [weak self] url, idx, s, e in
                 self?.onMicChunk?(url, idx, s, e)
@@ -129,7 +145,7 @@ final class AudioRecorder {
                 micChunkWriter = nil
             }
         }
-        if settings.captureSystem {
+        if captureSystem {
             let writer = ChunkedAudioWriter(dir: chunksDir, label: "system-seg\(segment)", chunkSeconds: 300)
             writer.onChunkReady = { [weak self] url, idx, s, e in
                 self?.onSystemChunk?(url, idx, s, e)
@@ -147,7 +163,7 @@ final class AudioRecorder {
             }
         }
 
-        if !settings.captureMic && !settings.captureSystem {
+        if !captureMic && !captureSystem {
             throw NSError(domain: "MeetingScribe", code: 10,
                           userInfo: [NSLocalizedDescriptionKey: "Both mic and system capture are disabled."])
         }
@@ -230,8 +246,8 @@ final class AudioRecorder {
         }
         let micBytes = bytes(micURL)
         let sysBytes = bytes(systemURL)
-        let captureMic = AppSettings.shared.captureMic
-        let captureSystem = AppSettings.shared.captureSystem
+        let captureMic = activeCaptureMic
+        let captureSystem = activeCaptureSystem
 
         var warnings: [String] = []
         if captureMic, micSnap.samplesAppended == 0 {

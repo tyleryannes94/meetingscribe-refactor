@@ -130,6 +130,11 @@ extension UnifiedMeetingDetail {
                     .padding(6)
                     .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 6))
                     .lineLimit(2...4)
+                // Per-meeting capture sources (v3) — only meaningful before the
+                // recording starts, so shown for upcoming meetings.
+                if case .upcoming = mode {
+                    captureSourcesEditor
+                }
                 HStack(spacing: 8) {
                     Button("Save") { saveHeader() }
                         .buttonStyle(MSPrimaryButtonStyle())
@@ -150,6 +155,49 @@ extension UnifiedMeetingDetail {
                     .foregroundStyle(NDS.textSecondary)
             }
         }
+    }
+
+    // MARK: - Capture sources (v3 per-meeting override)
+
+    @ViewBuilder
+    var captureSourcesEditor: some View {
+        let micOn = captureMicDraft ?? AppSettings.shared.captureMic
+        let sysOn = captureSystemDraft ?? AppSettings.shared.captureSystem
+        VStack(alignment: .leading, spacing: 5) {
+            Text("CAPTURE SOURCES")
+                .scaledFont(10, weight: .bold)
+                .tracking(0.8)
+                .foregroundStyle(NDS.textTertiary)
+            HStack(spacing: 7) {
+                captureChip("Microphone", systemImage: "mic.fill", on: micOn) {
+                    captureMicDraft = !micOn
+                }
+                captureChip("System audio", systemImage: "speaker.wave.2.fill", on: sysOn) {
+                    captureSystemDraft = !sysOn
+                }
+            }
+            if !micOn && !sysOn {
+                Text("Pick at least one source to record.")
+                    .scaledFont(11).foregroundStyle(NDS.danger)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func captureChip(_ label: String, systemImage: String, on: Bool,
+                             toggle: @escaping () -> Void) -> some View {
+        Button(action: toggle) {
+            HStack(spacing: 6) {
+                Image(systemName: on ? "checkmark.circle.fill" : systemImage)
+                    .scaledFont(11)
+                Text(label).scaledFont(12, weight: .semibold)
+            }
+            .foregroundStyle(on ? NDS.onAccent : NDS.textSecondary)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(on ? AnyShapeStyle(NDS.accent) : AnyShapeStyle(NDS.fieldBg), in: Capsule())
+            .overlay(Capsule().stroke(on ? Color.clear : NDS.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Meta line (date/time + health)
@@ -539,6 +587,8 @@ extension UnifiedMeetingDetail {
         guard let m = meeting else { return }
         titleDraft = m.userTitle ?? m.title
         descriptionDraft = m.userDescription ?? ""
+        captureMicDraft = m.captureMic
+        captureSystemDraft = m.captureSystem
     }
 
     func saveHeader() {
@@ -547,7 +597,9 @@ extension UnifiedMeetingDetail {
         let d = descriptionDraft.trimmingCharacters(in: .whitespaces)
         manager.updateMeeting(m,
                               title: t.isEmpty ? nil : t,
-                              description: d.isEmpty ? nil : d)
+                              description: d.isEmpty ? nil : d,
+                              captureMic: .some(captureMicDraft),
+                              captureSystem: .some(captureSystemDraft))
         editingHeader = false
     }
 

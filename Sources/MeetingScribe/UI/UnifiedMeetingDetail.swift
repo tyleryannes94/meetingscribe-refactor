@@ -47,6 +47,11 @@ struct UnifiedMeetingDetail: View {
     @State var titleDraft: String = ""
     @State var descriptionDraft: String = ""
     @State var editingHeader: Bool = false
+    /// Per-meeting capture override drafts (v3 Edit mode). `nil` = inherit the
+    /// global Settings default; an explicit Bool = force that source for this
+    /// meeting. Persisted on Save via `manager.updateMeeting`.
+    @State var captureMicDraft: Bool?
+    @State var captureSystemDraft: Bool?
     @State var previousPrimaryTagID: String?
     @State var audioURLs: [URL] = []
     @State var importedRecordingURLs: [URL] = []
@@ -855,6 +860,8 @@ struct UnifiedMeetingDetail: View {
         lastSavedDraft = noteDraft
         titleDraft = m.userTitle ?? m.title
         descriptionDraft = m.userDescription ?? ""
+        captureMicDraft = m.captureMic
+        captureSystemDraft = m.captureSystem
         previousPrimaryTagID = manager.tagStore.primaryTag(for: m)?.id
 
         // Audio URLs are cheap (fileExists on a known set) but still off-main.
