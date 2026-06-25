@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@10..48,600;10..48,700;10..48,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#15121a; --sidebar:#100d15; --surface:#1e1925; --surface-2:#271f31; --surface-3:#322843; --line:rgba(245,238,250,.09); --line-2:rgba(245,238,250,.16); --txt:#f3eef6; --txt-2:rgba(243,238,246,.68); --txt-3:rgba(243,238,246,.44); --accent:#ff9173; --accent-2:#f06a4c; --accent-soft:rgba(255,145,115,.16); --lilac:#b79cff; --lilac-soft:rgba(183,156,255,.16); --mint:#74e0bc; --sky:#8ab4ff; --gold:#ffce6b; --danger:#ff7a8a; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{ font-family:'Plus Jakarta Sans',-apple-system,system-ui,sans-serif; background:#0b090f; color:var(--txt); -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.5; }
+  ::selection{ background:var(--lilac-soft); }
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(245,238,250,.12); border-radius:99px; border:3px solid transparent; background-clip:padding-box; }
+  ::-webkit-scrollbar-thumb:hover{ background:rgba(245,238,250,.22); background-clip:padding-box; }
+  input{ font-family:inherit; }
+  @keyframes rec-pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+  @keyframes wave{ 0%,100%{ transform:scaleY(.4); } 50%{ transform:scaleY(1); } }
+</style>
+</helmet>
+
+<div style="position:fixed; inset:0; display:grid; place-items:center; padding:18px; background:radial-gradient(1200px 700px at 70% -10%, rgba(255,145,115,.06), transparent 60%),radial-gradient(900px 600px at 10% 110%, rgba(183,156,255,.06), transparent 60%),#0b090f;">
+  <div style="width:1440px; height:900px; max-width:100%; max-height:100%; background:var(--bg); display:flex; flex-direction:column; overflow:hidden; position:relative; border-radius:14px; border:1px solid rgba(245,238,250,.08); box-shadow:0 40px 120px rgba(0,0,0,.6);">
+
+    <!-- Title bar -->
+    <div style="height:44px; flex:0 0 auto; display:flex; align-items:center; gap:12px; padding:0 14px; background:var(--sidebar); border-bottom:1px solid var(--line); position:relative; z-index:5;">
+      <div style="display:flex; gap:8px;"><i style="width:12px; height:12px; border-radius:50%; background:#ff5f57; display:block;"></i><i style="width:12px; height:12px; border-radius:50%; background:#febc2e; display:block;"></i><i style="width:12px; height:12px; border-radius:50%; background:#28c840; display:block;"></i></div>
+      <div style="font-size:12.5px; color:var(--txt-3); font-weight:600;">{{ titleCrumb }}</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+        <sc-if value="{{ recording }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ toggleRecording }}" style="display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 11px; border-radius:9px; font-size:12.5px; font-weight:700; color:#ffa6b0; background:rgba(255,122,138,.16); border:1px solid rgba(255,122,138,.3); cursor:pointer; font-family:inherit;"><span style="width:9px; height:9px; border-radius:50%; background:var(--danger); animation:rec-pulse 1.3s ease-in-out infinite;"></span>Stop · 12:04</button>
+        </sc-if>
+        <sc-for list="{{ toolbarVMs }}" as="a" hint-placeholder-count="3">
+          <sc-if value="{{ a.isDiv }}" hint-placeholder-val="{{ false }}"><span style="width:1px; height:18px; background:var(--line); margin:0 3px;"></span></sc-if>
+          <sc-if value="{{ a.isBtn }}" hint-placeholder-val="{{ true }}"><button onClick="{{ a.act }}" style="{{ a.style }}">{{ a.iconEl }}<sc-if value="{{ a.label }}" hint-placeholder-val="{{ true }}"><span>{{ a.label }}</span></sc-if></button></sc-if>
+        </sc-for>
+        <span style="width:1px; height:18px; background:var(--line); margin:0 3px;"></span>
+        <button onClick="{{ toggleChat }}" style="{{ chatBtnStyle }}">{{ chatIcon }}</button>
+      </div>
+    </div>
+
+    <div style="flex:1; display:flex; min-height:0;">
+      <!-- Nav rail -->
+      <nav style="width:228px; flex:0 0 auto; background:var(--sidebar); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:6px 0;">
+        <div style="display:flex; align-items:center; gap:10px; padding:12px 16px 10px;"><span style="width:26px; height:26px; border-radius:9px; background:linear-gradient(145deg,var(--accent),var(--lilac)); display:grid; place-items:center; color:#221636; box-shadow:0 4px 14px rgba(255,145,115,.3); flex:0 0 auto;">{{ markIcon }}</span><b style="font-size:15.5px; font-weight:700; letter-spacing:-.3px; font-family:'Bricolage Grotesque',sans-serif;">MeetingScribe</b></div>
+        <sc-for list="{{ navGroups }}" as="g" hint-placeholder-count="2">
+          <div style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); padding:13px 18px 4px;">{{ g.group }}</div>
+          <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+            <button onClick="{{ it.go }}" style="{{ it.style }}">{{ it.iconEl }}<span style="flex:1; text-align:left;">{{ it.label }}</span><sc-if value="{{ it.showCount }}" hint-placeholder-val="{{ false }}"><span style="{{ it.countStyle }}">{{ it.count }}</span></sc-if></button>
+          </sc-for>
+        </sc-for>
+        <div style="flex:1;"></div>
+        <div style="border-top:1px solid var(--line); margin:6px 12px 0; padding:10px 0 8px;">
+          <button onClick="{{ openSettings }}" style="display:flex; align-items:center; gap:11px; height:36px; padding:0 12px; border-radius:10px; color:var(--txt-2); border:none; background:transparent; cursor:pointer; font-family:inherit; font-size:13.5px; font-weight:500; width:100%; text-align:left;">{{ settingsIcon }}<span>Settings</span></button>
+        </div>
+      </nav>
+
+      <!-- Content -->
+      <div style="flex:1; min-width:0; display:flex; min-height:0; position:relative;">
+
+        <!-- ============ TODAY ============ -->
+        <sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; min-width:0; overflow-y:auto;" data-screen-label="Today">
+            <div style="padding:30px 36px; max-width:1080px;">
+              <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:31px; font-weight:800; letter-spacing:-.9px;">{{ greeting }}</div>
+              <div style="color:var(--txt-2); font-size:14px; margin-top:4px;">Tuesday, June 9 · 3 meetings today · 4 tasks due</div>
+              <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:18px; margin-top:24px; align-items:start;">
+                <div style="display:flex; flex-direction:column; gap:16px;">
+                  <sc-if value="{{ recording }}" hint-placeholder-val="{{ true }}">
+                    <div style="background:linear-gradient(135deg, rgba(255,122,138,.14), rgba(255,145,115,.08)); border:1px solid rgba(255,122,138,.3); border-radius:18px; padding:16px 18px;">
+                      <div style="display:flex; align-items:center; gap:9px; font-size:11px; font-weight:800; color:var(--danger); letter-spacing:.5px;"><span style="width:9px; height:9px; border-radius:50%; background:var(--danger); animation:rec-pulse 1.3s ease-in-out infinite;"></span>RECORDING NOW · 12:04</div>
+                      <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:18px; font-weight:700; margin-top:8px;">Product × Design — Do not book over</div>
+                      <div style="color:var(--txt-2); font-size:12.5px; margin-top:3px;">Maya, Sam, Jules · Mic + System</div>
+                      <button onClick="{{ openLiveMeeting }}" style="margin-top:12px; display:inline-flex; align-items:center; gap:7px; height:32px; padding:0 14px; border-radius:10px; border:none; cursor:pointer; font-family:inherit; font-weight:700; font-size:12.5px; color:#2a1208; background:linear-gradient(135deg,var(--accent),var(--accent-2));">Open & add notes</button>
+                    </div>
+                  </sc-if>
+                  <div>
+                    <div style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); text-transform:uppercase; margin-bottom:11px;">Up next</div>
+                    <div style="display:flex; flex-direction:column; gap:9px;">
+                      <sc-for list="{{ todayMeetings }}" as="m" hint-placeholder-count="3">
+                        <button onClick="{{ m.onOpen }}" style="text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:13px 15px; cursor:pointer; font-family:inherit; color:var(--txt); display:flex; align-items:center; gap:12px;"><span style="color:var(--txt-2); font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; width:62px; flex:0 0 auto;">{{ m.time }}</span><div style="flex:1; min-width:0;"><div style="font-weight:600; font-size:14px;">{{ m.title }}</div><div style="color:var(--txt-3); font-size:11.5px; margin-top:2px;">{{ m.dur }} · {{ m.attCount }} attendees</div></div>{{ m.statusBadge }}</button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:16px;">
+                  <div style="background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:15px 16px;">
+                    <div style="display:flex; align-items:center; margin-bottom:11px;"><div style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); text-transform:uppercase;">Due today</div><button onClick="{{ goTasks }}" style="margin-left:auto; font-size:11px; font-weight:700; color:var(--accent); background:transparent; border:none; cursor:pointer; font-family:inherit;">All tasks →</button></div>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                      <sc-for list="{{ todayTasks }}" as="t" hint-placeholder-count="3">
+                        <button onClick="{{ t.onOpen }}" style="display:flex; align-items:flex-start; gap:9px; background:transparent; border:none; cursor:pointer; font-family:inherit; text-align:left; padding:0; color:var(--txt);"><span style="width:16px; height:16px; border-radius:5px; border:1.5px solid var(--line-2); flex:0 0 auto; margin-top:1px;"></span><div style="flex:1;"><div style="font-size:13px; font-weight:500;">{{ t.title }}</div><div style="display:flex; gap:6px; margin-top:5px;">{{ t.dueBadge }}{{ t.ownerAv }}</div></div></button>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div style="background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:15px 16px;">
+                    <div style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); text-transform:uppercase; margin-bottom:11px;">Reconnect</div>
+                    <div style="display:flex; flex-direction:column; gap:11px;">
+                      <sc-for list="{{ reconnectPeople }}" as="p" hint-placeholder-count="2">
+                        <button onClick="{{ p.onOpen }}" style="display:flex; align-items:center; gap:10px; background:transparent; border:none; cursor:pointer; font-family:inherit; text-align:left; padding:0;"><span style="{{ p.avStyle }}">{{ p.initials }}</span><div style="flex:1;"><div style="font-size:13px; font-weight:600; color:var(--txt);">{{ p.name }}</div><div style="font-size:11px; color:var(--txt-3);">last spoke {{ p.lastSpokeDays }}d ago</div></div><span style="{{ p.cadenceStyle }}">{{ p.cadence }}</span></button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ============ MEETINGS — C focused ============ -->
+        <sc-if value="{{ isMeetings }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
+            <sc-if value="{{ mDetail }}" hint-placeholder-val="{{ false }}">
+              <dc-import name="MeetingDetail" m="{{ selMeetingVM }}" layout="page" show-back="{{ true }}" on-back="{{ closeMeeting }}" on-open-person="{{ openPerson }}" hint-size="100%,100%"></dc-import>
+            </sc-if>
+            <sc-if value="{{ mList }}" hint-placeholder-val="{{ true }}">
+              <div style="flex:1; min-height:0; overflow-y:auto;" data-screen-label="Meetings">
+                <div style="max-width:1000px; margin:0 auto; padding:30px 36px;">
+                  <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:18px;"><div><h1 style="font-family:'Bricolage Grotesque',sans-serif; font-size:30px; font-weight:800; letter-spacing:-.8px;">Meetings</h1><div style="color:var(--txt-2); font-size:13.5px; margin-top:3px;">{{ meetingMeta }}</div></div></div>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px;"><sc-for list="{{ mFilterVMs }}" as="f" hint-placeholder-count="4"><button onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</button></sc-for></div>
+                  <sc-for list="{{ meetingGroups }}" as="grp" hint-placeholder-count="3">
+                    <div style="margin-bottom:22px;">
+                      <div style="{{ grp.headStyle }}">{{ grp.label }}</div>
+                      <div style="display:flex; flex-direction:column; gap:2px;">
+                        <sc-for list="{{ grp.items }}" as="m" hint-placeholder-count="2">
+                          <button onClick="{{ m.openDetail }}" style="text-align:left; display:flex; align-items:center; gap:14px; padding:14px 16px; background:transparent; border:none; border-bottom:1px solid var(--line); cursor:pointer; font-family:inherit; color:var(--txt);"><sc-if value="{{ m.live }}" hint-placeholder-val="{{ false }}"><span style="width:9px; height:9px; border-radius:50%; background:var(--danger); animation:rec-pulse 1.3s ease-in-out infinite; flex:0 0 auto;"></span></sc-if><span style="color:var(--txt-2); font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; width:74px; flex:0 0 auto;">{{ m.time }}</span><div style="flex:1; min-width:0;"><div style="font-weight:600; font-size:15px;">{{ m.title }}</div><div style="color:var(--txt-3); font-size:12px; margin-top:2px;">{{ m.dur }} · {{ m.source }}</div></div>{{ m.attStack }}{{ m.statusBadge }}{{ m.chevIcon }}</button>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- ============ PEOPLE — Option 1 roster + profile ============ -->
+        <sc-if value="{{ isPeople }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ closePeoplePop }}" style="flex:1; display:flex; min-width:0; min-height:0;">
+            <!-- roster -->
+            <div style="width:312px; flex:0 0 auto; border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0;" data-screen-label="People">
+              <div style="padding:18px 16px 12px; flex:0 0 auto;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;"><h1 style="font-family:'Bricolage Grotesque',sans-serif; font-size:20px; font-weight:800;">People</h1><button onClick="{{ newPerson }}" style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:10px; font-size:12px; font-weight:700; color:#2a1208; background:linear-gradient(135deg,var(--accent),var(--accent-2)); border:none; cursor:pointer; font-family:inherit;">{{ plusIconDark }} Add</button></div>
+                <div style="display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:8px 11px;">{{ searchIcon }}<input placeholder="Search people…" style="background:transparent; border:none; outline:none; color:var(--txt); font-size:13px; flex:1; min-width:0;"/></div>
+              </div>
+              <div style="flex:1; min-height:0; overflow-y:auto; padding:2px 10px 16px;">
+                <sc-for list="{{ rosterGroups }}" as="g" hint-placeholder-count="3">
+                  <div style="margin-bottom:10px;">
+                    <div style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); text-transform:uppercase; padding:8px 8px 6px; display:flex; align-items:center;">{{ g.label }}<span style="margin-left:auto; color:var(--txt-3);">{{ g.count }}</span></div>
+                    <sc-for list="{{ g.items }}" as="p" hint-placeholder-count="3"><button onClick="{{ p.onSelect }}" style="{{ p.rowStyle }}"><span style="{{ p.avStyle }}">{{ p.initials }}</span><div style="flex:1; min-width:0;"><div style="font-weight:600; font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ p.name }}</div><div style="color:var(--txt-3); font-size:11.5px;">{{ p.role }}</div></div><span style="{{ p.cadenceDot }}" title="{{ p.cadence }}"></span></button></sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <!-- profile -->
+            <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;" data-screen-label="Person detail">
+              <div style="padding:24px 30px 0; flex:0 0 auto;">
+                <div style="display:flex; align-items:flex-start; gap:18px;">
+                  <span style="{{ heroAvStyle }}">{{ sel.initials }}</span>
+                  <div style="flex:1; min-width:0;">
+                    <sc-if value="{{ pEditing }}" hint-placeholder-val="{{ false }}">
+                      <input value="{{ sel.name }}" style="font-family:'Bricolage Grotesque',sans-serif; font-size:25px; font-weight:800; letter-spacing:-.5px; background:var(--surface); border:1px solid var(--line-2); border-radius:10px; color:var(--txt); padding:4px 10px; outline:none; width:100%; max-width:360px;"/>
+                      <div style="display:flex; gap:8px; margin-top:8px;"><input value="{{ sel.role }}" style="font-size:13px; background:var(--surface); border:1px solid var(--line-2); border-radius:8px; color:var(--txt-2); padding:5px 9px; outline:none;"/><input value="{{ sel.company }}" style="font-size:13px; background:var(--surface); border:1px solid var(--line-2); border-radius:8px; color:var(--txt-2); padding:5px 9px; outline:none;"/></div>
+                    </sc-if>
+                    <sc-if value="{{ pNotEditing }}" hint-placeholder-val="{{ true }}">
+                      <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:26px; font-weight:800; letter-spacing:-.6px; line-height:1.1;">{{ sel.name }}</div>
+                      <div style="color:var(--txt-2); font-size:13.5px; margin-top:5px;">{{ sel.role }} · {{ sel.company }}</div>
+                    </sc-if>
+                    <!-- tags -->
+                    <div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; align-items:center; position:relative;">
+                      <sc-for list="{{ tagVMs }}" as="t" hint-placeholder-count="3"><span style="display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:999px; background:var(--surface-2); color:var(--txt-2);">{{ t.label }}<sc-if value="{{ pEditing }}" hint-placeholder-val="{{ false }}"><button onClick="{{ t.remove }}" style="color:var(--txt-3); display:inline-flex; line-height:0; background:transparent; border:none; cursor:pointer; padding:0;">{{ xIconSm }}</button></sc-if></span></sc-for>
+                      <sc-if value="{{ pEditing }}" hint-placeholder-val="{{ false }}">
+                        <button onClick="{{ openAddTag }}" style="display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:999px; background:transparent; border:1px dashed var(--line-2); color:var(--txt-3); cursor:pointer; font-family:inherit;">{{ plusIconSm }} Tag</button>
+                        <sc-if value="{{ addTagOpen }}" hint-placeholder-val="{{ false }}">
+                          <div onClick="{{ stop }}" style="position:absolute; top:calc(100% + 6px); left:0; z-index:30; min-width:170px; background:var(--surface-2); border:1px solid var(--line-2); border-radius:13px; box-shadow:0 18px 50px rgba(0,0,0,.55); padding:6px;">
+                            <input value="{{ newTag }}" onInput="{{ onNewTag }}" onKeyDown="{{ onTagKey }}" placeholder="New tag… (Enter)" style="width:100%; background:var(--surface); border:1px solid var(--line); border-radius:8px; color:var(--txt); padding:7px 9px; font-size:12.5px; outline:none; margin-bottom:5px;"/>
+                            <sc-for list="{{ tagSuggest }}" as="sg" hint-placeholder-count="3"><button onClick="{{ sg.add }}" style="display:block; width:100%; text-align:left; padding:6px 9px; border-radius:8px; border:none; background:transparent; color:var(--txt-2); cursor:pointer; font-family:inherit; font-size:12px; font-weight:600;">{{ sg.label }}</button></sc-for>
+                          </div>
+                        </sc-if>
+                      </sc-if>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:7px; flex:0 0 auto; flex-wrap:wrap; justify-content:flex-end; max-width:300px;">
+                    <button style="{{ actBtn }}">{{ mailIcon }} Message</button>
+                    <button style="{{ actBtn }}">{{ calIcon }} Log</button>
+                    <button onClick="{{ togglePEdit }}" style="{{ pEditBtn }}">{{ pEditIcon }} {{ pEditLabel }}</button>
+                  </div>
+                </div>
+                <!-- facts strip -->
+                <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
+                  <sc-for list="{{ factVMs }}" as="f" hint-placeholder-count="5">
+                    <div style="display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:8px 12px; min-width:0;">{{ f.icon }}<div style="min-width:0;"><div style="font-size:9px; font-weight:700; letter-spacing:.6px; color:var(--txt-3); text-transform:uppercase;">{{ f.label }}</div><sc-if value="{{ f.editable }}" hint-placeholder-val="{{ false }}"><input value="{{ f.value }}" style="font-size:12.5px; color:var(--txt); background:transparent; border:none; border-bottom:1px solid var(--line-2); outline:none; padding:1px 0; max-width:150px;"/></sc-if><sc-if value="{{ f.static }}" hint-placeholder-val="{{ true }}"><div style="font-size:12.5px; color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ f.value }}</div></sc-if></div></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="flex:1; min-height:0; margin-top:18px;"><dc-import name="PersonWork" p="{{ sel }}" tab-layout="pills" on-open-meeting="{{ openMeeting }}" hint-size="100%,100%"></dc-import></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ============ TASKS — B inspector ============ -->
+        <sc-if value="{{ isTasks }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; display:flex; min-width:0; min-height:0;">
+            <div style="flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;" data-screen-label="Tasks">
+              <div style="padding:18px 24px 14px; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid var(--line);">
+                <div style="display:flex; align-items:baseline; gap:12px;"><h1 style="font-family:'Bricolage Grotesque',sans-serif; font-size:21px; font-weight:800; letter-spacing:-.5px;">Tasks</h1><span style="color:var(--txt-3); font-size:12.5px;">{{ taskMeta }}</span></div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;"><sc-for list="{{ tFilterVMs }}" as="f" hint-placeholder-count="3"><button onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}<sc-if value="{{ f.count }}" hint-placeholder-val="{{ false }}"><span style="margin-left:5px; opacity:.7;">{{ f.count }}</span></sc-if></button></sc-for></div>
+              </div>
+              <div style="flex:1; min-height:0; overflow-y:auto; padding:18px 24px 28px;">
+                <div style="display:flex; gap:14px; align-items:flex-start;">
+                  <sc-for list="{{ taskLanes }}" as="l" hint-placeholder-count="3">
+                    <div style="{{ l.laneStyle }}">
+                      <div style="display:flex; align-items:center; gap:8px; padding:3px 6px 10px;"><span style="width:8px; height:8px; border-radius:50%; background:{{ l.dot }};"></span><b style="font-size:12.5px;">{{ l.label }}</b><span style="color:var(--txt-3); font-size:11px;">{{ l.count }}</span></div>
+                      <div style="display:flex; flex-direction:column; gap:8px;">
+                        <sc-for list="{{ l.items }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.onSelect }}" style="{{ t.boardStyle }}"><div style="display:flex; gap:7px; margin-bottom:8px; flex-wrap:wrap;">{{ t.projBadge }}{{ t.meetingBadge }}</div><div style="{{ t.titleStyle }}">{{ t.title }}</div><div style="display:flex; align-items:center; gap:7px; margin-top:10px;">{{ t.prioBadge }}{{ t.dueBadge }}<span style="margin-left:auto;">{{ t.ownerAv }}</span></div></button></sc-for>
+                        <sc-if value="{{ l.empty }}" hint-placeholder-val="{{ false }}"><div style="color:var(--txt-3); font-size:11.5px; padding:8px 6px;">—</div></sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <!-- inspector -->
+            <div style="width:380px; flex:0 0 auto; border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; background:var(--bg);">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); flex:0 0 auto;"><span style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); text-transform:uppercase;">Task inspector</span><button onClick="{{ openTaskFull }}" style="display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px; border-radius:8px; font-size:11.5px; font-weight:700; color:var(--txt-2); background:var(--surface); border:1px solid var(--line-2); cursor:pointer; font-family:inherit;">{{ expandIcon }} Full view</button></div>
+              <div style="flex:1; min-height:0;"><dc-import name="TaskDetail" t="{{ selTaskVM }}" layout="inspector" on-open-meeting="{{ openMeeting }}" hint-size="100%,100%"></dc-import></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ============ VOICE NOTES ============ -->
+        <sc-if value="{{ isVoice }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; display:flex; min-width:0; min-height:0;">
+            <div style="width:300px; flex:0 0 auto; border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0;" data-screen-label="Voice notes">
+              <div style="padding:18px 16px 12px; flex:0 0 auto;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;"><h1 style="font-family:'Bricolage Grotesque',sans-serif; font-size:20px; font-weight:800;">Voice Notes</h1></div>
+                <button onClick="{{ toggleVoiceRec }}" style="{{ voiceRecBtnStyle }}">{{ voiceRecInner }}</button>
+              </div>
+              <div style="flex:1; min-height:0; overflow-y:auto; padding:2px 10px 16px;">
+                <sc-for list="{{ voiceVMs }}" as="v" hint-placeholder-count="4"><button onClick="{{ v.onSelect }}" style="{{ v.rowStyle }}"><div style="display:flex; align-items:center; gap:9px;"><span style="width:30px; height:30px; border-radius:9px; background:var(--surface-2); display:grid; place-items:center; flex:0 0 auto;">{{ v.icon }}</span><div style="flex:1; min-width:0;"><div style="font-weight:600; font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ v.title }}</div><div style="color:var(--txt-3); font-size:11px; margin-top:1px;">{{ v.date }} · {{ v.dur }}</div></div></div></button></sc-for>
+              </div>
+            </div>
+            <div style="flex:1; min-width:0; min-height:0; overflow-y:auto;">
+              <div style="max-width:680px; padding:26px 30px;">
+                <sc-if value="{{ voiceRecording }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:linear-gradient(135deg, rgba(255,122,138,.14), rgba(255,145,115,.08)); border:1px solid rgba(255,122,138,.3); border-radius:18px; padding:22px; text-align:center; margin-bottom:22px;">
+                    <div style="display:flex; align-items:center; justify-content:center; gap:9px; font-size:11px; font-weight:800; color:var(--danger); letter-spacing:.5px;"><span style="width:9px; height:9px; border-radius:50%; background:var(--danger); animation:rec-pulse 1.3s ease-in-out infinite;"></span>RECORDING · 00:08</div>
+                    <div style="display:flex; gap:3px; align-items:center; justify-content:center; height:46px; margin:16px 0;"><sc-for list="{{ liveWave }}" as="w" hint-placeholder-count="20"><div style="{{ w.style }}"></div></sc-for></div>
+                    <button onClick="{{ toggleVoiceRec }}" style="display:inline-flex; align-items:center; gap:7px; height:36px; padding:0 18px; border-radius:11px; border:none; cursor:pointer; font-family:inherit; font-weight:700; font-size:13px; color:#fff; background:var(--danger);">{{ stopIcon }} Stop & transcribe</button>
+                  </div>
+                </sc-if>
+                <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:24px; font-weight:800; letter-spacing:-.5px;">{{ selVoice.title }}</div>
+                <div style="color:var(--txt-2); font-size:12.5px; margin-top:5px;">{{ selVoice.date }} · {{ selVoice.dur }}</div>
+                <div style="display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:13px 15px; margin-top:18px;">
+                  <button style="width:40px; height:40px; border-radius:50%; background:var(--accent); border:none; cursor:pointer; display:grid; place-items:center; flex:0 0 auto;">{{ playIcon }}</button>
+                  <div style="flex:1;"><div style="height:5px; border-radius:3px; background:var(--surface-2); position:relative;"><div style="position:absolute; left:0; top:0; bottom:0; width:28%; border-radius:3px; background:var(--accent);"></div></div><div style="display:flex; justify-content:space-between; font-size:11px; margin-top:6px; color:var(--txt-3);"><span>0:09</span><span>{{ selVoice.dur }}</span></div></div>
+                  <button style="display:inline-flex; align-items:center; gap:5px; height:30px; padding:0 11px; border-radius:9px; font-size:11.5px; font-weight:700; color:var(--txt); background:var(--surface-2); border:1px solid var(--line-2); cursor:pointer; font-family:inherit;">1.0×</button>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; margin:22px 0 10px;"><span style="font-size:10px; font-weight:700; letter-spacing:.8px; color:var(--accent); text-transform:uppercase;">AI summary</span></div>
+                <p style="font-size:14px; line-height:1.7; color:var(--txt);">{{ selVoice.summary }}</p>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin:22px 0 10px;"><span style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); text-transform:uppercase;">Transcript</span><button style="display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 11px; border-radius:9px; font-size:11.5px; font-weight:700; color:var(--txt); background:var(--surface); border:1px solid var(--line-2); cursor:pointer; font-family:inherit;">{{ tasksIcon }} Push → Tasks</button></div>
+                <div style="background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; font-size:13.5px; line-height:1.7; color:var(--txt-2);">{{ selVoice.transcript }}</div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Ask-AI rail -->
+        <sc-if value="{{ chatOpen }}" hint-placeholder-val="{{ false }}">
+          <aside style="width:320px; flex:0 0 auto; border-left:1px solid var(--line); background:var(--bg); display:flex; flex-direction:column; min-height:0;">
+            <div style="padding:16px 16px 10px; display:flex; align-items:center; gap:8px;">{{ sparkIcon }}<b style="font-size:14px;">{{ chatTitle }}</b><button onClick="{{ toggleChat }}" style="margin-left:auto; width:26px; height:26px; border-radius:8px; border:none; background:transparent; color:var(--txt-3); cursor:pointer; display:grid; place-items:center;">{{ closeIcon }}</button></div>
+            <div style="flex:1; min-height:0; overflow-y:auto; padding:4px 16px 12px;">
+              <div style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); text-transform:uppercase; margin-bottom:10px;">Try asking</div>
+              <div style="display:flex; flex-direction:column; gap:8px;"><sc-for list="{{ chatPrompts }}" as="p" hint-placeholder-count="3"><button style="text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-size:12.5px; color:var(--txt-2); cursor:pointer; font-family:inherit; display:flex; gap:8px; align-items:flex-start;">{{ sparkIconSm }}{{ p }}</button></sc-for></div>
+              <div style="display:flex; gap:7px; margin-top:14px; font-size:11px; color:var(--txt-3); align-items:center;">{{ globeIcon }} Runs locally via Ollama. No API key, no outbound traffic.</div>
+            </div>
+            <div style="padding:10px 14px 14px; border-top:1px solid var(--line);"><div style="display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:8px 10px;"><input placeholder="Message…" style="background:transparent; border:none; outline:none; color:var(--txt); font-size:13px; flex:1;"/>{{ sendIcon }}</div></div>
+          </aside>
+        </sc-if>
+
+      </div>
+    </div>
+
+    <!-- ============ NEW ITEM MODAL ============ -->
+    <sc-if value="{{ newModalOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeNew }}" style="position:absolute; inset:0; z-index:40; background:rgba(11,9,15,.55); display:grid; place-items:center;" data-screen-label="New item">
+        <div onClick="{{ stop }}" style="width:520px; max-width:92%; background:var(--bg); border:1px solid var(--line-2); border-radius:18px; box-shadow:0 40px 120px rgba(0,0,0,.6); overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:10px; padding:18px 22px; border-bottom:1px solid var(--line);">{{ newIcon }}<b style="font-family:'Bricolage Grotesque',sans-serif; font-size:18px; font-weight:800;">{{ newTitle }}</b><button onClick="{{ closeNew }}" style="margin-left:auto; width:30px; height:30px; border-radius:9px; border:1px solid var(--line); background:var(--surface); color:var(--txt-2); cursor:pointer; display:grid; place-items:center;">{{ closeIcon }}</button></div>
+          <div style="padding:20px 22px; display:flex; flex-direction:column; gap:14px;">
+            <sc-for list="{{ newFields }}" as="fld" hint-placeholder-count="3">
+              <div><div style="font-size:10px; font-weight:700; letter-spacing:.8px; color:var(--txt-3); text-transform:uppercase; margin-bottom:7px;">{{ fld.label }}</div>
+                <sc-if value="{{ fld.isChips }}" hint-placeholder-val="{{ false }}"><div style="display:flex; gap:6px; flex-wrap:wrap;"><sc-for list="{{ fld.chips }}" as="c" hint-placeholder-count="3"><span style="font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line-2); color:var(--txt-2); cursor:pointer;">{{ c }}</span></sc-for></div></sc-if>
+                <sc-if value="{{ fld.isInput }}" hint-placeholder-val="{{ true }}"><input placeholder="{{ fld.ph }}" style="width:100%; background:var(--surface); border:1px solid var(--line-2); border-radius:11px; color:var(--txt); padding:10px 13px; font-size:14px; outline:none;"/></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end; padding:0 22px 20px;"><button onClick="{{ closeNew }}" style="height:36px; padding:0 16px; border-radius:10px; border:1px solid var(--line-2); background:var(--surface); color:var(--txt); font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;">Cancel</button><button onClick="{{ closeNew }}" style="height:36px; padding:0 18px; border-radius:10px; border:none; background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#2a1208; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;">{{ newCta }}</button></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ SETTINGS ============ -->
+    <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeSettings }}" style="position:absolute; inset:0; z-index:40; background:rgba(11,9,15,.55); display:grid; place-items:center;" data-screen-label="Settings">
+        <div onClick="{{ stop }}" style="width:880px; height:600px; max-width:94%; max-height:92%; background:var(--bg); border:1px solid var(--line-2); border-radius:18px; box-shadow:0 40px 120px rgba(0,0,0,.6); display:flex; overflow:hidden;">
+          <div style="width:220px; flex:0 0 auto; background:var(--sidebar); border-right:1px solid var(--line); padding:16px 12px; display:flex; flex-direction:column;">
+            <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:17px; font-weight:800; padding:6px 10px 14px;">Settings</div>
+            <sc-for list="{{ settingsNav }}" as="s" hint-placeholder-count="6"><button onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.iconEl }}<span style="flex:1; text-align:left;">{{ s.label }}</span></button></sc-for>
+            <div style="flex:1;"></div>
+            <button onClick="{{ closeSettings }}" style="display:inline-flex; align-items:center; justify-content:center; gap:7px; height:34px; border-radius:10px; border:1px solid var(--line-2); background:var(--surface); color:var(--txt); cursor:pointer; font-family:inherit; font-weight:700; font-size:12.5px;">Done</button>
+          </div>
+          <div style="flex:1; min-width:0; overflow-y:auto; padding:24px 28px;">
+            <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:20px; font-weight:800; margin-bottom:4px;">{{ settingsTitle }}</div>
+            <div style="color:var(--txt-2); font-size:13px; margin-bottom:22px;">{{ settingsSub }}</div>
+            <sc-for list="{{ settingsSections }}" as="sec" hint-placeholder-count="2">
+              <div style="margin-bottom:22px;">
+                <div style="font-size:10px; font-weight:700; letter-spacing:1px; color:var(--txt-3); text-transform:uppercase; margin-bottom:11px;">{{ sec.label }}</div>
+                <div style="background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden;"><sc-for list="{{ sec.rows }}" as="r" hint-placeholder-count="3"><div style="{{ r.rowStyle }}"><div style="flex:1; min-width:0;"><div style="font-size:13.5px; font-weight:600;">{{ r.title }}</div><sc-if value="{{ r.desc }}" hint-placeholder-val="{{ true }}"><div style="color:var(--txt-3); font-size:12px; margin-top:2px;">{{ r.desc }}</div></sc-if></div>{{ r.control }}</div></sc-for></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = {
+    page:'today', settingsOpen:false, settingsCat:'general', chatOpen:false, recording:true,
+    mView:'list', mSel:'m-sync', mFilter:'all',
+    pSel:'maya', pEditing:false, addTagOpen:false, newTag:'', pTags:null, pRemovedTags:[],
+    tSel:'t1', tFilter:'all',
+    voiceSel:'v1', voiceRecording:false,
+    newModal:null
+  };
+
+  ic(name,size,color){
+    const P={
+      today:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/>',
+      meetings:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+      people:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+      tasks:'<path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+      voice:'<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/>',
+      search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/>', plus:'<path d="M12 5v14M5 12h14"/>',
+      mic:'<path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v3"/>',
+      record:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
+      calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+      upload:'<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M8 6l4-4 4 4M12 2v13"/>',
+      filter:'<path d="M22 3H2l8 9.5V19l4 2v-8.5z"/>',
+      settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+      chat:'<path d="M21 11.5a8.38 8.38 0 0 1-9 8.32 8.5 8.5 0 0 1-3.9-.9L3 20l1.08-3.1A8.5 8.5 0 0 1 12 3.5a8.38 8.38 0 0 1 9 8z"/>',
+      chevR:'<path d="M9 18l6-6-6-6"/>', clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      sparkles:'<path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5 10.1 7.6z"/>',
+      expand:'<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>', send:'<path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>',
+      globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/>',
+      arrowUp:'<path d="M18 15l-6-6-6 6"/>', minus:'<path d="M5 12h14"/>', check:'<path d="M20 6 9 17l-5-5"/>', x:'<path d="M18 6 6 18M6 6l12 12"/>',
+      mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6 12 13 2 6"/>',
+      phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.4-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
+      map:'<path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+      gift:'<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7M12 8a3 3 0 1 0-3-3c0 1.5 1.5 3 3 3zm0 0a3 3 0 1 1 3-3c0 1.5-1.5 3-3 3z"/>',
+      edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+      play:'<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>', stop:'<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
+      waveform:'<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/>',
+      cpu:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
+      plug:'<path d="M9 2v6M15 2v6M7 8h10v4a5 5 0 0 1-10 0zM12 17v5"/>', layers:'<path d="M12 2 2 7l10 5 10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>',
+      speaker:'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
+      circle:'<circle cx="12" cy="12" r="9"/>'
+    };
+    return React.createElement('svg',{viewBox:'0 0 24 24',width:size||16,height:size||16,fill:'none',stroke:color||'currentColor',strokeWidth:1.9,style:{flex:'0 0 auto'},dangerouslySetInnerHTML:{__html:P[name]||P.circle}});
+  }
+  initials(n){ const p=(n||'').trim().split(/\s+/); return ((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase(); }
+  cadColor(c){ return {Healthy:'var(--mint)',Slipping:'var(--gold)','At risk':'var(--danger)',New:'var(--sky)'}[c]||'var(--sky)'; }
+  avStyle(grad,size,radius){ return { width:size,height:size,borderRadius:radius||'34%',display:'grid',placeItems:'center',fontWeight:800,color:'#241636',fontSize:size*0.38,background:grad,flex:'0 0 auto' }; }
+
+  data(){
+    const G={ coral:'linear-gradient(150deg,#ff9173,#f06a4c)', mint:'linear-gradient(150deg,#74e0bc,#46c79f)', lilac:'linear-gradient(150deg,#b79cff,#9a7af0)', sky:'linear-gradient(150deg,#8ab4ff,#6b96ec)', gold:'linear-gradient(150deg,#ffce6b,#f0b43f)' };
+    const PEOPLE=[
+      {id:'maya',name:'Maya Kerr',grad:G.lilac,role:'VP Product',company:'Skio',emails:['maya@skio.com','maya.kerr@gmail.com'],phone:'+1 415 555 0142',location:'San Francisco, CA',relationship:'Colleague',tags:['Colleague','Skio','Decision-maker'],firstMet:'Mar 2024 · Skio',cadence:'Healthy',cadenceDays:14,lastSpokeDays:6,birthday:'Aug 14',favorites:['Oat flat white','Trail running','Daughter at Berkeley'],memories:['Prefers async updates over standing meetings.','Owns the Skio relationship end-to-end.','Daughter just started college — mentioned in March.'],msg:{total:312,replyMedian:'~4h',youInitiate:68,last30:41,bars:[40,70,55,90,65,45,80]}},
+      {id:'devon',name:'Devon Vale',grad:G.mint,role:'Counsel',company:'Skio',emails:['devon@skio.com'],phone:'+1 415 555 0198',location:'Oakland, CA',relationship:'Colleague',tags:['Colleague','Skio','Legal'],firstMet:'Apr 2024 · Contract review',cadence:'Slipping',cadenceDays:10,lastSpokeDays:18,birthday:'Feb 2',favorites:['Espresso','Cycling'],memories:['Owns contract redlines. Fast on email, slow on Slack.'],msg:{total:88,replyMedian:'~1d',youInitiate:55,last30:9,bars:[30,45,20,60,35,50,25]}},
+      {id:'jules',name:'Jules Lin',grad:G.sky,role:'Finance Lead',company:'Skio',emails:['jules@skio.com'],phone:'+1 628 555 0110',location:'Remote · NYC',relationship:'Colleague',tags:['Colleague','Finance'],firstMet:'Jan 2025 · Pricing workshop',cadence:'Healthy',cadenceDays:7,lastSpokeDays:2,birthday:'Nov 30',favorites:['Matcha','Spreadsheets that tie out'],memories:['Building the usage-based pricing model. Loves a clean number.'],msg:{total:201,replyMedian:'~2h',youInitiate:60,last30:33,bars:[55,60,70,50,85,40,65]}},
+      {id:'rae',name:'Rae Adler',grad:G.gold,role:'Designer',company:'Recharge',emails:['rae@recharge.com'],phone:'',location:'Austin, TX',relationship:'Client',tags:['Client','Recharge','Design'],firstMet:'Sep 2025 · Intro call',cadence:'At risk',cadenceDays:21,lastSpokeDays:34,birthday:'Jun 21',favorites:['Risograph prints'],memories:['Leads the Recharge brand refresh. Visual thinker — send mocks, not docs.'],msg:{total:54,replyMedian:'~6h',youInitiate:72,last30:3,bars:[20,35,15,25,40,18,22]}},
+      {id:'theo',name:'Theo Nash',grad:G.coral,role:'Founder',company:'Northwind',emails:['theo@northwind.io'],phone:'+1 917 555 0167',location:'Brooklyn, NY',relationship:'Prospect',tags:['Prospect','Northwind'],firstMet:'May 2026 · Conference',cadence:'New',cadenceDays:30,lastSpokeDays:5,birthday:'Dec 29',favorites:['Natural wine','Early mornings'],memories:['Met at SaaStr. Evaluating us vs. an in-house build.'],msg:{total:12,replyMedian:'~1d',youInitiate:90,last30:12,bars:[10,15,8,20,12,18,14]}},
+      {id:'sam',name:'Sam Owens',grad:G.lilac,role:'Engineer',company:'Skio',emails:['sam@skio.com'],phone:'',location:'Seattle, WA',relationship:'Colleague',tags:['Colleague','Skio','Eng'],firstMet:'Feb 2025 · Standup',cadence:'Healthy',cadenceDays:7,lastSpokeDays:3,birthday:'Mar 9',favorites:['Cold brew','Mechanical keyboards'],memories:['Building the MCP write-back tools. Ping in #infra.'],msg:{total:140,replyMedian:'~3h',youInitiate:50,last30:22,bars:[45,50,55,48,62,52,58]}},
+    ];
+    const MEETINGS=[
+      {id:'m-now',title:'Product × Design — Do not book over',when:'today',time:'11:15 AM',dur:'45m',range:'11:15 AM – 12:00 PM',date:'Tue, Jun 9',source:'Mic + System',attendees:['maya','sam','jules'],extra:['phelipe@skio.com'],link:'meet.google.com/gqo-dyhn-mkh',tags:['Skio','Product'],status:'recording'},
+      {id:'m-sync',title:'Product Sync — Skio',when:'today',time:'10:30 AM',dur:'30m',range:'10:30–11:00 AM',date:'Tue, Jun 9',source:'Mic + System',attendees:['maya','devon','jules'],link:'meet.google.com/abc-defg-hij',tags:['Skio','Planning'],status:'summary'},
+      {id:'m-analytics',title:'Skio Analytics Team Sync',when:'today',time:'10:00 AM',dur:'30m',range:'10:00–10:30 AM',date:'Tue, Jun 9',source:'Mic + System',attendees:['sam','jules'],tags:['Skio'],status:'transcribed'},
+      {id:'m-roadmap',title:'Planning Call — Q3 Roadmap',when:'upcoming',time:'2:00 PM',dur:'60m',range:'2:00–3:00 PM',date:'Tue, Jun 9',source:'Google Meet',attendees:['maya','jules','sam'],link:'meet.google.com/q3r-plan-xyz',tags:['Planning'],status:'scheduled'},
+      {id:'m-recharge',title:'Recharge — Weekly Standup',when:'upcoming',time:'4:00 PM',dur:'30m',range:'4:00–4:30 PM',date:'Tue, Jun 9',source:'Zoom',attendees:['rae'],tags:['Recharge'],status:'scheduled'},
+      {id:'m-contract',title:'Contract review',when:'past',time:'3:00 PM',dur:'45m',range:'Jun 2 · 3:00 PM',date:'Mon, Jun 2',source:'Mic + System',attendees:['maya','devon'],tags:['Skio','Legal'],status:'summary'},
+      {id:'m-devon',title:'1:1 — Devon',when:'past',time:'4:00 PM',dur:'30m',range:'Jun 8 · 4:00 PM',date:'Mon, Jun 8',source:'Mic + System',attendees:['devon'],tags:['1:1'],status:'summary'},
+      {id:'m-intro',title:'Theo / intro — Northwind',when:'past',time:'1:00 PM',dur:'30m',range:'Jun 5 · 1:00 PM',date:'Thu, Jun 5',source:'Phone',attendees:['theo'],tags:['Northwind','Prospect'],status:'transcribed'},
+    ];
+    const PROJECTS=[{name:'Skio Integration',color:'var(--accent)'},{name:'Q3 Roadmap',color:'var(--mint)'},{name:'Onboarding revamp',color:'var(--gold)'}];
+    const TASKS=[
+      {id:'t1',title:'Circulate revised contract terms to legal',status:'open',priority:'high',due:'Wed',project:'Skio Integration',owner:'devon',meeting:'m-sync',fromMeeting:true},
+      {id:'t2',title:'Build usage-based pricing model',status:'doing',priority:'high',due:'Fri',project:'Q3 Roadmap',owner:'jules',meeting:'m-sync',fromMeeting:true},
+      {id:'t3',title:'Draft the integration spec doc',status:'open',priority:'med',due:'Fri',project:'Skio Integration',owner:'me',meeting:'m-analytics',fromMeeting:false},
+      {id:'t4',title:'Wire up MCP write-back tools',status:'doing',priority:'med',due:'Mon',project:'Skio Integration',owner:'sam',meeting:null,fromMeeting:false},
+      {id:'t5',title:'Schedule design review with Rae',status:'open',priority:'low',due:'',project:'Onboarding revamp',owner:'me',meeting:'m-recharge',fromMeeting:false},
+      {id:'t6',title:'Share recording link with Devon',status:'done',priority:'low',due:'',project:'Skio Integration',owner:'me',meeting:'m-contract',fromMeeting:true},
+      {id:'t7',title:'Send onboarding deck to Recharge',status:'done',priority:'med',due:'',project:'Onboarding revamp',owner:'me',meeting:'m-recharge',fromMeeting:false},
+    ];
+    const VOICE=[
+      {id:'v1',title:'Idea — onboarding tour rework',date:'Tue, Jun 9',dur:'1:24',summary:'Rework the first-run onboarding into a 3-step tour: connect calendar, pick recording sources, then a sample summary. Skip account creation friction.',transcript:'So the onboarding feels heavy right now. I think we cut it to three steps — calendar, sources, and show them one real summary so they get the aha moment fast. Maybe a skip button on each.'},
+      {id:'v2',title:'Follow-ups after Skio sync',date:'Tue, Jun 9',dur:'0:48',summary:'Two follow-ups: confirm the contract redline timeline with Devon, and ask Jules for the pricing model by Friday.',transcript:'Quick note after the Skio sync — need to ping Devon on the redline and make sure Jules has Friday for the pricing numbers.'},
+      {id:'v3',title:'Random — pricing page copy',date:'Mon, Jun 8',dur:'2:10',summary:'Pricing page should lead with usage-based value, not seats. Headline idea: "Pay for conversations, not chairs."',transcript:'For the pricing page I keep coming back to usage over seats. Something like pay for conversations not chairs. Lead with the value metric.'},
+      {id:'v4',title:'Reminder — Rae brand assets',date:'Fri, Jun 5',dur:'0:31',summary:'Send Rae the latest brand assets and the risograph texture pack she asked about.',transcript:'Don\u2019t forget to send Rae the brand assets and that riso texture pack.'},
+    ];
+    return {PEOPLE,MEETINGS,TASKS,PROJECTS,VOICE};
+  }
+
+  // builders
+  avEl(name,grad,size){ return React.createElement('span',{style:this.avStyle(grad,size)},this.initials(name)); }
+  ownerAvEl(owner,size){ size=size||21; const {PEOPLE}=this.data(); if(!owner) return null; if(owner==='me') return React.createElement('span',{style:{width:size,height:size,borderRadius:'34%',display:'grid',placeItems:'center',fontWeight:800,fontSize:size*0.38,background:'var(--surface-3)',color:'var(--txt-2)',flex:'0 0 auto'}},'me'); const p=PEOPLE.find(x=>x.id===owner); if(!p) return null; return this.avEl(p.name,p.grad,size); }
+  prioBadgeEl(p){ if(p==='low'||!p) return null; const d=p==='high'?{l:'High',c:'rgba(255,122,138,.16)',t:'#ffa0ac',i:'arrowUp'}:{l:'Med',c:'rgba(255,206,107,.16)',t:'#ffd98a',i:'minus'}; return React.createElement('span',{style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,fontWeight:700,padding:'2px 8px',borderRadius:999,background:d.c,color:d.t}},this.ic(d.i,10,d.t),d.l); }
+  dueBadgeEl(due){ if(!due) return null; return React.createElement('span',{style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,fontWeight:700,padding:'2px 8px',borderRadius:999,background:'rgba(255,206,107,.16)',color:'#ffd98a'}},this.ic('clock',10,'#ffd98a'),due); }
+  projBadgeEl(name,color){ if(!name) return null; return React.createElement('span',{style:{display:'inline-flex',alignItems:'center',gap:5,fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:999,background:'var(--surface-2)',color:'var(--txt-2)'}},React.createElement('span',{style:{width:6,height:6,borderRadius:'50%',background:color||'var(--accent)'}}),name); }
+  meetingBadgeEl(mId){ if(!mId) return null; const {MEETINGS}=this.data(); const m=MEETINGS.find(x=>x.id===mId); if(!m) return null; const t=m.title.length>18?m.title.slice(0,18)+'…':m.title; return React.createElement('span',{style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:999,background:'var(--lilac-soft)',color:'#cbb8ff'}},this.ic('meetings',10,'#cbb8ff'),t); }
+  statusBadgeEl(status){
+    if(status==='recording') return React.createElement('span',{style:{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,fontWeight:800,color:'var(--danger)'}},React.createElement('span',{style:{width:8,height:8,borderRadius:'50%',background:'var(--danger)'}}),'Live');
+    if(status==='scheduled') return React.createElement('span',{style:{fontSize:10.5,fontWeight:700,padding:'3px 9px',borderRadius:999,background:'rgba(138,180,255,.16)',color:'#aecaff'}},'Scheduled');
+    if(status==='summary') return React.createElement('span',{style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,fontWeight:700,padding:'3px 9px',borderRadius:999,background:'rgba(116,224,188,.16)',color:'#9aedd0'}},this.ic('sparkles',10,'#9aedd0'),'Summary');
+    return React.createElement('span',{style:{fontSize:10.5,fontWeight:700,padding:'3px 9px',borderRadius:999,background:'var(--surface-2)',color:'var(--txt-2)'}},'Transcribed');
+  }
+  avStackEl(ids){ const {PEOPLE}=this.data(); return React.createElement('span',{style:{display:'flex',flex:'0 0 auto'}}, ids.slice(0,3).map((id,i)=>{ const p=PEOPLE.find(x=>x.id===id); if(!p) return null; return React.createElement('span',{key:id,style:{width:24,height:24,borderRadius:'34%',display:'grid',placeItems:'center',fontWeight:800,color:'#241636',fontSize:10,background:p.grad,marginLeft:i?-8:0,border:'2.5px solid var(--bg)'}},this.initials(p.name)); })); }
+
+  resolvePerson(id){ const {PEOPLE,MEETINGS,TASKS,PROJECTS}=this.data(); const p=PEOPLE.find(x=>x.id===id)||PEOPLE[0];
+    const meetings=MEETINGS.filter(m=>m.attendees.includes(p.id)).map(m=>({id:m.id,title:m.title,date:m.date,dur:m.dur,attCount:m.attendees.length,status:m.status}));
+    const tasks=TASKS.filter(t=>t.owner===p.id).map(t=>({...t,projColor:(PROJECTS.find(pr=>pr.name===t.project)||{}).color}));
+    return {...p, meetings, tasks}; }
+  resolveMeeting(id){ const {PEOPLE,MEETINGS}=this.data(); const m=MEETINGS.find(x=>x.id===id)||MEETINGS[1];
+    const atts=m.attendees.map(aid=>{ const p=PEOPLE.find(x=>x.id===aid); return {id:aid,name:p.name,first:p.name.split(' ')[0],grad:p.grad}; });
+    return {...m, atts}; }
+  resolveTask(id){ const {PEOPLE,TASKS,PROJECTS,MEETINGS}=this.data(); const t=TASKS.find(x=>x.id===id)||TASKS[0];
+    const proj=PROJECTS.find(p=>p.name===t.project); const owner=t.owner==='me'?null:PEOPLE.find(p=>p.id===t.owner); const mtg=MEETINGS.find(m=>m.id===t.meeting);
+    return {...t, projColor:proj?.color, owner:t.owner==='me'?'You':t.owner, ownerName:owner?owner.name:'You', ownerGrad:owner?owner.grad:null, meetingTitle:mtg?mtg.title:null}; }
+
+  renderVals(){
+    const {PEOPLE,MEETINGS,TASKS,PROJECTS,VOICE}=this.data(); const s=this.state; const page=s.page;
+
+    // nav
+    const navDef=[ {group:'WORKSPACE',items:[{id:'today',label:'Today',icon:'today'},{id:'meetings',label:'Meetings',icon:'meetings'},{id:'people',label:'People',icon:'people'}]},
+      {group:'ORGANIZE',items:[{id:'tasks',label:'Tasks',icon:'tasks',count:TASKS.filter(t=>t.status!=='done').length},{id:'voice',label:'Voice Notes',icon:'voice'}]} ];
+    const itemBase={ display:'flex', alignItems:'center', gap:11, margin:'2px 9px', padding:'8px 12px', borderRadius:999, color:'var(--txt-2)', fontSize:13.5, fontWeight:500, cursor:'pointer', border:'none', background:'transparent', width:'calc(100% - 18px)', textAlign:'left', fontFamily:'inherit' };
+    const itemOn={ ...itemBase, background:'var(--lilac-soft)', color:'var(--txt)', fontWeight:700 };
+    const navGroups=navDef.map(g=>({ group:g.group, items:g.items.map(it=>({ label:it.label, go:()=>this.setState({page:it.id, mView:'list'}), iconEl:this.ic(it.icon,17, page===it.id?'var(--lilac)':'currentColor'), style: page===it.id?itemOn:itemBase, showCount:it.count!=null, count:it.count, countStyle:{ marginLeft:'auto', fontSize:11, fontVariantNumeric:'tabular-nums', color: page===it.id?'var(--lilac)':'var(--txt-3)', background: page===it.id?'rgba(183,156,255,.2)':'var(--surface)', padding:'1px 7px', borderRadius:999 } })) }));
+
+    // toolbar
+    const tdiv={ isDiv:true };
+    const btn=(id,label,icon,kind)=>{ const base={ display:'inline-flex',alignItems:'center',gap:7,height:28,padding:label?'0 11px':'0',width:label?'auto':28,justifyContent:'center',borderRadius:9,fontSize:12.5,fontWeight:kind==='accent'?700:600,cursor:'pointer',border:'1px solid transparent',fontFamily:'inherit',whiteSpace:'nowrap' };
+      const sty=kind==='accent'?{...base,background:'linear-gradient(135deg,var(--accent),var(--accent-2))',color:'#2a1208',boxShadow:'0 3px 12px rgba(255,145,115,.3)'}:{...base,color:'var(--txt-2)',background:'transparent'};
+      return { isBtn:true, label, iconEl:this.ic(icon,15, kind==='accent'?'#2a1208':undefined), style:sty, act:()=>this.toolbarAct(id) }; };
+    let tb=[];
+    if(page==='today') tb=[btn('search','Search','search'),tdiv,btn('voice','Voice note','mic'),btn('newmeeting','New meeting','plus','accent')];
+    else if(page==='meetings') tb=[btn('search','Search','search'),btn('import','Import calendar','calendar'),tdiv,btn('newmeeting','New meeting','plus','accent')];
+    else if(page==='people') tb=[btn('search','Search','search'),btn('import','Import','upload'),tdiv,btn('newperson','Add person','plus','accent')];
+    else if(page==='tasks') tb=[btn('search','Search','search'),btn('filter','Filter','filter'),tdiv,btn('newtask','New task','plus','accent')];
+    else tb=[btn('search','Search','search'),tdiv,btn('voice','New voice note','mic','accent')];
+
+    // ---- MEETINGS list (C) ----
+    const headStyle={ display:'flex', alignItems:'center', fontSize:10, fontWeight:700, letterSpacing:'1px', color:'var(--txt-3)', textTransform:'uppercase', padding:'6px 6px 7px' };
+    const headStyleNow={ ...headStyle, color:'var(--danger)' };
+    const mGroupsDef=[{key:'now',label:'● NOW',filter:m=>m.status==='recording'},{key:'today',label:'TODAY',filter:m=>m.when==='today'&&m.status!=='recording'},{key:'upcoming',label:'UPCOMING',filter:m=>m.when==='upcoming'},{key:'past',label:'PAST · RECORDED',filter:m=>m.when==='past'}];
+    const passMFilter=(m)=> s.mFilter==='all'?true: s.mFilter==='today'?m.when==='today': s.mFilter==='upcoming'?(m.when==='upcoming'||m.status==='recording'): m.when==='past';
+    const mkMeetingRow=(m)=>({ id:m.id,title:m.title,time:m.time,dur:m.dur,source:m.source,live:m.status==='recording', openDetail:()=>this.setState({mSel:m.id,mView:'detail'}), attStack:this.avStackEl(m.attendees), statusBadge:this.statusBadgeEl(m.status), chevIcon:this.ic('chevR',16,'var(--txt-3)') });
+    const meetingGroups=mGroupsDef.map(g=>({ label:g.label, headStyle:g.key==='now'?headStyleNow:headStyle, items:MEETINGS.filter(g.filter).filter(passMFilter).map(mkMeetingRow) })).filter(g=>g.items.length);
+    const chipBase={ fontSize:12.5,fontWeight:700,padding:'7px 14px',borderRadius:999,border:'1px solid var(--line)',color:'var(--txt-2)',cursor:'pointer',background:'transparent',fontFamily:'inherit' };
+    const chipOn={ ...chipBase,background:'var(--accent-soft)',borderColor:'rgba(255,145,115,.3)',color:'#ffb59f' };
+    const mFilterVMs=[{id:'all',label:'All'},{id:'today',label:'Today'},{id:'upcoming',label:'Upcoming'},{id:'past',label:'Past'}].map(f=>({ label:f.label, pick:()=>this.setState({mFilter:f.id}), style:s.mFilter===f.id?chipOn:chipBase }));
+
+    // ---- PEOPLE (opt1) ----
+    const rel=(r)=>PEOPLE.filter(p=>p.relationship===r);
+    const mkRosterRow=(p)=>{ const cc=this.cadColor(p.cadence); const seld=s.pSel===p.id; return { name:p.name,role:p.role,initials:this.initials(p.name),cadence:p.cadence, onSelect:()=>this.setState({pSel:p.id,pEditing:false,pTags:null,pRemovedTags:[],addTagOpen:false}),
+      avStyle:this.avStyle(p.grad,36,'12px'), rowStyle:{ display:'flex',alignItems:'center',gap:11,padding:'10px 11px',borderRadius:12,cursor:'pointer',width:'100%',background:seld?'var(--accent-soft)':'transparent',border:'1px solid',borderColor:seld?'rgba(255,145,115,.28)':'transparent',textAlign:'left',marginBottom:3,fontFamily:'inherit',color:'var(--txt)' },
+      cadenceDot:{ width:8,height:8,borderRadius:'50%',background:cc,flex:'0 0 auto' } }; };
+    const rosterGroups=[{label:'Colleagues',items:rel('Colleague')},{label:'Clients',items:rel('Client')},{label:'Prospects',items:rel('Prospect')}].filter(g=>g.items.length).map(g=>({ label:g.label, count:g.items.length, items:g.items.map(mkRosterRow) }));
+    const selPerson=this.resolvePerson(s.pSel);
+    const pEditing=s.pEditing;
+    const liveTags=s.pTags?s.pTags:(selPerson.tags||[]).filter(t=>!s.pRemovedTags.includes(t));
+    const tagVMs=liveTags.map(t=>({ label:t, remove:(e)=>{ e.stopPropagation(); this.setState({pTags:liveTags.filter(x=>x!==t)}); } }));
+    const tagSuggestList=['VIP','Skio','Champion','Investor','Advisor','Follow-up'].filter(x=>!liveTags.includes(x)).slice(0,4);
+    const addPTag=(val)=>{ const v=(val||'').trim(); if(!v||liveTags.includes(v)) return; this.setState({pTags:[...liveTags,v],newTag:'',addTagOpen:false}); };
+    const tagSuggest=tagSuggestList.map(t=>({ label:t, add:(e)=>{ e.stopPropagation(); addPTag(t); } }));
+    const factVMs=[
+      {label:'Email',value:selPerson.emails[0],icon:this.ic('mail',15,'var(--txt-3)'),editable:pEditing,static:!pEditing},
+      selPerson.phone?{label:'Phone',value:selPerson.phone,icon:this.ic('phone',15,'var(--txt-3)'),editable:pEditing,static:!pEditing}:null,
+      {label:'Location',value:selPerson.location,icon:this.ic('map',15,'var(--txt-3)'),editable:pEditing,static:!pEditing},
+      {label:'Birthday',value:selPerson.birthday,icon:this.ic('gift',15,'var(--txt-3)'),editable:pEditing,static:!pEditing},
+      {label:'Cadence',value:selPerson.cadence+' · ~'+selPerson.cadenceDays+'d',icon:this.ic('clock',15,this.cadColor(selPerson.cadence)),editable:false,static:true},
+      {label:'First met',value:selPerson.firstMet,icon:this.ic('calendar',15,'var(--txt-3)'),editable:false,static:true},
+    ].filter(Boolean);
+    const actBtn={ display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 12px',borderRadius:10,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:'var(--txt)',background:'var(--surface)',border:'1px solid var(--line-2)' };
+    const pEditBtn={ ...actBtn, color:pEditing?'#2a1208':'var(--txt)', background:pEditing?'linear-gradient(135deg,var(--accent),var(--accent-2))':'var(--surface)', border:pEditing?'1px solid transparent':'1px solid var(--line-2)' };
+
+    // ---- TASKS (B) ----
+    const confirmed=TASKS;
+    const tFilters=[{id:'all',label:'All'},{id:'mine',label:'Mine'},{id:'meeting',label:'From meetings',count:TASKS.filter(t=>t.fromMeeting).length},{id:'done',label:'Done'}];
+    let tList=confirmed;
+    if(s.tFilter==='mine') tList=confirmed.filter(t=>t.owner==='me');
+    else if(s.tFilter==='meeting') tList=confirmed.filter(t=>t.fromMeeting);
+    else if(s.tFilter==='done') tList=confirmed.filter(t=>t.status==='done');
+    const chipBaseS={ fontSize:11.5,fontWeight:700,padding:'5px 11px',borderRadius:999,border:'1px solid var(--line)',color:'var(--txt-2)',cursor:'pointer',background:'transparent',fontFamily:'inherit' };
+    const chipOnS={ ...chipBaseS,background:'var(--accent-soft)',borderColor:'rgba(255,145,115,.3)',color:'#ffb59f' };
+    const tFilterVMs=tFilters.map(f=>({ label:f.label, count:f.count, pick:()=>this.setState({tFilter:f.id}), style:s.tFilter===f.id?chipOnS:chipBaseS }));
+    const mkTaskCard=(t)=>{ const sel=s.tSel===t.id; const done=t.status==='done'; const proj=PROJECTS.find(p=>p.name===t.project); return {
+      id:t.id,title:t.title, onSelect:()=>this.setState({tSel:t.id}),
+      boardStyle:{ width:'100%',textAlign:'left',background:sel?'var(--surface-2)':'var(--surface)',border:'1px solid',borderColor:sel?'var(--line-2)':'var(--line)',borderRadius:13,padding:'11px 12px',cursor:'pointer',fontFamily:'inherit',color:'var(--txt)',opacity:done?0.62:1 },
+      titleStyle:{ fontSize:13,fontWeight:600,lineHeight:1.35,textDecoration:done?'line-through':'none',color:done?'var(--txt-3)':'var(--txt)' },
+      prioBadge:done?null:this.prioBadgeEl(t.priority), dueBadge:done?null:this.dueBadgeEl(t.due), projBadge:this.projBadgeEl(t.project,proj?.color), meetingBadge:this.meetingBadgeEl(t.meeting), ownerAv:this.ownerAvEl(t.owner) }; };
+    const taskLanes=[{key:'open',label:'To do',dot:'var(--sky)',items:tList.filter(t=>t.status==='open')},{key:'doing',label:'In progress',dot:'var(--gold)',items:tList.filter(t=>t.status==='doing')},{key:'done',label:'Completed',dot:'var(--mint)',items:tList.filter(t=>t.status==='done')}].map(l=>({ label:l.label,dot:l.dot,count:l.items.length,empty:l.items.length===0, laneStyle:{ flex:'1 1 0',minWidth:0,background:'var(--surface)',border:'1px solid var(--line)',borderRadius:16,padding:10 }, items:l.items.map(mkTaskCard) }));
+
+    // ---- VOICE ----
+    const mkVoice=(v)=>{ const sel=s.voiceSel===v.id; return { ...v, onSelect:()=>this.setState({voiceSel:v.id,voiceRecording:false}), icon:this.ic('waveform',15, sel?'var(--accent)':'var(--txt-2)'),
+      rowStyle:{ display:'block',width:'100%',textAlign:'left',padding:'10px 11px',borderRadius:12,cursor:'pointer',background:sel?'var(--accent-soft)':'transparent',border:'1px solid',borderColor:sel?'rgba(255,145,115,.28)':'transparent',marginBottom:3,fontFamily:'inherit',color:'var(--txt)' } }; };
+    const voiceVMs=VOICE.map(mkVoice);
+    const selVoice=VOICE.find(v=>v.id===s.voiceSel)||VOICE[0];
+    const voiceRecBtnStyle={ display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',height:42,borderRadius:12,border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:700,fontSize:13.5,
+      color: s.voiceRecording?'#fff':'#2a1208', background: s.voiceRecording?'var(--danger)':'linear-gradient(135deg,var(--accent),var(--accent-2))' };
+    const voiceRecInner=React.createElement(React.Fragment,null, this.ic(s.voiceRecording?'stop':'mic',16, s.voiceRecording?'#fff':'#2a1208'), s.voiceRecording?'Stop recording':'New voice note');
+    const liveWave=Array.from({length:20}).map((_,i)=>({ style:{ width:4,borderRadius:3,background:'var(--danger)',height:(10+((i*13)%30))+'px',animation:`wave ${0.6+(i%5)*0.12}s ease-in-out infinite`,animationDelay:(i*0.05)+'s' } }));
+
+    // ---- today ----
+    const todayMeetings=MEETINGS.filter(m=>m.when==='today'||m.when==='upcoming').slice(0,4).map(m=>({ title:m.title,time:m.time,dur:m.dur,attCount:m.attendees.length, onOpen:()=>this.setState({page:'meetings',mSel:m.id,mView:'detail'}), statusBadge:this.statusBadgeEl(m.status) }));
+    const todayTasks=TASKS.filter(t=>t.due&&t.status!=='done').slice(0,4).map(t=>({ title:t.title, onOpen:()=>this.setState({page:'tasks',tSel:t.id}), dueBadge:this.dueBadgeEl(t.due), ownerAv:this.ownerAvEl(t.owner,16) }));
+    const reconnectPeople=PEOPLE.filter(p=>p.cadence==='Slipping'||p.cadence==='At risk').map(p=>{ const cc=this.cadColor(p.cadence); return { name:p.name,initials:this.initials(p.name),lastSpokeDays:p.lastSpokeDays,cadence:p.cadence, onOpen:()=>this.setState({page:'people',pSel:p.id}), avStyle:this.avStyle(p.grad,34,'12px'), cadenceStyle:{ fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:999,background:cc+'28',color:cc } }; });
+
+    // ---- chat ----
+    const chatCtx={ today:{title:'Ask AI',prompts:['Summarize what needs my attention today.','What are my open commitments?','Who should I reconnect with?']}, meetings:{title:'Ask about this meeting',prompts:['Summarize this meeting.','What did attendees commit to?','Draft a follow-up email.']}, people:{title:'Ask about '+selPerson.name.split(' ')[0],prompts:['Give me a briefing.','Open tasks with them?','When did we last meet?']}, tasks:{title:'Ask about Tasks',prompts:['What should I work on today?','What is overdue?','Draft a status update.']}, voice:{title:'Ask about this note',prompts:['Turn this into tasks.','Summarize in one line.','Draft a message from this.']} }[page]||{title:'Ask AI',prompts:['How can I help?']};
+
+    // ---- settings ----
+    const settingsCats=[{id:'general',label:'General',icon:'settings'},{id:'recording',label:'Recording',icon:'mic'},{id:'transcription',label:'Transcription',icon:'voice'},{id:'ai',label:'AI & Summaries',icon:'cpu'},{id:'integrations',label:'Integrations',icon:'plug'},{id:'mcp',label:'MCP Server',icon:'layers'}];
+    const setBase={ display:'flex',alignItems:'center',gap:10,height:36,padding:'0 12px',borderRadius:10,color:'var(--txt-2)',border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:600,width:'100%',textAlign:'left',marginBottom:2 };
+    const setOn={ ...setBase,background:'var(--lilac-soft)',color:'var(--txt)',fontWeight:700 };
+    const settingsNav=settingsCats.map(c=>({ label:c.label, iconEl:this.ic(c.icon,16, s.settingsCat===c.id?'var(--lilac)':'currentColor'), pick:()=>this.setState({settingsCat:c.id}), style:s.settingsCat===c.id?setOn:setBase }));
+    const toggle=(on)=>React.createElement('span',{style:{width:38,height:22,borderRadius:999,background:on?'var(--accent)':'var(--surface-3)',position:'relative',flex:'0 0 auto',cursor:'pointer'}},React.createElement('span',{style:{position:'absolute',top:2,left:on?18:2,width:18,height:18,borderRadius:'50%',background:'#fff'}}));
+    const selPill=(txt)=>React.createElement('span',{style:{display:'inline-flex',alignItems:'center',gap:6,fontSize:12.5,fontWeight:600,padding:'6px 11px',borderRadius:9,background:'var(--surface-2)',border:'1px solid var(--line-2)',color:'var(--txt)',cursor:'pointer'}},txt,this.ic('chevR',12,'var(--txt-3)'));
+    const rowB={ display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderBottom:'1px solid var(--line)' }; const rowL={ ...rowB,borderBottom:'none' };
+    const settingsContent={
+      general:{ title:'General', sub:'Workspace basics and appearance.', sections:[{label:'Workspace',rows:[{title:'Storage folder',desc:'~/Documents/MeetingNotes',control:selPill('Change')},{title:'Theme',desc:'Match system or pick one',control:selPill('Dark')},{title:'Launch at login',desc:'Open MeetingScribe when you sign in',control:toggle(true),last:true}]}] },
+      recording:{ title:'Recording', sub:'Defaults for what gets captured. Per-meeting sources are set on each meeting.', sections:[{label:'Default sources',rows:[{title:'Record microphone',desc:'Capture your audio',control:toggle(true)},{title:'Record system audio',desc:'Capture the other side via ScreenCaptureKit',control:toggle(true),last:true}]},{label:'Automation',rows:[{title:'Auto-start at meeting time',desc:'Begin recording when a calendar event starts',control:toggle(false)},{title:'Detect Zoom / Meet calls',desc:'Offer to record impromptu calls',control:toggle(true),last:true}]}] },
+      transcription:{ title:'Transcription', sub:'Local speech-to-text via whisper.cpp.', sections:[{label:'Model',rows:[{title:'Whisper model',desc:'ggml-base.en.bin · 148 MB',control:selPill('base.en')},{title:'Live transcript',desc:'Transcribe in 5-minute chunks during a call',control:toggle(true),last:true}]}] },
+      ai:{ title:'AI & Summaries', sub:'Local summarization via Ollama.', sections:[{label:'Engine',rows:[{title:'Ollama model',desc:'llama3.1:8b · 4.9 GB',control:selPill('llama3.1:8b')},{title:'Auto-summarize on stop',desc:'Generate a summary when recording ends',control:toggle(true),last:true}]}] },
+      integrations:{ title:'Integrations', sub:'Connect calendars and task tools.', sections:[{label:'Connected',rows:[{title:'Google Calendar',desc:'Connected · maya@skio.com',control:selPill('Manage')},{title:'Notion tasks',desc:'Push action items to a Notion database',control:toggle(false),last:true}]}] },
+      mcp:{ title:'MCP Server', sub:'Let Claude query and write to your vault.', sections:[{label:'Claude integration',rows:[{title:'Install in Claude Desktop',desc:'Adds the bundled MeetingScribe MCP server',control:selPill('Install')},{title:'Allow write tools',desc:'Create tasks, add people, write notes',control:toggle(true),last:true}]}] }
+    }[s.settingsCat];
+    const settingsSections=(settingsContent?.sections||[]).map(sec=>({ label:sec.label, rows:sec.rows.map(r=>({ title:r.title, desc:r.desc, rowStyle:r.last?rowL:rowB, control:r.control })) }));
+
+    // ---- new-item modal ----
+    const nm=s.newModal;
+    const newConfig={
+      meeting:{ title:'New meeting', icon:this.ic('meetings',18,'var(--accent)'), cta:'Create meeting', fields:[{label:'Title',isInput:true,ph:'e.g. Weekly sync'},{label:'When',isInput:true,ph:'Today · 3:00 PM'},{label:'Capture sources',isChips:true,chips:['Microphone','System audio']}] },
+      person:{ title:'Add person', icon:this.ic('people',18,'var(--accent)'), cta:'Add person', fields:[{label:'Name',isInput:true,ph:'Full name'},{label:'Role & company',isInput:true,ph:'e.g. VP Product · Skio'},{label:'Relationship',isChips:true,chips:['Colleague','Client','Prospect']}] },
+      task:{ title:'New task', icon:this.ic('tasks',18,'var(--accent)'), cta:'Create task', fields:[{label:'Task',isInput:true,ph:'What needs to happen?'},{label:'Priority',isChips:true,chips:['High','Medium','Low']},{label:'Due',isChips:true,chips:['Today','Tomorrow','This week']}] }
+    }[nm]||{title:'',icon:null,cta:'',fields:[]};
+
+    return {
+      titleCrumb: {today:'Today',meetings:'Meetings',people:'People',tasks:'Tasks',voice:'Voice Notes'}[page],
+      markIcon:this.ic('waveform',15,'#221636'), settingsIcon:this.ic('settings',16),
+      navGroups, toolbarVMs:tb,
+      recording:s.recording, toggleRecording:()=>this.setState({recording:!s.recording}),
+      chatOpen:s.chatOpen, toggleChat:()=>this.setState({chatOpen:!s.chatOpen}), chatIcon:this.ic('chat',15,s.chatOpen?'var(--lilac)':undefined),
+      chatBtnStyle:{ display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:9,cursor:'pointer',fontFamily:'inherit',color:s.chatOpen?'var(--txt)':'var(--txt-2)',background:s.chatOpen?'var(--surface)':'transparent',border:'1px solid',borderColor:s.chatOpen?'var(--line)':'transparent' },
+      openSettings:()=>this.setState({settingsOpen:true}), closeSettings:()=>this.setState({settingsOpen:false}), settingsOpen:s.settingsOpen, stop:(e)=>e.stopPropagation(),
+      isToday:page==='today', isMeetings:page==='meetings', isPeople:page==='people', isTasks:page==='tasks', isVoice:page==='voice',
+      // today
+      greeting:'Good morning, Tyler', openLiveMeeting:()=>this.setState({page:'meetings',mSel:'m-now',mView:'detail'}), goTasks:()=>this.setState({page:'tasks'}),
+      todayMeetings, todayTasks, reconnectPeople,
+      // meetings
+      mDetail:s.mView==='detail', mList:s.mView!=='detail', meetingMeta:`${MEETINGS.filter(m=>m.when==='today'||m.status==='recording').length} today · ${MEETINGS.filter(m=>m.when==='past').length} recorded`,
+      meetingGroups, mFilterVMs, selMeetingVM:this.resolveMeeting(s.mSel), closeMeeting:()=>this.setState({mView:'list'}),
+      openPerson:(id)=>this.setState({page:'people',pSel:id}), openMeeting:(id)=>this.setState({page:'meetings',mSel:id,mView:'detail'}),
+      // people
+      rosterGroups, sel:{...selPerson, initials:this.initials(selPerson.name), tags:liveTags}, heroAvStyle:this.avStyle(selPerson.grad,72,'22px'),
+      pEditing, pNotEditing:!pEditing, togglePEdit:()=>this.setState({pEditing:!pEditing, addTagOpen:false}),
+      pEditIcon:pEditing?this.ic('check',13,'#2a1208'):this.ic('edit',13), pEditLabel:pEditing?'Done':'Edit', pEditBtn, actBtn,
+      tagVMs, xIconSm:this.ic('x',10), plusIconSm:this.ic('plus',10),
+      openAddTag:(e)=>{ e.stopPropagation(); this.setState({addTagOpen:!s.addTagOpen}); }, addTagOpen:s.addTagOpen, closePeoplePop:()=>{ if(s.addTagOpen) this.setState({addTagOpen:false}); },
+      newTag:s.newTag, onNewTag:(e)=>this.setState({newTag:e.target.value}), onTagKey:(e)=>{ if(e.key==='Enter'){ e.preventDefault(); addPTag(s.newTag); } }, tagSuggest,
+      factVMs, mailIcon:this.ic('mail',13), calIcon:this.ic('calendar',13), searchIcon:this.ic('search',15,'var(--txt-3)'), plusIconDark:this.ic('plus',13,'#2a1208'),
+      newPerson:()=>this.setState({newModal:'person'}),
+      // tasks
+      taskMeta:`${TASKS.filter(t=>t.status!=='done').length} open · ${TASKS.filter(t=>t.fromMeeting).length} from meetings`, tFilterVMs, taskLanes, selTaskVM:this.resolveTask(s.tSel),
+      openTaskFull:()=>this.setState({chatOpen:false}), expandIcon:this.ic('expand',13),
+      // voice
+      voiceVMs, selVoice, voiceRecording:s.voiceRecording, toggleVoiceRec:()=>this.setState({voiceRecording:!s.voiceRecording}), voiceRecBtnStyle, voiceRecInner, liveWave,
+      playIcon:this.ic('play',16,'#2a1208'), stopIcon:this.ic('stop',14,'#fff'), tasksIcon:this.ic('tasks',12),
+      // chat
+      chatTitle:chatCtx.title, chatPrompts:chatCtx.prompts, sparkIcon:this.ic('sparkles',16,'var(--lilac)'), sparkIconSm:this.ic('sparkles',14,'var(--lilac)'), globeIcon:this.ic('globe',13,'var(--txt-3)'), sendIcon:this.ic('send',15,'var(--accent)'), closeIcon:this.ic('x',14),
+      // settings
+      settingsNav, settingsTitle:settingsContent?.title, settingsSub:settingsContent?.sub, settingsSections,
+      // new modal
+      newModalOpen:!!nm, closeNew:()=>this.setState({newModal:null}), newTitle:newConfig.title, newIcon:newConfig.icon, newCta:newConfig.cta, newFields:newConfig.fields
+    };
+  }
+
+  toolbarAct(id){
+    if(id==='newmeeting') this.setState({newModal:'meeting'});
+    else if(id==='newperson') this.setState({newModal:'person'});
+    else if(id==='newtask') this.setState({newModal:'task'});
+    else if(id==='voice') this.setState({page:'voice'});
+  }
+  newPerson(){ this.setState({newModal:'person'}); }
+}
+</script>
+</body>
+</html>
