@@ -223,8 +223,12 @@ final class FloatingOverlayController: ObservableObject {
         if window != nil { return }
         let hosting = NSHostingController(rootView: FloatingOverlayView(controller: self))
         hosting.view.wantsLayer = true
+        // Auto-size the window to the SwiftUI content (`.preferredContentSize`, the
+        // NSHostingController default). The pill draws at its intrinsic width per
+        // state, so the window never clips a label — this is the fix for GC-1's
+        // truncation bug (the old window was pinned to a too-narrow 520pt).
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 80),
+            contentRect: NSRect(x: 0, y: 0, width: 466, height: 96),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -232,7 +236,7 @@ final class FloatingOverlayController: ObservableObject {
         window.contentViewController = hosting
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.hasShadow = true
+        window.hasShadow = false   // the SwiftUI pill draws its own soft gold glow
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces,
                                      .stationary,
@@ -240,6 +244,17 @@ final class FloatingOverlayController: ObservableObject {
                                      .fullScreenAuxiliary]
         window.isMovableByWindowBackground = true
         window.hidesOnDeactivate = false
+        // When the content resizes (a state change widens/narrows the pill), keep
+        // it pinned bottom-centre. Drags only move the window (didMove), so this
+        // doesn't fight `isMovableByWindowBackground`.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let w = self.window else { return }
+                self.positionAtBottomCenter(w)
+            }
+        }
         positionAtBottomCenter(window)
         self.window = window
     }
@@ -260,41 +275,157 @@ final class FloatingOverlayController: ObservableObject {
 struct FloatingOverlayView: View {
     @ObservedObject var controller: FloatingOverlayController
 
+    /// Per-state intrinsic width (matches `prototype/VoiceNotePill.dc.html`:
+    /// recording 410, transcribing 372, saved 466). The Saved state widens when a
+    /// "Tasks" button is also present. The window auto-sizes to this, so labels
+    /// never truncate — that's the GC-1 fix.
+    private var pillWidth: CGFloat {
+        switch controller.state {
+        case .recording, .meetingRecording: return 410
+        case .transcribing:                 return 372
+        case .done(let note, _):            return controller.taskReadyNoteIDs.contains(note.id) ? 540 : 466
+        case .error:                        return 380
+        case .hidden:                       return 410
+        }
+    }
+
     var body: some View {
-        Group {
-            switch controller.state {
-            case .hidden:
-                EmptyView()
-            case .recording(let startedAt):
-                RecordingPill(startedAt: startedAt, controller: controller)
-            case .meetingRecording(let startedAt):
-                MeetingRecordingPill(startedAt: startedAt, controller: controller)
-            case .transcribing:
-                TranscribingPill(controller: controller)
-            case .done(let note, let transcript):
-                DonePill(note: note, transcript: transcript, controller: controller)
-            case .error(let msg):
-                ErrorPill(message: msg, controller: controller)
+        content
+            .frame(width: pillWidth, alignment: .leading)
+            .padding(.vertical, 11)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(hex: "#221b1a") ?? .black,
+                                                  Color(hex: "#191420") ?? .black],
+                                         startPoint: .top, endPoint: .bottom))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(NDS.gold.opacity(0.26), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.55), radius: 30, y: 22)
+            .shadow(color: NDS.gold.opacity(0.10), radius: 8)
+            .padding(20)   // breathing room inside the window for the soft glow
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch controller.state {
+        case .hidden:
+            EmptyView()
+        case .recording(let startedAt):
+            RecordingPill(startedAt: startedAt, controller: controller)
+        case .meetingRecording(let startedAt):
+            MeetingRecordingPill(startedAt: startedAt, controller: controller)
+        case .transcribing:
+            TranscribingPill(controller: controller)
+        case .done(let note, let transcript):
+            DonePill(note: note, transcript: transcript, controller: controller)
+        case .error(let msg):
+            ErrorPill(message: msg, controller: controller)
+        }
+    }
+}
+
+// MARK: - Shared pill chrome
+
+/// 2×3 dot drag-grip on the leading edge (prototype `gripIcon`).
+@available(macOS 14.0, *)
+private struct PillGrip: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<2, id: \.self) { _ in
+                VStack(spacing: 4) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Circle().fill(NDS.textTertiary).frame(width: 2.6, height: 2.6)
+                    }
+                }
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(LinearGradient(colors: [Color.black.opacity(0.06),
-                                                  Color.clear],
-                                         startPoint: .top, endPoint: .bottom))
+        .frame(width: 16)
+        .accessibilityHidden(true)
+    }
+}
+
+/// 40×40 round status badge (recording dot / spinner / check).
+@available(macOS 14.0, *)
+private struct PillBadge<Content: View>: View {
+    let fill: Color
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        ZStack { Circle().fill(fill); content() }
+            .frame(width: 40, height: 40)
+    }
+}
+
+/// The shared ghost "×" dismiss button (30×30, all states).
+@available(macOS 14.0, *)
+private struct PillDismiss: View {
+    let help: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .scaledFont(12, weight: .semibold)
+                .foregroundStyle(NDS.textTertiary)
+                .frame(width: 30, height: 30)
+                .background(NDS.textPrimary.opacity(0.06),
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(help)
+        .help(help)
+    }
+}
+
+/// 32pt action button used in the Saved state (Copy = neutral, Open/Tasks = lilac).
+@available(macOS 14.0, *)
+private struct PillActionButton: View {
+    enum Kind { case neutral, lilac }
+    let label: String
+    let systemImage: String
+    let kind: Kind
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage).scaledFont(12, weight: .semibold)
+                Text(label).scaledFont(12.5, weight: .bold).fixedSize()
             }
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-        )
-        .padding(10)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .foregroundStyle(kind == .lilac ? NDS.lilac : NDS.textPrimary)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(kind == .lilac ? NDS.lilacSoft : NDS.surface2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(kind == .lilac ? NDS.lilac.opacity(0.3) : NDS.hairline, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+    }
+}
+
+/// Pulsing danger dot inside the 40px recording badge (prototype `rec-pulse`).
+@available(macOS 14.0, *)
+private struct RecPulseDot: View {
+    @State private var on = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        Circle()
+            .fill(NDS.danger)
+            .frame(width: 13, height: 13)
+            .opacity(on ? 0.45 : 1)
+            .scaleEffect(on ? 0.82 : 1)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 0.65).repeatForever(autoreverses: true)) { on = true }
+            }
     }
 }
 
@@ -306,47 +437,43 @@ private struct RecordingPill: View {
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        HStack(spacing: 14) {
-            PulsingDot()
-            VStack(alignment: .leading, spacing: 2) {
-                Text("VOICE NOTE · OVER ANY APP")
-                    .scaledFont(9, weight: .heavy, relativeTo: .caption2).tracking(0.8)
+        HStack(spacing: 11) {
+            PillGrip()
+            PillBadge(fill: NDS.danger.opacity(0.16)) { RecPulseDot() }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Voice note")
+                    .scaledFont(14, weight: .bold).foregroundStyle(NDS.textPrimary)
+                    .lineLimit(1)
+                Text("Recording · \(elapsedString())")
+                    .scaledFont(12, weight: .semibold).monospacedDigit()
                     .foregroundStyle(NDS.gold)
-                Text(elapsedString())
-                    .font(.callout.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.primary)
+                    .lineLimit(1).truncationMode(.tail)
                 if let dest = dictationDestination {
                     DictationDestinationLabel(destination: dest)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             AudioLevelMeter(level: controller.manager?.recordingMonitor.voiceNoteLevel ?? 0,
-                            tint: NDS.gold, bars: 14, height: 24)
-                .frame(width: 130)
-            Spacer()
-            OverlayButton(label: "End",
-                          systemImage: "stop.fill",
-                          tint: .red,
-                          prominent: true,
-                          action: controller.stopRecording)
-            Button(action: controller.cancelOverlay) {
-                Image(systemName: "xmark")
-                    .scaledFont(11, weight: .semibold)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 26, height: 26)
-                    .background(Color.secondary.opacity(0.08), in: Circle())
+                            tint: NDS.gold, bars: 16, height: 26)
+                .fixedSize()
+            Button(action: controller.stopRecording) {
+                Image(systemName: "stop.fill")
+                    .scaledFont(15, weight: .bold).foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(NDS.danger, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .shadow(color: NDS.danger.opacity(0.4), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Hide overlay")
-            .help("Hide overlay (recording continues)")
+            .help("Stop & transcribe")
+            PillDismiss(help: "Cancel (discard)", action: controller.cancelOverlay)
         }
         .onReceive(timer) { now = $0 }
     }
 
     private func elapsedString() -> String {
         let s = Int(now.timeIntervalSince(startedAt))
-        let m = s / 60
-        let r = s % 60
-        return String(format: "%d:%02d", m, r)
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     /// Destination for the active capture — but only when the live recording is
@@ -399,36 +526,34 @@ private struct MeetingRecordingPill: View {
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        HStack(spacing: 14) {
-            PulsingDot()
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 11) {
+            PillGrip()
+            PillBadge(fill: NDS.danger.opacity(0.16)) { RecPulseDot() }
+            VStack(alignment: .leading, spacing: 1) {
                 Text("Recording meeting")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(elapsedString())
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .scaledFont(14, weight: .bold).foregroundStyle(NDS.textPrimary)
+                    .lineLimit(1)
+                Text("Recording · \(elapsedString())")
+                    .scaledFont(12, weight: .semibold).monospacedDigit()
+                    .foregroundStyle(NDS.gold)
+                    .lineLimit(1).truncationMode(.tail)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             AudioLevelMeter(micLevel: controller.manager?.recordingMonitor.recordingHealth.micLevel ?? 0,
                             systemLevel: 0,
-                            bars: 14, height: 24)
-                .frame(width: 130)
-            Spacer()
-            OverlayButton(label: "Stop",
-                          systemImage: "stop.fill",
-                          tint: .red,
-                          prominent: true,
-                          action: controller.stopRecording)
-            Button(action: controller.cancelOverlay) {
-                Image(systemName: "xmark")
-                    .scaledFont(11, weight: .semibold)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 26, height: 26)
-                    .background(Color.secondary.opacity(0.08), in: Circle())
+                            bars: 16, height: 26)
+                .fixedSize()
+            Button(action: controller.stopRecording) {
+                Image(systemName: "stop.fill")
+                    .scaledFont(15, weight: .bold).foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(NDS.danger, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .shadow(color: NDS.danger.opacity(0.4), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Hide overlay")
-            .help("Hide overlay (recording continues)")
+            .help("Stop recording")
+            PillDismiss(help: "Hide overlay (recording continues)", action: controller.cancelOverlay)
         }
         .onReceive(timer) { now = $0 }
     }
@@ -443,23 +568,22 @@ private struct MeetingRecordingPill: View {
 private struct TranscribingPill: View {
     @ObservedObject var controller: FloatingOverlayController
     var body: some View {
-        HStack(spacing: 14) {
-            ProgressView().controlSize(.small) // design-lint:allow
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Transcribing").font(.callout.weight(.semibold))
+        HStack(spacing: 11) {
+            PillGrip()
+            PillBadge(fill: NDS.gold.opacity(0.12)) {
+                ProgressView().controlSize(.small).tint(NDS.gold) // design-lint:allow
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Transcribing")
+                    .scaledFont(14, weight: .bold).foregroundStyle(NDS.textPrimary)
+                // Wraps to two lines — must never truncate (GC-1 anti-truncation rule).
                 Text("Whisper is running locally · usually a few seconds")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .scaledFont(12).foregroundStyle(NDS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
-            Button(action: controller.cancelOverlay) {
-                Image(systemName: "xmark")
-                    .scaledFont(11, weight: .semibold)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 26, height: 26)
-                    .background(Color.secondary.opacity(0.08), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Hide overlay")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+            PillDismiss(help: "Cancel", action: controller.cancelOverlay)
         }
     }
 }
@@ -471,60 +595,47 @@ private struct DonePill: View {
     @ObservedObject var controller: FloatingOverlayController
     @State private var copiedFlash = false
 
-    private var hasTasks: Bool {
-        controller.taskReadyNoteIDs.contains(note.id)
+    private var hasTasks: Bool { controller.taskReadyNoteIDs.contains(note.id) }
+
+    private var snippet: String {
+        let s = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? "Saved to Voice Notes" : s
     }
 
     var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle().fill(Color.green.opacity(0.15)).frame(width: 32, height: 32)
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.green)
-                    .scaledFont(14, weight: .bold)
+        HStack(spacing: 11) {
+            PillGrip()
+            PillBadge(fill: NDS.mint.opacity(0.18)) {
+                Image(systemName: "checkmark").scaledFont(15, weight: .bold).foregroundStyle(NDS.mint)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Voice note ready").font(.callout.weight(.semibold))
-                Text(transcript.isEmpty ? "(empty transcript)" : transcript)
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Voice note saved")
+                    .scaledFont(14, weight: .bold).foregroundStyle(NDS.textPrimary)
+                    .lineLimit(1)
+                Text(snippet)
+                    .scaledFont(12).foregroundStyle(NDS.textTertiary)
+                    .lineLimit(1).truncationMode(.tail)
             }
-            Spacer(minLength: 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             if hasTasks {
-                OverlayButton(label: "See Tasks",
-                              systemImage: "checklist",
-                              tint: NDS.brand,
-                              prominent: true) {
+                PillActionButton(label: "Tasks", systemImage: "checklist", kind: .lilac) {
                     NSApp.activate(ignoringOtherApps: true)
                     NotificationCenter.default.post(
-                        name: .meetingScribeOpenVoiceNote,
-                        object: nil,
-                        userInfo: ["id": note.id, "focusTasks": true]
-                    )
+                        name: .meetingScribeOpenVoiceNote, object: nil,
+                        userInfo: ["id": note.id, "focusTasks": true])
                     controller.cancelOverlay()
                 }
             }
-            OverlayButton(label: copiedFlash ? "Copied" : "Copy",
-                          systemImage: copiedFlash ? "checkmark" : "doc.on.doc",
-                          tint: copiedFlash ? .green : .primary,
-                          prominent: false) {
+            PillActionButton(label: copiedFlash ? "Copied" : "Copy",
+                             systemImage: copiedFlash ? "checkmark" : "doc.on.doc",
+                             kind: .neutral) {
                 controller.copyTranscript()
                 copiedFlash = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copiedFlash = false }
             }
-            OverlayButton(label: "Open",
-                          systemImage: "arrow.up.right",
-                          tint: NDS.brand,
-                          prominent: false,
-                          action: controller.goToRecording)
-            Button(action: controller.cancelOverlay) {
-                Image(systemName: "xmark")
-                    .scaledFont(11, weight: .semibold)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 26, height: 26)
-                    .background(Color.secondary.opacity(0.08), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Hide overlay")
+            PillActionButton(label: "Open", systemImage: "arrow.up.right",
+                             kind: .lilac, action: controller.goToRecording)
+            PillDismiss(help: "Dismiss", action: controller.cancelOverlay)
         }
     }
 }
@@ -534,83 +645,24 @@ private struct ErrorPill: View {
     let message: String
     @ObservedObject var controller: FloatingOverlayController
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange).font(.title3)
+        HStack(spacing: 11) {
+            PillGrip()
+            PillBadge(fill: NDS.danger.opacity(0.16)) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .scaledFont(15, weight: .bold).foregroundStyle(NDS.danger)
+            }
             VStack(alignment: .leading, spacing: 1) {
-                Text("Voice note error").font(.callout).bold()
-                Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text("Voice note error")
+                    .scaledFont(14, weight: .bold).foregroundStyle(NDS.textPrimary)
+                    .lineLimit(1)
+                Text(message)
+                    .scaledFont(12).foregroundStyle(NDS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
-            Button("Dismiss") { controller.cancelOverlay() }
-                .controlSize(.small) // design-lint:allow
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+            PillDismiss(help: "Dismiss", action: controller.cancelOverlay)
         }
-    }
-}
-
-@available(macOS 14.0, *)
-private struct PulsingDot: View {
-    @State private var scale: CGFloat = 1.0
-    @State private var glow: Double = 0.0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var body: some View {
-        ZStack {
-            Circle().fill(NDS.recording.opacity(0.18))
-                .frame(width: 28, height: 28)
-                .scaleEffect(1 + CGFloat(glow))
-                .opacity(1 - glow)
-            Circle()
-                .fill(NDS.recording)
-                .frame(width: 12, height: 12)
-                .scaleEffect(scale)
-                .shadow(color: NDS.recording.opacity(0.5), radius: 4)
-        }
-        .onAppear {
-            // Reduce Motion: keep the dot static (no perpetual pulse/glow).
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                scale = 1.18
-            }
-            withAnimation(.easeOut(duration: 1.2).repeatForever(autoreverses: false)) {
-                glow = 0.6
-            }
-        }
-    }
-}
-
-@available(macOS 14.0, *)
-private struct OverlayButton: View {
-    let label: String
-    let systemImage: String
-    let tint: Color
-    let prominent: Bool
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: systemImage).scaledFont(11, weight: .semibold)
-                Text(label).scaledFont(12.5, weight: .semibold)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .foregroundStyle(prominent ? .white : tint)
-            .background(
-                Capsule().fill(
-                    prominent ? AnyShapeStyle(tint)
-                              : AnyShapeStyle(Color.secondary.opacity(hovering ? 0.16 : 0.10))
-                )
-            )
-            .overlay(Capsule().strokeBorder(
-                prominent ? Color.clear : tint.opacity(0.2), lineWidth: 0.5
-            ))
-            .shadow(color: prominent ? tint.opacity(0.25) : .clear,
-                    radius: 2, y: 1)
-        }
-        .buttonStyle(.plain)
-        .scaleEffect(hovering ? 1.03 : 1)
-        .animation(.spring(response: 0.15, dampingFraction: 0.85), value: hovering)
-        .onHover { hovering = $0 }
     }
 }
 
