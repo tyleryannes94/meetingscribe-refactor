@@ -490,6 +490,15 @@ struct MainWindow: View {
             chatSession.setContext(contextLabel(s))
         }
         .toolbar {
+            // Title-bar "Stop · MM:SS" pill (from the design comp): a live,
+            // always-visible recording control while a meeting is recording.
+            ToolbarItem(placement: .principal) {
+                if let started = meetingRecordingStartedAt {
+                    RecordingStopPill(startedAt: started) {
+                        Task { await manager.stopRecording() }
+                    }
+                }
+            }
             // Global back / forward — browser-style history across sections and
             // meeting selections, driven by WorkspaceRouter.
             ToolbarItemGroup(placement: .navigation) {
