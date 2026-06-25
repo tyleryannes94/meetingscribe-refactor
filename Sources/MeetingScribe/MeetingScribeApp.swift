@@ -43,6 +43,7 @@ struct MeetingScribeApp: App {
                 // controller publishes, not when the manager's unrelated
                 // state changes.
                 .environmentObject(manager.quickNotesController)
+                .environmentObject(manager.screenRecordingsController)
                 .environmentObject(manager.pipelineController)
                 .environmentObject(manager.actionItemBackfill)
                 .environmentObject(manager.personExtraction)

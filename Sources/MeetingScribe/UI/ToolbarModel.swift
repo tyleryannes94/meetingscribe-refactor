@@ -11,6 +11,7 @@ enum ToolbarModel {
         case search, voiceNote, record, newMeeting
         case importCalendar, importPeople
         case addPerson, filter, newTask, newVoiceNote
+        case newRecording, newScreenshot
         case stopRecording
     }
 
@@ -78,6 +79,10 @@ enum ToolbarModel {
         case .notes:
             return [.button(search), .divider,
                     primary(.newVoiceNote, "New voice note", "mic")]
+        case .recordings:
+            return [.button(search),
+                    ghost(.newScreenshot, "Screenshot", "camera.viewfinder"), .divider,
+                    primary(.newRecording, "New recording", "record.circle")]
         case .decisions, .integrations:
             return [.button(search)]
         }

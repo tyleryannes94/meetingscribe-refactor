@@ -33,9 +33,10 @@ final class MeetingStore {
     static let indexSchemaVersion = 2
     static let untaggedFolder = "Untagged"
     static let quickNotesFolder = "QuickNotes"
+    static let screenRecordingsFolder = "ScreenRecordings"
     /// Sub-folders we never treat as meeting groupings (case-sensitive matches).
     private static let reservedFolders: Set<String> = [
-        "models", "QuickNotes", "logs", "diagnostics"
+        "models", "QuickNotes", "ScreenRecordings", "Screenshots", "logs", "diagnostics"
     ]
 
     var root: URL { AppSettings.shared.storageDir }

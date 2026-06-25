@@ -62,6 +62,9 @@ final class MeetingManager: ObservableObject {
     // items. `lazy` because an inline default can't reference `actionItems`.
     lazy var quickNotesController = QuickNotesController(actionItemStore: actionItems)
 
+    /// Screen-recording state (capture / transcription), parallel to voice notes.
+    let screenRecordingsController = ScreenRecordingsController()
+
     /// Post-stop + Transcribe-Now pipeline state.
     lazy var pipelineController = MeetingPipelineController(
         store: store, tagStore: tagStore, actionItems: actionItems, decisions: decisions,
