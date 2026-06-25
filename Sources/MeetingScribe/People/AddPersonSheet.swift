@@ -133,7 +133,7 @@ struct AddPersonSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Notes").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                        Text("About").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
                         TextEditor(text: $bio)
                             .font(NDS.body)
                             .frame(minHeight: 100)
