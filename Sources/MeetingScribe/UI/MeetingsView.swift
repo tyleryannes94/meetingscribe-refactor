@@ -121,7 +121,7 @@ struct MeetingsView: View {
             // upcoming/past counts now sit beside the title as a muted suffix.
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Meetings").scaledFont(22, weight: .bold, kind: .display)
-                Text("\(upcoming.count) upcoming · \(past.count) past")
+                Text("\(todayCount) today · \(past.count) recorded")
                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 Spacer()
             }
@@ -179,14 +179,16 @@ struct MeetingsView: View {
             HStack(spacing: 6) {
                 ForEach(Scope.allCases) { s in
                     MSFilterChip(label: s.label,
-                                 active: scope == s && activeSavedViewID == nil) {
+                                 active: scope == s && activeSavedViewID == nil,
+                                 tint: NDS.accent) {
                         scope = s; activeSavedViewID = nil
                     }
                 }
                 if !savedViews.isEmpty {
                     Divider().frame(height: 16).overlay(NDS.divider)
                     ForEach(savedViews) { v in
-                        MSFilterChip(label: v.name, active: activeSavedViewID == v.id) {
+                        MSFilterChip(label: v.name, active: activeSavedViewID == v.id,
+                                     tint: NDS.accent) {
                             apply(v)
                         }
                         .contextMenu {
@@ -320,12 +322,22 @@ struct MeetingsView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ForEach(sortedGroups, id: \.0) { title, items in
                     if !items.isEmpty {
+                        let clean = title.replacingOccurrences(of: "● ", with: "")
+                        let isNow = clean.uppercased().hasPrefix("NOW")
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(title)
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(NDS.textSecondary)
-                                .padding(.horizontal, 12)
-                                .padding(.top, 8)
+                            HStack(spacing: 6) {
+                                if isNow {
+                                    Circle().fill(NDS.recording).frame(width: 7, height: 7)
+                                }
+                                Text(clean.uppercased())
+                                    .font(NDS.sectionLabel).tracking(0.8)
+                                    .foregroundStyle(isNow ? NDS.recording : NDS.textTertiary)
+                                Text("\(items.count)")
+                                    .font(NDS.tiny.monospacedDigit())
+                                    .foregroundStyle(NDS.textTertiary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.top, 8)
                             ForEach(items) { m in
                                 meetingRow(m)
                             }
@@ -458,6 +470,15 @@ struct MeetingsView: View {
         manager.pastMeetings.filter(matches).sorted { $0.startDate > $1.startDate }
     }
 
+    /// Meetings happening today (calendar upcoming + recorded), for the comp
+    /// header subline "N today · N recorded".
+    private var todayCount: Int {
+        let cal = Calendar.current
+        let up = calendar.upcoming.filter { cal.isDateInToday($0.startDate) }.count
+        let recorded = manager.pastMeetings.filter { cal.isDateInToday($0.startDate) }.count
+        return up + recorded
+    }
+
     /// The currently-recording meeting's id (so NOW is shown regardless of the
     /// scope filter).
     private var liveMeetingID: String? {
@@ -556,14 +577,14 @@ struct MeetingsView: View {
             // Header: prev / week range / next / Today
             HStack(spacing: 12) {
                 Button { weekOffset -= 1 } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "chevron.left").scaledFont(13, weight: .semibold)
                 }
                 .buttonStyle(.borderless)
                 Text(weekRangeLabel)
                     .font(.callout.weight(.semibold))
                     .frame(minWidth: 180, alignment: .center)
                 Button { weekOffset += 1 } label: {
-                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "chevron.right").scaledFont(13, weight: .semibold)
                 }
                 .buttonStyle(.borderless)
                 if weekOffset != 0 {

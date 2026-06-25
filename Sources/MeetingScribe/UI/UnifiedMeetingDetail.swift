@@ -88,8 +88,8 @@ struct UnifiedMeetingDetail: View {
         case brief, outcomes, notes, transcript, related
         var label: String {
             switch self {
-            case .brief: return "Brief"
-            case .outcomes: return "Outcomes"
+            case .brief: return "Summary"     // comp naming
+            case .outcomes: return "Actions"  // comp naming
             case .notes: return "Notes"
             case .transcript: return "Transcript"
             case .related: return "Related"
@@ -297,7 +297,7 @@ struct UnifiedMeetingDetail: View {
     private func resetTab() {
         switch mode {
         case .past: activeTab = .brief
-        case .live: activeTab = .transcript
+        case .live: activeTab = .notes     // comp: live recording defaults to Notes
         case .upcoming: activeTab = .brief
         }
     }
@@ -324,26 +324,27 @@ struct UnifiedMeetingDetail: View {
         Button { withAnimation(.easeOut(duration: 0.12)) { activeTab = tab } } label: {
             HStack(spacing: 8) {
                 Image(systemName: tab.icon)
-                    .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                    .scaledFont(12, weight: isActive ? .semibold : .regular)
                     .frame(width: 16, alignment: .center)
                 Text(tab.label)
                     .font(isActive ? .callout.weight(.semibold) : .callout)
                 Spacer()
+                // Actions tab badge: count of items still needing triage (comp).
                 if tab == .outcomes, let m = meeting {
-                    let count = manager.actionItems.items(for: m.id).count
+                    let count = manager.actionItems.items(for: m.id).filter { $0.needsTriage }.count
                     if count > 0 {
                         Text("\(count)")
-                            .font(.caption2.bold()).foregroundStyle(.white)
+                            .font(.caption2.bold()).foregroundStyle(NDS.onAccent)
                             .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(isActive ? Color.white.opacity(0.3) : Color.accentColor)
+                            .background(isActive ? NDS.accent.opacity(0.45) : NDS.accent)
                             .clipShape(Capsule())
                     }
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
-            .foregroundStyle(isActive ? Color.accentColor : Color.primary.opacity(0.7))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(isActive ? NDS.accentSoft : Color.clear)
+            .foregroundStyle(isActive ? NDS.accent : NDS.textSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

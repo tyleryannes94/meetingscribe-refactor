@@ -441,6 +441,9 @@ struct MSFilterChip: View {
     let label: String
     var count: Int? = nil
     let active: Bool
+    /// Active-state accent. Defaults to the lilac brand (People/Meetings legacy
+    /// chips); pass `NDS.accent` for the comp's coral filter rows (Tasks/scope).
+    var tint: Color = NDS.brand
     let action: () -> Void
 
     var body: some View {
@@ -450,14 +453,14 @@ struct MSFilterChip: View {
                 if let count {
                     Text("\(count)")
                         .font(NDS.tiny.monospacedDigit())
-                        .foregroundStyle(active ? NDS.brand : NDS.textTertiary)
+                        .foregroundStyle(active ? tint : NDS.textTertiary)
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(active ? NDS.brand.opacity(0.14) : Color.clear, in: Capsule())
-            .overlay(Capsule().strokeBorder(active ? NDS.brand.opacity(0.4) : NDS.hairline,
+            .background(active ? tint.opacity(0.16) : Color.clear, in: Capsule())
+            .overlay(Capsule().strokeBorder(active ? tint.opacity(0.4) : NDS.hairline,
                                             lineWidth: active ? 1 : 0.5))
-            .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
+            .foregroundStyle(active ? tint : NDS.textSecondary)
         }
         .buttonStyle(.plain)
     }
