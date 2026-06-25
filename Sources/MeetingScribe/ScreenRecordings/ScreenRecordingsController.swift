@@ -110,10 +110,63 @@ final class ScreenRecordingsController: ObservableObject {
     /// Live mic/system level for the recording UI meter.
     func currentLevel() -> Float { recorder?.currentLevel ?? 0 }
 
+    /// Resolves the actual video file (recorded `.mov` or imported `.<ext>`).
+    private func existingVideoURL(_ rec: ScreenRecording) -> URL {
+        store.existingVideoURL(for: rec) ?? store.videoURL(for: rec)
+    }
+
+    // MARK: - Import (local file / web URL)
+
+    /// Imports a local video file, then transcribes it. The user can Analyze it
+    /// afterwards like a recorded clip.
+    @discardableResult
+    func importVideo(from url: URL) async -> String? {
+        let now = Date()
+        let base = url.deletingPathExtension().lastPathComponent
+        var rec = ScreenRecording(id: UUID().uuidString,
+                                  title: base.isEmpty ? "Imported \(Self.shortTime.string(from: now))" : base,
+                                  createdAt: now, durationSeconds: 0, width: 0, height: 0,
+                                  mode: .imported, hasMic: false, micIsSidecar: false, snippet: "")
+        state = .transcribing
+        do {
+            try store.writeRecording(rec)
+            let dest = try store.importVideo(from: url, for: rec)
+            let asset = AVURLAsset(url: dest)
+            rec.durationSeconds = (try? await CMTimeGetSeconds(asset.load(.duration))) ?? 0
+            if let track = try? await asset.loadTracks(withMediaType: .video).first,
+               let size = try? await track.load(.naturalSize) {
+                rec.width = Int(abs(size.width)); rec.height = Int(abs(size.height))
+            }
+            try? store.writeRecording(rec)
+            await writeThumbnail(for: rec)
+            refresh()
+            await transcribe(rec)
+            state = .idle
+            return rec.id
+        } catch {
+            log.error("importVideo failed: \(error.localizedDescription, privacy: .public)")
+            state = .error("Import failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Downloads a video from a web URL (yt-dlp if installed, else a direct media
+    /// link) and imports it. User-initiated fetch.
+    func importFromURL(_ urlString: String) async {
+        state = .transcribing
+        do {
+            let tmp = try await VideoImporter.fetch(urlString)
+            defer { try? FileManager.default.removeItem(at: tmp.deletingLastPathComponent()) }
+            _ = await importVideo(from: tmp)
+        } catch {
+            state = .error(error.localizedDescription)
+        }
+    }
+
     // MARK: - Transcription
 
     func reTranscribe(_ rec: ScreenRecording) {
-        guard FileManager.default.fileExists(atPath: store.videoURL(for: rec).path) else {
+        guard store.existingVideoURL(for: rec) != nil else {
             setError(rec.id, "Recording file not found.")
             return
         }
@@ -124,7 +177,7 @@ final class ScreenRecordingsController: ObservableObject {
     private func transcribe(_ rec: ScreenRecording) async {
         setError(rec.id, nil)
         transcribing.insert(rec.id)
-        let audioURL = store.videoURL(for: rec)
+        let audioURL = existingVideoURL(rec)
         let result: (text: String, error: String?) = await Task.detached(priority: .userInitiated) { [transcriber] in
             do {
                 let t = try await transcriber.transcribe(audioURL: audioURL)
@@ -164,11 +217,22 @@ final class ScreenRecordingsController: ObservableObject {
             refresh()
         }
         let transcript = store.readTranscript(for: rec)
-        let frames = await ScreenAnalyzer.ocr(videoURL: store.videoURL(for: rec),
-                                              framesDir: store.framesDir(for: rec))
+        let framesDir = store.framesDir(for: rec)
+        let frames = await ScreenAnalyzer.ocr(videoURL: existingVideoURL(rec), framesDir: framesDir)
         let onScreen = ScreenAnalyzer.onScreenTextMarkdown(frames)
+
+        // Optional local multimodal pass: "watch" sampled frames with a vision
+        // model (qwen2.5vl / llava) for a richer description. Best-effort — if
+        // the model can't be pulled or run, we fall back to OCR + transcript.
+        var visualDescription = ""
+        if AppSettings.shared.useScreenVisionModel {
+            let frameURLs = ScreenAnalyzer.frameURLs(in: framesDir)
+            visualDescription = (try? await ollama.describeFrames(frameURLs)) ?? ""
+        }
+
         do {
-            let summary = try await ollama.analyzeScreenRecording(transcript: transcript, onScreenText: onScreen)
+            let summary = try await ollama.analyzeScreenRecording(
+                transcript: transcript, onScreenText: onScreen, visualDescription: visualDescription)
             try? store.writeSummary(summary, for: rec)
             await extractTasks(from: summary, rec: rec)
         } catch {
@@ -210,7 +274,7 @@ final class ScreenRecordingsController: ObservableObject {
     // MARK: - Thumbnail
 
     private func writeThumbnail(for rec: ScreenRecording) async {
-        let asset = AVURLAsset(url: store.videoURL(for: rec))
+        let asset = AVURLAsset(url: existingVideoURL(rec))
         let gen = AVAssetImageGenerator(asset: asset)
         gen.appliesPreferredTrackTransform = true
         gen.maximumSize = CGSize(width: 640, height: 640)
@@ -236,7 +300,7 @@ final class ScreenRecordingsController: ObservableObject {
         refresh()
     }
 
-    func videoURL(_ rec: ScreenRecording) -> URL { store.videoURL(for: rec) }
+    func videoURL(_ rec: ScreenRecording) -> URL { existingVideoURL(rec) }
     func thumbnailURL(_ rec: ScreenRecording) -> URL { store.thumbnailURL(for: rec) }
     func audioSources(_ rec: ScreenRecording) -> [URL] { store.audioSources(for: rec) }
 

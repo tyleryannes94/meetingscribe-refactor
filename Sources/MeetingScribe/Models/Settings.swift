@@ -13,6 +13,8 @@ final class AppSettings {
         static let ollamaURL = "ollamaURL"
         static let ollamaModel = "ollamaModel"
         static let ollamaEmbeddingModel = "ollamaEmbeddingModel"
+        static let useScreenVisionModel = "useScreenVisionModel"
+        static let screenVisionModel = "screenVisionModel"
         static let collectMetrics = "collectMetrics"
         static let dailyBriefEnabled = "dailyBriefEnabled"
         static let autoRecord = "autoRecord"
@@ -220,6 +222,22 @@ final class AppSettings {
     var ollamaModel: String {
         get { defaults.string(forKey: Keys.ollamaModel) ?? Self.recommendedOllamaModel }
         set { defaults.set(newValue, forKey: Keys.ollamaModel) }
+    }
+
+    /// Use a local multimodal model (Ollama) to "watch" sampled screen-recording
+    /// frames during analysis, in addition to OCR. On by default; auto-pulls the
+    /// model on first use. Turn off to keep analysis to OCR + transcript only
+    /// (no large model download). Local-only — still nothing leaves the Mac.
+    var useScreenVisionModel: Bool {
+        get { defaults.object(forKey: Keys.useScreenVisionModel) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.useScreenVisionModel) }
+    }
+
+    /// The Ollama multimodal model used for screen-recording frame analysis.
+    /// Default `qwen2.5vl` (auto-pulled). `llava` is a smaller alternative.
+    var screenVisionModel: String {
+        get { defaults.string(forKey: Keys.screenVisionModel) ?? "qwen2.5vl" }
+        set { defaults.set(newValue, forKey: Keys.screenVisionModel) }
     }
 
     /// Local embedding model for semantic recall (C2-1b/C5-10). Small (~274 MB),

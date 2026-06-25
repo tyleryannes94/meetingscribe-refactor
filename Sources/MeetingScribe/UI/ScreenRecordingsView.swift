@@ -1,6 +1,8 @@
 import SwiftUI
+import AppKit
 import AVKit
 import ScreenCaptureKit
+import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let meetingScribeNewScreenRecording = Notification.Name("MeetingScribeNewScreenRecording")
@@ -18,6 +20,8 @@ struct ScreenRecordingsView: View {
     @State private var showWindowPicker = false
     @State private var windows: [SCWindow] = []
     @State private var screenshotImage: ScreenshotPreview?
+    @State private var showURLImport = false
+    @State private var urlText = ""
 
     var body: some View {
         HSplitView {
@@ -42,6 +46,25 @@ struct ScreenRecordingsView: View {
         }
         .sheet(item: $screenshotImage) { shot in
             ScreenshotEditorView(image: shot.image) { recordings.refresh() }
+        }
+        .sheet(isPresented: $showURLImport) {
+            URLImportSheet(text: $urlText, ytDlpAvailable: VideoImporter.ytDlpPath() != nil) { confirmed in
+                showURLImport = false
+                let s = urlText.trimmingCharacters(in: .whitespaces)
+                urlText = ""
+                if confirmed, !s.isEmpty { Task { await recordings.importFromURL(s) } }
+            }
+        }
+    }
+
+    private func importFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
+        panel.allowsMultipleSelection = false
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK, let url = panel.url {
+            Task { await recordings.importVideo(from: url) }
         }
     }
 
@@ -101,6 +124,9 @@ struct ScreenRecordingsView: View {
                     Button { Task { await start(.fullScreen) } } label: { Label("Full screen", systemImage: "display") }
                     Button { Task { await pickWindow() } } label: { Label("Window…", systemImage: "macwindow") }
                     Button { Task { await start(.regionPrompt) } } label: { Label("Region…", systemImage: "rectangle.dashed") }
+                    Divider()
+                    Button { importFile() } label: { Label("Import video file…", systemImage: "square.and.arrow.down") }
+                    Button { showURLImport = true } label: { Label("From web URL…", systemImage: "link") }
                 } label: {
                     Label("New recording", systemImage: "record.circle").frame(maxWidth: .infinity)
                 }
@@ -439,6 +465,39 @@ private struct WindowPickerSheet: View {
             .padding(12)
         }
         .frame(width: 380)
+        .background(NDS.bg)
+    }
+}
+
+// MARK: - URL import
+
+@available(macOS 14.0, *)
+private struct URLImportSheet: View {
+    @Binding var text: String
+    let ytDlpAvailable: Bool
+    let onFinish: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Import from web URL").scaledFont(15, weight: .bold)
+            TextField("https://…", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { onFinish(true) }
+            Text(ytDlpAvailable
+                 ? "yt-dlp is installed — YouTube, Vimeo, and most sites work, plus direct .mp4/.mov links."
+                 : "Paste a direct video file link (.mp4/.mov/.webm). For YouTube and other sites, install yt-dlp: brew install yt-dlp")
+                .scaledFont(11).foregroundStyle(NDS.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { onFinish(false) }.buttonStyle(MSSecondaryButtonStyle())
+                Button("Import") { onFinish(true) }
+                    .buttonStyle(MSPrimaryButtonStyle())
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(16)
+        .frame(width: 420)
         .background(NDS.bg)
     }
 }

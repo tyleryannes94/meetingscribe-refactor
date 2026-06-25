@@ -13,13 +13,14 @@ import Foundation
 struct ScreenRecording: Identifiable, Codable, Hashable {
     /// What was captured. Mirrors the three SCContentFilter variants.
     enum Mode: String, Codable, Hashable {
-        case fullScreen, window, region
+        case fullScreen, window, region, imported
 
         var label: String {
             switch self {
             case .fullScreen: return "Full screen"
             case .window: return "Window"
             case .region: return "Region"
+            case .imported: return "Imported"
             }
         }
     }

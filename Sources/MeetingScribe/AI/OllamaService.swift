@@ -12,6 +12,8 @@ final class OllamaService {
         let prompt: String
         let stream: Bool
         let options: Options
+        /// Base64-encoded images for multimodal models (omitted for text-only).
+        var images: [String]? = nil
         struct Options: Encodable {
             let temperature: Double
             let num_ctx: Int
@@ -292,6 +294,51 @@ final class OllamaService {
         }
         let decoded = try JSONDecoder().decode(GenerateResponse.self, from: data)
         return decoded.response.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Multimodal prompt → completion against the configured screen-vision model
+    /// (e.g. `qwen2.5vl`). `imagesBase64` are raw base64 PNG/JPEG strings. If the
+    /// model isn't pulled yet, auto-pulls it once and retries. Local-only
+    /// (EgressPolicy-guarded to 127.0.0.1), like every other Ollama call here.
+    func generateVision(prompt: String,
+                        imagesBase64: [String],
+                        temperature: Double = 0.2,
+                        numCtx: Int = 8192) async throws -> String {
+        let settings = AppSettings.shared
+        let model = settings.screenVisionModel
+        if !(await isReachable()) {
+            guard Self.binaryPath != nil else { throw SummaryError.notInstalled }
+            _ = await ensureRunning()
+            guard await isReachable() else { throw SummaryError.unreachable("auto-start timed out") }
+        }
+        let url = settings.ollamaURL.appendingPathComponent("api/generate")
+        try EgressPolicy.assertOllamaEgressAllowed(url)
+
+        func attempt() async throws -> String {
+            let body = GenerateRequest(model: model, prompt: prompt, stream: false,
+                                       options: .init(temperature: temperature, num_ctx: numCtx),
+                                       images: imagesBase64)
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONEncoder().encode(body)
+            req.timeoutInterval = 600
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse else { throw SummaryError.http(-1, "no http response") }
+            guard (200..<300).contains(http.statusCode) else {
+                throw SummaryError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
+            }
+            return try JSONDecoder().decode(GenerateResponse.self, from: data).response
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        do {
+            return try await attempt()
+        } catch {
+            // Most likely the vision model isn't pulled yet — pull once, retry.
+            try? await OllamaChatClient.pullModel(model)
+            return try await attempt()
+        }
     }
 
     /// 3-D: pull a strict `## Action Items` section out of free text (a voice
