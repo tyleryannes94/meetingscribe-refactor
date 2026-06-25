@@ -45,6 +45,14 @@ struct TaskPageView: View {
     @State private var startShown = false
     /// Inline source-meeting peek popover (4-4).
     @State private var meetingPeekShown = false
+    /// v3 inline-edit model: which property's click-to-open popover picker is
+    /// showing. Only one is open at a time.
+    @State private var openPicker: PropertyPicker?
+    @State private var assigneeQuery = ""
+    @ObservedObject private var changeLog = TaskChangeLog.shared
+
+    /// The five v3 property pickers that open as popovers (TaskDetail.dc.html).
+    enum PropertyPicker: Hashable { case status, priority, due, project, assignee }
 
     private var item: ActionItem? { store.items.first { $0.id == itemID } }
 
@@ -63,6 +71,8 @@ struct TaskPageView: View {
                     Divider().overlay(NDS.divider).padding(.vertical, 18)
                     subtasks(item)
                     bodyEditor
+                        .padding(.top, 18)
+                    activitySection(item)
                         .padding(.top, 18)
                 }
                 .notionPageColumn()
@@ -173,22 +183,31 @@ struct TaskPageView: View {
     private func properties(_ item: ActionItem) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             NotionPropertyRow(icon: "circle.dotted", label: "Status") {
-                Menu {
-                    ForEach(ActionItem.Status.allCases) { s in
-                        Button { store.setStatus(itemID, status: s) } label: { Label(s.label, systemImage: s.systemImage) }
-                    }
-                } label: {
+                pickerButton(.status) {
                     NotionChip(item.status.label, color: statusColor(item.status), systemImage: item.status.systemImage)
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .popover(isPresented: pickerBinding(.status), arrowEdge: .bottom) {
+                    pickerPopover(ActionItem.Status.allCases.map { s in
+                        PickerOption(id: s.rawValue, label: s.label, systemImage: s.systemImage,
+                                     color: NDS.status(s), selected: s == item.status) {
+                            store.setStatus(itemID, status: s)
+                        }
+                    })
+                }
             }
             NotionPropertyRow(icon: "flag", label: "Priority") {
-                Menu {
-                    ForEach(ActionItem.Priority.allCases) { p in
-                        Button(p.label) { store.setPriority(itemID, priority: p) }
-                    }
-                } label: { NotionChip(item.priority.label, color: priorityColor(item.priority)) }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                pickerButton(.priority) {
+                    NotionChip(item.priority.label, color: priorityColor(item.priority),
+                               systemImage: NDS.priorityGlyph(item.priority))
+                }
+                .popover(isPresented: pickerBinding(.priority), arrowEdge: .bottom) {
+                    pickerPopover(ActionItem.Priority.allCases.map { p in
+                        PickerOption(id: p.rawValue, label: p.label, systemImage: NDS.priorityGlyph(p),
+                                     color: NDS.priority(p), selected: p == item.priority) {
+                            store.setPriority(itemID, priority: p)
+                        }
+                    })
+                }
             }
             NotionPropertyRow(icon: "repeat", label: "Repeat") {
                 Menu {
@@ -264,42 +283,21 @@ struct TaskPageView: View {
             }
             NotionPropertyRow(icon: "person", label: "Assignee") {
                 HStack(spacing: 6) {
-                    TextField("Empty", text: $assigneeDraft)
-                        .textFieldStyle(.plain).font(NDS.body)
-                        .onSubmit {
-                            // Free-text edit clears any stale hard link unless it
-                            // still matches the linked person's name.
-                            let name = assigneeDraft.isEmpty ? nil : assigneeDraft
-                            if let pid = item.ownerPersonID,
-                               people.person(by: pid)?.displayName == assigneeDraft {
-                                store.setOwnerPerson(itemID, personID: pid, ownerName: name)
-                            } else {
-                                store.setOwnerPerson(itemID, personID: nil, ownerName: name)
+                    pickerButton(.assignee) {
+                        if let pid = item.ownerPersonID, let p = people.person(by: pid) {
+                            HStack(spacing: 6) {
+                                MSAvatar(name: p.displayName, size: 18)
+                                Text(p.displayName).font(NDS.body).foregroundStyle(NDS.textPrimary).lineLimit(1)
                             }
+                        } else if let owner = item.owner, !owner.isEmpty {
+                            Text(owner).font(NDS.body).foregroundStyle(NDS.textPrimary).lineLimit(1)
+                        } else {
+                            Text("Empty").font(NDS.body).foregroundStyle(NDS.textTertiary)
                         }
-                    // Link to a Person record (exact, navigable).
-                    Menu {
-                        if item.ownerPersonID != nil {
-                            Button("Unlink person") {
-                                store.setOwnerPerson(itemID, personID: nil,
-                                                     ownerName: assigneeDraft.isEmpty ? nil : assigneeDraft)
-                            }
-                            Divider()
-                        }
-                        ForEach(personPickerList) { p in
-                            Button(p.displayName) {
-                                assigneeDraft = p.displayName
-                                store.setOwnerPerson(itemID, personID: p.id, ownerName: p.displayName)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: item.ownerPersonID == nil
-                              ? "person.crop.circle.badge.plus"
-                              : "person.crop.circle.badge.checkmark")
-                            .foregroundStyle(item.ownerPersonID == nil ? NDS.textTertiary : NDS.brand)
                     }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                    .help("Link this assignee to a person")
+                    .popover(isPresented: pickerBinding(.assignee), arrowEdge: .bottom) {
+                        assigneePopover(item)
+                    }
                     if let pid = item.ownerPersonID, people.person(by: pid) != nil {
                         Button { router.openPerson(pid) } label: {
                             Image(systemName: "arrow.up.right.square")
@@ -312,18 +310,39 @@ struct TaskPageView: View {
                 dateButton(item.startDate, show: $startShown) { store.setStartDate(itemID, startDate: $0) }
             }
             NotionPropertyRow(icon: "calendar", label: "Due") {
-                dateButton(item.dueDate, show: $dueShown) { store.setDueDate(itemID, dueDate: $0) }
+                pickerButton(.due) {
+                    if let d = item.dueDate {
+                        Text(d.formatted(date: .abbreviated, time: .omitted))
+                            .font(NDS.body).foregroundStyle(NDS.due(d, status: item.status))
+                    } else {
+                        Text("Empty").font(NDS.body).foregroundStyle(NDS.textTertiary)
+                    }
+                }
+                .popover(isPresented: pickerBinding(.due), arrowEdge: .bottom) {
+                    duePopover(item)
+                }
             }
             NotionPropertyRow(icon: "folder", label: "Project") {
-                Menu {
-                    Button("No project") { store.setProject(itemID, projectID: nil) }
-                    Divider()
-                    ForEach(store.projects) { p in Button(p.name) { store.setProject(itemID, projectID: p.id) } }
-                } label: {
-                    if let p = store.project(for: item) { NotionChip(p.name, color: NDS.selectColor(p.name), systemImage: "folder.fill") }
-                    else { Text("Empty").font(NDS.body).foregroundStyle(NDS.textTertiary) }
+                pickerButton(.project) {
+                    if let p = store.project(for: item) {
+                        NotionChip(p.name, color: NDS.selectColor(p.name), systemImage: "folder.fill")
+                    } else {
+                        Text("Empty").font(NDS.body).foregroundStyle(NDS.textTertiary)
+                    }
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .popover(isPresented: pickerBinding(.project), arrowEdge: .bottom) {
+                    pickerPopover(
+                        [PickerOption(id: "__none__", label: "No project", systemImage: "folder",
+                                      color: NDS.textTertiary, selected: item.projectID == nil) {
+                            store.setProject(itemID, projectID: nil)
+                        }]
+                        + store.projects.map { p in
+                            PickerOption(id: p.id, label: p.name, systemImage: "folder.fill",
+                                         color: NDS.selectColor(p.name), selected: item.projectID == p.id) {
+                                store.setProject(itemID, projectID: p.id)
+                            }
+                        })
+                }
             }
             if let pid = item.projectID {
                 // Sprint / cycle (6-1).
@@ -441,6 +460,198 @@ struct TaskPageView: View {
                 if !n.isEmpty { let l = store.createLabel(name: n); store.toggleLabel(itemID, labelID: l.id); newLabel = "" }
             })
             .textFieldStyle(.plain).font(NDS.small).frame(width: 90)
+        }
+    }
+
+    // MARK: v3 popover property pickers
+
+    /// One selectable row inside a property popover.
+    private struct PickerOption: Identifiable {
+        let id: String
+        let label: String
+        let systemImage: String?
+        let color: Color?
+        let selected: Bool
+        let action: () -> Void
+    }
+
+    /// Binds a property's open/closed state to the single `openPicker` slot so
+    /// only one popover shows at a time.
+    private func pickerBinding(_ p: PropertyPicker) -> Binding<Bool> {
+        Binding(get: { openPicker == p }, set: { openPicker = $0 ? p : nil })
+    }
+
+    /// The clickable property value that opens a picker popover.
+    private func pickerButton<L: View>(_ p: PropertyPicker, @ViewBuilder label: () -> L) -> some View {
+        Button { openPicker = p } label: { label() }
+            .buttonStyle(.plain)
+    }
+
+    /// A generic single-select popover: icon/dot + label + checkmark on current.
+    private func pickerPopover(_ options: [PickerOption]) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(options) { opt in
+                Button {
+                    opt.action()
+                    openPicker = nil
+                } label: {
+                    HStack(spacing: 9) {
+                        if let img = opt.systemImage {
+                            Image(systemName: img).scaledFont(12)
+                                .foregroundStyle(opt.color ?? NDS.textSecondary).frame(width: 16)
+                        } else if let c = opt.color {
+                            Circle().fill(c).frame(width: 9, height: 9).frame(width: 16)
+                        }
+                        Text(opt.label).scaledFont(13).foregroundStyle(NDS.textPrimary)
+                        Spacer(minLength: 14)
+                        if opt.selected {
+                            Image(systemName: "checkmark").scaledFont(11, weight: .bold)
+                                .foregroundStyle(NDS.accent)
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .ndsHover(cornerRadius: 9)
+            }
+        }
+        .padding(6)
+        .frame(minWidth: 216)
+    }
+
+    /// Due-date popover: quick relative options plus a graphical calendar.
+    private func duePopover(_ item: ActionItem) -> some View {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        func day(_ n: Int) -> Date { cal.date(byAdding: .day, value: n, to: today) ?? today }
+        // Upcoming Friday (end of work week); if today is Fri/Sat/Sun, next Friday.
+        let weekdayToday = cal.component(.weekday, from: today) // 1=Sun … 6=Fri
+        let daysToFri = ((6 - weekdayToday) + 7) % 7
+        let friday = day(daysToFri == 0 ? 7 : daysToFri)
+        let quick: [PickerOption] = [
+            PickerOption(id: "today", label: "Today", systemImage: "clock", color: NDS.gold,
+                         selected: item.dueDate.map { cal.isDate($0, inSameDayAs: today) } ?? false) {
+                store.setDueDate(itemID, dueDate: today)
+            },
+            PickerOption(id: "tomorrow", label: "Tomorrow", systemImage: "clock", color: NDS.textSecondary,
+                         selected: item.dueDate.map { cal.isDate($0, inSameDayAs: day(1)) } ?? false) {
+                store.setDueDate(itemID, dueDate: day(1))
+            },
+            PickerOption(id: "friday", label: "This week (Fri)", systemImage: "clock", color: NDS.textSecondary,
+                         selected: item.dueDate.map { cal.isDate($0, inSameDayAs: friday) } ?? false) {
+                store.setDueDate(itemID, dueDate: friday)
+            },
+            PickerOption(id: "nextweek", label: "Next week", systemImage: "clock", color: NDS.textSecondary,
+                         selected: item.dueDate.map { cal.isDate($0, inSameDayAs: day(7)) } ?? false) {
+                store.setDueDate(itemID, dueDate: day(7))
+            },
+            PickerOption(id: "none", label: "No date", systemImage: "minus.circle", color: NDS.textTertiary,
+                         selected: item.dueDate == nil) {
+                store.setDueDate(itemID, dueDate: nil)
+            }
+        ]
+        return VStack(alignment: .leading, spacing: 6) {
+            pickerPopover(quick)
+            Divider().overlay(NDS.divider)
+            DateTypeAheadField(date: Binding(get: { item.dueDate },
+                                             set: { store.setDueDate(itemID, dueDate: $0) }),
+                               onCommit: { openPicker = nil })
+                .padding(.horizontal, 8).padding(.bottom, 8)
+        }
+        .frame(minWidth: 240)
+    }
+
+    /// Assignee popover: search + roster, each linking to a Person record.
+    private func assigneePopover(_ item: ActionItem) -> some View {
+        let q = assigneeQuery.trimmingCharacters(in: .whitespaces).lowercased()
+        let matches = q.isEmpty ? personPickerList
+            : people.people.filter { $0.displayName.lowercased().contains(q) }.prefix(50).map { $0 }
+        return VStack(alignment: .leading, spacing: 6) {
+            MSSearchField(placeholder: "Search people…", text: $assigneeQuery, autoFocus: true)
+                .padding(.horizontal, 8).padding(.top, 8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 1) {
+                    Button {
+                        store.setOwnerPerson(itemID, personID: nil, ownerName: nil)
+                        openPicker = nil
+                    } label: {
+                        HStack(spacing: 9) {
+                            Image(systemName: "person.crop.circle.badge.xmark").scaledFont(12)
+                                .foregroundStyle(NDS.textTertiary).frame(width: 16)
+                            Text("Unassign").scaledFont(13).foregroundStyle(NDS.textPrimary)
+                            Spacer(minLength: 14)
+                            if item.ownerPersonID == nil && (item.owner ?? "").isEmpty {
+                                Image(systemName: "checkmark").scaledFont(11, weight: .bold).foregroundStyle(NDS.accent)
+                            }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 7).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain).ndsHover(cornerRadius: 9)
+                    ForEach(matches) { p in
+                        Button {
+                            store.setOwnerPerson(itemID, personID: p.id, ownerName: p.displayName)
+                            assigneeQuery = ""
+                            openPicker = nil
+                        } label: {
+                            HStack(spacing: 9) {
+                                MSAvatar(name: p.displayName, size: 18)
+                                Text(p.displayName).scaledFont(13).foregroundStyle(NDS.textPrimary).lineLimit(1)
+                                Spacer(minLength: 14)
+                                if item.ownerPersonID == p.id {
+                                    Image(systemName: "checkmark").scaledFont(11, weight: .bold).foregroundStyle(NDS.accent)
+                                }
+                            }
+                            .padding(.horizontal, 10).padding(.vertical, 6).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain).ndsHover(cornerRadius: 9)
+                    }
+                }
+                .padding(6)
+            }
+            .frame(maxHeight: 260)
+        }
+        .frame(width: 260)
+    }
+
+    // MARK: Activity
+
+    /// Read-only timeline of this task's recorded mutations (TaskChangeLog).
+    @ViewBuilder
+    private func activitySection(_ item: ActionItem) -> some View {
+        let events = changeLog.recent
+            .filter { $0.entity == .task && $0.entityID == itemID && !$0.undone }
+            .suffix(40).reversed().map { $0 }
+        if !events.isEmpty {
+            MSSection("Activity", systemImage: "clock.arrow.circlepath",
+                      persistenceKey: "taskPage.activity", defaultExpanded: false) {
+                VStack(alignment: .leading, spacing: 13) {
+                    ForEach(events) { ev in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: activityGlyph(ev.op)).scaledFont(11)
+                                .foregroundStyle(NDS.textSecondary)
+                                .frame(width: 24, height: 24)
+                                .background(NDS.surface2, in: Circle())
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(ev.summary).scaledFont(12).foregroundStyle(NDS.textPrimary)
+                                Text(ev.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                    .scaledFont(11).foregroundStyle(NDS.textTertiary)
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private func activityGlyph(_ op: TaskChangeEvent.Op) -> String {
+        switch op {
+        case .create: return "sparkles"
+        case .update: return "pencil"
+        case .delete: return "trash"
+        case .restore: return "arrow.uturn.backward"
+        case .merge: return "arrow.triangle.merge"
         }
     }
 
