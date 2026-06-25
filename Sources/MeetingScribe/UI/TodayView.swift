@@ -21,6 +21,7 @@ struct TodayView: View {
     @EnvironmentObject var actionItems: ActionItemStore
     @State private var showStandup = false
     @State private var showDecisionLedger = false   // 4-D
+    @State private var bannerPulsing = false   // comp recording-banner dot
     @ObservedObject private var streaks = StreakTracker.shared   // 5-D
 
     /// D5-1 "Today, calm by default": the long-tail sections collapse under one
@@ -130,52 +131,21 @@ struct TodayView: View {
 
     private var feed: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {   // Was 30 — too much air between top-level cards.
+            VStack(alignment: .leading, spacing: 18) {
+                // Comp (MeetingScribe.dc.html) above-the-fold: greeting, live
+                // recording banner, then the 2-column Up next / Due today /
+                // Reconnect grid. The app's richer sections are preserved below,
+                // under the "More" disclosure, so nothing is lost.
                 header
                 firstStepsCard   // 5-H: dismissible new-user onboarding
-                MorningBriefCard(contextSummary: morningContextSummary)   // 5-C
-                turnaroundCard  // U3-2: the back-to-back bridge (imminent only)
-                dayShapeStrip   // U3-3: the 7am coffee scan, answered in 10s
+                if isRecording { recordingBanner }
+                compGrid
                 quickActions
-                upNextCard
-
-                // 1-G: time-sensitive follow-ups + decisions are surfaced here,
-                // not buried under "More". Each self-hides when it has no items.
-                followUpsSection
-                decisionsSection
-
-                oneOnOneDaySection   // U1-1: your 1:1s today, person-first
-
-                if isRecording { liveSection }
-
-                // Overdue + due-today work, surfaced above meetings (TDY-2).
-                NeedsAttentionWidget(store: manager.actionItems) {
-                    router.section = .actions
-                }
-
-                if !todayUpcoming.isEmpty || !todayPast.isEmpty {
-                    todaySection
-                } else if !isRecording {
-                    emptyState
-                }
-
-                ActionItemsWidget(store: manager.actionItems) {
-                    router.section = .actions
-                }
-
-                // Kanban board of all open tasks, with one-tap add (Notion/Trello
-                // style) right on the home page.
-                HomeTasksBoard(store: manager.actionItems)
-
-                endOfDayCard   // 5-I: after-5pm wrap-up
-
-                // D5-1: everything below the fold collapses under one "More"
-                // disclosure so the home screen opens calm.
                 moreSection
             }
-            .padding(.horizontal, 20).padding(.vertical, 16)
-            // Full window width (req #5) — the feed is cards/lists, not prose,
-            // so no reading-measure cap. (Prose panes keep their own measure.)
+            .padding(.horizontal, 36).padding(.vertical, 30)
+            // Comp caps the column at 1080 and left-aligns it.
+            .frame(maxWidth: 1080, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -211,6 +181,27 @@ struct TodayView: View {
             .accessibilityHint("Weekly ledger, commitments, on this day, recent notes, and people")
 
             if moreExpanded {
+                // Surfaced-but-secondary sections, demoted from the top of Today
+                // by the comp redesign (the 2-column grid now leads). Each
+                // self-hides when empty, so this stays calm.
+                MorningBriefCard(contextSummary: morningContextSummary)   // 5-C
+                turnaroundCard  // U3-2: the back-to-back bridge (imminent only)
+                dayShapeStrip   // U3-3: the 7am coffee scan, answered in 10s
+                followUpsSection
+                decisionsSection
+                oneOnOneDaySection   // U1-1: your 1:1s today, person-first
+                NeedsAttentionWidget(store: manager.actionItems) {
+                    router.section = .actions
+                }
+                if !todayUpcoming.isEmpty || !todayPast.isEmpty {
+                    todaySection
+                }
+                ActionItemsWidget(store: manager.actionItems) {
+                    router.section = .actions
+                }
+                HomeTasksBoard(store: manager.actionItems)
+                endOfDayCard   // 5-I: after-5pm wrap-up
+
                 weeklyLedgerSection   // U3-6: "what did I commit to this week"
 
                 // Owe / Owed commitments split by direction. (U3-2/P2-7)
@@ -742,15 +733,24 @@ struct TodayView: View {
         }
     }
 
+    /// Time-of-day greeting, personalized with the user's name when set
+    /// (comp: "Good morning, Tyler").
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let part = hour < 12 ? "Good morning" : (hour < 17 ? "Good afternoon" : "Good evening")
+        let name = AppSettings.shared.userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? part : "\(part), \(name)"
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(todayLong())
-                    .scaledFont(26, weight: .heavy, relativeTo: .title, kind: .display)
-                    .tracking(-0.6)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(greeting)
+                    .scaledFont(31, weight: .heavy, relativeTo: .largeTitle, kind: .display)
+                    .tracking(-0.9)
                     .foregroundStyle(.primary)
                 HStack(spacing: 8) {
-                    Text(subtitleString())
+                    Text(compSubtitle())
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Label("100% Local", systemImage: "lock.fill")
@@ -783,6 +783,256 @@ struct TodayView: View {
                 .environmentObject(manager)
                 .environmentObject(router)
         }
+    }
+
+    // MARK: - Comp 2-column block (MeetingScribe.dc.html)
+
+    /// Live recording banner (comp): gradient card surfaced at the top of Today
+    /// while a meeting is recording.
+    @ViewBuilder
+    private var recordingBanner: some View {
+        if isRecording, case .recording(_, let startedAt) = manager.state {
+            let m = manager.activeMeeting
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 9) {
+                    Circle().fill(NDS.danger).frame(width: 9, height: 9)
+                        .opacity(bannerPulsing && !reduceMotion ? 0.35 : 1)
+                        .animation(reduceMotion ? nil
+                                   : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                                   value: bannerPulsing)
+                    TimelineView(.periodic(from: Date(), by: 1)) { ctx in
+                        let secs = max(0, Int(ctx.date.timeIntervalSince(startedAt)))
+                        Text("RECORDING NOW · \(elapsedString(secs))")
+                            .scaledFont(11, weight: .heavy).tracking(0.5)
+                            .foregroundStyle(NDS.danger)
+                    }
+                }
+                Text(m?.displayTitle ?? "Quick recording")
+                    .scaledFont(18, weight: .bold, relativeTo: .headline, kind: .display)
+                    .foregroundStyle(NDS.textPrimary)
+                    .padding(.top, 8)
+                Text(recordingSubtitle(m))
+                    .scaledFont(12.5).foregroundStyle(NDS.textSecondary)
+                    .padding(.top, 3)
+                Button {
+                    if let m { router.openMeeting(m) } else { router.section = .meetings }
+                } label: {
+                    Text("Open & add notes")
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
+                .padding(.top, 12)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(colors: [NDS.danger.opacity(0.16), NDS.accentSoft],
+                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(NDS.danger.opacity(0.3), lineWidth: 1))
+            .onAppear { bannerPulsing = true }
+        }
+    }
+
+    /// The comp's responsive 2-column grid: "Up next" on the left, "Due today"
+    /// + "Reconnect" on the right; collapses to one column when narrow.
+    private var compGrid: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                upNextSection
+                    .frame(minWidth: 360, maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 16) {
+                    dueTodayCard
+                    reconnectCard
+                }
+                .frame(width: 340)
+            }
+            VStack(alignment: .leading, spacing: 16) {
+                upNextSection
+                dueTodayCard
+                reconnectCard
+            }
+        }
+    }
+
+    private var upNextMeetings: [Meeting] { Array(todayUpcoming.prefix(5)) }
+
+    @ViewBuilder
+    private var upNextSection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            NotionEyebrow(text: "Up next")
+            if upNextMeetings.isEmpty {
+                Text("Nothing more on the calendar today.")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(upNextMeetings, id: \.id) { todayMeetingRow($0) }
+            }
+        }
+    }
+
+    private func todayMeetingRow(_ m: Meeting) -> some View {
+        Button { router.openMeeting(m) } label: {
+            HStack(spacing: 12) {
+                Text(timeOnly(m.startDate))
+                    .scaledFont(12, weight: .bold).monospacedDigit()
+                    .foregroundStyle(NDS.textSecondary)
+                    .frame(width: 62, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(m.displayTitle)
+                        .scaledFont(14, weight: .semibold).foregroundStyle(NDS.textPrimary)
+                        .lineLimit(1)
+                    Text("\(durationString(m)) · \(m.attendees.count) attendee\(m.attendees.count == 1 ? "" : "s")")
+                        .scaledFont(11.5).foregroundStyle(NDS.textTertiary)
+                }
+                Spacer(minLength: 0)
+                if m.isJoinableWindow {
+                    Text("Now")
+                        .scaledFont(10, weight: .bold).foregroundStyle(NDS.gold)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(NDS.gold.opacity(0.18), in: Capsule())
+                }
+            }
+            .padding(.horizontal, 15).padding(.vertical, 13)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(NDS.divider, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var dueTodayCard: some View {
+        let items = Array(dueTodayTasks.prefix(5))
+        VStack(alignment: .leading, spacing: 11) {
+            HStack {
+                NotionEyebrow(text: "Due today")
+                Spacer()
+                Button { router.section = .actions } label: {
+                    Text("All tasks →")
+                        .scaledFont(11, weight: .bold).foregroundStyle(NDS.accent)
+                }
+                .buttonStyle(.plain)
+            }
+            if items.isEmpty {
+                Text("Nothing due today.")
+                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+            } else {
+                ForEach(items, id: \.id) { dueTaskRow($0) }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .strokeBorder(NDS.divider, lineWidth: 1))
+    }
+
+    private func dueTaskRow(_ t: ActionItem) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Button {
+                actionItems.setStatus(t.id, status: t.status == .completed ? .open : .completed)
+            } label: {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(t.status == .completed ? NDS.mint : NDS.hairline, lineWidth: 1.5)
+                    .background(t.status == .completed
+                                ? NDS.mint.opacity(0.9) : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .frame(width: 16, height: 16)
+                    .overlay(t.status == .completed
+                             ? Image(systemName: "checkmark").scaledFont(9, weight: .bold)
+                                .foregroundStyle(NDS.onAccent) : nil)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 1)
+            Button { router.section = .actions } label: {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(t.title)
+                        .scaledFont(13, weight: .medium).foregroundStyle(NDS.textPrimary)
+                        .lineLimit(2).multilineTextAlignment(.leading)
+                    HStack(spacing: 6) {
+                        DueChip(date: t.dueDate, status: t.status)
+                        if let owner = t.owner, !owner.isEmpty {
+                            MSAvatar(name: owner, size: 20)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var reconnectCard: some View {
+        let people = reconnectPeople
+        if !people.isEmpty {
+            VStack(alignment: .leading, spacing: 11) {
+                NotionEyebrow(text: "Reconnect")
+                ForEach(people, id: \.id) { reconnectRow($0) }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(NDS.divider, lineWidth: 1))
+        }
+    }
+
+    private func reconnectRow(_ p: Person) -> some View {
+        let last = p.lastInteractionAt ?? p.createdAt
+        let days = max(0, Int(Date().timeIntervalSince(last) / 86400))
+        let atRisk = PeopleStore.shared.daysOverdue(p) > p.effectiveCheckInDays
+        let cadence = atRisk ? "At risk" : "Slipping"
+        let color = atRisk ? NDS.danger : NDS.gold
+        return Button { openPerson(p) } label: {
+            HStack(spacing: 10) {
+                MSAvatar(name: p.displayName, size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(p.displayName)
+                        .scaledFont(13, weight: .semibold).foregroundStyle(NDS.textPrimary)
+                    Text("last spoke \(days)d ago")
+                        .scaledFont(11).foregroundStyle(NDS.textTertiary)
+                }
+                Spacer(minLength: 0)
+                Text(cadence)
+                    .scaledFont(10, weight: .bold).foregroundStyle(color)
+                    .padding(.horizontal, 8).padding(.vertical, 2)
+                    .background(color.opacity(0.28), in: Capsule())
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Small formatting helpers for the comp block.
+    private func timeOnly(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "h:mm a"
+        return f.string(from: d)
+    }
+
+    private func durationString(_ m: Meeting) -> String {
+        let mins = max(0, Int(m.endDate.timeIntervalSince(m.startDate) / 60))
+        if mins >= 60 {
+            let h = mins / 60, r = mins % 60
+            return r == 0 ? "\(h)h" : "\(h)h \(r)m"
+        }
+        return "\(mins)m"
+    }
+
+    private func elapsedString(_ secs: Int) -> String {
+        let h = secs / 3600, m = (secs % 3600) / 60, s = secs % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s)
+                     : String(format: "%d:%02d", m, s)
+    }
+
+    private func recordingSubtitle(_ m: Meeting?) -> String {
+        let who = (m?.attendees ?? []).prefix(3).joined(separator: ", ")
+        let sources = "Mic + System"
+        return who.isEmpty ? sources : "\(who) · \(sources)"
     }
 
     // MARK: - Quick actions
@@ -1066,6 +1316,35 @@ struct TodayView: View {
             return "Nothing on the calendar today"
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// Comp subline: "Tuesday, June 9 · 3 meetings today · 4 tasks due".
+    private func compSubtitle() -> String {
+        let f = DateFormatter(); f.dateFormat = "EEEE, MMMM d"
+        var parts = [f.string(from: Date())]
+        let meetings = todayUpcoming.count + todayPast.count
+        if meetings > 0 { parts.append("\(meetings) meeting\(meetings == 1 ? "" : "s") today") }
+        let due = dueTodayTasks.count
+        if due > 0 { parts.append("\(due) task\(due == 1 ? "" : "s") due") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Tasks due today and still open — drives the subline count and the
+    /// "Due today" card in the comp 2-column grid.
+    private var dueTodayTasks: [ActionItem] {
+        actionItems.items.filter {
+            $0.status != .completed
+                && ($0.dueDate.map { Calendar.current.isDateInToday($0) } ?? false)
+        }
+    }
+
+    /// People with typed relationships overdue for a check-in, worst (most
+    /// overdue) first — drives the comp "Reconnect" card.
+    private var reconnectPeople: [Person] {
+        PeopleStore.shared.people
+            .filter { PeopleStore.shared.isOverdueForCheckIn($0) }
+            .sorted { PeopleStore.shared.daysOverdue($0) > PeopleStore.shared.daysOverdue($1) }
+            .prefix(3).map { $0 }
     }
 
     /// Jump to the People tab and open a specific person (used by the "Stay in
