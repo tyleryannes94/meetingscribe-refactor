@@ -27,6 +27,7 @@ extension ActionItemsView {
     var todayPane: some View {
         VStack(spacing: 0) {
             todayScratchHeader
+            todayUpNextStrip
             Divider().overlay(NDS.divider)
             HStack(spacing: 0) {
                 todayCaptureColumn
@@ -46,16 +47,15 @@ extension ActionItemsView {
     private var todayScratchHeader: some View {
         let open = todayOpenTasks.count
         let overdue = contextFiltered(store.overdueTasks).count
+        let meetingsToday = todayUpcomingMeetings.count
+        let dueToday = contextFiltered(store.myDayTasks).count
         return HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Image(systemName: "sun.max.fill").scaledFont(16).foregroundStyle(NDS.selectColor("orange"))
-                    Text("Today").scaledFont(22, weight: .bold, kind: .display)
-                    Text(Self.todayDateString())
-                        .font(NDS.small).foregroundStyle(NDS.textTertiary)
-                }
-                Text("What are your top priorities today?")
-                    .font(NDS.small).foregroundStyle(NDS.textSecondary)
+            VStack(alignment: .leading, spacing: 4) {
+                // Comp greeting: big Bricolage display title that changes by time
+                // of day, with a meta line summarizing the day.
+                Text(Self.greeting()).scaledFont(31, weight: .heavy, kind: .display)
+                Text(Self.todaySubtitle(meetings: meetingsToday, due: dueToday))
+                    .font(NDS.body).foregroundStyle(NDS.textSecondary)
             }
             Spacer()
             HStack(spacing: 6) {
@@ -63,7 +63,84 @@ extension ActionItemsView {
                 stat(label: "Open", value: open, color: NDS.brand)
             }
         }
-        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
+        .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 14)
+    }
+
+    /// Today's upcoming calendar meetings (the comp's "Up next").
+    var todayUpcomingMeetings: [Meeting] {
+        let cal = Calendar.current
+        return calendar.upcoming
+            .filter { cal.isDateInToday($0.startDate) && $0.endDate >= Date() }
+            .sorted { $0.startDate < $1.startDate }
+    }
+
+    /// Horizontal "Up next" strip of today's meetings above the scratchpad.
+    @ViewBuilder
+    private var todayUpNextStrip: some View {
+        let meetings = todayUpcomingMeetings
+        if !meetings.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Up next").font(NDS.sectionLabel).tracking(0.6)
+                    .foregroundStyle(NDS.textTertiary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(meetings.prefix(6)) { m in todayMeetingCard(m) }
+                    }
+                }
+            }
+            .padding(.horizontal, 24).padding(.bottom, 14)
+        }
+    }
+
+    private func todayMeetingCard(_ m: Meeting) -> some View {
+        Button { router.openMeeting(m) } label: {
+            HStack(spacing: 11) {
+                Text(Self.meetingTime(m.startDate))
+                    .scaledFont(12, weight: .bold).monospacedDigit()
+                    .foregroundStyle(NDS.textSecondary)
+                    .frame(width: 58, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(m.displayTitle).font(NDS.body).fontWeight(.semibold).lineLimit(1)
+                        .foregroundStyle(NDS.textPrimary)
+                    Text("\(Self.durationLabel(m)) · \(m.attendees.count) attendees")
+                        .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .frame(width: 300, alignment: .leading)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+            .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    static func greeting(now: Date = Date()) -> String {
+        let h = Calendar.current.component(.hour, from: now)
+        switch h {
+        case 5..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default: return "Still up?"
+        }
+    }
+
+    static func todaySubtitle(meetings: Int, due: Int) -> String {
+        let f = DateFormatter(); f.dateFormat = "EEEE, MMMM d"
+        var parts = [f.string(from: Date())]
+        parts.append("\(meetings) meeting\(meetings == 1 ? "" : "s") today")
+        parts.append("\(due) task\(due == 1 ? "" : "s") due")
+        return parts.joined(separator: " · ")
+    }
+
+    static func meetingTime(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "h:mm a"; return f.string(from: d)
+    }
+
+    static func durationLabel(_ m: Meeting) -> String {
+        let mins = max(0, Int(m.endDate.timeIntervalSince(m.startDate) / 60))
+        if mins >= 60 { let h = mins / 60, r = mins % 60; return r == 0 ? "\(h)h" : "\(h)h \(r)m" }
+        return "\(mins)m"
     }
 
     /// Everything you could be working on: open + in-progress, non-triage,

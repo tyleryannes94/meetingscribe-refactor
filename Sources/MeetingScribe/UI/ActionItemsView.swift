@@ -8,6 +8,7 @@ import AppKit
 struct ActionItemsView: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var router: WorkspaceRouter
+    @EnvironmentObject var calendar: CalendarService
     @ObservedObject var store: ActionItemStore
 
     /// Single owner of filter / sort / view / group state and the canonical
