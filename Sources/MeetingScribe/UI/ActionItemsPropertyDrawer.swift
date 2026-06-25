@@ -81,17 +81,19 @@ extension ActionItemsView {
             HStack(spacing: 0) {
                 Divider().overlay(NDS.divider)
                 VStack(spacing: 0) {
+                    // Comp inspector chrome: "TASK INSPECTOR" eyebrow + Full view.
                     HStack {
+                        NotionEyebrow(text: "Task inspector")
+                        Spacer()
                         Button {
                             env.selectedTaskID = eid
                             vm.editingID = nil
                         } label: {
-                            Label("Open full page", systemImage: "arrow.up.left.and.arrow.down.right")
+                            Label("Full view", systemImage: "arrow.up.left.and.arrow.down.right")
                                 .font(NDS.small)
                                 .lineLimit(1)
                         }
-                        .buttonStyle(.plain).foregroundStyle(NDS.brand)
-                        Spacer()
+                        .buttonStyle(.plain).foregroundStyle(NDS.accent)
                         Button { vm.editingID = nil } label: {
                             Image(systemName: "xmark").foregroundStyle(NDS.textSecondary)
                         }
@@ -105,7 +107,7 @@ extension ActionItemsView {
                 }
                 .background(NDS.bg)
             }
-            .frame(maxWidth: 360, maxHeight: .infinity)
+            .frame(maxWidth: 380, maxHeight: .infinity)
             .layoutPriority(1)
             .shadow(color: .black.opacity(0.12), radius: 12, x: -4, y: 0)
             .transition(.move(edge: .trailing))

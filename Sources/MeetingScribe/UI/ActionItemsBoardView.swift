@@ -21,7 +21,9 @@ extension ActionItemsView {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            ScrollView([.horizontal, .vertical]) {
+            ScrollView(.vertical) {
+                // Comp: three flex lanes filling the pane (To do / In progress /
+                // Completed), rather than fixed-width horizontally-scrolling cols.
                 HStack(alignment: .top, spacing: 14) {
                     ForEach(ActionItem.Status.allCases) { status in
                         boardColumn(status)
@@ -236,15 +238,15 @@ private struct BoardColumnView: View {
                     return true
                 } isTargeted: { setTargeted($0) }
         }
-        .frame(width: 280, alignment: .top)
+        .frame(minWidth: 240, maxWidth: .infinity, alignment: .top)
         .frame(maxHeight: .infinity, alignment: .top)
-        .padding(8)
-        .background(isTargeted ? NDS.status(status).opacity(0.10) : NDS.columnBg,
-                    in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+        .padding(10)
+        .background(isTargeted ? NDS.status(status).opacity(0.10) : NDS.fieldBg,
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: NDS.cardRadius)
-                .strokeBorder(NDS.status(status).opacity(isTargeted ? 0.85 : 0),
-                              lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(isTargeted ? NDS.status(status).opacity(0.85) : NDS.hairline,
+                              lineWidth: isTargeted ? 1.5 : 1)
         )
         // Reduce-motion-proof: `NDS.motion` returns nil (instant) when the user
         // has Reduce Motion on, so the tint/ring snaps instead of animating.
@@ -252,12 +254,19 @@ private struct BoardColumnView: View {
                    value: isTargeted)
     }
 
+    /// Comp lane wording (To do / In progress / Completed).
+    private var compLaneLabel: String {
+        switch status {
+        case .open: return "To do"
+        case .inProgress: return "In progress"
+        case .completed: return "Completed"
+        }
+    }
+
     private var header: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             Circle().fill(NDS.status(status)).frame(width: 8, height: 8)
-            Image(systemName: status.systemImage)
-                .scaledFont(11, weight: .semibold).foregroundStyle(NDS.status(status))
-            Text(status.label).font(.callout.weight(.bold))
+            Text(compLaneLabel).scaledFont(12.5, weight: .bold)
             Text("\(items.count)").font(.caption2.monospacedDigit())
                 .foregroundStyle(.tertiary)
             Spacer()

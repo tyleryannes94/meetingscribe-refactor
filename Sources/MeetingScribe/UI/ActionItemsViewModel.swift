@@ -40,7 +40,7 @@ final class ActionItemsViewModel {
     /// Secondary sort applied within each group / board column (5-12).
     var groupSort: GroupSort = .smart
     var groupSortAscending: Bool = true
-    var viewMode: ViewMode = .list
+    var viewMode: ViewMode = .board   // comp default; saved per-route prefs still win
     var tableSort: TableSort = .priority
     var tableSortAscending: Bool = false
 

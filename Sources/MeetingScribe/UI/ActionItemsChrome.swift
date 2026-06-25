@@ -713,8 +713,9 @@ extension ActionItemsView {
             Text(label)
                 .scaledFont(12, weight: active ? .semibold : .regular)
                 .padding(.horizontal, 9).padding(.vertical, 4)
-                .background(active ? NDS.brand.opacity(0.16) : Color.clear, in: Capsule())
-                .foregroundStyle(active ? NDS.brand : NDS.textSecondary)
+                .background(active ? NDS.accentSoft : Color.clear, in: Capsule())
+                .overlay(Capsule().strokeBorder(active ? NDS.accent.opacity(0.3) : Color.clear, lineWidth: 1))
+                .foregroundStyle(active ? NDS.accent : NDS.textSecondary)
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
