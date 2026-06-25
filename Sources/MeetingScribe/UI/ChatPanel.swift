@@ -18,6 +18,9 @@ struct ChatPanel: View {
     var density: Density = .regular
     /// Optional placeholder examples shown when the chat is empty.
     var examplePrompts: [String]? = nil
+    /// Title shown above the empty-state prompts. Per-page contextual in the
+    /// Today/section chat rail (comp: "Ask AI" / "Ask about this meeting" …).
+    var emptyTitle: String = "Ask anything"
     /// 5-F: optional categorized "What can I ask?" prompt groups, shown
     /// collapsibly in the empty state. Takes precedence over examplePrompts.
     var capabilitySections: [CapabilitySection]? = nil
@@ -78,7 +81,7 @@ struct ChatPanel: View {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .foregroundStyle(NDS.brand)
-                Text("Ask anything")
+                Text(emptyTitle)
                     .font(density == .compact ? .callout.weight(.semibold)
                                               : .title3.weight(.semibold))
             }
@@ -113,8 +116,8 @@ struct ChatPanel: View {
                     ForEach(prompts, id: \.self) { promptButton($0) }
                 }
             }
-            Label("Running locally via Ollama. No API key, no outbound traffic.",
-                  systemImage: "lock.shield")
+            Label("Runs locally via Ollama. No API key, no outbound traffic.",
+                  systemImage: "globe")
                 .font(.caption2).foregroundStyle(.tertiary)
                 .padding(.top, 4)
         }
@@ -127,16 +130,16 @@ struct ChatPanel: View {
             input = text
             inputFocused = true
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.up.right.circle").font(.caption2)
-                    .foregroundStyle(NDS.textTertiary)
-                Text(text).font(.caption).multilineTextAlignment(.leading)
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "sparkles").font(.caption)
+                    .foregroundStyle(NDS.lilac)
+                Text(text).scaledFont(12.5).multilineTextAlignment(.leading)
                     .foregroundStyle(NDS.textSecondary)
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radiusSmall))
-            .overlay(RoundedRectangle(cornerRadius: NDS.radiusSmall)
-                .strokeBorder(NDS.hairline, lineWidth: 0.5))
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+            .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius)
+                .strokeBorder(NDS.divider, lineWidth: 1))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)

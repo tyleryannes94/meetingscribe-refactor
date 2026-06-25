@@ -10,9 +10,9 @@ final class ToolbarModelTests: XCTestCase {
 
     func testEachPageHasItsPrimaryAndSearch() {
         XCTAssertEqual(actions(ToolbarModel.items(for: .today)),
-                       [.search, .voiceNote, .record, .newMeeting])
+                       [.search, .voiceNote, .newMeeting])
         XCTAssertEqual(actions(ToolbarModel.items(for: .meetings)),
-                       [.search, .importCalendar, .record, .newMeeting])
+                       [.search, .importCalendar, .newMeeting])
         XCTAssertEqual(actions(ToolbarModel.items(for: .people)),
                        [.search, .importPeople, .addPerson])
         XCTAssertEqual(actions(ToolbarModel.items(for: .actions)),

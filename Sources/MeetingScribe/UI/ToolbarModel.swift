@@ -58,26 +58,26 @@ enum ToolbarModel {
         }
         switch section {
         case .today:
+            // Comp (MeetingScribe.dc.html) toolbar: Search · Voice note · New meeting.
+            // Recording stays reachable via the Today recording banner / New-meeting flow.
             return [.button(search), .divider,
                     ghost(.voiceNote, "Voice note", "mic"),
-                    ghost(.record, "Record", "record.circle"),
                     primary(.newMeeting, "New meeting", "plus")]
         case .meetings:
             return [.button(search),
-                    ghost(.importCalendar, "Import calendar", "calendar.badge.plus"), .divider,
-                    ghost(.record, "Record", "record.circle"),
+                    ghost(.importCalendar, "Import calendar", "calendar"), .divider,
                     primary(.newMeeting, "New meeting", "plus")]
         case .people:
             return [.button(search),
-                    ghost(.importPeople, "Import", "square.and.arrow.down"), .divider,
-                    primary(.addPerson, "Add person", "person.badge.plus")]
+                    ghost(.importPeople, "Import", "square.and.arrow.up"), .divider,
+                    primary(.addPerson, "Add person", "plus")]
         case .actions:
             return [.button(search),
                     ghost(.filter, "Filter", "line.3.horizontal.decrease"), .divider,
                     primary(.newTask, "New task", "plus")]
         case .notes:
             return [.button(search), .divider,
-                    primary(.newVoiceNote, "New voice note", "mic.badge.plus")]
+                    primary(.newVoiceNote, "New voice note", "mic")]
         case .decisions, .integrations:
             return [.button(search)]
         }

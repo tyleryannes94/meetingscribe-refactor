@@ -8,34 +8,55 @@ import AppKit
 @available(macOS 14.0, *)
 struct ChatSidebar: View {
     @EnvironmentObject var session: ChatSession
+    @EnvironmentObject var router: WorkspaceRouter
 
     @State private var showingFolders = false
     @State private var folders: [String] = AppSettings.shared.chatFolders
 
-    /// 5-F: categorized "What can I ask?" prompts, lightly personalized with a
-    /// recent contact so the suggestions feel grounded in the user's own data.
-    private static func capabilitySections() -> [ChatPanel.CapabilitySection] {
-        let person = PeopleStore.shared.people.first?.displayName ?? "a contact"
-        return [
-            .init(label: "People", prompts: [
-                "Brief me on \(person).",
-                "Who am I overdue to check in with?",
-                "What do \(person) and I usually text about?"
-            ]),
-            .init(label: "Meetings", prompts: [
-                "Summarize my calls from this week.",
-                "What action items came out of yesterday's meetings?",
-                "What questions were left unanswered recently?"
-            ]),
-            .init(label: "Decisions", prompts: [
-                "What decisions did we make recently?",
-                "Why did we land on our current approach?"
-            ]),
-            .init(label: "Tasks", prompts: [
-                "What's due this week?",
-                "What am I waiting on from other people?"
+    /// Page-contextual Ask-AI prompts (comp MeetingScribe.dc.html): the title +
+    /// three suggestions track the current top-level section so the rail feels
+    /// grounded in what the user is looking at.
+    private var context: (title: String, prompts: [String]) {
+        switch router.section {
+        case .meetings:
+            return ("Ask about this meeting", [
+                "Summarize this meeting.",
+                "What did attendees commit to?",
+                "Draft a follow-up email."
             ])
-        ]
+        case .people:
+            return ("Ask about \(selectedPersonFirstName ?? "People")", [
+                "Give me a briefing.",
+                "Open tasks with them?",
+                "When did we last meet?"
+            ])
+        case .actions:
+            return ("Ask about Tasks", [
+                "What should I work on today?",
+                "What is overdue?",
+                "Draft a status update."
+            ])
+        case .notes:
+            return ("Ask about this note", [
+                "Turn this into tasks.",
+                "Summarize in one line.",
+                "Draft a message from this."
+            ])
+        default:
+            return ("Ask AI", [
+                "Summarize what needs my attention today.",
+                "What are my open commitments?",
+                "Who should I reconnect with?"
+            ])
+        }
+    }
+
+    /// First name of the person currently selected on the People tab, if any,
+    /// so the prompt header personalizes like the comp ("Ask about Maya").
+    private var selectedPersonFirstName: String? {
+        guard let id = router.selectedPersonID,
+              let p = PeopleStore.shared.people.first(where: { $0.id == id }) else { return nil }
+        return p.displayName.split(separator: " ").first.map(String.init)
     }
 
     var body: some View {
@@ -45,7 +66,8 @@ struct ChatSidebar: View {
             ChatPanel(
                 session: session,
                 density: .compact,
-                capabilitySections: Self.capabilitySections()
+                examplePrompts: context.prompts,
+                emptyTitle: context.title
             )
         }
         .background(

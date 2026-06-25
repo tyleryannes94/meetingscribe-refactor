@@ -314,12 +314,12 @@ struct MainWindow: View {
 
     private func navGroupLabel(_ text: String) -> some View {
         Text(text)
-            .scaledFont(9, weight: .semibold)
-            .tracking(0.6)
+            .scaledFont(10, weight: .bold)
+            .tracking(1.0)
             .foregroundStyle(NDS.textTertiary)
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 1)
+            .padding(.horizontal, 18)
+            .padding(.top, 13)
+            .padding(.bottom, 4)
     }
 
     private func navItem(_ s: TopLevelSection) -> some View {
@@ -497,6 +497,11 @@ struct MainWindow: View {
                     RecordingStopPill(startedAt: started) {
                         Task { await manager.stopRecording() }
                     }
+                } else {
+                    // Comp: page-name breadcrumb in the title bar when not recording.
+                    Text(section.label)
+                        .scaledFont(12.5, weight: .semibold)
+                        .foregroundStyle(NDS.textTertiary)
                 }
             }
             // Global back / forward — browser-style history across sections and
@@ -526,6 +531,7 @@ struct MainWindow: View {
                 Button { withAnimation(.easeOut(duration: 0.15)) { chatVisible.toggle() } } label: {
                     Label("Assistant", systemImage: chatVisible ? "sidebar.right" : "bubble.left.and.bubble.right")
                 }
+                .tint(chatVisible ? NDS.lilac : nil)
                 .help(chatVisible ? "Hide assistant" : "Show assistant")
             }
         }
@@ -744,24 +750,27 @@ private struct NavRailItem: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: section.systemImage)
-                    .scaledFont(13, weight: selected ? .semibold : .regular)
+                    .scaledFont(13, weight: selected ? .bold : .regular)
                     .foregroundStyle(selected ? NDS.lilac : NDS.textSecondary)
                     .frame(width: 16)
                 Text(section.label)
-                    .scaledFont(13, weight: selected ? .semibold : .medium)
+                    .scaledFont(13.5, weight: selected ? .bold : .medium)
                     .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
                 Spacer(minLength: 0)
                 badgeView
             }
-            .padding(.horizontal, 10).padding(.vertical, 5)
+            .padding(.horizontal, 12).padding(.vertical, 8)
             .background(
-                selected || isHovered ? NDS.lilacSoft : .clear,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                // Comp: active = lilac-soft pill; hover (unselected) = a lighter wash
+                // so the two states read differently.
+                selected ? NDS.rowSelected : (isHovered ? NDS.rowHover : .clear),
+                in: Capsule()
             )
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 9)
+        .padding(.vertical, 1)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .accessibilityLabel(section.label)
@@ -774,12 +783,14 @@ private struct NavRailItem: View {
         case .none:
             EmptyView()
         case .count(let n, let color):
+            // Comp geometry (11/tabular, padding 7/1, capsule); keep the
+            // semantic tint (danger=overdue, gold=drifting) as fg-on-soft-bg.
             Text("\(n)")
-                .scaledFont(10, weight: .bold)
+                .scaledFont(11, weight: .bold)
                 .monospacedDigit()
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6).padding(.vertical, 1)
-                .background(color, in: Capsule())
+                .foregroundStyle(color)
+                .padding(.horizontal, 7).padding(.vertical, 1)
+                .background(color.opacity(0.20), in: Capsule())
         case .pulse(let n):
             HStack(spacing: 4) {
                 Circle()
