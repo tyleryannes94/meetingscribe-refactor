@@ -249,6 +249,13 @@ final class MeetingManager: ObservableObject {
                 if !cal.isDate(existing.startDate, equalTo: m.startDate, toGranularity: .day) {
                     m.id = UUID().uuidString
                     m.relativeFolderPath = nil
+                } else {
+                    // Per-meeting capture override (set in Edit mode) persists to
+                    // disk; pick it up if the in-memory meeting (e.g. from a
+                    // calendar refresh) didn't carry it. Only for the same
+                    // occurrence — a different day is a distinct recording.
+                    if m.captureMic == nil { m.captureMic = existing.captureMic }
+                    if m.captureSystem == nil { m.captureSystem = existing.captureSystem }
                 }
             }
             activeMeeting = m
@@ -284,7 +291,8 @@ final class MeetingManager: ObservableObject {
                 }
 
                 let dir = store.directory(for: m, primaryTag: primary)
-                try await audio.start(in: dir, segment: m.segmentCount)
+                try await audio.start(in: dir, segment: m.segmentCount,
+                                      micOverride: m.captureMic, systemOverride: m.captureSystem)
                 AudioRecovery.markRecordingStarted(in: dir)
                 // Use the resolved meeting `m` (which is `activeMeeting`), not the
                 // `meeting` parameter — that param is nil for ad-hoc recordings, so
@@ -387,7 +395,8 @@ final class MeetingManager: ObservableObject {
                 self?.liveTranscriber.submitChunk(url: url, speaker: "Them", startSec: s, endSec: e)
             }
 
-            try await audio.start(in: dir, segment: live.segmentCount)
+            try await audio.start(in: dir, segment: live.segmentCount,
+                                  micOverride: live.captureMic, systemOverride: live.captureSystem)
             AudioRecovery.markRecordingStarted(in: dir)
             state = .recording(meeting: live, startedAt: Date())
             lastError = nil
@@ -806,12 +815,18 @@ final class MeetingManager: ObservableObject {
     func updateMeeting(_ meeting: Meeting,
                        title: String? = nil,
                        description: String? = nil,
-                       source: MeetingSource?? = nil) {
+                       source: MeetingSource?? = nil,
+                       captureMic: Bool?? = nil,
+                       captureSystem: Bool?? = nil) {
         var updated = meeting
         if let title { updated.userTitle = title }
         if let description { updated.userDescription = description }
         // Double-optional: nil = don't touch, .some(nil) = clear back to auto-detect.
         if let source { updated.userSource = source }
+        // Same convention for per-meeting capture (v3): outer nil = leave as-is,
+        // .some(nil) = inherit global default, .some(x) = force that source.
+        if let captureMic { updated.captureMic = captureMic }
+        if let captureSystem { updated.captureSystem = captureSystem }
         let primary = tagStore.primaryTag(for: updated)
         do {
             try store.writeMeeting(updated, primaryTag: primary)
