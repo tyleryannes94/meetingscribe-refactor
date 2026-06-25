@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var ollamaURL: String = AppSettings.shared.ollamaURL.absoluteString
     @State private var ollamaModel: String = AppSettings.shared.ollamaModel
     @State private var autoRecord: Bool = AppSettings.shared.autoRecord
+    @State private var useScreenVisionModel: Bool = AppSettings.shared.useScreenVisionModel
+    @State private var screenVisionModel: String = AppSettings.shared.screenVisionModel
     @State private var captureMic: Bool = AppSettings.shared.captureMic
     @State private var captureSystem: Bool = AppSettings.shared.captureSystem
     @State private var liveTranscriptionEnabled: Bool = AppSettings.shared.liveTranscriptionEnabled
@@ -278,6 +280,13 @@ struct SettingsView: View {
                 Toggle("Defer to batch on battery / low-power", isOn: $deferLiveOnBattery)
                     .disabled(!liveTranscriptionEnabled)
                 Text("Deferring skips the per-chunk Whisper cold-loads while unplugged; the full transcript is produced in one pass when you stop. Currently: \(ResourceGovernor.shared.statusDescription).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Screen recordings") {
+                Toggle("Analyze frames with a local vision model", isOn: $useScreenVisionModel)
+                TextField("Vision model", text: $screenVisionModel)
+                    .disabled(!useScreenVisionModel)
+                Text("When analyzing a screen recording, also \"watch\" sampled frames with a local multimodal model (auto-pulled on first use, a few GB). Off = OCR + transcript only, no download. Either way, nothing leaves your Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Meeting recording") {
@@ -1028,6 +1037,9 @@ struct SettingsView: View {
         s.allowRemoteOllamaEndpoint = allowRemoteOllama
         s.ollamaModel = ollamaModel
         s.autoRecord = autoRecord
+        s.useScreenVisionModel = useScreenVisionModel
+        s.screenVisionModel = screenVisionModel.trimmingCharacters(in: .whitespaces).isEmpty
+            ? "qwen2.5vl" : screenVisionModel.trimmingCharacters(in: .whitespaces)
         s.captureMic = captureMic
         s.captureSystem = captureSystem
         s.liveTranscriptionEnabled = liveTranscriptionEnabled

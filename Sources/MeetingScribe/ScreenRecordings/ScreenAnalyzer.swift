@@ -54,6 +54,16 @@ enum ScreenAnalyzer {
         return out
     }
 
+    /// The sampled frame PNGs on disk, sorted by index (for the vision pass).
+    static func frameURLs(in framesDir: URL) -> [URL] {
+        let fm = FileManager.default
+        let contents = (try? fm.contentsOfDirectory(at: framesDir,
+                                                    includingPropertiesForKeys: nil,
+                                                    options: [.skipsHiddenFiles])) ?? []
+        return contents.filter { $0.pathExtension.lowercased() == "png" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
     /// Synchronous Vision OCR on one frame; returns deduped, non-trivial lines.
     private static func recognizeText(in image: CGImage) -> [String] {
         let request = VNRecognizeTextRequest()

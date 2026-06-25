@@ -30,8 +30,35 @@ struct ScreenRecordingStore {
     }
 
     /// The screen-capture container (video + system audio, mic muxed when possible).
+    /// Recorded clips are always `recording.mov`; imported clips keep their own
+    /// extension under `recording.<ext>`.
     func videoURL(for rec: ScreenRecording) -> URL {
         directory(for: rec).appendingPathComponent("recording.mov")
+    }
+
+    static let importableVideoExtensions = ["mov", "mp4", "m4v", "webm", "mkv", "avi"]
+
+    /// The actual video file present (recorded `.mov` or imported `.<ext>`).
+    func existingVideoURL(for rec: ScreenRecording) -> URL? {
+        let dir = directory(for: rec)
+        for ext in (["mov"] + Self.importableVideoExtensions) {
+            let u = dir.appendingPathComponent("recording.\(ext)")
+            if FileManager.default.fileExists(atPath: u.path) { return u }
+        }
+        return nil
+    }
+
+    /// Copies an imported video into the recording's folder, preserving its
+    /// extension. Returns the destination URL.
+    func importVideo(from src: URL, for rec: ScreenRecording) throws -> URL {
+        try ensureRoot()
+        let dir = directory(for: rec)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let ext = src.pathExtension.isEmpty ? "mp4" : src.pathExtension.lowercased()
+        let dest = dir.appendingPathComponent("recording.\(ext)")
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.copyItem(at: src, to: dest)
+        return dest
     }
 
     /// Sidecar mic track, only present when mic muxing fell back.
