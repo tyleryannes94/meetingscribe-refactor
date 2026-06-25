@@ -43,6 +43,11 @@ struct ScreenRecordingStore {
         directory(for: rec).appendingPathComponent("thumbnail.png")
     }
 
+    /// Where sampled frames (Phase 2 OCR / vision) are written.
+    func framesDir(for rec: ScreenRecording) -> URL {
+        directory(for: rec).appendingPathComponent("frames", isDirectory: true)
+    }
+
     /// All audio tracks to feed the transcriber / overlay player: the mov plus
     /// the mic sidecar if the recording used one.
     func audioSources(for rec: ScreenRecording) -> [URL] {

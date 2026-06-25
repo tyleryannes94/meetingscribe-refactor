@@ -247,6 +247,7 @@ private struct ScreenRecordingDetail: View {
     @State private var transcriptDraft = ""
     @State private var saveTimer: Timer?
     @State private var player: AVPlayer?
+    @State private var summary = ""
 
     var body: some View {
         ScrollView {
@@ -256,6 +257,7 @@ private struct ScreenRecordingDetail: View {
                     .frame(minHeight: 280, idealHeight: 380)
                     .clipShape(RoundedRectangle(cornerRadius: NDS.cardRadius))
                     .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius).stroke(NDS.hairline, lineWidth: 1))
+                analysisCard
                 transcriptCard
             }
             .padding(20)
@@ -264,7 +266,12 @@ private struct ScreenRecordingDetail: View {
         .background(NDS.bg)
         .onAppear {
             transcriptDraft = recordings.readTranscript(rec)
+            summary = recordings.readSummary(rec)
             if player == nil { player = AVPlayer(url: recordings.videoURL(rec)) }
+        }
+        .onChange(of: recordings.analyzing) { _, _ in
+            // Refresh the summary text once an analysis run completes.
+            if !recordings.isAnalyzing(rec) { summary = recordings.readSummary(rec) }
         }
         .onChange(of: transcriptDraft) { _, _ in scheduleSave() }
         .onDisappear { flush() }
@@ -293,6 +300,52 @@ private struct ScreenRecordingDetail: View {
             }
             .menuStyle(.borderlessButton).fixedSize()
         }
+    }
+
+    @ViewBuilder
+    private var analysisCard: some View {
+        let analyzing = recordings.isAnalyzing(rec)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("AI Summary", systemImage: "sparkles")
+                    .scaledFont(12, weight: .bold).foregroundStyle(NDS.textSecondary)
+                Spacer()
+                if summary.isEmpty {
+                    Button { runAnalysis() } label: {
+                        Label("Analyze recording", systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(MSPrimaryButtonStyle()).disabled(analyzing)
+                } else {
+                    Button { runAnalysis() } label: {
+                        Label("Re-analyze", systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(MSSecondaryButtonStyle()).disabled(analyzing)
+                }
+            }
+            if analyzing {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small) // design-lint:allow
+                    Text("Reading the screen and summarizing… (on-device)")
+                        .scaledFont(11).foregroundStyle(NDS.textSecondary)
+                }
+            } else if summary.isEmpty {
+                Text("Summarize what happened on screen and pull out action items — runs locally, nothing leaves your Mac.")
+                    .scaledFont(12).foregroundStyle(NDS.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(.init(summary))
+                    .scaledFont(13).foregroundStyle(NDS.textPrimary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                if recordings.recordingsWithTasks.contains(rec.id) {
+                    Label("Action items were added to Tasks", systemImage: "checklist")
+                        .scaledFont(11).foregroundStyle(NDS.mint)
+                }
+            }
+        }
+        .padding(14)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius).stroke(NDS.hairline, lineWidth: 1))
     }
 
     private var transcriptCard: some View {
@@ -324,6 +377,11 @@ private struct ScreenRecordingDetail: View {
         .padding(14)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.cardRadius))
         .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius).stroke(NDS.hairline, lineWidth: 1))
+    }
+
+    private func runAnalysis() {
+        summary = ""
+        Task { await recordings.analyze(rec) }
     }
 
     private func scheduleSave() {

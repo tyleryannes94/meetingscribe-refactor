@@ -20,12 +20,25 @@ final class ScreenRecordingsController: ObservableObject {
     @Published private(set) var state: RecordState = .idle
     @Published private(set) var recordings: [ScreenRecording] = []
     @Published private(set) var transcribing: Set<String> = []
+    /// IDs currently running the local AI analysis (Phase 2).
+    @Published private(set) var analyzing: Set<String> = []
+    /// IDs whose analysis pushed one or more tasks into the task store.
+    @Published private(set) var recordingsWithTasks: Set<String> = []
     @Published private(set) var errors: [String: String] = [:]
 
     private let store = ScreenRecordingStore()
     private let transcriber = QuickTranscribe()
+    private let ollama = OllamaService()
+    private let actionItems: ActionItemStore?
     private var recorder: ScreenRecorder?
     private var pending: ScreenRecording?
+
+    /// `actionItemStore` is injected so analysis can push extracted action items
+    /// into Tasks (the same path voice notes use). Optional so the controller
+    /// still builds without it (extraction is then skipped).
+    init(actionItemStore: ActionItemStore? = nil) {
+        self.actionItems = actionItemStore
+    }
 
     func refresh() {
         recordings = store.listRecordings()
@@ -135,6 +148,63 @@ final class ScreenRecordingsController: ObservableObject {
         } else if trimmed.isEmpty {
             setError(rec.id, "Transcription returned no text — the recording may have had no spoken audio.")
         }
+    }
+
+    // MARK: - Local AI analysis (Phase 2)
+
+    /// Samples + OCRs the recording, summarizes it via the local LLM (Ollama),
+    /// writes `summary.md`, and pushes any extracted action items into Tasks.
+    /// Fully on-device — `OllamaService` is EgressPolicy-guarded to 127.0.0.1.
+    func analyze(_ rec: ScreenRecording) async {
+        guard !analyzing.contains(rec.id) else { return }
+        analyzing.insert(rec.id)
+        setError(rec.id, nil)
+        defer {
+            analyzing.remove(rec.id)
+            refresh()
+        }
+        let transcript = store.readTranscript(for: rec)
+        let frames = await ScreenAnalyzer.ocr(videoURL: store.videoURL(for: rec),
+                                              framesDir: store.framesDir(for: rec))
+        let onScreen = ScreenAnalyzer.onScreenTextMarkdown(frames)
+        do {
+            let summary = try await ollama.analyzeScreenRecording(transcript: transcript, onScreenText: onScreen)
+            try? store.writeSummary(summary, for: rec)
+            await extractTasks(from: summary, rec: rec)
+        } catch {
+            log.error("screen analysis failed: \(error.localizedDescription, privacy: .public)")
+            setError(rec.id, "Analysis failed: \(error.localizedDescription). Is the summary engine running?")
+        }
+    }
+
+    /// Parses the summary's `## Action Items` section (same parser meetings/voice
+    /// notes use) and reconciles the items into the task store as confirmed,
+    /// user-owned tasks.
+    private func extractTasks(from summary: String, rec: ScreenRecording) async {
+        guard let store = actionItems else { return }
+        var items = ActionItemExtractor.extract(from: summary, sourceID: rec.id,
+                                                sourceTitle: rec.title, sourceDate: rec.createdAt)
+        guard !items.isEmpty else { return }
+        let myName = AppSettings.shared.userName
+        let known = PeopleStore.shared.people
+        for i in items.indices {
+            items[i].source = "screen_recording"
+            if items[i].owner?.trimmingCharacters(in: .whitespaces).isEmpty ?? true {
+                items[i].owner = myName
+            }
+            if items[i].ownerPersonID == nil {
+                items[i].ownerPersonID = PersonResolver.resolveOwner(items[i].owner, in: known)
+            }
+            items[i].confirmedAt = Date()
+            items[i].delegated = nil
+        }
+        store.reconcileExtracted(items, for: rec.id)
+        recordingsWithTasks.insert(rec.id)
+    }
+
+    func isAnalyzing(_ rec: ScreenRecording) -> Bool { analyzing.contains(rec.id) }
+    func hasSummary(_ rec: ScreenRecording) -> Bool {
+        !store.readSummary(for: rec).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // MARK: - Thumbnail
