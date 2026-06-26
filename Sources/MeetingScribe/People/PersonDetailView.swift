@@ -1435,7 +1435,7 @@ struct PersonDetailView: View {
     @ViewBuilder
     private var decisionsSection: some View {
         let mine = decisions.decisions
-            .filter { current.meetingMentions.contains($0.meetingID) }
+            .filter { d in d.meetingID.map { current.meetingMentions.contains($0) } ?? false }
             .sorted { $0.date > $1.date }
             .prefix(8)
         if !mine.isEmpty {
@@ -1445,7 +1445,7 @@ struct PersonDetailView: View {
                     Button {
                         NotificationCenter.default.post(
                             name: .meetingScribeOpenEntity, object: nil,
-                            userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: d.meetingID).absoluteString])
+                            userInfo: ["url": WorkspaceLink.url(kind: .meeting, id: d.meetingID ?? "").absoluteString])
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "checkmark.seal").scaledFont(13)
@@ -1453,7 +1453,7 @@ struct PersonDetailView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(d.text).scaledFont(13.5).foregroundStyle(NDS.textPrimary)
                                     .lineLimit(2)
-                                Text("\(d.meetingTitle) · \(Self.dateFormatter.string(from: d.date))")
+                                Text("\(d.sourceLabel) · \(Self.dateFormatter.string(from: d.date))")
                                     .font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(1)
                             }
                             Spacer(minLength: 0)
@@ -2240,7 +2240,7 @@ struct PersonDetailView: View {
             .sorted { $0.startDate > $1.startDate }
         let meetingIDs = Set(meetings.map(\.id))
         let decisionLines = decisions.decisions
-            .filter { meetingIDs.contains($0.meetingID) }
+            .filter { d in d.meetingID.map { meetingIDs.contains($0) } ?? false }
             .map { "- \($0.text)" }
         let doneTasks = actionItems.items
             .filter { $0.ownerPersonID == current.id && $0.status == .completed && (($0.completedAt ?? $0.updatedAt) >= cutoff) }

@@ -308,6 +308,7 @@ extension ActionItemsView {
             ProjectPageHeader(store: store, project: project, bodyFills: false,
                               onOpenInitiative: { env.selectedInitiativeID = $0 },
                               onOpenProject: { env.selectedProjectID = $0 })
+            ProjectDecisionsSection(projectID: project.id)
             if !kids.isEmpty { subPagesSection(project, kids: kids) }
             Divider().overlay(NDS.divider)
             toolbar
@@ -321,6 +322,7 @@ extension ActionItemsView {
             ProjectPageHeader(store: store, project: project, bodyFills: true,
                               onOpenInitiative: { env.selectedInitiativeID = $0 },
                               onOpenProject: { env.selectedProjectID = $0 })
+            ProjectDecisionsSection(projectID: project.id)
             docFooter(project, kids: kids)
         }
     }

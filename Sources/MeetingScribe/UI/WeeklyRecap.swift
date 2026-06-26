@@ -30,7 +30,7 @@ enum WeeklyRecap {
         lines.append("")
         lines.append("## Decisions (\(decisions.count))")
         lines += decisions.isEmpty ? ["- _(none)_"]
-                                   : decisions.map { "- \($0.text)  _(\($0.meetingTitle))_" }
+                                   : decisions.map { "- \($0.text)  _(\($0.sourceLabel))_" }
         lines.append("")
         lines.append("## Open commitments (\(open.count))")
         lines += open.isEmpty ? ["- _(none)_"]

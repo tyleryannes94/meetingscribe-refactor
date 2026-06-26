@@ -72,11 +72,11 @@ final class DecisionChatTools {
             [
                 "text": d.text,
                 "rationale": d.rationale ?? "",
-                "meetingTitle": d.meetingTitle,
+                "meetingTitle": d.sourceLabel,
                 "date": ISO8601DateFormatter().string(from: d.date),
                 "personIDs": d.personIDs,
                 "status": d.status.rawValue,
-                "backlink": "meetingscribe://meeting/\(d.meetingID)",
+                "backlink": d.meetingID.map { "meetingscribe://meeting/\($0)" } ?? "",
             ]
         }
         return ChatToolHelpers.jsonString(["decisions": top])

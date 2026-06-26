@@ -117,7 +117,7 @@ struct DecisionLedgerView: View {
     @ViewBuilder
     private func card(_ d: Decision) -> some View {
         Button {
-            if let m = manager.meeting(forEntityID: d.meetingID) { router.openMeeting(m) }
+            if let mid = d.meetingID, let m = manager.meeting(forEntityID: mid) { router.openMeeting(m) }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(d.text).font(.callout.weight(.medium)).foregroundStyle(NDS.textPrimary)
@@ -128,8 +128,8 @@ struct DecisionLedgerView: View {
                 }
                 HStack(spacing: 6) {
                     statusBadge(d.status)
-                    Text(d.meetingTitle).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                        .lineLimit(1).help(d.meetingTitle)
+                    Text(d.sourceLabel).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                        .lineLimit(1).help(d.sourceLabel)
                     Spacer()
                     ForEach(d.personIDs.prefix(3), id: \.self) { pid in
                         if let p = people.person(by: pid) {

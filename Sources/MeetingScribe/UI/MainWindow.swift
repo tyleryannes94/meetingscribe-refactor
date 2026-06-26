@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// - Integrations moved to Settings (⚙️ gear icon at bottom of rail)
 /// - Notes kept as Voice Notes (distinct enough from Meetings to warrant its own slot)
 enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
-    case today, meetings, people, actions, notes, recordings, decisions, integrations
+    case today, meetings, people, actions, notes, recordings, integrations
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -17,7 +17,6 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
         case .actions:  return "Tasks"
         case .notes:    return "Voice Notes"
         case .recordings: return "Recordings"
-        case .decisions: return "Decisions"
         case .integrations: return "Integrations"
         }
     }
@@ -32,7 +31,6 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
         case .actions:  return "checklist"
         case .notes:    return "waveform.badge.plus"
         case .recordings: return "record.circle.fill"
-        case .decisions: return "checkmark.seal.fill"
         case .integrations: return "puzzlepiece.extension.fill"
         }
     }
@@ -40,7 +38,7 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
     var group: NavGroup {
         switch self {
         case .today, .meetings, .people: return .workspace
-        case .actions, .notes, .recordings, .decisions, .integrations: return .organize
+        case .actions, .notes, .recordings, .integrations: return .organize
         }
     }
 }
@@ -360,7 +358,7 @@ struct MainWindow: View {
         case .people:
             let drifting = PeopleStore.shared.overdueCheckInCount
             return drifting > 0 ? .count(drifting, NDS.gold) : .none
-        case .today, .notes, .recordings, .decisions, .integrations:
+        case .today, .notes, .recordings, .integrations:
             return .none
         }
     }
@@ -388,7 +386,6 @@ struct MainWindow: View {
         case .actions:  return "The Tasks workspace — initiatives, projects (pages), and tasks."
         case .notes:    return "Voice Notes — recorded/imported notes with transcripts."
         case .recordings: return "Recordings — screen recordings and screenshots with transcripts."
-        case .decisions: return "Decisions — the searchable decision ledger with rationale and people."
         case .integrations: return "Integrations — set up, edit, and test every connector the app uses."
         }
     }
@@ -430,7 +427,6 @@ struct MainWindow: View {
         case .actions:  ActionItemsView(store: manager.actionItems)
         case .notes:    QuickNotesView()
         case .recordings: ScreenRecordingsView()
-        case .decisions: DecisionLedgerView()
         case .integrations: IntegrationsView()
         }
     }

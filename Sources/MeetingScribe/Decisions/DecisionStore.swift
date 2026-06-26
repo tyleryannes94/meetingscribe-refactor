@@ -4,10 +4,28 @@ import OSLog
 
 /// Lifecycle state of a decision (P0-E). A decision starts `open`; a later
 /// decision can `supersede` it, or it can be `resolved` once acted on.
+/// In the project-centric UI these read as **To make** (open) → **Made**
+/// (resolved) / **Superseded**.
 enum DecisionStatus: String, Codable, CaseIterable, Hashable {
     case open
     case superseded
     case resolved
+
+    /// Human label used by the project/task/initiative decision sections.
+    var label: String {
+        switch self {
+        case .open:       return "To make"
+        case .resolved:   return "Made"
+        case .superseded: return "Superseded"
+        }
+    }
+}
+
+/// Where a decision came from. Auto-extracted decisions carry `.meeting`;
+/// ones the user logs by hand carry `.manual` (and have no meetingID).
+enum DecisionOrigin: String, Codable, Hashable {
+    case meeting
+    case manual
 }
 
 /// One decision made in a meeting, lifted out of that meeting's summary into a
@@ -20,8 +38,11 @@ enum DecisionStatus: String, Codable, CaseIterable, Hashable {
 /// pre-existing `decisions.json` still loads.
 struct Decision: Identifiable, Codable, Hashable {
     var id: String
-    var meetingID: String
-    var meetingTitle: String
+    /// Source meeting. nil for a manually-logged decision. (Was non-optional —
+    /// optional now so a decision can be created by hand from a project/task.)
+    var meetingID: String?
+    /// Denormalized source-meeting title. nil for manual decisions.
+    var meetingTitle: String?
     var date: Date
     var text: String
 
@@ -33,19 +54,28 @@ struct Decision: Identifiable, Codable, Hashable {
     var personIDs: [String]
     /// Optional owning Project/feature.
     var projectID: String?
+    /// Optional owning Task (ActionItem.id).
+    var taskID: String?
+    /// Optional owning Initiative (Initiative.id).
+    var initiativeID: String?
+    /// Whether this was auto-extracted from a meeting or logged manually.
+    var origin: DecisionOrigin
     /// Lifecycle state.
     var status: DecisionStatus
     /// When to revisit this decision, if ever.
     var revisitDate: Date?
 
     init(id: String,
-         meetingID: String,
-         meetingTitle: String,
+         meetingID: String? = nil,
+         meetingTitle: String? = nil,
          date: Date,
          text: String,
          rationale: String? = nil,
          personIDs: [String] = [],
          projectID: String? = nil,
+         taskID: String? = nil,
+         initiativeID: String? = nil,
+         origin: DecisionOrigin = .meeting,
          status: DecisionStatus = .open,
          revisitDate: Date? = nil) {
         self.id = id
@@ -56,25 +86,35 @@ struct Decision: Identifiable, Codable, Hashable {
         self.rationale = rationale
         self.personIDs = personIDs
         self.projectID = projectID
+        self.taskID = taskID
+        self.initiativeID = initiativeID
+        self.origin = origin
         self.status = status
         self.revisitDate = revisitDate
     }
 }
 
 extension Decision {
+    /// Label for the decision's source: the meeting title, or a manual marker
+    /// when it was logged by hand (meetingTitle == nil).
+    var sourceLabel: String { meetingTitle ?? "Logged manually" }
+
     /// Custom decode so legacy records (and the v1 schema, which had only
     /// id/meetingID/meetingTitle/date/text) load without throwing on the new
     /// keys. Kept in an extension so the memberwise initializer above survives.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
-        meetingID = try c.decode(String.self, forKey: .meetingID)
-        meetingTitle = try c.decode(String.self, forKey: .meetingTitle)
+        meetingID = try c.decodeIfPresent(String.self, forKey: .meetingID)
+        meetingTitle = try c.decodeIfPresent(String.self, forKey: .meetingTitle)
         date = try c.decode(Date.self, forKey: .date)
         text = try c.decode(String.self, forKey: .text)
         rationale = try c.decodeIfPresent(String.self, forKey: .rationale)
         personIDs = try c.decodeIfPresent([String].self, forKey: .personIDs) ?? []
         projectID = try c.decodeIfPresent(String.self, forKey: .projectID)
+        taskID = try c.decodeIfPresent(String.self, forKey: .taskID)
+        initiativeID = try c.decodeIfPresent(String.self, forKey: .initiativeID)
+        origin = try c.decodeIfPresent(DecisionOrigin.self, forKey: .origin) ?? .meeting
         status = try c.decodeIfPresent(DecisionStatus.self, forKey: .status) ?? .open
         revisitDate = try c.decodeIfPresent(Date.self, forKey: .revisitDate)
     }
@@ -100,9 +140,11 @@ final class DecisionStore: ObservableObject {
     private let log = Logger(subsystem: "com.tyleryannes.MeetingScribe", category: "Decisions")
     @Published private(set) var decisions: [Decision] = []
 
-    /// On-disk schema version (P0-E). Bumped from the implicit v1 (raw array,
-    /// minimal struct) to v2 (enriched struct, enveloped).
-    static let schemaVersion = 2
+    /// On-disk schema version. v2 added the enriched struct (rationale/people/
+    /// project/status/revisit). v3 adds manual decisions: optional meetingID/
+    /// meetingTitle plus taskID/initiativeID/origin. Back-compat is carried by
+    /// `decodeIfPresent`, so the v2→v3 migration step is identity.
+    static let schemaVersion = 3
 
     private var fileURL: URL { AppSettings.shared.storageDir.appendingPathComponent("decisions.json") }
 
@@ -244,6 +286,94 @@ final class DecisionStore: ObservableObject {
         guard let data = slice.data(using: .utf8),
               let arr = try? JSONDecoder().decode([String].self, from: data) else { return nil }
         return arr
+    }
+
+    // MARK: - Manual decisions (project / task / initiative)
+
+    /// Log a decision by hand and attach it to a project, task, and/or
+    /// initiative. Manual decisions carry a `manual::` id and a nil meetingID,
+    /// so the meeting auto-extraction pipeline never touches them.
+    @discardableResult
+    func addManual(text: String,
+                   rationale: String? = nil,
+                   projectID: String? = nil,
+                   taskID: String? = nil,
+                   initiativeID: String? = nil) -> Decision {
+        let d = Decision(
+            id: "manual::\(UUID().uuidString)",
+            meetingID: nil,
+            meetingTitle: nil,
+            date: Date(),
+            text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            rationale: rationale,
+            projectID: projectID,
+            taskID: taskID,
+            initiativeID: initiativeID,
+            origin: .manual,
+            status: .open)
+        decisions.insert(d, at: 0)
+        decisions.sort { $0.date > $1.date }
+        save()
+        VaultIndexService.shared.indexDecision(d)
+        return d
+    }
+
+    /// Mutate one decision in place, persist, and reindex.
+    private func update(_ id: String, _ mutate: (inout Decision) -> Void) {
+        guard let i = decisions.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&decisions[i])
+        save()
+        VaultIndexService.shared.indexDecision(decisions[i])
+    }
+
+    func setStatus(_ id: String, _ status: DecisionStatus) {
+        update(id) { $0.status = status }
+    }
+
+    func setRevisit(_ id: String, _ date: Date?) {
+        update(id) { $0.revisitDate = date }
+    }
+
+    func setText(_ id: String, text: String, rationale: String? = nil) {
+        update(id) {
+            $0.text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let rationale { $0.rationale = rationale }
+        }
+    }
+
+    /// Re-attach a decision. Each parameter is a *double* optional: omit it to
+    /// leave the link unchanged, pass `.some(nil)` to clear it, pass `.some(id)`
+    /// to set it.
+    func link(_ id: String,
+              projectID: String?? = nil,
+              taskID: String?? = nil,
+              initiativeID: String?? = nil) {
+        update(id) {
+            if let projectID { $0.projectID = projectID }
+            if let taskID { $0.taskID = taskID }
+            if let initiativeID { $0.initiativeID = initiativeID }
+        }
+    }
+
+    func delete(_ id: String) {
+        guard decisions.contains(where: { $0.id == id }) else { return }
+        decisions.removeAll { $0.id == id }
+        save()
+        VaultIndexService.shared.removeFromIndex(entityID: id, entityKind: "decision")
+    }
+
+    // MARK: - Queries
+
+    func decisions(forProject id: String) -> [Decision] {
+        decisions.filter { $0.projectID == id }
+    }
+
+    func decisions(forTask id: String) -> [Decision] {
+        decisions.filter { $0.taskID == id }
+    }
+
+    func decisions(forInitiative id: String) -> [Decision] {
+        decisions.filter { $0.initiativeID == id }
     }
 
     /// Pull the bulleted lines under a "## Key Decisions" (or "## Decisions")

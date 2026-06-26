@@ -518,7 +518,7 @@ struct TodayView: View {
                 }
                 ForEach(items.prefix(5)) { d in
                     Button {
-                        if let m = manager.meeting(forEntityID: d.meetingID) { router.openMeeting(m) }
+                        if let mid = d.meetingID, let m = manager.meeting(forEntityID: mid) { router.openMeeting(m) }
                     } label: {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "circle.fill").scaledFont(5)
@@ -534,7 +534,7 @@ struct TodayView: View {
                                         .foregroundStyle(NDS.textSecondary)
                                         .multilineTextAlignment(.leading)
                                 }
-                                Text("\(d.meetingTitle) · \(d.date.formatted(date: .abbreviated, time: .omitted))")
+                                Text("\(d.sourceLabel) · \(d.date.formatted(date: .abbreviated, time: .omitted))")
                                     .scaledFont(11)
                                     .foregroundStyle(NDS.textTertiary)
                             }

@@ -83,7 +83,7 @@ enum ToolbarModel {
             return [.button(search),
                     ghost(.newScreenshot, "Screenshot", "camera.viewfinder"), .divider,
                     primary(.newRecording, "New recording", "record.circle")]
-        case .decisions, .integrations:
+        case .integrations:
             return [.button(search)]
         }
     }

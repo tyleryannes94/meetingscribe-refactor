@@ -304,7 +304,8 @@ struct GlobalSearchView: View {
         // opens where the decision was made — no new entity kind / destination.
         if r.entityKind == "decision" {
             guard let dec = manager.decisions.decisions.first(where: { $0.id == r.entityID }),
-                  let m = manager.meeting(forEntityID: dec.meetingID) else { return nil }
+                  let mid = dec.meetingID,
+                  let m = manager.meeting(forEntityID: mid) else { return nil }
             return WorkspaceEntity(kind: .meeting, rawID: m.id,
                                    title: "Decision: " + (r.title ?? dec.text),
                                    subtitle: MeetingManager.entityDateString(m.startDate),

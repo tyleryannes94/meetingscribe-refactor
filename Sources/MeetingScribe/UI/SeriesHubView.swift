@@ -71,7 +71,7 @@ struct SeriesHubView: View {
     private var seriesDecisions: [Decision] {
         let ids = Set(occurrences.map { $0.id })
         return manager.decisions.decisions
-            .filter { ids.contains($0.meetingID) }
+            .filter { d in d.meetingID.map { ids.contains($0) } ?? false }
             .sorted { $0.date > $1.date }
     }
 
