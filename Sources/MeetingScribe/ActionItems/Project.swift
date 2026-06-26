@@ -38,6 +38,11 @@ struct Project: Identifiable, Codable, Hashable {
     /// User-defined database columns for this project's tasks (NP-1). Optional
     /// so existing projects.json still decodes.
     var propertyDefs: [PropertyDefinition]?
+    /// Reference materials pinned to this feature/project — scoping docs, design
+    /// files, competitor analyses — as either web/cloud links or local files
+    /// (remembered via a file bookmark). Optional so existing projects.json
+    /// still decodes.
+    var documents: [DocumentReference]?
     var createdAt: Date
     var updatedAt: Date
 
@@ -68,6 +73,7 @@ struct Project: Identifiable, Codable, Hashable {
          linearProjectID: String? = nil,
          targetDate: Date? = nil,
          propertyDefs: [PropertyDefinition]? = nil,
+         documents: [DocumentReference]? = nil,
          createdAt: Date = Date(),
          updatedAt: Date = Date()) {
         self.id = id
@@ -84,8 +90,57 @@ struct Project: Identifiable, Codable, Hashable {
         self.linearProjectID = linearProjectID
         self.targetDate = targetDate
         self.propertyDefs = propertyDefs
+        self.documents = documents
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+}
+
+/// A reference document pinned to a project: a scoping doc, a design file, a
+/// competitor analysis, etc. The payload is either a web/cloud URL (Figma,
+/// Google Docs, Notion, any link) or a local file remembered via a file
+/// bookmark so it survives moves/renames. Persisted inside `Project.documents`.
+struct DocumentReference: Identifiable, Codable, Hashable {
+    var id: String = UUID().uuidString
+    var title: String
+    var kind: DocKind
+    var payload: Payload
+    var addedAt: Date = Date()
+
+    enum DocKind: String, Codable, CaseIterable, Hashable, Identifiable {
+        case scopingDoc, design, competitor, other
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .scopingDoc: return "Scoping"
+            case .design:     return "Design"
+            case .competitor: return "Competitor"
+            case .other:      return "Doc"
+            }
+        }
+        var systemImage: String {
+            switch self {
+            case .scopingDoc: return "doc.text"
+            case .design:     return "paintbrush"
+            case .competitor: return "chart.bar.doc.horizontal"
+            case .other:      return "paperclip"
+            }
+        }
+    }
+
+    /// Where the document lives. `.url` for links, `.localFile` for an on-disk
+    /// file (the bookmark resolves the path; `displayPath` is shown in the UI).
+    enum Payload: Codable, Hashable {
+        case url(String)
+        case localFile(bookmark: Data, displayPath: String)
+    }
+
+    /// A human-readable location for the chip subtitle / chat answers.
+    var locationLabel: String {
+        switch payload {
+        case .url(let s): return s
+        case .localFile(_, let path): return (path as NSString).lastPathComponent
+        }
     }
 }
 

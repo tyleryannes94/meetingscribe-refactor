@@ -1726,6 +1726,21 @@ final class ActionItemStore: ObservableObject {
         saveProjects()
     }
 
+    // MARK: - Project reference materials (scoping docs / design / competitor)
+
+    /// Reference documents pinned to a project, newest first.
+    func documents(forProject id: String) -> [DocumentReference] {
+        (project(id: id)?.documents ?? []).sorted { $0.addedAt > $1.addedAt }
+    }
+
+    func addDocument(_ doc: DocumentReference, toProject id: String) {
+        updateProject(id) { $0.documents = ($0.documents ?? []) + [doc] }
+    }
+
+    func removeDocument(_ docID: String, fromProject id: String) {
+        updateProject(id) { $0.documents?.removeAll { $0.id == docID } }
+    }
+
     // MARK: - Persistence
     //
     // All six files now go through `SchemaEnvelope` (audit 2.3) so future

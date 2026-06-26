@@ -155,3 +155,141 @@ struct ProjectDecisionsSection: View {
         draft = ""; draftWhy = ""; addingWhy = false
     }
 }
+
+/// Reference materials pinned to a feature/project: scoping docs, design files,
+/// competitor analyses — as web links or local files. The thing a PM "grabs and
+/// pulls from" while building. Inserted under the decisions section.
+struct ProjectReferenceMaterialsSection: View {
+    @ObservedObject var store: ActionItemStore
+    let projectID: String
+
+    @State private var expanded = true
+    @State private var draftTitle = ""
+    @State private var draftURL = ""
+    @State private var draftKind: DocumentReference.DocKind = .scopingDoc
+
+    private var docs: [DocumentReference] { store.documents(forProject: projectID) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            if expanded {
+                if !docs.isEmpty {
+                    FlowLayout(spacing: 8) {
+                        ForEach(docs) { chip($0) }
+                    }
+                }
+                addRow
+            }
+        }
+        .padding(.horizontal, 32).padding(.vertical, 12)
+    }
+
+    private var header: some View {
+        Button { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "paperclip").scaledFont(12).foregroundStyle(NDS.brand)
+                Text("Reference materials").font(NDS.sectionLabel).foregroundStyle(NDS.textSecondary)
+                if !docs.isEmpty { Text("\(docs.count)").scaledFont(11).foregroundStyle(NDS.textTertiary) }
+                Spacer()
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .scaledFont(10).foregroundStyle(NDS.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func chip(_ d: DocumentReference) -> some View {
+        Button { open(d) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: d.kind.systemImage).scaledFont(11).foregroundStyle(NDS.brand)
+                Text(d.title).scaledFont(12).foregroundStyle(NDS.textPrimary).lineLimit(1)
+                Text(d.kind.label).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(NDS.surface2, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(d.locationLabel)
+        .contextMenu {
+            Button { open(d) } label: { Label("Open", systemImage: "arrow.up.right.square") }
+            Button(role: .destructive) {
+                store.removeDocument(d.id, fromProject: projectID)
+            } label: { Label("Remove", systemImage: "trash") }
+        }
+    }
+
+    private var addRow: some View {
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(DocumentReference.DocKind.allCases) { k in
+                    Button { draftKind = k } label: {
+                        if draftKind == k { Label(k.label, systemImage: "checkmark") } else { Text(k.label) }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: draftKind.systemImage).scaledFont(11)
+                    Text(draftKind.label).scaledFont(12)
+                    Image(systemName: "chevron.down").scaledFont(8)
+                }
+                .foregroundStyle(NDS.textSecondary)
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+
+            TextField("Title (optional)", text: $draftTitle)
+                .textFieldStyle(.plain).scaledFont(12).frame(maxWidth: 160)
+            TextField("Paste a link…", text: $draftURL)
+                .textFieldStyle(.plain).scaledFont(12)
+                .onSubmit(addLink)
+            Button("Add link", action: addLink)
+                .buttonStyle(.plain).scaledFont(12).foregroundStyle(NDS.brand)
+                .disabled(draftURL.trimmingCharacters(in: .whitespaces).isEmpty)
+            Divider().frame(height: 16)
+            Button(action: addFile) {
+                Label("File…", systemImage: "folder").scaledFont(12).foregroundStyle(NDS.textSecondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(NDS.surface2, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func addLink() {
+        var url = draftURL.trimmingCharacters(in: .whitespaces)
+        guard !url.isEmpty else { return }
+        if !url.contains("://") { url = "https://" + url }
+        let title = draftTitle.trimmingCharacters(in: .whitespaces)
+        store.addDocument(.init(title: title.isEmpty ? url : title, kind: draftKind, payload: .url(url)),
+                          toProject: projectID)
+        draftTitle = ""; draftURL = ""
+    }
+
+    private func addFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Attach"
+        guard panel.runModal() == .OK else { return }
+        let title = draftTitle.trimmingCharacters(in: .whitespaces)
+        for url in panel.urls {
+            guard let bm = FileBookmark.make(for: url) else { continue }
+            let name = title.isEmpty || panel.urls.count > 1 ? url.lastPathComponent : title
+            store.addDocument(.init(title: name, kind: draftKind,
+                                    payload: .localFile(bookmark: bm, displayPath: url.path)),
+                              toProject: projectID)
+        }
+        draftTitle = ""
+    }
+
+    private func open(_ d: DocumentReference) {
+        switch d.payload {
+        case .url(let s):
+            if let u = URL(string: s) { NSWorkspace.shared.open(u) }
+        case .localFile(let bookmark, _):
+            FileBookmark.open(bookmark)
+        }
+    }
+}
