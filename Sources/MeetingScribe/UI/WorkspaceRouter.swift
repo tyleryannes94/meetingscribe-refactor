@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AppKit
 
 /// The single source of truth for top-level navigation and entity opening (D1-1).
 ///
@@ -218,6 +219,14 @@ final class WorkspaceRouter: ObservableObject {
         section = .people
     }
 
+    /// Open a project/feature page in the Tasks tab. Reuses the Tasks-route
+    /// mailbox, whose consumer (`ActionItemsView.consumePendingTasksRoute`) sets
+    /// `env.selectedProjectID` — so a real project id lands on its page.
+    func openProject(_ id: String) {
+        pendingTasksRoute = id
+        section = .actions
+    }
+
     /// Single entry point for opening any workspace entity (search palette,
     /// deep links, person/meeting backlinks). Meetings open in the Meetings
     /// tab detail; other kinds flip to their section. Replaces the old
@@ -239,8 +248,32 @@ final class WorkspaceRouter: ObservableObject {
         case .voiceNote:
             pendingRoute = .voiceNote(id)
             section = .notes
-        case .project, .actionItem:
+        case .project:
+            openProject(id)
+        case .actionItem:
+            pendingTaskID = id
             section = .actions
+        case .decision:
+            // Route to the decision's owner: task → project → meeting.
+            if let d = manager.decisions.decisions.first(where: { $0.id == id }) {
+                if let tid = d.taskID { pendingTaskID = tid; section = .actions }
+                else if let pid = d.projectID { openProject(pid) }
+                else if let mid = d.meetingID, let m = manager.meeting(forEntityID: mid) { openMeeting(m) }
+                else { section = .actions }
+            } else {
+                section = .actions
+            }
+        case .documentRef:
+            // id is "<projectID>::<docID>" — open the file/link in place (a
+            // side-effecting route, not navigation).
+            let parts = id.components(separatedBy: "::")
+            if parts.count == 2,
+               let doc = manager.actionItems.documents(forProject: parts[0]).first(where: { $0.id == parts[1] }) {
+                switch doc.payload {
+                case .url(let s): if let u = URL(string: s) { NSWorkspace.shared.open(u) }
+                case .localFile(let bookmark, _): FileBookmark.open(bookmark)
+                }
+            }
         case .person:
             openPerson(id)
         case .attachedNote:

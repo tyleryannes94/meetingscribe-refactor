@@ -8,9 +8,16 @@ import SwiftUI
 /// Decisions here are the same `Decision` records the rest of the app uses:
 /// some are auto-extracted from meetings (and assigned to this project), others
 /// are logged by hand via `DecisionStore.addManual(..., projectID:)`.
-struct ProjectDecisionsSection: View {
+struct DecisionLogSection: View {
+    /// What the decisions hang off — a project, a task, or an initiative.
+    enum Anchor: Equatable {
+        case project(String), task(String), initiative(String)
+    }
+
     @EnvironmentObject private var decisions: DecisionStore
-    let projectID: String
+    let anchor: Anchor
+    /// Compact mode trims the chrome for the narrower task/initiative panes.
+    var compact: Bool = false
 
     @State private var expanded = true
     @State private var draft = ""
@@ -18,7 +25,13 @@ struct ProjectDecisionsSection: View {
     @State private var addingWhy = false
 
     private var all: [Decision] {
-        decisions.decisions(forProject: projectID).sorted { $0.date > $1.date }
+        let list: [Decision]
+        switch anchor {
+        case .project(let id):    list = decisions.decisions(forProject: id)
+        case .task(let id):       list = decisions.decisions(forTask: id)
+        case .initiative(let id): list = decisions.decisions(forInitiative: id)
+        }
+        return list.sorted { $0.date > $1.date }
     }
     private var toMake: [Decision] { all.filter { $0.status == .open } }
     private var made: [Decision] { all.filter { $0.status == .resolved } }
@@ -40,7 +53,7 @@ struct ProjectDecisionsSection: View {
                 }
             }
         }
-        .padding(.horizontal, 32).padding(.vertical, 12)
+        .padding(.horizontal, compact ? 0 : 32).padding(.vertical, compact ? 4 : 12)
     }
 
     private var header: some View {
@@ -151,9 +164,20 @@ struct ProjectDecisionsSection: View {
         let text = draft.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         let why = draftWhy.trimmingCharacters(in: .whitespaces)
-        decisions.addManual(text: text, rationale: why.isEmpty ? nil : why, projectID: projectID)
+        let rationale = why.isEmpty ? nil : why
+        switch anchor {
+        case .project(let id):    decisions.addManual(text: text, rationale: rationale, projectID: id)
+        case .task(let id):       decisions.addManual(text: text, rationale: rationale, taskID: id)
+        case .initiative(let id): decisions.addManual(text: text, rationale: rationale, initiativeID: id)
+        }
         draft = ""; draftWhy = ""; addingWhy = false
     }
+}
+
+/// Thin wrapper kept for the project-page call sites.
+struct ProjectDecisionsSection: View {
+    let projectID: String
+    var body: some View { DecisionLogSection(anchor: .project(projectID)) }
 }
 
 /// Reference materials pinned to a feature/project: scoping docs, design files,

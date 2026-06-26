@@ -69,6 +69,8 @@ struct InitiativeDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     headerBlock(ini)
+                    DecisionLogSection(anchor: .initiative(initiativeID), compact: true)
+                        .padding(.horizontal, 20)
                     listSections.padding(.horizontal, 20)
                 }
                 .padding(.bottom, 28)

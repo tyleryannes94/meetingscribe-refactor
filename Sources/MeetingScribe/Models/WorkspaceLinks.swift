@@ -15,6 +15,7 @@ import Foundation
 /// scanning those same files for the target URL.
 enum WorkspaceEntityKind: String, Codable, Hashable, CaseIterable {
     case meeting, voiceNote, project, actionItem, person, attachedNote, chatQuery, tag
+    case decision, documentRef
 
     var label: String {
         switch self {
@@ -26,6 +27,8 @@ enum WorkspaceEntityKind: String, Codable, Hashable, CaseIterable {
         case .attachedNote: return "Note"
         case .chatQuery:    return "Ask Chat"
         case .tag:          return "Tag"
+        case .decision:     return "Decision"
+        case .documentRef:  return "Document"
         }
     }
 
@@ -39,6 +42,8 @@ enum WorkspaceEntityKind: String, Codable, Hashable, CaseIterable {
         case .attachedNote: return "doc.text"
         case .chatQuery:    return "sparkles"
         case .tag:          return "tag"
+        case .decision:     return "checkmark.seal"
+        case .documentRef:  return "paperclip"
         }
     }
 }

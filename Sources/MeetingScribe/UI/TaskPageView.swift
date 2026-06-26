@@ -70,6 +70,8 @@ struct TaskPageView: View {
                         .padding(.top, 14)
                     Divider().overlay(NDS.divider).padding(.vertical, 18)
                     subtasks(item)
+                    DecisionLogSection(anchor: .task(item.id), compact: true)
+                        .padding(.top, 18)
                     bodyEditor
                         .padding(.top, 18)
                     activitySection(item)
