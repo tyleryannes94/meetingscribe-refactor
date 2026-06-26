@@ -101,14 +101,26 @@ struct MainWindow: View {
     /// opened, then kept in the hierarchy and shown/hidden via opacity.
     /// A short cross-fade (0.15 s) smooths the transition.
     private var tabContent: some View {
-        ZStack {
-            ForEach(TopLevelSection.allCases) { s in
-                if visited.contains(s) {
-                    tabView(for: s)
-                        .opacity(section == s ? 1 : 0)
-                        .animation(NDS.motion(NDS.springStandard, reduce: reduceMotion), value: section)
-                        .allowsHitTesting(section == s)
-                        .zIndex(section == s ? 1 : 0)
+        // Force every keep-alive tab to exactly the width the HStack allocates to
+        // this column, top-leading, and clip overflow. Without this the ZStack
+        // sizes to the WIDEST visited tab's minimum (Tasks' 3-pane HStack), so
+        // once Tasks is visited every other tab — even a narrow-fitting Today —
+        // is proposed that oversized width and its content spills left UNDER the
+        // opaque nav rail when the window is narrow. Pinning each tab to
+        // geo.size.width keeps narrow-fitting tabs (Today's 1-column) perfect and
+        // makes a genuinely-too-wide tab clip cleanly on the trailing edge.
+        GeometryReader { geo in
+            ZStack {
+                ForEach(TopLevelSection.allCases) { s in
+                    if visited.contains(s) {
+                        tabView(for: s)
+                            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                            .clipped()
+                            .opacity(section == s ? 1 : 0)
+                            .animation(NDS.motion(NDS.springStandard, reduce: reduceMotion), value: section)
+                            .allowsHitTesting(section == s)
+                            .zIndex(section == s ? 1 : 0)
+                    }
                 }
             }
         }

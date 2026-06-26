@@ -50,7 +50,11 @@ struct MeetingScribeApp: App {
                 .environmentObject(manager.actionItems)
                 .environmentObject(manager.decisions)
                 .environmentObject(router)
-                .frame(minWidth: 720, minHeight: 560)
+                // Min width matches the 860px chat-rail breakpoint so the
+                // multi-pane screens (nav rail + a 2-pane split) always have room
+                // to lay out; below this the panes can't fit and content used to
+                // overflow under the rail (now also clipped in MainWindow).
+                .frame(minWidth: 860, minHeight: 560)
                 // Deep links: meetingscribe://<kind>/<id> from MCP, Shortcuts,
                 // Spotlight, or another app. The scheme is registered in
                 // Resources/Info.plist (CFBundleURLTypes). Routes through the
