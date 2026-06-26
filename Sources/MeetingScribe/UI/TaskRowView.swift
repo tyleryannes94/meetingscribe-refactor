@@ -324,8 +324,7 @@ struct ActionItemRow: View {
         if cal.isDateInToday(due) { return "Today" }
         if cal.isDateInTomorrow(due) { return "Tomorrow" }
         if cal.isDateInYesterday(due) { return "Yesterday" }
-        let f = DateFormatter(); f.dateFormat = "MMM d"
-        return f.string(from: due)
+        return AppDateFormat.monthDay.string(from: due)
     }
 
     private var dueColor: Color {
@@ -549,8 +548,7 @@ struct ActionItemRow: View {
 
     private func dateLabel(_ d: Date?, placeholder: String) -> String {
         guard let d else { return placeholder }
-        let f = DateFormatter(); f.dateFormat = "MMM d, yyyy"
-        return f.string(from: d)
+        return AppDateFormat.monthDayYear.string(from: d)
     }
 
     private func datePopover(current: Date?, onSet: @escaping (Date?) -> Void, onClose: @escaping () -> Void) -> some View {

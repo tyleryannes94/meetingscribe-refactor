@@ -156,8 +156,7 @@ final class ActionItemsViewModel {
             if cal.isDateInTomorrow(d) { return "Tomorrow" }
             if cal.isDateInYesterday(d) { return "Yesterday" }
             if d < now { return "Overdue" }
-            let f = DateFormatter(); f.dateFormat = "EEE, MMM d"
-            return f.string(from: d)
+            return AppDateFormat.weekdayMonthDay.string(from: d)
         }
     }
 

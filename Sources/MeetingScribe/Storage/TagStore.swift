@@ -78,18 +78,18 @@ final class TagStore: ObservableObject {
     }
 
     private func persist() {
+        // Encode on main (small), hand the bytes to the shared debounced,
+        // coalesced, off-main writer. `meetingTags`/`seriesTags` grow with every
+        // meeting ever recorded, and a tag toggle is a very common click — doing
+        // a synchronous `.atomic` write of the whole map on the UI thread each
+        // time was needless main-thread disk I/O.
         let p = Persisted(tags: allTags, meetingTags: meetingTags, seriesTags: seriesTags)
-        do {
-            try FileManager.default.createDirectory(at: AppSettings.shared.storageDir,
-                                                    withIntermediateDirectories: true)
-            let envelope = SchemaEnvelope(version: Self.schemaVersion, data: p)
-            let data = try SharedCoders.encoder(pretty: true, sorted: true).encode(envelope)
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            log.error("Failed to persist tags: \(error.localizedDescription, privacy: .public)")
-            ErrorReporter.shared.report(error, category: .storage,
-                                        context: ["phase": "persist-tags"])
+        let envelope = SchemaEnvelope(version: Self.schemaVersion, data: p)
+        guard let data = try? SharedCoders.encoder(pretty: true, sorted: true).encode(envelope) else {
+            log.error("Failed to encode tags for persistence")
+            return
         }
+        TaskPersistenceCoordinator.shared.write(data, to: fileURL)
     }
 
     // MARK: - Tag CRUD

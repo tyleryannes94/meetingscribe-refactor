@@ -242,37 +242,40 @@ final class MeetingStore {
     /// the 200 most-recent meetings from the last 90 days. Used by the iPhone
     /// Shortcuts integration to populate meeting-picker UIs without reading
     /// every individual `meeting.json`.
+    private static let recentISOFormatter = ISO8601DateFormatter()
+
     func updateRecentJSON(vaultURL: URL) {
         let cutoff = Date().addingTimeInterval(-90 * 24 * 3600)
         let allMeetings = cachedIndex() ?? []
-        let recent = allMeetings
-            .filter { $0.startDate > cutoff }
-            .sorted { $0.startDate > $1.startDate }
-            .prefix(200)
-            .map { m -> [String: Any] in
-                let hasSummary: Bool = {
-                    guard let rel = m.relativeFolderPath, !rel.isEmpty else { return false }
-                    let summaryURL = vaultURL
-                        .appendingPathComponent(rel)
-                        .appendingPathComponent("summary.md")
-                    return FileManager.default.fileExists(atPath: summaryURL.path)
-                }()
-                let stub: [String: Any] = [
+        // Snapshot the Sendable primitives on the caller's actor, then do the
+        // ~200 `fileExists` stats + JSON serialization + atomic write OFF main.
+        // `_recent.json` is a derived cache for the iPhone Shortcuts picker, so
+        // eventual consistency is fine — there's no reason this should ever block
+        // a `writeMeeting` on the UI thread.
+        let snap: [(id: String, title: String, date: Date, rel: String, attendees: [String])] =
+            allMeetings
+                .filter { $0.startDate > cutoff }
+                .sorted { $0.startDate > $1.startDate }
+                .prefix(200)
+                .map { ($0.id, $0.displayTitle, $0.startDate, $0.relativeFolderPath ?? "", $0.attendees) }
+        Task.detached(priority: .utility) {
+            let recent: [[String: Any]] = snap.map { m in
+                let hasSummary = !m.rel.isEmpty && FileManager.default.fileExists(
+                    atPath: vaultURL.appendingPathComponent(m.rel)
+                        .appendingPathComponent("summary.md").path)
+                return [
                     "id":           m.id,
-                    "title":        m.displayTitle,
-                    "startDate":    ISO8601DateFormatter().string(from: m.startDate),
-                    "folderPath":   m.relativeFolderPath ?? "",
+                    "title":        m.title,
+                    "startDate":    Self.recentISOFormatter.string(from: m.date),
+                    "folderPath":   m.rel,
                     "hasSummary":   hasSummary,
                     "participants": m.attendees
                 ]
-                return stub
             }
-        guard let data = try? JSONSerialization.data(
-            withJSONObject: Array(recent),
-            options: [.prettyPrinted]
-        ) else { return }
-        let url = vaultURL.appendingPathComponent("_recent.json")
-        try? data.write(to: url, options: .atomic)
+            guard let data = try? JSONSerialization.data(withJSONObject: recent,
+                                                         options: [.prettyPrinted]) else { return }
+            try? data.write(to: vaultURL.appendingPathComponent("_recent.json"), options: .atomic)
+        }
     }
 
     /// Low-level write — writes `meeting.json` in `dir` directly, no

@@ -379,8 +379,7 @@ struct MeetingCard: View {
     }
 
     private func timeOfDay() -> String {
-        let f = DateFormatter(); f.dateFormat = "h:mm a"
-        return f.string(from: meeting.startDate)
+        AppDateFormat.time12.string(from: meeting.startDate)
     }
     private func durationMinutes() -> Int {
         max(0, Int(meeting.endDate.timeIntervalSince(meeting.startDate) / 60))

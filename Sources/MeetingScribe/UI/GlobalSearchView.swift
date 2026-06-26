@@ -16,6 +16,10 @@ struct GlobalSearchView: View {
     @State private var results: [WorkspaceEntity] = []
     @State private var selection = 0
     @State private var filter: SearchFilter = .all
+    /// Debounce handle: each keystroke cancels the prior pending search so the
+    /// synchronous FTS + in-memory scan runs once after typing pauses, not on
+    /// every character (the search-typing freeze).
+    @State private var searchTask: Task<Void, Never>?
     @FocusState private var fieldFocused: Bool
 
     /// Tabs above the result list — scopes the search to one entity
@@ -64,8 +68,9 @@ struct GlobalSearchView: View {
             recompute()
             DispatchQueue.main.async { fieldFocused = true }
         }
-        .onChange(of: query) { _, _ in recompute() }
+        .onChange(of: query) { _, _ in scheduleRecompute() }
         .onChange(of: filter) { _, _ in recompute() }
+        .onDisappear { searchTask?.cancel() }
         .onKeyPress(.downArrow) { move(1); return .handled }
         .onKeyPress(.upArrow) { move(-1); return .handled }
         .onKeyPress(.escape) { isPresented = false; return .handled }
@@ -246,6 +251,19 @@ struct GlobalSearchView: View {
             } else { words.append(word) }
         }
         return (words.joined(separator: " "), scope)
+    }
+
+    /// Debounced entry point for query changes: cancel any pending search and
+    /// run `recompute()` ~180ms after the last keystroke. A single character
+    /// (or a cleared field) still feels instant; a fast burst collapses to one
+    /// FTS + scan pass instead of one per character.
+    private func scheduleRecompute() {
+        searchTask?.cancel()
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+            recompute()
+        }
     }
 
     private func recompute() {
