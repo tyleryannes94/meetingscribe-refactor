@@ -147,27 +147,39 @@ final class DecisionStore: ObservableObject {
     static let schemaVersion = 3
 
     private var fileURL: URL { AppSettings.shared.storageDir.appendingPathComponent("decisions.json") }
+    private var loadTask: Task<Void, Never>?
 
-    init() { load() }
-
-    private func load() {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
-        let decoded: [Decision]
-        do {
-            decoded = try SchemaEnvelope.decode([Decision].self, from: data,
-                                                currentVersion: Self.schemaVersion,
-                                                migrate: DecisionSchemaMigrations.decisions)
-        } catch {
-            log.error("Failed to decode decisions.json: \(error.localizedDescription, privacy: .public)")
-            return
+    init() {
+        // Decode OFF the main thread (mirrors ActionItemStore) — this store is
+        // built during MeetingManager init on the app-launch critical path, and a
+        // synchronous `Data(contentsOf:)` + decode here used to block first paint,
+        // worst on a cold / iCloud-evicted / scanner-intercepted vault.
+        let url = fileURL
+        let version = Self.schemaVersion
+        loadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let data = try? Data(contentsOf: url) else { return }
+            let decoded = (try? SchemaEnvelope.decode([Decision].self, from: data,
+                                                      currentVersion: version,
+                                                      migrate: DecisionSchemaMigrations.decisions))?
+                .sorted { $0.date > $1.date }
+            guard let decoded else { return }
+            await MainActor.run {
+                guard let self else { return }
+                // Don't clobber a decision logged in the tiny window before the
+                // async load resolved.
+                if self.decisions.isEmpty { self.decisions = decoded }
+            }
         }
-        decisions = decoded.sorted { $0.date > $1.date }
     }
 
+    /// Encode on main (cheap for this small array) and hand the bytes to the
+    /// shared debounced, coalesced, off-main writer — so rapid edits (status
+    /// flips, text edits, the extract pipeline) collapse into one background
+    /// atomic write instead of N synchronous full-file writes on the UI thread.
     private func save() {
         let env = SchemaEnvelope(version: Self.schemaVersion, data: decisions)
         guard let data = try? SharedCoders.encoder(pretty: true, sorted: true).encode(env) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        TaskPersistenceCoordinator.shared.write(data, to: fileURL)
     }
 
     /// Replace this meeting's decisions with those parsed from its summary.

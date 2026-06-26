@@ -41,6 +41,8 @@ struct TaskPageView: View {
     @FocusState private var subtaskFocused: Bool
     @State private var newLabel = ""
     @State private var saveTimer: Timer?
+    @State private var titleSaveTimer: Timer?
+    @State private var lastSavedTitle = ""
     @State private var dueShown = false
     @State private var startShown = false
     /// Inline source-meeting peek popover (4-4).
@@ -82,11 +84,11 @@ struct TaskPageView: View {
             .background(NDS.bg)
             .onAppear { load(item) }
             .onChange(of: itemID) { _, _ in
-                flush()
+                flush(); flushTitle()
                 if let i = store.items.first(where: { $0.id == itemID }) { load(i) }
             }
             .onChange(of: noteDraft) { _, _ in scheduleSave() }
-            .onDisappear { flush() }
+            .onDisappear { flush(); flushTitle() }
         } else {
             VStack(spacing: 8) {
                 Text("Task not found").font(.headline)
@@ -173,9 +175,7 @@ struct TaskPageView: View {
             TextField("Untitled", text: $titleDraft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .scaledFont(22, weight: .bold, kind: .display)
-                .onChange(of: titleDraft) { _, v in
-                    if v != item.title { store.setTitle(itemID, title: v) }
-                }
+                .onChange(of: titleDraft) { _, _ in scheduleTitleSave() }
         }
     }
 
@@ -784,6 +784,7 @@ struct TaskPageView: View {
 
     private func load(_ item: ActionItem) {
         titleDraft = item.title
+        lastSavedTitle = item.title
         assigneeDraft = item.owner ?? ""
         noteDraft = item.notes ?? ""
         lastSavedNote = noteDraft
@@ -799,6 +800,21 @@ struct TaskPageView: View {
         guard noteDraft != lastSavedNote else { return }
         store.setNotes(itemID, notes: noteDraft.isEmpty ? nil : noteDraft)
         lastSavedNote = noteDraft
+    }
+    /// Debounce the title the same way as notes — committing per keystroke ran a
+    /// full-collection encode + SQLite FTS reindex + changelog append on the main
+    /// actor on every character (the typing-lag freeze).
+    private func scheduleTitleSave() {
+        titleSaveTimer?.invalidate()
+        titleSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { _ in
+            Task { @MainActor in flushTitle() }
+        }
+    }
+    private func flushTitle() {
+        titleSaveTimer?.invalidate(); titleSaveTimer = nil
+        guard titleDraft != lastSavedTitle else { return }
+        store.setTitle(itemID, title: titleDraft)
+        lastSavedTitle = titleDraft
     }
 
     private func statusColor(_ s: ActionItem.Status) -> Color { NDS.status(s) }

@@ -896,11 +896,15 @@ final class WebAPI {
             } else {
                 return .error(405, "Method not allowed")
             }
-            let fresh = actionItems.items.first { $0.id == id }!
+            guard let fresh = actionItems.items.first(where: { $0.id == id }) else {
+                return .error(404, "Task not found")
+            }
             return .jsonObject(taskSummary(fresh))
         }
 
-        let item = actionItems.items.first(where: { $0.id == id })!
+        guard let item = actionItems.items.first(where: { $0.id == id }) else {
+            return .error(404, "Task not found")
+        }
         switch request.method {
         case "GET":
             return .jsonObject(taskSummary(item))

@@ -6,7 +6,8 @@ import Foundation
 /// (safe to delete; rebuilt by re-mapping).
 enum SpeakerMap {
     private static var dir: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let base = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support"))
             .appendingPathComponent("MeetingScribe/speakers", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
@@ -37,7 +38,8 @@ enum SpeakerMap {
 /// otherwise the label's mapping applies). Stored as a sibling sidecar.
 enum SegmentSpeakerMap {
     private static var dir: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let base = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support"))
             .appendingPathComponent("MeetingScribe/speakers", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base

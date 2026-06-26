@@ -25,6 +25,8 @@ struct InitiativeDetailView: View {
     @AppStorage private var layoutRaw: String
     @State private var nameDraft = ""
     @State private var bodyDraft = ""
+    @State private var bodySaveTimer: Timer?
+    @State private var lastSavedBody = ""
     @State private var descExpanded = false
     @State private var showIconPicker = false
     @State private var showTarget = false
@@ -46,11 +48,28 @@ struct InitiativeDetailView: View {
         if let ini = initiative {
             content(ini)
                 .background(NDS.bg)
-                .onAppear { nameDraft = ini.name; bodyDraft = ini.body }
+                .onAppear { nameDraft = ini.name; bodyDraft = ini.body; lastSavedBody = ini.body }
                 .onChange(of: initiativeID) { _, _ in
-                    nameDraft = ini.name; bodyDraft = ini.body; descExpanded = false
+                    flushBody()
+                    nameDraft = ini.name; bodyDraft = ini.body; lastSavedBody = ini.body; descExpanded = false
                 }
+                .onDisappear { flushBody() }
         }
+    }
+
+    /// Debounce the initiative body — the editor binding fired
+    /// `setInitiativeBody` (whole-DB encode + FTS reindex on main) per keystroke.
+    private func scheduleBodySave() {
+        bodySaveTimer?.invalidate()
+        bodySaveTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { _ in
+            Task { @MainActor in flushBody() }
+        }
+    }
+    private func flushBody() {
+        bodySaveTimer?.invalidate(); bodySaveTimer = nil
+        guard bodyDraft != lastSavedBody else { return }
+        store.setInitiativeBody(initiativeID, body: bodyDraft)
+        lastSavedBody = bodyDraft
     }
 
     @ViewBuilder
@@ -180,7 +199,7 @@ struct InitiativeDetailView: View {
             if descExpanded {
                 RichMarkdownEditor(text: Binding(
                     get: { bodyDraft },
-                    set: { bodyDraft = $0; store.setInitiativeBody(initiativeID, body: $0) }
+                    set: { bodyDraft = $0; scheduleBodySave() }
                 ), placeholder: "Describe this initiative — goals, scope, timeline…")
                 .frame(minHeight: 90, maxHeight: 180)
             }

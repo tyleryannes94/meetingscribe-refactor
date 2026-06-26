@@ -4,7 +4,8 @@ import Foundation
 /// known participants are auto-assigned in future meetings.
 struct GlobalSpeakerMap {
     private static let url: URL = {
-        let app = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let app = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support"))
             .appendingPathComponent("MeetingScribe", isDirectory: true)
         try? FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
         return app.appendingPathComponent("global-speakers.json")

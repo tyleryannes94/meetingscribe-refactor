@@ -211,6 +211,18 @@ enum MarkdownStyle {
     static let h5Font   = NSFont.systemFont(ofSize: 14, weight: .semibold)
     static let codeFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 
+    // Compile the inline/link regexes ONCE. `applyStyling` runs on every keystroke
+    // in every markdown editor; building six `NSRegularExpression`s from source
+    // each time was a measurable per-keystroke cost (regex compilation is
+    // expensive). These patterns are constant, so cache the compiled objects.
+    private static func compile(_ p: String) -> NSRegularExpression? { try? NSRegularExpression(pattern: p) }
+    private static let boldRE   = compile(#"\*\*([^*\n]+)\*\*"#)
+    private static let emStarRE = compile(#"(?<!\*)\*([^*\n]+)\*(?!\*)"#)
+    private static let emUndRE  = compile(#"_([^_\n]+)_"#)
+    private static let codeRE   = compile(#"`([^`\n]+)`"#)
+    private static let strikeRE = compile(#"~~([^~\n]+)~~"#)
+    private static let linkRE   = compile(#"\[([^\]\n]+)\]\(([^)\n]+)\)"#)
+
     static func applyStyling(to textView: NSTextView) {
         guard let storage = textView.textStorage else { return }
         let ns = storage.string as NSString
@@ -246,16 +258,16 @@ enum MarkdownStyle {
             applyBlockStyle(line: line, range: lineRange, storage: storage)
         }
 
-        applyInline(pattern: #"\*\*([^*\n]+)\*\*"#, font: NSFont.boldSystemFont(ofSize: 14),
+        applyInline(regex: boldRE, font: NSFont.boldSystemFont(ofSize: 14),
                     dimMarkers: true, markerLen: 2, in: storage, range: fullRange)
-        applyInline(pattern: #"(?<!\*)\*([^*\n]+)\*(?!\*)"#, font: italicFont(),
+        applyInline(regex: emStarRE, font: italicFont(),
                     dimMarkers: true, markerLen: 1, in: storage, range: fullRange)
-        applyInline(pattern: #"_([^_\n]+)_"#, font: italicFont(),
+        applyInline(regex: emUndRE, font: italicFont(),
                     dimMarkers: true, markerLen: 1, in: storage, range: fullRange)
-        applyInline(pattern: #"`([^`\n]+)`"#, font: codeFont,
+        applyInline(regex: codeRE, font: codeFont,
                     dimMarkers: true, markerLen: 1, in: storage, range: fullRange,
                     bgColor: NSColor.secondaryLabelColor.withAlphaComponent(0.1))
-        applyInline(pattern: #"~~([^~\n]+)~~"#, font: bodyFont,
+        applyInline(regex: strikeRE, font: bodyFont,
                     dimMarkers: true, markerLen: 2, in: storage, range: fullRange,
                     strikethrough: true)
         applyLinks(in: storage, range: fullRange)
@@ -333,7 +345,7 @@ enum MarkdownStyle {
         }
     }
 
-    private static func applyInline(pattern: String,
+    private static func applyInline(regex: NSRegularExpression?,
                                     font: NSFont,
                                     dimMarkers: Bool,
                                     markerLen: Int,
@@ -341,7 +353,7 @@ enum MarkdownStyle {
                                     range: NSRange,
                                     bgColor: NSColor? = nil,
                                     strikethrough: Bool = false) {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        guard let regex else { return }
         regex.enumerateMatches(in: storage.string, range: range) { match, _, _ in
             guard let r = match?.range else { return }
             storage.addAttribute(.font, value: font, range: r)
@@ -365,8 +377,7 @@ enum MarkdownStyle {
     }
 
     private static func applyLinks(in storage: NSTextStorage, range: NSRange) {
-        let pattern = #"\[([^\]\n]+)\]\(([^)\n]+)\)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        guard let regex = linkRE else { return }
         let text = storage.string
         regex.enumerateMatches(in: text, range: range) { match, _, _ in
             guard let r = match?.range,

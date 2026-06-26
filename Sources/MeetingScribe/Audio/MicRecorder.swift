@@ -59,13 +59,29 @@ final class MicRecorder {
             self.log.info("AVAudioEngineConfigurationChange — restarting mic capture")
             self.counters.incrementRestart(reason: "Audio device changed; restarted capture.")
             self.onHealthChange?(self)
-            self.engine?.stop()
+            // Tear the old engine down fully (drop its tap too) and retry after
+            // the route settles — reading the format the instant a config-change
+            // fires often yields a transient 0-Hz format. The guard in
+            // `startEngine` makes a too-early read recoverable; the delay lets it
+            // actually succeed instead of just not-crashing.
+            self.restartAfterSettle(outputURL: outputURL, phase: "mic-restart-config-change")
+        }
+    }
+
+    /// Fully tear down the current engine and restart into the same file after a
+    /// short settle delay. Used by the config-change observer and the stall
+    /// watchdog. Runs on the main thread (both callers do).
+    private func restartAfterSettle(outputURL: URL, phase: String) {
+        engine?.inputNode.removeTap(onBus: 0)
+        engine?.stop()
+        engine = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self else { return }
             do {
                 try self.startEngine(outputURL: outputURL, reopenFile: false)
             } catch {
-                self.log.error("Mic restart after config change failed: \(error.localizedDescription, privacy: .public)")
-                ErrorReporter.shared.reportAsync(error, category: .audio,
-                                                 context: ["phase": "mic-restart-config-change"])
+                self.log.error("Mic restart failed (\(phase, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+                ErrorReporter.shared.reportAsync(error, category: .audio, context: ["phase": phase])
                 self.counters.setLastError("Mic restart failed: \(error.localizedDescription)")
                 self.onHealthChange?(self)
             }
@@ -81,6 +97,22 @@ final class MicRecorder {
         Self.applyPreferredInput(to: input, log: log)
         let inputFormat = input.outputFormat(forBus: 0)
 
+        // CRITICAL: `installTap` asserts (throws an Objective-C NSException, which
+        // Swift `do/catch` CANNOT catch → SIGABRT) on a 0-channel / 0-Hz format.
+        // A Bluetooth/AirPods route change posts `.AVAudioEngineConfigurationChange`
+        // and, for a brief window, `outputFormat(forBus:)` returns a transient
+        // invalid format. The `makeMicFile` guard below only runs on the
+        // file-reopen path, so the restart callers (config-change + stall
+        // watchdog, both `reopenFile: false`) used to skip it and crash. Validate
+        // here on EVERY path and throw a *catchable* Swift error so those callers
+        // can tear down and retry instead of aborting the whole app.
+        guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
+            throw NSError(domain: "MeetingScribe.Mic", code: 12, userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Mic input not ready (\(inputFormat.channelCount)ch @ \(Int(inputFormat.sampleRate))Hz) — device still settling."
+            ])
+        }
+
         if reopenFile || file == nil {
             file = try Self.makeMicFile(outputURL: outputURL,
                                         inputFormat: inputFormat,
@@ -88,6 +120,9 @@ final class MicRecorder {
                                         counters: counters)
         }
 
+        // Idempotent: remove any prior tap before installing so a reused input
+        // node can never hit "a tap is already installed on bus 0".
+        input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
             // Cheap work that has to run on the audio thread:
@@ -201,16 +236,7 @@ final class MicRecorder {
         counters.incrementRestart(reason: "Mic stalled for \(Int(age))s; restarting.")
         onHealthChange?(self)
         guard let url = outputURL else { return }
-        engine.stop()
-        do {
-            try startEngine(outputURL: url, reopenFile: false)
-        } catch {
-            log.error("Mic stall recovery failed: \(error.localizedDescription, privacy: .public)")
-            ErrorReporter.shared.reportAsync(error, category: .audio,
-                                             context: ["phase": "mic-stall-recovery"])
-            counters.setLastError("Mic stall recovery failed: \(error.localizedDescription)")
-            onHealthChange?(self)
-        }
+        restartAfterSettle(outputURL: url, phase: "mic-stall-recovery")
     }
 
     func stop() {
