@@ -62,6 +62,12 @@ final class QuickDictation: ObservableObject {
     /// `finish()` so the paste step is skipped for exactly this capture.
     private var forcedSaveOnly = false
 
+    /// True when recording began while an "always-polished" in-app field (the
+    /// Brain Dump composer or a Tasks quick-add input) was focused. Captured at
+    /// `start()` so the intent is locked even if focus flickers during the async
+    /// transcription, and read in `finish()` to force the polished version.
+    private var forcePolishedCapture = false
+
     private let recorder = MicOnlyRecorder()
     private let transcriber = QuickTranscribe()
     private let polisher = TranscriptPolisher()
@@ -199,6 +205,9 @@ final class QuickDictation: ObservableObject {
         // can show it the instant recording begins. Holding Shift forces a
         // save-only capture even when auto-paste is the persistent default.
         forcedSaveOnly = NSEvent.modifierFlags.contains(.shift)
+        // Lock in whether the focused field always wants polished text (Brain
+        // Dump / Tasks input), captured now while that field is still focused.
+        forcePolishedCapture = DictationFieldContext.shared.preferPolished
         if AppSettings.shared.dictationAutoPaste && !forcedSaveOnly {
             let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "the active app"
             destination = .paste(appName: app)
@@ -294,7 +303,11 @@ final class QuickDictation: ObservableObject {
             }
         }
 
-        let usePolished = AppSettings.shared.dictationUsePolished
+        // Use the polished version when the global default asks for it OR when
+        // this capture targeted an always-polished field (Brain Dump / Tasks
+        // input) — those feed the local planner/extractor, which does less work
+        // on already-cleaned text.
+        let usePolished = AppSettings.shared.dictationUsePolished || forcePolishedCapture
         // The persistent default, overridden to false when this one capture was
         // forced save-only (Shift held at start).
         let autoPaste = AppSettings.shared.dictationAutoPaste && !forcedSaveOnly

@@ -31,6 +31,10 @@ struct QuickAddTaskField: View {
     @State private var draft: String = ""
     @State private var expanded: Bool = false
     @FocusState private var focused: Bool
+    /// Per-instance id so several quick-add fields (List, every Board column,
+    /// Today) register independently in `DictationFieldContext` — focus
+    /// hand-offs between them stay correct.
+    @State private var dictationFieldID = UUID().uuidString
 
     var body: some View {
         Group {
@@ -77,11 +81,15 @@ struct QuickAddTaskField: View {
                     expanded = false
                 }
                 .onChange(of: focused) { _, isFocused in
+                    // Dictation into a Tasks quick-add always uses the polished
+                    // transcript (it's parsed by the task extractor).
+                    DictationFieldContext.shared.setFocused(dictationFieldID, isFocused)
                     if !isFocused && collapseOnBlur
                         && draft.trimmingCharacters(in: .whitespaces).isEmpty {
                         expanded = false
                     }
                 }
+                .onDisappear { DictationFieldContext.shared.setFocused(dictationFieldID, false) }
             if !draft.trimmingCharacters(in: .whitespaces).isEmpty {
                 Button("Add", action: commit)
                     .buttonStyle(.borderless)

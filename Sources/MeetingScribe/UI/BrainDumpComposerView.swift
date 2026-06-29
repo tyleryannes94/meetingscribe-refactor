@@ -76,6 +76,9 @@ struct BrainDumpComposerView: View {
                     debouncer.send(newValue)
                     detectURLs(in: newValue)
                 }
+                // Dictation into the brain dump always pastes the polished
+                // transcript — it's piped straight to the local planner.
+                .dictationPrefersPolished(id: "brainDump.composer", focused: bodyFocused)
 
             if bufferText.isEmpty {
                 Text("Dump everything on your mind — thoughts, links, follow-ups, the messy week. Paste a URL and the planner will read it.\n\nThe planner turns this into tasks and 25-minute focus blocks you can accept.")

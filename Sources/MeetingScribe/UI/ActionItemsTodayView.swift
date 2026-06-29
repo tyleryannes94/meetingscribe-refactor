@@ -190,6 +190,7 @@ extension ActionItemsView {
                 .textFieldStyle(.plain).font(NDS.body)
                 .focused($todayQuickAddFocused)
                 .onSubmit { commitTodayQuickAdd() }
+                .dictationPrefersPolished(id: "tasks.today.quickAdd", focused: todayQuickAddFocused)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
