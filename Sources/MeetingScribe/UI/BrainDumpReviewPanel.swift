@@ -161,9 +161,22 @@ private struct TaskDraftCard: View {
                 if let projectName = draft.suggestedProjectName ?? actionItems.project(id: draft.suggestedProjectID ?? "")?.name {
                     NotionChip(projectName, color: NDS.selectColor(projectName), systemImage: "folder")
                 }
+                if let initiative = draft.suggestedInitiativeName, !initiative.isEmpty {
+                    NotionChip(initiative, color: NDS.selectColor(initiative), systemImage: "flag.fill")
+                }
                 if let due = draft.dueDate {
                     Text(Self.dueLabel(due)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                 }
+            }
+            if let tags = draft.suggestedLabelNames, !tags.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(tags, id: \.self) { tag in
+                        NotionChip(tag, color: NDS.selectColor(tag), systemImage: "tag")
+                    }
+                }
+            }
+            if let relation = draft.relation {
+                relationBanner(relation)
             }
             if !draft.sourceURLs.isEmpty {
                 FlowText(urls: draft.sourceURLs)
@@ -231,7 +244,7 @@ private struct TaskDraftCard: View {
                 .lineLimit(2...4)
         } else if case .pending = draft.state {
             HStack(spacing: 6) {
-                Button { accept() } label: { Label("Accept", systemImage: "checkmark") }
+                Button { accept() } label: { Label(acceptLabel, systemImage: acceptGlyph) }
                     .buttonStyle(MSPrimaryButtonStyle())
                 Button { beginEdit() } label: { Label("Edit", systemImage: "pencil") }
                     .buttonStyle(MSSecondaryButtonStyle())
@@ -261,6 +274,60 @@ private struct TaskDraftCard: View {
         }
     }
 
+    // MARK: - Relation (dedup) banner + accept labels
+
+    @ViewBuilder
+    private func relationBanner(_ relation: TaskRelation) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: relationGlyph(relation.kind)).scaledFont(11)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(relationVerb(relation.kind)) “\(relation.existingTaskTitle)”")
+                    .font(NDS.tiny.weight(.semibold)).lineLimit(2)
+                if let reason = relation.reason, !reason.isEmpty {
+                    Text(reason).font(NDS.tiny).foregroundStyle(NDS.textTertiary).lineLimit(2)
+                }
+            }
+            Spacer()
+        }
+        .foregroundStyle(NDS.textSecondary)
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(NDS.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: NDS.radius))
+    }
+
+    private func relationGlyph(_ kind: TaskRelation.Kind) -> String {
+        switch kind {
+        case .subtask: return "arrow.turn.down.right"
+        case .merge:   return "arrow.triangle.merge"
+        case .related: return "link"
+        }
+    }
+
+    private func relationVerb(_ kind: TaskRelation.Kind) -> String {
+        switch kind {
+        case .subtask: return "Add as subtask of"
+        case .merge:   return "Merge into"
+        case .related: return "Link to"
+        }
+    }
+
+    private var acceptLabel: String {
+        switch draft.relation?.kind {
+        case .subtask: return "Add subtask"
+        case .merge:   return "Merge"
+        case .related: return "Add & link"
+        case nil:      return "Accept"
+        }
+    }
+
+    private var acceptGlyph: String {
+        switch draft.relation?.kind {
+        case .subtask: return "arrow.turn.down.right"
+        case .merge:   return "arrow.triangle.merge"
+        case .related: return "link"
+        case nil:      return "checkmark"
+        }
+    }
+
     private func beginEdit() {
         editedTitle = draft.title
         editedPriority = draft.priority
@@ -284,16 +351,81 @@ private struct TaskDraftCard: View {
     }
 
     private func accept() {
+        // Dedup relations short-circuit the normal create path.
+        if let relation = draft.relation,
+           actionItems.items.contains(where: { $0.id == relation.existingTaskID }) {
+            switch relation.kind {
+            case .subtask:
+                // Lightweight subtask under the existing task — no new top-level task.
+                actionItems.addSubtask(relation.existingTaskID, title: draft.title)
+                store.setDraftState(sessionID, draft.id, .accepted(externalID: relation.existingTaskID))
+                return
+            case .merge:
+                // Fold this item's detail into the existing task's notes.
+                mergeIntoExisting(relation.existingTaskID)
+                store.setDraftState(sessionID, draft.id, .accepted(externalID: relation.existingTaskID))
+                return
+            case .related:
+                break // fall through: create the task, then cross-link below.
+            }
+        }
+
         let newTask = actionItems.createTask(
             title: draft.title,
             projectID: draft.suggestedProjectID,
             priority: draft.priority
         )
         if let due = draft.dueDate { actionItems.setDueDate(newTask.id, dueDate: due) }
-        if let notes = draft.notes, !notes.isEmpty {
-            actionItems.setNotes(newTask.id, notes: notes)
+        applyLabels(to: newTask.id)
+
+        var notes = draft.notes ?? ""
+        // For a "related" proposal, cross-link both tasks via notes (no
+        // first-class relation field exists yet).
+        if let relation = draft.relation, relation.kind == .related,
+           actionItems.items.contains(where: { $0.id == relation.existingTaskID }) {
+            let link = taskLinkMarkdown(id: relation.existingTaskID, title: relation.existingTaskTitle)
+            notes = appendLine(to: notes, "Related: \(link)")
+            // Back-link from the existing task to the new one.
+            let backNotes = appendLine(to: existingNotes(relation.existingTaskID),
+                                       "Related: \(taskLinkMarkdown(id: newTask.id, title: draft.title))")
+            actionItems.setNotes(relation.existingTaskID, notes: backNotes)
         }
+        if !notes.isEmpty { actionItems.setNotes(newTask.id, notes: notes) }
         store.setDraftState(sessionID, draft.id, .accepted(externalID: newTask.id))
+    }
+
+    /// Resolve each suggested tag name to an existing label (case-insensitive)
+    /// or create it, then attach it to the task.
+    private func applyLabels(to taskID: String) {
+        guard let names = draft.suggestedLabelNames else { return }
+        for name in names {
+            let trimmed = name.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let label = actionItems.labels.first { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
+                ?? actionItems.createLabel(name: trimmed)
+            actionItems.toggleLabel(taskID, labelID: label.id)
+        }
+    }
+
+    /// Append this draft's title + notes to an existing task's notes (the merge).
+    private func mergeIntoExisting(_ taskID: String) {
+        var merged = existingNotes(taskID)
+        merged = appendLine(to: merged, "• \(draft.title)")
+        if let n = draft.notes, !n.isEmpty { merged = appendLine(to: merged, "  \(n)") }
+        actionItems.setNotes(taskID, notes: merged)
+    }
+
+    private func existingNotes(_ taskID: String) -> String {
+        actionItems.items.first { $0.id == taskID }?.notes ?? ""
+    }
+
+    private func appendLine(to base: String, _ line: String) -> String {
+        base.isEmpty ? line : base + "\n" + line
+    }
+
+    private func taskLinkMarkdown(id: String, title: String) -> String {
+        let url = WorkspaceLink.url(kind: .actionItem, id: id)
+        return "[\(WorkspaceLink.sanitizeTitle(title))](\(url.absoluteString))"
     }
 
     private static func dueLabel(_ d: Date) -> String {

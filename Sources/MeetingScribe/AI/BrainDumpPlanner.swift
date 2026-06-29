@@ -26,6 +26,14 @@ final class BrainDumpPlanner {
         store.setState(sessionID, .planning)
         progress(.started)
 
+        let openTasks = actionItems.items
+            .filter { $0.deletedAt == nil && $0.status != .completed }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(40)
+            .map { (id: $0.id,
+                    title: $0.title,
+                    project: $0.projectID.flatMap { actionItems.project(id: $0)?.name } ?? "") }
+
         let system = BrainDumpPrompts.systemPrompt(
             now: Date(),
             userName: AppSettings.shared.userName,
@@ -33,6 +41,11 @@ final class BrainDumpPlanner {
             projects: actionItems.projects
                 .filter { $0.status != .archived }
                 .map { (id: $0.id, name: $0.name) },
+            initiatives: actionItems.initiatives
+                .filter { $0.status != .archived }
+                .map { $0.name },
+            tags: actionItems.labels.map { $0.name },
+            openTasks: Array(openTasks),
             focusMinutes: AppSettings.shared.brainDumpDefaultFocusMinutes,
             workdayStartHour: AppSettings.shared.brainDumpWorkdayStartHour,
             workdayEndHour: AppSettings.shared.brainDumpWorkdayEndHour

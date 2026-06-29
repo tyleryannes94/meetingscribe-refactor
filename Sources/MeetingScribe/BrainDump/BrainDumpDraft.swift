@@ -92,6 +92,25 @@ enum DraftState: Codable, Hashable {
     }
 }
 
+/// How a proposed task relates to a task that ALREADY exists. Lets the planner
+/// dedup against the live task list instead of blindly creating duplicates:
+///   - `.subtask`  — this item is a smaller step of `existingTaskID`; accepting
+///                   adds it as a subtask under that task (no new top-level task).
+///   - `.merge`    — this item is essentially the same as `existingTaskID`;
+///                   accepting folds its detail into that task's notes (no
+///                   duplicate created).
+///   - `.related`  — distinct but connected; accepting creates the new task AND
+///                   cross-links both tasks' notes.
+/// Optional on `TaskDraft` (nil ⇒ a plain new task), so older persisted drafts
+/// decode unchanged.
+struct TaskRelation: Codable, Hashable {
+    enum Kind: String, Codable { case subtask, merge, related }
+    var kind: Kind
+    var existingTaskID: String
+    var existingTaskTitle: String
+    var reason: String?
+}
+
 /// Task draft — what the planner thinks the user should add to their tasks.
 /// Mirrors the shape of `ExtractedTaskDraft` so the UI can render either kind
 /// of draft with the same card.
@@ -104,6 +123,16 @@ struct TaskDraft: Codable, Identifiable, Hashable {
     var dueDate: Date?
     var suggestedProjectID: String?
     var suggestedProjectName: String?
+    /// Tags the planner recommends. Names (not ids) so they survive decode even
+    /// if a label is renamed; resolved-or-created at accept time. Optional so
+    /// older persisted drafts (which had no tags) still decode.
+    var suggestedLabelNames: [String]?
+    /// Initiative the suggested project rolls up to — display-only context on
+    /// the card (initiatives attach to projects, not tasks). Optional for decode.
+    var suggestedInitiativeName: String?
+    /// Dedup verdict against the live task list (subtask / merge / related), or
+    /// nil for a plain new task. Optional so older persisted drafts decode.
+    var relation: TaskRelation?
     /// Notes the planner attached (rationale, source citations, etc.).
     var notes: String?
     /// URLs the planner cited as the source of this task — shown as link chips
@@ -117,6 +146,9 @@ struct TaskDraft: Codable, Identifiable, Hashable {
          dueDate: Date? = nil,
          suggestedProjectID: String? = nil,
          suggestedProjectName: String? = nil,
+         suggestedLabelNames: [String]? = nil,
+         suggestedInitiativeName: String? = nil,
+         relation: TaskRelation? = nil,
          notes: String? = nil,
          sourceURLs: [URL] = [],
          state: DraftState = .pending) {
@@ -126,6 +158,9 @@ struct TaskDraft: Codable, Identifiable, Hashable {
         self.dueDate = dueDate
         self.suggestedProjectID = suggestedProjectID
         self.suggestedProjectName = suggestedProjectName
+        self.suggestedLabelNames = suggestedLabelNames
+        self.suggestedInitiativeName = suggestedInitiativeName
+        self.relation = relation
         self.notes = notes
         self.sourceURLs = sourceURLs
         self.state = state

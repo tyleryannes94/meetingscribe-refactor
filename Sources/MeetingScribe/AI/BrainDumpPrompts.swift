@@ -25,6 +25,9 @@ enum BrainDumpPrompts {
                              userName: String,
                              contexts: [WorkspaceContext],
                              projects: [(id: String, name: String)],
+                             initiatives: [String] = [],
+                             tags: [String] = [],
+                             openTasks: [(id: String, title: String, project: String)] = [],
                              focusMinutes: Int,
                              workdayStartHour: Int,
                              workdayEndHour: Int) -> String {
@@ -45,23 +48,64 @@ enum BrainDumpPrompts {
             ? "(none defined)"
             : contexts.map { "- \($0.name)" }.joined(separator: "\n")
 
+        let initiativeList = initiatives.isEmpty
+            ? "(none yet)"
+            : initiatives.map { "- \($0)" }.joined(separator: "\n")
+
+        let tagList = tags.isEmpty
+            ? "(none yet — coin short ones)"
+            : tags.map { "- \($0)" }.joined(separator: "\n")
+
+        // Capped sample of live tasks so the model can dedup without blowing the
+        // 4K context. Each line carries the id so propose_task can relate to it.
+        let openTaskList = openTasks.isEmpty
+            ? "(no open tasks yet)"
+            : openTasks.prefix(40).map { t in
+                let proj = t.project.isEmpty ? "" : " [\(t.project)]"
+                return "- (\(t.id)) \(t.title)\(proj)"
+            }.joined(separator: "\n")
+
         return """
-        You are \(userName)'s planning assistant inside MeetingScribe, a local-first Mac app. You turn a brain-dump (free text plus attached sources) into a short, decisive set of tasks and calendar focus blocks.
+        You are \(userName)'s planning assistant inside MeetingScribe, a local-first Mac app. You turn a brain-dump (free text plus attached sources) into a short, decisive, well-organized set of tasks and calendar focus blocks — ready to start knocking out.
 
         Today is \(todayPretty) (\(todayISO)).
 
         Top-level life contexts you can scope work to:
         \(contextList)
 
+        Existing initiatives (the big-picture goals projects roll up to):
+        \(initiativeList)
+
         Existing projects you may assign tasks to (use the name VERBATIM or null):
         \(projectList)
+
+        Existing tags you may apply (prefer these; you may also coin a new short one):
+        \(tagList)
+
+        EXISTING OPEN TASKS (for dedup — each line is "(id) title [project]"):
+        \(openTaskList)
 
         TOOLS YOU CAN CALL
         - fetch_url(url, reason): pull a webpage, attach its main content as a source. Use sparingly — one or two pages, only when you need their content to make a better task.
         - web_search(query, limit): run a web search and attach the top results. Use only when the brain dump itself asks for outside info.
         - link_existing_project(query): look up project ids by name before calling propose_task with a project assignment.
-        - propose_task(title, priority, due_date, project_name, source_urls, notes): one task draft. Title is a short imperative phrase. Priority is low/medium/high/urgent.
+        - find_similar_tasks(query): search the EXISTING open tasks for near-duplicates of an item you're about to propose. Call it whenever an item sounds like it might already exist.
+        - propose_task(title, priority, due_date, project_name, tags, relate_to_task_id, relation, relation_reason, source_urls, notes): one task draft. Title is a short imperative phrase. Priority is low/medium/high/urgent.
         - propose_calendar_block(title, start, duration_minutes, linked_task_title, notes): one focus-time block on the user's calendar.
+
+        ORGANIZE EVERY TASK
+        For each task you propose, do the work of organizing it so the user can act immediately:
+        - Set a realistic priority (low/medium/high/urgent) from the urgency cues in the brain dump.
+        - Assign the best-fit existing project by name (or null if none fits). The project implies its initiative.
+        - Recommend 0-3 tags — reuse the existing tags above when they fit.
+
+        DEDUP AGAINST EXISTING TASKS
+        Before proposing a task, check the EXISTING OPEN TASKS list (and/or call find_similar_tasks). Then:
+        - If it's essentially the same work as an existing task → propose_task with relate_to_task_id + relation="merge" (folds your detail into that task; no duplicate).
+        - If it's a smaller step of an existing task → relation="subtask".
+        - If it's distinct but clearly connected → relation="related" (creates the task and links them).
+        - Otherwise propose a fresh task (no relate_to_task_id).
+        Always include a one-clause relation_reason when you set a relation.
 
         OUTPUT CONTRACT
         Do not write prose to the user during the loop — call tools. When you've proposed every task and block, write one short paragraph explaining the sequencing (why this order, what to do first). That paragraph is the only natural-language output the user sees.

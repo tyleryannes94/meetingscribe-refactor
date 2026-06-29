@@ -63,8 +63,18 @@ final class BrainDumpToolHandlers {
                         "query": .object(["type": .string("string")])
                     ])
                   ])),
+            .init(name: "find_similar_tasks",
+                  description: "Search the user's EXISTING open tasks for ones similar to an item you're about to propose, so you can dedup. Returns up to 6 matches with their id, title, project, and status. If a match is essentially the same work, propose_task with relate_to_task_id + relation='merge'; if your item is a smaller step of it, use relation='subtask'; if merely connected, use relation='related'.",
+                  input_schema: .object([
+                    "type": .string("object"),
+                    "required": .array([.string("query")]),
+                    "properties": .object([
+                        "query": .object(["type": .string("string"), "description": .string("Keywords from the task you're considering, e.g. 'cancel flow documentation'.")]),
+                        "limit": .object(["type": .string("integer"), "default": .int(6)])
+                    ])
+                  ])),
             .init(name: "propose_task",
-                  description: "Propose one task for the user to review. The user accepts/edits/rejects in the review pane; accepted tasks are created in MeetingScribe's task store.",
+                  description: "Propose one task for the user to review. The user accepts/edits/rejects in the review pane; accepted tasks are created in MeetingScribe's task store. Always set a priority and the best-fit project (or null), and recommend 0-3 tags. If find_similar_tasks turned up a duplicate or parent, set relate_to_task_id + relation instead of creating a redundant task.",
                   input_schema: .object([
                     "type": .string("object"),
                     "required": .array([.string("title")]),
@@ -73,6 +83,10 @@ final class BrainDumpToolHandlers {
                         "priority": .object(["type": .string("string"), "description": .string("low | medium | high | urgent")]),
                         "due_date": .object(["type": .string("string"), "description": .string("YYYY-MM-DD or null")]),
                         "project_name": .object(["type": .string("string"), "description": .string("Must match an existing project name exactly, or null.")]),
+                        "tags": .object(["type": .string("array"), "items": .object(["type": .string("string")]), "description": .string("0-3 short tag names. Prefer existing tags listed in the system prompt; you may also coin a new short tag.")]),
+                        "relate_to_task_id": .object(["type": .string("string"), "description": .string("Id of an EXISTING task (from find_similar_tasks) this item relates to, or null for a brand-new task.")]),
+                        "relation": .object(["type": .string("string"), "description": .string("subtask | merge | related — required when relate_to_task_id is set. subtask = a step of that task; merge = same work (folds into it, no new task); related = distinct but linked.")]),
+                        "relation_reason": .object(["type": .string("string"), "description": .string("One short clause explaining the link, shown to the user.")]),
                         "source_urls": .object(["type": .string("array"), "items": .object(["type": .string("string")])]),
                         "notes": .object(["type": .string("string")])
                     ])
@@ -101,6 +115,7 @@ final class BrainDumpToolHandlers {
         case "fetch_url":               return await fetchURL(input)
         case "web_search":              return await webSearch(input)
         case "link_existing_project":   return linkProject(input)
+        case "find_similar_tasks":      return findSimilarTasks(input)
         case "propose_task":            return proposeTask(input)
         case "propose_calendar_block":  return proposeBlock(input)
         default:                        return nil
@@ -214,6 +229,52 @@ final class BrainDumpToolHandlers {
         """)
     }
 
+    // MARK: - find_similar_tasks
+
+    /// Search live (non-deleted, non-completed) tasks by keyword overlap so the
+    /// planner can dedup before proposing. Cheap word-overlap scoring — the goal
+    /// is a short candidate list the model reasons over, not perfect ranking.
+    private func findSimilarTasks(_ input: [String: JSONValue]) -> Result<String, Error> {
+        let query = (input["query"]?.asString ?? "")
+        let limit = max(1, min(input["limit"]?.asInt ?? 6, 10))
+        let qWords = Set(Self.tokenize(query))
+        guard !qWords.isEmpty else {
+            return .success(#"{"ok":true,"matches":[]}"#)
+        }
+        let scored: [(item: ActionItem, score: Int)] = actionItems.items
+            .filter { $0.deletedAt == nil && $0.status != .completed }
+            .map { item in
+                let tWords = Set(Self.tokenize(item.title))
+                var score = qWords.intersection(tWords).count
+                // Bonus when the whole query phrase appears in the title.
+                if item.title.lowercased().contains(query.lowercased()) { score += 2 }
+                return (item, score)
+            }
+            .filter { $0.score > 0 }
+            .sorted { $0.score > $1.score }
+        let rows = scored.prefix(limit).map { pair -> String in
+            let item = pair.item
+            let project = item.projectID.flatMap { actionItems.project(id: $0)?.name } ?? ""
+            return """
+            {"id":"\(escape(item.id))","title":"\(escape(item.title))","project":"\(escape(project))","status":"\(escape(item.status.rawValue))"}
+            """
+        }
+        return .success("""
+        {"ok":true,"matches":[\(rows.joined(separator: ","))]}
+        """)
+    }
+
+    private static func tokenize(_ s: String) -> [String] {
+        s.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count > 2 && !Self.stopWords.contains($0) }
+    }
+
+    private static let stopWords: Set<String> = [
+        "the", "and", "for", "with", "that", "this", "from", "into", "any",
+        "all", "out", "are", "was", "has", "have", "will", "task", "todo"
+    ]
+
     // MARK: - propose_task
 
     private func proposeTask(_ input: [String: JSONValue]) -> Result<String, Error> {
@@ -233,20 +294,55 @@ final class BrainDumpToolHandlers {
         let sourceURLs = urlStrings.compactMap { URL(string: $0) }
         let notes = input["notes"]?.asString
 
+        // Tags (names) — keep up to 3, trimmed and de-blanked.
+        let tags: [String] = {
+            guard case let .array(items) = (input["tags"] ?? .null) else { return [] }
+            return items.compactMap { $0.asString?.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .prefix(3).map { $0 }
+        }()
+
+        // Initiative the suggested project rolls up to (display-only).
+        let initiativeName: String? = projectID
+            .flatMap { actionItems.project(id: $0)?.initiativeID }
+            .flatMap { actionItems.initiative(id: $0)?.name }
+
+        // Dedup relation against an existing task, if the model supplied one.
+        let relation = resolveRelation(input)
+
         let draft = TaskDraft(
             title: title,
             priorityRaw: priorityRaw,
             dueDate: dueDate,
             suggestedProjectID: projectID,
             suggestedProjectName: projectName,
+            suggestedLabelNames: tags.isEmpty ? nil : tags,
+            suggestedInitiativeName: initiativeName,
+            relation: relation,
             notes: notes,
             sourceURLs: sourceURLs
         )
         store.appendDraft(sessionID, .task(draft))
         progress(.draftProposed(kind: "task", label: title))
         return .success("""
-        {"ok":true,"id":"\(draft.id.uuidString)","title":"\(escape(title))"}
+        {"ok":true,"id":"\(draft.id.uuidString)","title":"\(escape(title))","relation":"\(relation?.kind.rawValue ?? "new")"}
         """)
+    }
+
+    /// Build a `TaskRelation` from the model's `relate_to_task_id` + `relation`,
+    /// resolving the target task's current title. Returns nil unless the id
+    /// names a real live task and the relation kind is recognised.
+    private func resolveRelation(_ input: [String: JSONValue]) -> TaskRelation? {
+        guard let rawID = input["relate_to_task_id"]?.asString?.trimmingCharacters(in: .whitespaces),
+              !rawID.isEmpty, rawID.lowercased() != "null",
+              let target = actionItems.items.first(where: { $0.id == rawID && $0.deletedAt == nil }),
+              let kindRaw = input["relation"]?.asString?.lowercased(),
+              let kind = TaskRelation.Kind(rawValue: kindRaw) else { return nil }
+        let reason = input["relation_reason"]?.asString?.trimmingCharacters(in: .whitespaces)
+        return TaskRelation(kind: kind,
+                            existingTaskID: target.id,
+                            existingTaskTitle: target.title,
+                            reason: (reason?.isEmpty == false) ? reason : nil)
     }
 
     // MARK: - propose_calendar_block
