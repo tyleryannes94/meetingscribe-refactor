@@ -653,13 +653,16 @@ struct QuickActionCard: View {
 
 extension View {
     /// Wraps page content in Notion's centered, max-width, generously-padded
-    /// column.
-    func notionPageColumn() -> some View {
+    /// column. Pass `horizontalPadding` to tighten the gutters when the same
+    /// page view is rendered in a narrow container (e.g. the 380pt task
+    /// inspector drawer), where the full 56pt gutter would crush the content.
+    func notionPageColumn(horizontalPadding: CGFloat = NDS.pagePadding,
+                          verticalPadding: CGFloat = 28) -> some View {
         self
             .frame(maxWidth: NDS.contentMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, NDS.pagePadding)
-            .padding(.vertical, 28)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
     }
 
     /// Apply one elevation tier's shadow (D2-2). Pair with a surface fill of

@@ -103,7 +103,8 @@ extension ActionItemsView {
                     Divider().overlay(NDS.divider)
                     TaskPageView(store: store, itemID: eid, breadcrumb: "Tasks",
                                  onClose: { vm.editingID = nil },
-                                 onNavigate: { env.go($0); vm.editingID = nil })
+                                 onNavigate: { env.go($0); vm.editingID = nil },
+                                 compact: true)
                 }
                 .background(NDS.bg)
             }

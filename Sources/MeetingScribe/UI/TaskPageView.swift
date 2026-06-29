@@ -15,6 +15,10 @@ struct TaskPageView: View {
     let onClose: () -> Void
     /// Routes a breadcrumb segment tap up the hierarchy (3-6).
     var onNavigate: (TasksRoute) -> Void = { _ in }
+    /// Compact layout for the narrow task-inspector drawer (~380pt): the full
+    /// 56pt page gutter crushes content into ~268pt, so use tight gutters and
+    /// let the notes body grow taller. Defaults off for the full-page view.
+    var compact: Bool = false
 
     /// Recent contacts surfaced first for the assignee→person link menu.
     private var personPickerList: [Person] {
@@ -79,7 +83,8 @@ struct TaskPageView: View {
                     activitySection(item)
                         .padding(.top, 18)
                 }
-                .notionPageColumn()
+                .notionPageColumn(horizontalPadding: compact ? 18 : NDS.pagePadding,
+                                  verticalPadding: compact ? 16 : 28)
             }
             .background(NDS.bg)
             .onAppear { load(item) }
@@ -726,7 +731,7 @@ struct TaskPageView: View {
                       }
                   }) {
             RichMarkdownEditor(text: $noteDraft, placeholder: "Type / for blocks, or just start writing…")
-                .frame(minHeight: 240, maxHeight: 520)
+                .frame(minHeight: 240, maxHeight: compact ? 900 : 520)
         }
     }
 
