@@ -331,7 +331,7 @@ struct WhisperRunner {
             // Back-to-back duplicate of the previous kept short phrase.
             if let last = out.last, norm(last.text) == key { continue }
             counts[key, default: 0] += 1
-            if counts[key]! > 2 { continue }   // 3rd+ occurrence of a short phrase
+            if counts[key, default: 0] > 2 { continue }   // 3rd+ occurrence of a short phrase
             out.append(seg)
         }
         return out

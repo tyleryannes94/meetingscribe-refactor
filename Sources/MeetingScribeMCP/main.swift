@@ -21,7 +21,11 @@ let storageDir: URL = {
     if let path = ProcessInfo.processInfo.environment["MEETINGSCRIBE_STORAGE"], !path.isEmpty {
         return URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
     }
-    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    // `.urls(...)` can be empty in restricted environments; fall back to
+    // ~/Documents rather than force-unwrapping and crashing the MCP server.
+    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents", isDirectory: true)
     return docs.appendingPathComponent("MeetingNotes", isDirectory: true)
 }()
 

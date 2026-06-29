@@ -308,6 +308,14 @@ struct MeetingScribeApp: App {
         }
         RunLoop.main.add(t, forMode: .common)
         calendarTimer = t
+        // Invalidate on app termination so the repeating timer (and its captured
+        // closure) is torn down deterministically rather than relying on process
+        // exit to reclaim it.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { _ in
+            t.invalidate()
+        }
         Task { @MainActor in
             let briefs = Dictionary(calendar.upcoming.compactMap { m in manager.briefSnippet(for: m).map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a }); await notifications.syncScheduled(for: calendar.upcoming, briefs: briefs)
             await notifications.syncTaskReminders(for: manager.actionItems.items)

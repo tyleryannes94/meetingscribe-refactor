@@ -10,7 +10,12 @@ public struct VaultPaths {
 
     /// SQLite derived index — always in Application Support, never synced
     public static var databaseURL: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        // `.urls(...)` can return an empty array in restricted/sandboxed
+        // environments. Fall back to ~/Library/Application Support rather than
+        // crashing on a force-unwrap at app launch.
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support", isDirectory: true)
         let dir = appSupport.appendingPathComponent("MeetingScribe", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("secondbrain.db")

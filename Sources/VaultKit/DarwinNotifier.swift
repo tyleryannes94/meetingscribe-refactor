@@ -45,7 +45,9 @@ public struct DarwinNotifier {
         // We use the notification name string itself (bridged to CFString) as
         // the observer pointer so the C callback can recover the name without
         // any extra bookkeeping.
-        let nameRef = (name as NSString).copy() as! NSString
+        // `.copy()` on an NSString returns an immutable NSString; guard the
+        // cast rather than force it so a surprising return type can't crash.
+        let nameRef = ((name as NSString).copy() as? NSString) ?? (name as NSString)
         let observer = Unmanaged.passRetained(nameRef).toOpaque()
 
         CFNotificationCenterAddObserver(

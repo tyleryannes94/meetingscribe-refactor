@@ -1046,8 +1046,10 @@ final class PeopleStore: ObservableObject {
             next[i].relationships = out
         }
         // 4. Reassign any encounters off losers onto keepers.
-        for i in encounters.indices where loserToKeeper[encounters[i].personID] != nil {
-            encounters[i].personID = loserToKeeper[encounters[i].personID]!
+        for i in encounters.indices {
+            if let keeper = loserToKeeper[encounters[i].personID] {
+                encounters[i].personID = keeper
+            }
         }
 
         let keepersToWrite = Array(keepers.values)

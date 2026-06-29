@@ -61,6 +61,10 @@ final class iCloudInboxWatcher {
     }
 
     func stop() {
+        if let q = query {
+            NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: q)
+            NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: q)
+        }
         query?.stop()
         query = nil
     }

@@ -140,9 +140,12 @@ enum TranscriptionLog {
         guard size > maxBytes else { return }
         guard let data = try? Data(contentsOf: url) else { return }
         let keep = data.suffix(maxBytes / 2)
-        // Try to start at a clean block boundary (next "=== " marker).
-        if let range = String(data: keep, encoding: .utf8)?.range(of: "=== ") {
-            let trimmed = String(String(data: keep, encoding: .utf8)![range.lowerBound...])
+        // Try to start at a clean block boundary (next "=== " marker). Decode
+        // once; if the tail isn't valid UTF-8 (truncated mid-codepoint) just
+        // keep the raw bytes rather than force-unwrapping and crashing.
+        if let text = String(data: keep, encoding: .utf8),
+           let range = text.range(of: "=== ") {
+            let trimmed = String(text[range.lowerBound...])
             try? trimmed.data(using: .utf8)?.write(to: url)
         } else {
             try? keep.write(to: url)
