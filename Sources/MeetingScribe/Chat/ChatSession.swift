@@ -77,18 +77,34 @@ final class ChatSession: ObservableObject {
 
     /// Default init for @StateObject. Must call `attach(manager:)`
     /// before any user message lands or tools will be unavailable.
+    ///
+    /// The persisted conversation + anchor are loaded OFF the main thread.
+    /// `ChatSession` is a top-level `@StateObject` built during
+    /// `MeetingScribeApp` init (before first paint), and these cache files live
+    /// in `<vault>/_cache/` — an iCloud-synced path. When iCloud has evicted the
+    /// file (dataless), a synchronous `Data(contentsOf:)` here blocks the
+    /// `read` syscall until the file materializes, hanging the whole app on
+    /// launch ("not responding"). Loading off-main lets the UI paint immediately
+    /// and the history fills in a moment later.
     init() {
-        if let saved = VaultCache.load([AnthropicClient.Message].self,
-                                       name: Self.cacheName, version: Self.cacheVersion) {
-            messages = saved
-        }
-        if let anchor = VaultCache.load(AnchorState.self,
-                                        name: Self.anchorCacheName,
-                                        version: Self.anchorCacheVersion) {
-            anchorContext = anchor.context
-            anchorLabel = anchor.label
-            pageContext = anchor.context
-            contextLabel = anchor.label
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let saved = VaultCache.load([AnthropicClient.Message].self,
+                                        name: Self.cacheName, version: Self.cacheVersion)
+            let anchor = VaultCache.load(AnchorState.self,
+                                         name: Self.anchorCacheName,
+                                         version: Self.anchorCacheVersion)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                // Don't clobber anything the user already produced while the
+                // (possibly slow) iCloud read was in flight.
+                if let saved, self.messages.isEmpty { self.messages = saved }
+                if let anchor, self.anchorLabel.isEmpty, self.anchorContext.isEmpty {
+                    self.anchorContext = anchor.context
+                    self.anchorLabel = anchor.label
+                    if self.pageContext.isEmpty { self.pageContext = anchor.context }
+                    if self.contextLabel.isEmpty { self.contextLabel = anchor.label }
+                }
+            }
         }
     }
 
