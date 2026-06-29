@@ -195,6 +195,7 @@ struct MeetingScribeApp: App {
         // disk walks.
         AppSettings.shared.migrateOllamaModelIfNeeded()
         AppSettings.shared.migrateLiveTranscriptionDefaultIfNeeded()
+        AppSettings.shared.migrateWhisperModelsOffICloudIfNeeded()
         registerScribeCoreLoginItem()
         wireNotifications()
         wireDetector()

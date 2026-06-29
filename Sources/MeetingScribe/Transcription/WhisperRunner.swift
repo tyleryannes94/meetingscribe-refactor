@@ -53,6 +53,7 @@ struct WhisperRunner {
     enum RunnerError: Error, LocalizedError {
         case binaryMissing(String)
         case modelMissing(String)
+        case modelEvicted(String)
         case audioMissing(String)
         case audioEmpty(String)
         case modelTooSmall(String, Int64)
@@ -67,6 +68,8 @@ struct WhisperRunner {
                 return "whisper-cli not found at \(p). Install: brew install whisper-cpp, then set the path in Settings."
             case .modelMissing(let p):
                 return "Whisper model not found at \(p). Download a ggml model (e.g. ggml-base.en.bin)."
+            case .modelEvicted(let p):
+                return "Whisper model at \(p) was evicted from local disk by iCloud (it has no data on disk). Free up disk space and let it re-download, or move the model out of an iCloud-synced folder."
             case .audioMissing(let p):
                 return "Audio file missing at \(p)."
             case .audioEmpty(let p):
@@ -409,6 +412,16 @@ struct WhisperRunner {
         if modelSize < 10_000_000 {
             throw RunnerError.modelTooSmall(model, modelSize)
         }
+        // Guard against an iCloud-evicted (dataless) model. Its logical size
+        // reads full — so the size check above passes — but it has zero data
+        // blocks on disk, and whisper-cli would hang trying to read bytes that
+        // aren't local. Best-effort kick off a re-download, then fail fast with a
+        // clear message instead of wedging the pipeline. (Models now default to a
+        // non-synced Application Support dir, so this only bites legacy installs.)
+        if Self.isDataless(path: model) {
+            try? fm.startDownloadingUbiquitousItem(at: URL(fileURLWithPath: model))
+            throw RunnerError.modelEvicted(model)
+        }
         // Best-effort: make sure the VAD model is present so argv can enable VAD.
         // Never blocks transcription — failure just means we transcribe without it.
         if AppSettings.shared.whisperVADEnabled {
@@ -434,7 +447,21 @@ struct WhisperRunner {
     static var isModelReady: Bool {
         let path = AppSettings.shared.whisperModel
         let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int64) ?? 0
-        return size >= 10_000_000
+        // A dataless (iCloud-evicted) model reports its full logical size but has
+        // no bytes on disk — not actually usable, so don't report it ready.
+        return size >= 10_000_000 && !isDataless(path: path)
+    }
+
+    /// True iff the file at `path` is an iCloud-evicted "dataless" placeholder:
+    /// it reports a real logical size but occupies zero data blocks on disk, so
+    /// reading it would block on an iCloud fetch (or fail outright when the disk
+    /// is full). `stat`'s `st_blocks` is the reliable cross-mechanism signal —
+    /// it's 0 for both iCloud Drive and Desktop & Documents evictions, whereas
+    /// the high-level ubiquitous-item keys don't fire for the latter.
+    static func isDataless(path: String) -> Bool {
+        var st = stat()
+        guard stat(path, &st) == 0 else { return false }   // can't stat → let the normal open path report it
+        return st.st_blocks == 0 && st.st_size > 0
     }
 
     /// Public one-tap download for the Setup Check. Returns true if the default

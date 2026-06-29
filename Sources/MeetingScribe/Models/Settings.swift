@@ -80,6 +80,13 @@ final class AppSettings {
         /// Settings → Save wrote it), which silently disabled 5-minute chunked
         /// live transcription.
         static let migratedLiveTranscriptionDefault = "migratedLiveTranscriptionDefault"
+        /// One-time flag: re-point whisper model paths that live inside an
+        /// iCloud-synced folder (Documents / Mobile Documents) to the local-only
+        /// Application Support models dir, so iCloud can never evict the model
+        /// out from under whisper-cli (the "audio recorded but no transcript"
+        /// bug — a dataless placeholder reads its full logical size but has no
+        /// bytes on disk, so whisper hangs/fails reading it).
+        static let migratedWhisperModelsOffICloud = "migratedWhisperModelsOffICloud"
         /// BCP-47 language code passed to whisper-cli via --language.
         /// "auto" = let whisper detect; "en", "es", "fr", etc. for forced lang.
         static let whisperLanguage = "whisperLanguage"
@@ -221,6 +228,19 @@ final class AppSettings {
         myNameAliases.subtracting(["me", "i", "myself", "my"])
     }
 
+    /// Local-only home for whisper/VAD models. MUST NOT live under `storageDir`,
+    /// which is iCloud-synced — iCloud evicts large files there to reclaim space,
+    /// leaving a dataless placeholder that whisper-cli can't read (audio records
+    /// but no transcript is produced). Application Support is never synced, so a
+    /// model placed here stays materialized on local disk.
+    var modelsDir: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        let dir = base.appendingPathComponent("MeetingScribe/models", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
     var whisperBinary: String {
         get { defaults.string(forKey: Keys.whisperBinary) ?? "/opt/homebrew/bin/whisper-cli" }
         set { defaults.set(newValue, forKey: Keys.whisperBinary) }
@@ -229,7 +249,7 @@ final class AppSettings {
     var whisperModel: String {
         get {
             if let s = defaults.string(forKey: Keys.whisperModel) { return s }
-            return storageDir.appendingPathComponent("models/ggml-base.en.bin").path
+            return modelsDir.appendingPathComponent("ggml-base.en.bin").path
         }
         set { defaults.set(newValue, forKey: Keys.whisperModel) }
     }
@@ -309,6 +329,48 @@ final class AppSettings {
         defaults.set(true, forKey: Keys.migratedLiveTranscriptionDefault)
     }
 
+    /// One-time migration: existing installs persisted whisper model paths under
+    /// the iCloud-synced storage dir (`~/Documents/MeetingNotes/models/...` or the
+    /// iCloud Drive vault). iCloud evicts large files there to reclaim space,
+    /// turning the model into a dataless placeholder — whisper-cli then hangs or
+    /// fails reading it and the voice note records audio but never transcribes.
+    /// Re-point any iCloud-located model override to the local-only Application
+    /// Support models dir. If a valid (non-dataless, sane-size) copy already
+    /// exists there, keep that exact filename; otherwise clear the override so it
+    /// falls back to the auto-downloadable `ggml-base.en.bin` default. Idempotent.
+    func migrateWhisperModelsOffICloudIfNeeded() {
+        guard !defaults.bool(forKey: Keys.migratedWhisperModelsOffICloud) else { return }
+        defer { defaults.set(true, forKey: Keys.migratedWhisperModelsOffICloud) }
+        repointModelIfICloud(Keys.whisperModel)
+        repointModelIfICloud(Keys.whisperVADModel)
+    }
+
+    /// True iff `path` sits inside a folder macOS keeps in iCloud (iCloud Drive
+    /// or Desktop & Documents sync) — i.e. somewhere a large file can be evicted.
+    private func isICloudSyncedPath(_ path: String) -> Bool {
+        let p = (path as NSString).expandingTildeInPath
+        return p.contains("/Library/Mobile Documents/")          // iCloud Drive
+            || p.range(of: "/Documents/", options: .caseInsensitive) != nil  // Desktop & Documents sync
+    }
+
+    private func repointModelIfICloud(_ key: String) {
+        guard let stored = defaults.string(forKey: key), isICloudSyncedPath(stored) else { return }
+        let fm = FileManager.default
+        let filename = URL(fileURLWithPath: stored).lastPathComponent
+        let dest = modelsDir.appendingPathComponent(filename)
+        // Keep the user's model choice (e.g. small.en) if a healthy copy already
+        // lives in the local models dir; a "healthy" file is materialized on disk
+        // (has data blocks) and a sane size, not a dataless placeholder.
+        let size = (try? fm.attributesOfItem(atPath: dest.path)[.size] as? Int64) ?? 0
+        if fm.fileExists(atPath: dest.path), size >= 10_000_000 {
+            defaults.set(dest.path, forKey: key)
+        } else {
+            // Nothing usable locally — drop the override so the default
+            // (Application Support / ggml-base.en.bin, which auto-downloads) wins.
+            defaults.removeObject(forKey: key)
+        }
+    }
+
     /// BCP-47 language hint for whisper-cli (--language flag).
     /// "auto" lets whisper detect; "en", "es", "fr", etc. force a language.
     /// Default "auto" — detection is fast and avoids broken output when the
@@ -333,7 +395,7 @@ final class AppSettings {
     var whisperVADModel: String {
         get {
             if let s = defaults.string(forKey: Keys.whisperVADModel) { return s }
-            return storageDir.appendingPathComponent("models/ggml-silero-v5.1.2.bin").path
+            return modelsDir.appendingPathComponent("ggml-silero-v5.1.2.bin").path
         }
         set { defaults.set(newValue, forKey: Keys.whisperVADModel) }
     }
