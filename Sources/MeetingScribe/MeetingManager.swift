@@ -526,10 +526,12 @@ final class MeetingManager: ObservableObject {
         }
         lastPastMeetingsRefresh = Date()
         let storeRef = store
+        RefreshIndicator.shared.begin()
         Task.detached(priority: .userInitiated) { [weak self] in
             let list = storeRef.listPastMeetings(forceRescan: force)
             await MainActor.run {
                 self?.pastMeetings = list
+                RefreshIndicator.shared.end()
             }
         }
     }

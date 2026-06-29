@@ -102,14 +102,29 @@ final class QuickNotesController: ObservableObject {
     /// the list reflects the mutation immediately. Re-arms the throttle window.
     func refresh() {
         _ = listThrottle.shouldRun(force: true)
-        notes = store.listNotes()
+        reload()
     }
 
     /// onAppear path: re-scan the vault only when the cached snapshot is stale,
     /// so rapid Voice-Notes tab switches don't re-hit disk on the main thread.
     func refreshIfStale() {
         guard listThrottle.shouldRun() else { return }
-        notes = store.listNotes()
+        reload()
+    }
+
+    /// Scans the vault off the main thread and publishes the result in place,
+    /// so neither the first load nor a refresh ever blocks the UI. A subtle
+    /// refresh hint shows while the scan is in flight.
+    private func reload() {
+        let store = self.store
+        RefreshIndicator.shared.begin()
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let list = store.listNotes()
+            await MainActor.run {
+                self?.notes = list
+                RefreshIndicator.shared.end()
+            }
+        }
     }
 
     // MARK: - Recording lifecycle

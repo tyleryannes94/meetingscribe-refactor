@@ -264,6 +264,18 @@ struct MeetingScribeApp: App {
         // first paint.
         startCalendarTimerDeferred()
 
+        // BACKGROUND: prewarm the Voice-Notes and Recordings lists so the
+        // first visit to those tabs is instant (data already in memory) rather
+        // than paying a vault scan on appear. Each reload now hops off-main, so
+        // this never competes with the first paint; staggered after a short
+        // pause so it trails the meeting index + body-cache warm-up.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            manager.quickNotesController.refreshIfStale()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            manager.screenRecordingsController.refreshIfStale()
+        }
+
         // BACKGROUND: warm the top-N meeting body cache so the first few
         // clicks-into-detail come from RAM. Runs after a brief pause to
         // let the index load first.
@@ -278,10 +290,13 @@ struct MeetingScribeApp: App {
         // history, not just future meetings. Reads a definitive list from the
         // store (not the still-loading published `pastMeetings`); guarded by a
         // UserDefaults flag inside the store helper, so it runs at most once.
-        Task.detached(priority: .background) { [manager] in
+        Task.detached(priority: .background) { [store = manager.store] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
+            // Read the meeting list off-main (a cold index would otherwise scan
+            // disk on the main thread here); only the Person-link write hops
+            // back to the main actor.
+            let meetings = store.listPastMeetings()
             await MainActor.run {
-                let meetings = manager.store.listPastMeetings()
                 PeopleStore.shared.backfillMeetingLinks(meetings)
             }
         }

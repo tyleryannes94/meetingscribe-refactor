@@ -48,14 +48,29 @@ final class ScreenRecordingsController: ObservableObject {
     /// the mutation immediately. Re-arms the throttle window.
     func refresh() {
         _ = listThrottle.shouldRun(force: true)
-        recordings = store.listRecordings()
+        reload()
     }
 
     /// onAppear path: re-scan the vault only when the cached snapshot is stale,
     /// so rapid Recordings tab switches don't re-hit disk on the main thread.
     func refreshIfStale() {
         guard listThrottle.shouldRun() else { return }
-        recordings = store.listRecordings()
+        reload()
+    }
+
+    /// Scans the vault off the main thread and publishes the result in place,
+    /// so neither the first load nor a refresh ever blocks the UI. A subtle
+    /// refresh hint shows while the scan is in flight.
+    private func reload() {
+        let store = self.store
+        RefreshIndicator.shared.begin()
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let list = store.listRecordings()
+            await MainActor.run {
+                self?.recordings = list
+                RefreshIndicator.shared.end()
+            }
+        }
     }
 
     // MARK: - Recording lifecycle

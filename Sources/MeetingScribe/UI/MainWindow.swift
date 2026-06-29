@@ -60,6 +60,9 @@ struct MainWindow: View {
 
     @EnvironmentObject var router: WorkspaceRouter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// App-wide background-refresh hint. Drives a subtle top hairline while data
+    /// revalidates in place — content is always shown instantly underneath.
+    @ObservedObject private var refreshIndicator = RefreshIndicator.shared
     /// The selected top-level section now lives in `WorkspaceRouter` (D1-1) so
     /// search, deep links, and backlinks all drive one navigation surface. This
     /// computed accessor keeps the existing `section` / `section = …` call sites
@@ -134,8 +137,30 @@ struct MainWindow: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             Color.clear.frame(height: NDS.tabTopInset)
         }
+        // Subtle, non-blocking "updating…" hint: a 2pt accent hairline at the
+        // very top edge while a background refresh is in flight. Content is
+        // always rendered instantly underneath — this never gates the UI.
+        .overlay(alignment: .top) { refreshHint }
+        .animation(NDS.motion(.easeInOut(duration: 0.2), reduce: reduceMotion),
+                   value: refreshIndicator.isRefreshing)
         .onChange(of: section) { _, s in
             visited.insert(s)
+        }
+    }
+
+    /// The subtle background-refresh hint: a thin accent capsule pinned to the
+    /// top edge, faded in/out so brief refreshes don't flash harshly. Honors
+    /// Reduce Motion (plain fade, no implied movement).
+    @ViewBuilder
+    private var refreshHint: some View {
+        if refreshIndicator.isRefreshing {
+            Capsule(style: .continuous)
+                .fill(NDS.accent.opacity(0.85))
+                .frame(height: 2)
+                .padding(.horizontal, 0)
+                .transition(.opacity)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 
