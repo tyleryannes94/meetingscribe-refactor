@@ -40,19 +40,12 @@ struct TaskOrganizerView: View {
 
     @ViewBuilder
     private var content: some View {
-        if organizer.isRunning {
-            VStack(spacing: 10) {
-                ProgressView().controlSize(.small) // design-lint:allow
-                Text("Analyzing your tasks…").font(NDS.small).foregroundStyle(NDS.textSecondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let err = organizer.error {
-            errorState(err)
-        } else if organizer.suggestions.isEmpty {
-            emptyState
-        } else {
+        // Show results the moment the instant pass produces them — never block
+        // the whole sheet on the (optional, background) model phase.
+        if !organizer.suggestions.isEmpty {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
+                    if organizer.refining { refiningBanner }
                     if let reasoning = organizer.reasoning, !reasoning.isEmpty {
                         Text(reasoning).font(NDS.small).foregroundStyle(NDS.textSecondary)
                             .padding(.bottom, 2)
@@ -61,7 +54,32 @@ struct TaskOrganizerView: View {
                 }
                 .padding(14)
             }
+        } else if organizer.isRunning {
+            // Only reached when the instant pass found nothing and the model is
+            // still looking — brief, and rare.
+            VStack(spacing: 10) {
+                ProgressView().controlSize(.small) // design-lint:allow
+                Text("Looking for things to tidy up…").font(NDS.small).foregroundStyle(NDS.textSecondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let err = organizer.error {
+            errorState(err)
+        } else {
+            emptyState
         }
+    }
+
+    /// Slim inline hint shown above the instant results while the model is still
+    /// looking for groups/tags in the background.
+    private var refiningBanner: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small) // design-lint:allow
+            Text("Looking for projects & tags to group loose tasks…")
+                .font(NDS.tiny).foregroundStyle(NDS.textSecondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
     }
 
     private func suggestionCard(_ s: TaskSuggestion) -> some View {

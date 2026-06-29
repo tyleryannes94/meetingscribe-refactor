@@ -35,6 +35,11 @@ final class OllamaChatClient {
         let tools: [OllamaTool]?
         let stream: Bool
         let options: Options
+        /// Ollama structured-output mode. "json" forces a single valid JSON
+        /// object reply (no tool loop) — used by the one-shot path. Omitted from
+        /// the wire when nil (synthesized `encodeIfPresent`), so existing tool
+        /// calls are unaffected.
+        var format: String? = nil
         struct Options: Encodable {
             let temperature: Double
             let num_ctx: Int
@@ -72,6 +77,47 @@ final class OllamaChatClient {
     }
 
     // MARK: - Send
+
+    /// One non-streaming request that returns a single JSON object — no tool
+    /// loop. Dramatically faster than `send(...)` for "analyze and return a
+    /// structured result" tasks (one round-trip instead of up to N), and far more
+    /// reliable on small local models, which are flaky at multi-turn tool calling.
+    /// `timeoutSeconds` is deliberately short so a slow/stuck model fails fast and
+    /// the caller can fall back to whatever it already has.
+    func oneShotJSON(system: String,
+                     user: String,
+                     timeoutSeconds: TimeInterval = 60,
+                     numCtx: Int = 4_096) async throws -> String {
+        _ = await service.ensureRunning()
+        guard await service.isReachable() else { throw ClientError.notReachable }
+        let body = ChatRequest(
+            model: AppSettings.shared.ollamaModel,
+            messages: [
+                .init(role: "system", content: system, tool_calls: nil),
+                .init(role: "user", content: user, tool_calls: nil)
+            ],
+            tools: nil,
+            stream: false,
+            options: .init(temperature: 0.2, num_ctx: numCtx),
+            format: "json"
+        )
+        let url = AppSettings.shared.ollamaURL.appendingPathComponent("api/chat")
+        try EgressPolicy.assertOllamaEgressAllowed(url)
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = timeoutSeconds
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, response): (Data, URLResponse)
+        do { (data, response) = try await URLSession.shared.data(for: req) }
+        catch { throw ClientError.notReachable }
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            throw ClientError.http((response as? HTTPURLResponse)?.statusCode ?? -1, bodyStr)
+        }
+        return (try? JSONDecoder().decode(ChatResponse.self, from: data).message.content) ?? ""
+    }
 
     func send(messages startMessages: [AnthropicClient.Message],
               system: String?,

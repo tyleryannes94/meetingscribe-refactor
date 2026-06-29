@@ -16,7 +16,14 @@ final class TaskOrganizer: ObservableObject {
     private let chatClient = OllamaChatClient()
 
     @Published private(set) var suggestions: [TaskSuggestion] = []
+    /// A run is in flight. With the two-phase design this is true only while the
+    /// optional LLM grouping pass is still working — the instant deterministic
+    /// suggestions are already published by then.
     @Published private(set) var isRunning = false
+    /// The instant pass has published its results; the LLM is still looking for
+    /// groups/tags in the background. Drives a slim inline "still looking…" hint
+    /// instead of a blocking spinner.
+    @Published private(set) var refining = false
     @Published var reasoning: String?
     @Published var error: String?
 
@@ -25,7 +32,7 @@ final class TaskOrganizer: ObservableObject {
     @Published private(set) var didRun = false
 
     func reset() {
-        suggestions = []; reasoning = nil; error = nil; didRun = false
+        suggestions = []; reasoning = nil; error = nil; didRun = false; refining = false
     }
 
     func run(store: ActionItemStore) {
@@ -34,33 +41,47 @@ final class TaskOrganizer: ObservableObject {
         reset()
         Task { @MainActor [weak self] in
             guard let self else { return }
+            // PHASE 1 — instant, deterministic, no model. Publish immediately so
+            // the user always sees value in well under a second, even if the
+            // local model is slow or unavailable.
+            self.suggestions = Self.deterministicSuggestions(store: store)
+
+            // PHASE 2 — optional LLM grouping/tagging over ungrouped tasks. One
+            // structured call, short timeout. A failure here must NEVER erase the
+            // Phase-1 results — it just means no AI groups this round.
+            self.refining = true
             do {
-                try await self.analyze(store: store)
+                let extra = try await self.refineWithModel(store: store)
+                self.suggestions.append(contentsOf: extra)
             } catch {
-                self.error = error.localizedDescription
+                // Only surface an error if we have nothing at all to show.
+                if self.suggestions.isEmpty { self.error = Self.friendlyError(error) }
+                self.log.info("organizer LLM phase skipped: \(error.localizedDescription, privacy: .public)")
             }
+            self.refining = false
             self.isRunning = false
             self.didRun = true
         }
     }
 
-    private func analyze(store: ActionItemStore) async throws {
-        let handlers = TaskOrganizerTools(store: store) { [weak self] suggestion in
-            self?.suggestions.append(suggestion)
-        }
-        let system = Self.systemPrompt(store: store)
-        let seed = AnthropicClient.Message(role: .user, content: [.text(Self.taskInventory(store: store))])
-        let final = try await chatClient.send(
-            messages: [seed],
-            system: system,
-            tools: TaskOrganizerTools.catalog,
-            maxIterations: 10,
-            progress: { _ in }
-        ) { name, input in
-            if let r = await handlers.run(name: name, input: input) { return r }
-            return .failure(TaskOrganizerError.unknownTool(name))
-        }
-        reasoning = Self.lastText(final)
+    /// PHASE 2: ask the local model — in ONE structured-JSON call — to group
+    /// loose (project-less) tasks and propose shared tags. Only the ungrouped
+    /// tasks are sent, so prefill stays tiny and the call is fast.
+    private func refineWithModel(store: ActionItemStore) async throws -> [TaskSuggestion] {
+        let loose = store.items
+            .filter { $0.deletedAt == nil && $0.status != .completed && $0.projectID == nil }
+            .prefix(30)
+        // Nothing loose to group → skip the model entirely (instant).
+        guard loose.count >= 2 else { return [] }
+
+        let raw = try await chatClient.oneShotJSON(
+            system: Self.groupingSystemPrompt(store: store),
+            user: Self.groupingInventory(Array(loose), store: store),
+            timeoutSeconds: 45
+        )
+        let parsed = Self.parseGrouping(raw, store: store)
+        reasoning = parsed.summary
+        return parsed.suggestions
     }
 
     // MARK: - Apply / dismiss (user signoff)
@@ -96,78 +117,159 @@ final class TaskOrganizer: ObservableObject {
         suggestions[idx].dismissed = true
     }
 
-    // MARK: - Prompt building
+    // MARK: - Phase 1: instant deterministic suggestions (no model)
 
-    private static func systemPrompt(store: ActionItemStore) -> String {
-        let pretty = DateFormatter(); pretty.dateFormat = "EEEE, MMMM d, yyyy"
-        let iso = DateFormatter(); iso.locale = Locale(identifier: "en_US_POSIX"); iso.dateFormat = "yyyy-MM-dd"
-        let now = Date()
+    /// Compute the obvious, high-confidence fixes in pure Swift — no LLM, no
+    /// network — so they render instantly. Covers the two highest-value cases:
+    /// rescheduling overdue tasks and correcting priority from clear title cues.
+    static func deterministicSuggestions(store: ActionItemStore) -> [TaskSuggestion] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let open = store.items.filter { $0.deletedAt == nil && $0.status != .completed }
+        var out: [TaskSuggestion] = []
+
+        // 1) Overdue → reschedule. Urgent/high land today; everything else is
+        //    spread across the next few weekdays so we don't pile it all on one
+        //    day. Deterministic and explainable.
+        let overdue = open
+            .filter { if let d = $0.dueDate { return cal.startOfDay(for: d) < today } else { return false } }
+            .sorted { rank($0.priority) > rank($1.priority) }
+        var spread = 0
+        for t in overdue {
+            let target: Date
+            if t.priority == .urgent || t.priority == .high {
+                target = nextWeekday(onOrAfter: today)
+            } else {
+                target = nextWeekday(onOrAfter: cal.date(byAdding: .day, value: 1 + spread / 3, to: today) ?? today)
+                spread += 1
+            }
+            out.append(.init(kind: .reschedule(taskID: t.id, taskTitle: t.title, newDate: target),
+                             reason: "Overdue\(dueAgo(t.dueDate, cal: cal))"))
+        }
+
+        // 2) Priority from title cues — conservative: only upgrade when the cue
+        //    clearly outranks the current priority, or flag an explicit
+        //    "someday/eventually" task as low. Never fight an explicit higher
+        //    priority the user already set.
+        for t in open {
+            guard let (p, cue) = inferredPriority(from: t.title) else { continue }
+            let isUpgrade = rank(p) > rank(t.priority)
+            let isSomeday = p == .low && (t.priority == .medium || t.priority == .high)
+            guard isUpgrade || isSomeday, p != t.priority else { continue }
+            out.append(.init(kind: .reprioritize(taskID: t.id, taskTitle: t.title, priority: p),
+                             reason: "“\(cue)” in the title → \(p.label) priority"))
+        }
+        return out
+    }
+
+    private static func rank(_ p: ActionItem.Priority) -> Int {
+        switch p { case .low: return 0; case .medium: return 1; case .high: return 2; case .urgent: return 3 }
+    }
+
+    /// The given day if it's a weekday, otherwise the following Monday.
+    private static func nextWeekday(onOrAfter day: Date) -> Date {
+        let cal = Calendar.current
+        var d = cal.startOfDay(for: day)
+        while cal.isDateInWeekend(d) { d = cal.date(byAdding: .day, value: 1, to: d) ?? d }
+        return d
+    }
+
+    private static func dueAgo(_ due: Date?, cal: Calendar) -> String {
+        guard let due else { return "" }
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: due),
+                                      to: cal.startOfDay(for: Date())).day ?? 0
+        if days <= 0 { return "" }
+        if days == 1 { return " by 1 day" }
+        if days < 14 { return " by \(days) days" }
+        return " by \(days / 7) weeks"
+    }
+
+    /// Map clear urgency words in a title to a priority. Returns the matched cue
+    /// word too, for the user-facing reason. Conservative word lists only.
+    private static func inferredPriority(from title: String) -> (ActionItem.Priority, String)? {
+        let t = " " + title.lowercased() + " "
+        let urgent = ["urgent", "asap", "immediately", "critical", "emergency", "blocker", "p0"]
+        let high   = ["important", "high priority", "high-priority", "deadline", "must ", "p1"]
+        let low    = ["someday", "eventually", "nice to have", "nice-to-have", "low priority", "whenever", "p3"]
+        for w in urgent where t.contains(w) { return (.urgent, w.trimmingCharacters(in: .whitespaces)) }
+        for w in high   where t.contains(w) { return (.high,   w.trimmingCharacters(in: .whitespaces)) }
+        for w in low    where t.contains(w) { return (.low,    w.trimmingCharacters(in: .whitespaces)) }
+        return nil
+    }
+
+    // MARK: - Phase 2: grouping/tagging prompt + JSON parse
+
+    private static func groupingSystemPrompt(store: ActionItemStore) -> String {
         let projects = store.projects.filter { $0.status != .archived }.map { $0.name }
-        let projectList = projects.isEmpty ? "(none yet)" : projects.map { "- \($0)" }.joined(separator: "\n")
+        let projectList = projects.isEmpty ? "(none yet)" : projects.joined(separator: ", ")
         let tags = store.labels.map { $0.name }
         let tagList = tags.isEmpty ? "(none yet)" : tags.joined(separator: ", ")
         return """
-        You are \(AppSettings.shared.userName)'s task organizer inside MeetingScribe. You review their CURRENT tasks and propose concrete fixes that make the list easier to act on. You ONLY propose — the user reviews and one-click applies each suggestion.
+        You organize \(AppSettings.shared.userName)'s loose tasks. You are given tasks that have NO project. Group ones that clearly belong together and suggest a shared tag for obvious themes. Prefer existing names.
 
-        Today is \(pretty.string(from: now)) (\(iso.string(from: now))).
-
-        Existing projects (assign by exact name, or create a new one):
-        \(projectList)
+        Existing projects: \(projectList)
         Existing tags: \(tagList)
 
-        WHAT TO LOOK FOR (propose a fix for each issue you find):
-        - OVERDUE tasks: reschedule_task to today, or a sensible near-future weekday, based on the title's urgency. Don't pile everything on today.
-        - Wrong/missing priority: change_priority (low/medium/high/urgent) from the title's urgency cues.
-        - Loose, ungrouped tasks that clearly belong together: group_into_project — assign them to an existing project, or create a new one with a short name. Prefer existing projects when one fits.
-        - Tasks that share an obvious theme: apply_tag with a short reusable tag (prefer existing tags).
-
-        RULES
-        - Only propose changes that are clearly improvements; skip tasks that are already fine.
-        - Each suggestion needs a one-clause `reason` shown to the user.
-        - Reference tasks by the exact id from the inventory.
-        - Propose at most 12 suggestions. When done, write one short sentence summarizing what you changed and why.
+        Reply with ONLY this JSON (no prose):
+        {
+          "groups": [{ "task_ids": ["id1","id2"], "project": "Short Name", "reason": "one clause" }],
+          "tags":   [{ "task_ids": ["id1","id2"], "tag": "shorttag", "reason": "one clause" }],
+          "summary": "one short sentence"
+        }
+        Rules: only group 2+ tasks that genuinely belong together; skip tasks that don't fit anywhere; at most 5 groups and 5 tags; use exact ids from the list; "project"/"tag" reuse an existing name when one fits.
         """
     }
 
-    /// The user-turn inventory of current tasks the model reasons over.
-    static func taskInventory(store: ActionItemStore) -> String {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        let iso = DateFormatter(); iso.locale = Locale(identifier: "en_US_POSIX"); iso.dateFormat = "yyyy-MM-dd"
-        let live = store.items
-            .filter { $0.deletedAt == nil && $0.status != .completed }
-            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
-            .prefix(60)
-        var lines = ["CURRENT TASKS (id · title · priority · due · project · tags):"]
-        for t in live {
-            let due: String
-            if let d = t.dueDate {
-                let overdue = cal.startOfDay(for: d) < today
-                due = iso.string(from: d) + (overdue ? " (OVERDUE)" : "")
-            } else { due = "no due date" }
-            let project = t.projectID.flatMap { store.project(id: $0)?.name } ?? "none"
-            let tags = (t.labelIDs ?? []).compactMap { store.label(id: $0)?.name }.joined(separator: ",")
-            lines.append("- (\(t.id)) \(t.title) · \(t.priority.rawValue) · \(due) · \(project) · [\(tags)]")
-        }
-        if live.isEmpty { lines.append("(no open tasks)") }
+    private static func groupingInventory(_ tasks: [ActionItem], store: ActionItemStore) -> String {
+        var lines = ["LOOSE TASKS (id · title):"]
+        for t in tasks { lines.append("- (\(t.id)) \(t.title)") }
         return lines.joined(separator: "\n")
     }
 
-    private static func lastText(_ messages: [AnthropicClient.Message]) -> String? {
-        for m in messages.reversed() where m.role == .assistant {
-            for b in m.content {
-                if case let .text(s) = b, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    return s.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-            }
+    /// Parse the structured grouping reply into suggestions. Tolerant: ignores
+    /// malformed entries, validates every id against the store, and drops groups
+    /// of fewer than two real tasks.
+    private static func parseGrouping(_ raw: String, store: ActionItemStore)
+        -> (suggestions: [TaskSuggestion], summary: String?) {
+        guard let data = raw.data(using: .utf8),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return ([], nil) }
+        func realIDs(_ any: Any?) -> ([String], [String]) {
+            guard let arr = any as? [Any] else { return ([], []) }
+            let ids = arr.compactMap { $0 as? String }
+                .filter { id in store.items.contains { $0.id == id && $0.deletedAt == nil } }
+            let titles = ids.compactMap { id in store.items.first { $0.id == id }?.title }
+            return (ids, titles)
         }
-        return nil
+        var out: [TaskSuggestion] = []
+        for g in (root["groups"] as? [[String: Any]] ?? []).prefix(5) {
+            let (ids, titles) = realIDs(g["task_ids"])
+            guard ids.count >= 2,
+                  let name = (g["project"] as? String)?.trimmingCharacters(in: .whitespaces),
+                  !name.isEmpty else { continue }
+            let existing = store.projects.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+            out.append(.init(kind: .assignProject(taskIDs: ids, taskTitles: titles,
+                                                  projectName: existing?.name ?? name,
+                                                  existingProjectID: existing?.id),
+                             reason: (g["reason"] as? String) ?? ""))
+        }
+        for tg in (root["tags"] as? [[String: Any]] ?? []).prefix(5) {
+            let (ids, titles) = realIDs(tg["task_ids"])
+            guard ids.count >= 2,
+                  let tag = (tg["tag"] as? String)?.trimmingCharacters(in: .whitespaces),
+                  !tag.isEmpty else { continue }
+            out.append(.init(kind: .addTag(taskIDs: ids, taskTitles: titles, tag: tag),
+                             reason: (tg["reason"] as? String) ?? ""))
+        }
+        let summary = (root["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (out, (summary?.isEmpty == false) ? summary : nil)
     }
-}
 
-enum TaskOrganizerError: Error, LocalizedError {
-    case unknownTool(String)
-    var errorDescription: String? {
-        switch self { case .unknownTool(let n): return "Unknown tool: \(n)" }
+    private static func friendlyError(_ error: Error) -> String {
+        let msg = error.localizedDescription
+        if msg.contains("not reachable") || msg.contains("notReachable") {
+            return "The on-device summary engine isn't running. Open Settings → Integrations to start it, then retry."
+        }
+        return msg
     }
 }
