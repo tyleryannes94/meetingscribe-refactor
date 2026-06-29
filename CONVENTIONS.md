@@ -264,6 +264,13 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — Organizer cards show a per-task checklist.** Multi-task
+  recommendations (tag N tasks / move N tasks to a project) now list every
+  affected task with a checkbox so the user can uncheck the ones that don't fit
+  before applying; the header count tracks the live selection and Apply acts only
+  on the checked subset. Fixes "tag 2 tasks with #bug isn't specific enough — I
+  can't tell what it'll touch." (`TaskSuggestion.deselectedTaskIDs` /
+  `activeTaskIDs` / `taskList`.)
 - **2026-06-29 — "Organize my Tasks" richer + capped at ≤20s.** Added per-task
   individual suggestions to the instant deterministic pass: **split** compound
   tasks into subtasks, **infer a due date** from date words in the title, and

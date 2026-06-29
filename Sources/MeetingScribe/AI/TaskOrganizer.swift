@@ -104,22 +104,37 @@ final class TaskOrganizer: ObservableObject {
 
     // MARK: - Apply / dismiss (user signoff)
 
-    /// Apply one reviewed suggestion to the store and mark it applied.
+    /// Toggle whether one task inside a multi-task suggestion is included. Lets
+    /// the user uncheck individual tasks in a "tag N tasks / move N tasks" card
+    /// before applying, without losing the rest of the recommendation list.
+    func toggleTask(_ taskID: String, in suggestion: TaskSuggestion) {
+        guard let idx = suggestions.firstIndex(where: { $0.id == suggestion.id }) else { return }
+        if suggestions[idx].deselectedTaskIDs.contains(taskID) {
+            suggestions[idx].deselectedTaskIDs.remove(taskID)
+        } else {
+            suggestions[idx].deselectedTaskIDs.insert(taskID)
+        }
+    }
+
+    /// Apply one reviewed suggestion to the store and mark it applied. Multi-task
+    /// kinds act only on the still-checked tasks (`activeTaskIDs`).
     func apply(_ suggestion: TaskSuggestion, store: ActionItemStore) {
         guard let idx = suggestions.firstIndex(where: { $0.id == suggestion.id }),
               !suggestions[idx].applied else { return }
+        let active = suggestions[idx].activeTaskIDs
+        guard !active.isEmpty else { return }
         switch suggestion.kind {
         case let .reschedule(taskID, _, newDate):
             store.setDueDate(taskID, dueDate: newDate)
         case let .reprioritize(taskID, _, priority):
             store.setPriority(taskID, priority: priority)
-        case let .assignProject(taskIDs, _, projectName, existingID):
+        case let .assignProject(_, _, projectName, existingID):
             let pid = existingID ?? store.createProject(name: projectName).id
-            for tid in taskIDs { store.setProject(tid, projectID: pid) }
-        case let .addTag(taskIDs, _, tag):
+            for tid in active { store.setProject(tid, projectID: pid) }
+        case let .addTag(_, _, tag):
             let label = store.labels.first { $0.name.caseInsensitiveCompare(tag) == .orderedSame }
                 ?? store.createLabel(name: tag)
-            for tid in taskIDs where !(store.items.first { $0.id == tid }?.labelIDs?.contains(label.id) ?? false) {
+            for tid in active where !(store.items.first { $0.id == tid }?.labelIDs?.contains(label.id) ?? false) {
                 store.toggleLabel(tid, labelID: label.id)
             }
         case let .split(taskID, _, parts):

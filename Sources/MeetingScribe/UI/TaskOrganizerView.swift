@@ -83,31 +83,39 @@ struct TaskOrganizerView: View {
     }
 
     private func suggestionCard(_ s: TaskSuggestion) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: glyph(s.kind)).scaledFont(14).foregroundStyle(NDS.brand)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title(s.kind)).font(NDS.small.weight(.semibold))
-                    .foregroundStyle(s.applied ? NDS.textTertiary : NDS.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !s.reason.isEmpty {
-                    Text(s.reason).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: glyph(s.kind)).scaledFont(14).foregroundStyle(NDS.brand)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title(s)).font(NDS.small.weight(.semibold))
+                        .foregroundStyle(s.applied ? NDS.textTertiary : NDS.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if !s.reason.isEmpty {
+                        Text(s.reason).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 8)
+                if s.applied {
+                    Label("Applied", systemImage: "checkmark.circle.fill")
+                        .font(NDS.tiny).foregroundStyle(NDS.selectColor("green")).labelStyle(.titleAndIcon)
+                } else if s.dismissed {
+                    Text("Dismissed").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                } else {
+                    HStack(spacing: 6) {
+                        Button { organizer.apply(s, store: store) } label: { Text("Apply") }
+                            .buttonStyle(MSPrimaryButtonStyle())
+                            .disabled(s.activeTaskIDs.isEmpty)
+                        Button { organizer.dismiss(s) } label: { Text("Dismiss").font(NDS.tiny) }
+                            .buttonStyle(.plain).foregroundStyle(NDS.textTertiary)
+                    }
                 }
             }
-            Spacer(minLength: 8)
-            if s.applied {
-                Label("Applied", systemImage: "checkmark.circle.fill")
-                    .font(NDS.tiny).foregroundStyle(NDS.selectColor("green")).labelStyle(.titleAndIcon)
-            } else if s.dismissed {
-                Text("Dismissed").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-            } else {
-                HStack(spacing: 6) {
-                    Button { organizer.apply(s, store: store) } label: { Text("Apply") }
-                        .buttonStyle(MSPrimaryButtonStyle())
-                    Button { organizer.dismiss(s) } label: { Text("Dismiss").font(NDS.tiny) }
-                        .buttonStyle(.plain).foregroundStyle(NDS.textTertiary)
-                }
+            // Multi-task recommendations: list each affected task with a checkbox
+            // so the user can uncheck the ones that don't fit before applying.
+            if !s.applied && !s.dismissed && s.taskList.count > 1 {
+                taskChecklist(s)
             }
         }
         .padding(10)
@@ -156,6 +164,32 @@ struct TaskOrganizerView: View {
 
     // MARK: - Suggestion presentation
 
+    /// The checkable list of tasks a multi-task recommendation will touch.
+    private func taskChecklist(_ s: TaskSuggestion) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(s.taskList, id: \.id) { t in
+                let checked = !s.deselectedTaskIDs.contains(t.id)
+                Button { organizer.toggleTask(t.id, in: s) } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: checked ? "checkmark.square.fill" : "square")
+                            .scaledFont(13)
+                            .foregroundStyle(checked ? NDS.brand : NDS.textTertiary)
+                        Text(t.title)
+                            .font(NDS.tiny)
+                            .foregroundStyle(checked ? NDS.textSecondary : NDS.textTertiary)
+                            .strikethrough(!checked)
+                            .lineLimit(1).truncationMode(.tail)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 8)
+        .padding(.leading, 28)
+    }
+
     private func glyph(_ kind: TaskSuggestion.Kind) -> String {
         switch kind {
         case .reschedule:    return "calendar.badge.clock"
@@ -166,8 +200,11 @@ struct TaskOrganizerView: View {
         }
     }
 
-    private func title(_ kind: TaskSuggestion.Kind) -> String {
-        switch kind {
+    private func title(_ s: TaskSuggestion) -> String {
+        // Multi-task kinds reflect the live checked count so the header tracks
+        // the user's selections in the checklist below.
+        let n = s.activeTaskIDs.count
+        switch s.kind {
         case let .reschedule(id, t, d):
             // A task that has no due date yet gets "Set due"; one that already
             // has a (likely overdue) date gets "Reschedule".
@@ -176,11 +213,18 @@ struct TaskOrganizerView: View {
             return "\(verb) “\(t)” → \(Self.dateLabel(d))"
         case let .reprioritize(_, t, p):
             return "Set “\(t)” to \(p.label) priority"
-        case let .assignProject(ids, _, name, existing):
+        case let .assignProject(_, titles, name, existing):
+            if titles.count == 1, let only = titles.first {
+                let verb = existing == nil ? "Create project “\(name)” and move" : "Move to “\(name)”"
+                return "\(verb) “\(only)”"
+            }
             let verb = existing == nil ? "Create project “\(name)” and move" : "Move to “\(name)”"
-            return "\(verb) \(ids.count) task\(ids.count == 1 ? "" : "s")"
-        case let .addTag(ids, _, tag):
-            return "Tag \(ids.count) task\(ids.count == 1 ? "" : "s") with #\(tag)"
+            return "\(verb) \(n) task\(n == 1 ? "" : "s")"
+        case let .addTag(_, titles, tag):
+            if titles.count == 1, let only = titles.first {
+                return "Tag “\(only)” with #\(tag)"
+            }
+            return "Tag \(n) task\(n == 1 ? "" : "s") with #\(tag)"
         case let .split(_, t, parts):
             return "Split “\(t)” into \(parts.count) subtasks"
         }
