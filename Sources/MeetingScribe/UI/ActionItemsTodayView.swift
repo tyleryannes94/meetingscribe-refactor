@@ -314,9 +314,32 @@ extension ActionItemsView {
 
             Text("Tip: Press ⌘6 anywhere to jump there.")
                 .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+
+            Divider().overlay(NDS.divider).padding(.vertical, 4)
+
+            HStack(spacing: 7) {
+                Image(systemName: "wand.and.stars").scaledFont(14).foregroundStyle(NDS.brand)
+                Text("Organize my Tasks").scaledFont(15, weight: .bold)
+            }
+            Text("Let AI review your current tasks and suggest fixes — reschedule overdue, fix priorities, group loose tasks into projects — applied only on your sign-off.")
+                .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                taskOrganizer.reset()
+                showOrganizer = true
+            } label: {
+                Label("Organize my Tasks", systemImage: "wand.and.stars")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(MSSecondaryButtonStyle())
+
             Spacer()
         }
         .padding(16)
+        .sheet(isPresented: $showOrganizer) {
+            TaskOrganizerView(organizer: taskOrganizer, store: store,
+                              onClose: { showOrganizer = false })
+        }
     }
 
     // MARK: Actions

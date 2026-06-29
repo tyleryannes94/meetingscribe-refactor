@@ -14,6 +14,9 @@ struct ActionItemsView: View {
 
     /// Quick brain-dump capture on the Tasks home dashboard (BD merge).
     @State var brainDumpCapture = ""
+    /// "Organize my Tasks" AI review sheet (Today page).
+    @StateObject var taskOrganizer = TaskOrganizer()
+    @State var showOrganizer = false
 
     /// Single owner of filter / sort / view / group state and the canonical
     /// filter implementation (A0-1). Replaces ~11 parallel `@State` vars and a
