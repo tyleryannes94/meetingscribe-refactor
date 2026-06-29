@@ -103,6 +103,11 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// = no dependencies.
     var blockedByIDs: [String]? = nil
 
+    /// Ids of tasks related to this one — a symmetric, non-blocking "see also"
+    /// link (distinct from `blockedByIDs` dependencies). Kept in sync on both
+    /// tasks by `ActionItemStore.relate/unrelate`. nil/empty = none.
+    var relatedIDs: [String]? = nil
+
     /// Effort estimate in points (PM-4). nil = unestimated. Powers capacity and
     /// velocity reporting.
     var estimate: Double? = nil

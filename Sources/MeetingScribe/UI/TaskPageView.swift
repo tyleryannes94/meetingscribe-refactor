@@ -36,6 +36,15 @@ struct TaskPageView: View {
             .prefix(50).map { $0 }
     }
 
+    /// Other live tasks (not self, not already related) offered as "see also" links.
+    private func relatedCandidates(_ item: ActionItem) -> [ActionItem] {
+        let existing = Set(item.relatedIDs ?? [])
+        return store.items
+            .filter { $0.id != item.id && $0.deletedAt == nil && !existing.contains($0.id) }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(50).map { $0 }
+    }
+
     @State private var titleDraft = ""
     @State private var assigneeDraft = ""
     @State private var noteDraft = ""
@@ -272,6 +281,42 @@ struct TaskPageView: View {
                     }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                     .help("Add or remove a blocking task")
+                }
+            }
+            NotionPropertyRow(icon: "link", label: "Related") {
+                HStack(spacing: 6) {
+                    let rel = store.related(for: item)
+                    if rel.isEmpty {
+                        Text("None").font(NDS.body).foregroundStyle(NDS.textTertiary)
+                    } else {
+                        ForEach(rel.prefix(4)) { r in
+                            Button { onNavigate(.task(r.id)) } label: {
+                                NotionChip(r.title, color: NDS.accent, systemImage: "link")
+                            }
+                            .buttonStyle(.plain)
+                            .help("Open “\(r.title)”")
+                        }
+                        if rel.count > 4 {
+                            Text("+\(rel.count - 4)").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                        }
+                    }
+                    Menu {
+                        if !rel.isEmpty {
+                            ForEach(rel) { r in
+                                Button { store.unrelate(itemID, r.id) } label: {
+                                    Label("Remove “\(r.title)”", systemImage: "minus.circle")
+                                }
+                            }
+                            Divider()
+                        }
+                        ForEach(relatedCandidates(item)) { t in
+                            Button(t.title) { store.relate(itemID, t.id) }
+                        }
+                    } label: {
+                        Image(systemName: "plus.circle").foregroundStyle(NDS.textTertiary)
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .help("Link or unlink a related task")
                 }
             }
             NotionPropertyRow(icon: "gauge.medium", label: "Estimate") {

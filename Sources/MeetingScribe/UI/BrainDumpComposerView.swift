@@ -18,6 +18,9 @@ struct BrainDumpComposerView: View {
 
     let session: BrainDumpSession
     @ObservedObject var planRunner: BrainDumpPlanRunner
+    /// Current Tasks page context (e.g. "Project: Analytics") forwarded to the
+    /// planner so proposals reflect what the user is looking at.
+    var pageContext: String? = nil
 
     @State private var bufferText: String = ""
     @State private var bufferTitle: String = ""
@@ -102,7 +105,8 @@ struct BrainDumpComposerView: View {
                     sessionID: session.id,
                     store: store,
                     actionItems: actionItems,
-                    contexts: actionItems.contexts
+                    contexts: actionItems.contexts,
+                    pageContext: pageContext
                 )
             } label: {
                 Label(planRunner.isRunning ? "Planning…" : "Plan with AI",

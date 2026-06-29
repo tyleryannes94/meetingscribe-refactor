@@ -10,19 +10,29 @@ extension ActionItemsView {
         // Brain Dump is now a page *within* Tasks (no longer a top-level nav
         // item) — when toggled on it takes over the detail pane.
         if env.showingBrainDump {
-            BrainDumpView(onExit: { env.showingBrainDump = false })
+            BrainDumpView(onExit: { env.showingBrainDump = false },
+                          pageContext: brainDumpPageContext)
         } else {
-            // Real HStack split (not overlay) so the drawer participates in
-            // layout: main content shrinks to make room, the drawer never
-            // overflows the pane, and the whole thing re-balances when the
-            // window resizes either direction. The previous overlay + fixed
-            // 360pt frame clipped past the pane on narrow windows; the
-            // GeometryReader-driven attempt was reading unexpected sizes
-            // on wide windows and rendering the drawer far wider than 360.
-            HStack(spacing: 0) {
-                detailContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                propertyDrawer
+            // Drive BOTH widths off the real container size so the inspector
+            // drawer can never overflow the right edge — the prior plain-HStack
+            // version let the list/board's intrinsic min-width push the drawer
+            // off-screen on normal windows. The drawer takes a clamped share of
+            // the width and the content gets exactly the remainder (and clips
+            // its own overflow rather than forcing the HStack wider).
+            GeometryReader { geo in
+                let editing = vm.editingID != nil
+                    && store.items.contains { $0.id == vm.editingID }
+                let drawerW = editing ? min(380, max(260, geo.size.width * 0.42)) : 0
+                HStack(spacing: 0) {
+                    detailContent
+                        .frame(width: max(0, geo.size.width - drawerW),
+                               height: geo.size.height)
+                        .clipped()
+                    if editing {
+                        propertyDrawer
+                            .frame(width: drawerW, height: geo.size.height)
+                    }
+                }
             }
         }
     }
@@ -66,6 +76,34 @@ extension ActionItemsView {
             }
         default:
             taskDatabasePane
+        }
+    }
+
+    /// A short description of the Tasks page the user is on, handed to the Brain
+    /// Dump planner so its proposals are grounded in what they're viewing
+    /// (defaults new tasks to the open project/initiative, relates to the open
+    /// task, etc.). nil for surfaces with no useful anchor.
+    var brainDumpPageContext: String? {
+        switch env.route {
+        case .project(let pid):
+            guard let p = store.project(id: pid) else { return nil }
+            let open = store.items.filter { $0.projectID == pid && $0.deletedAt == nil && $0.status != .completed }
+            let initiative = p.initiativeID.flatMap { store.initiative(id: $0)?.name }
+            var s = "Project: \(p.name) (\(open.count) open task\(open.count == 1 ? "" : "s"))"
+            if let initiative { s += " · Initiative: \(initiative)" }
+            return s
+        case .initiative(let iid):
+            return store.initiative(id: iid).map { "Initiative: \($0.name)" }
+        case .task(let tid):
+            return store.items.first { $0.id == tid }.map { "Viewing task: \($0.title)" }
+        case .today:
+            return "The Today view — today's priorities and anything overdue."
+        case .myTasks:
+            return "My Tasks — tasks assigned to the user."
+        case .waitingOn:
+            return "Waiting-on — tasks delegated to others."
+        default:
+            return nil
         }
     }
 
@@ -114,8 +152,9 @@ extension ActionItemsView {
                 }
                 .background(NDS.bg)
             }
-            .frame(maxWidth: 380, maxHeight: .infinity)
-            .layoutPriority(1)
+            // Width is set by `detailPane`'s GeometryReader so the drawer always
+            // fits inside the container; just fill it here.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .shadow(color: .black.opacity(0.12), radius: 12, x: -4, y: 0)
             .transition(.move(edge: .trailing))
         }

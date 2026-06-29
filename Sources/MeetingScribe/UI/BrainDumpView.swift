@@ -19,6 +19,11 @@ struct BrainDumpView: View {
     /// a "Tasks" back chip whenever this is set.
     var onExit: (() -> Void)? = nil
 
+    /// Human description of the Tasks page the user opened Brain Dump from
+    /// (e.g. "Project: Analytics"). Fed to the planner so proposals are
+    /// grounded in what the user is looking at.
+    var pageContext: String? = nil
+
     @StateObject private var planRunner = BrainDumpPlanRunner()
 
     var body: some View {
@@ -124,7 +129,7 @@ struct BrainDumpView: View {
     private func sessionBody(_ session: BrainDumpSession) -> some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                BrainDumpComposerView(session: session, planRunner: planRunner)
+                BrainDumpComposerView(session: session, planRunner: planRunner, pageContext: pageContext)
                 if !planRunner.events.isEmpty {
                     Divider().overlay(NDS.divider)
                     BrainDumpActivityLog(events: planRunner.events)
@@ -156,7 +161,8 @@ struct BrainDumpView: View {
         store.activeSessionID = id
         store.pendingPlanSessionID = nil
         planRunner.run(sessionID: id, store: store,
-                       actionItems: actionItems, contexts: actionItems.contexts)
+                       actionItems: actionItems, contexts: actionItems.contexts,
+                       pageContext: pageContext)
     }
 
     private static func shortDate(_ d: Date) -> String {

@@ -28,6 +28,7 @@ enum BrainDumpPrompts {
                              initiatives: [String] = [],
                              tags: [String] = [],
                              openTasks: [(id: String, title: String, project: String)] = [],
+                             pageContext: String? = nil,
                              focusMinutes: Int,
                              workdayStartHour: Int,
                              workdayEndHour: Int) -> String {
@@ -65,10 +66,14 @@ enum BrainDumpPrompts {
                 return "- (\(t.id)) \(t.title)\(proj)"
             }.joined(separator: "\n")
 
+        let pageBlock = (pageContext?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap {
+            $0.isEmpty ? nil : "\n\nWHERE THE USER IS RIGHT NOW (use this for context — default new tasks to this project/initiative when it fits, and relate items to what they're viewing):\n\($0)"
+        } ?? ""
+
         return """
         You are \(userName)'s planning assistant inside MeetingScribe, a local-first Mac app. You turn a brain-dump (free text plus attached sources) into a short, decisive, well-organized set of tasks and calendar focus blocks — ready to start knocking out.
 
-        Today is \(todayPretty) (\(todayISO)).
+        Today is \(todayPretty) (\(todayISO)).\(pageBlock)
 
         Top-level life contexts you can scope work to:
         \(contextList)

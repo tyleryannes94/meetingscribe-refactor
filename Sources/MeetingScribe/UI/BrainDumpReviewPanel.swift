@@ -377,20 +377,13 @@ private struct TaskDraftCard: View {
         )
         if let due = draft.dueDate { actionItems.setDueDate(newTask.id, dueDate: due) }
         applyLabels(to: newTask.id)
+        if let notes = draft.notes, !notes.isEmpty { actionItems.setNotes(newTask.id, notes: notes) }
 
-        var notes = draft.notes ?? ""
-        // For a "related" proposal, cross-link both tasks via notes (no
-        // first-class relation field exists yet).
+        // For a "related" proposal, create a real bidirectional related link.
         if let relation = draft.relation, relation.kind == .related,
            actionItems.items.contains(where: { $0.id == relation.existingTaskID }) {
-            let link = taskLinkMarkdown(id: relation.existingTaskID, title: relation.existingTaskTitle)
-            notes = appendLine(to: notes, "Related: \(link)")
-            // Back-link from the existing task to the new one.
-            let backNotes = appendLine(to: existingNotes(relation.existingTaskID),
-                                       "Related: \(taskLinkMarkdown(id: newTask.id, title: draft.title))")
-            actionItems.setNotes(relation.existingTaskID, notes: backNotes)
+            actionItems.relate(newTask.id, relation.existingTaskID)
         }
-        if !notes.isEmpty { actionItems.setNotes(newTask.id, notes: notes) }
         store.setDraftState(sessionID, draft.id, .accepted(externalID: newTask.id))
     }
 

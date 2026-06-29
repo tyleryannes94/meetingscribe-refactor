@@ -18,6 +18,7 @@ final class BrainDumpPlanner {
               store: BrainDumpStore,
               actionItems: ActionItemStore,
               contexts: [WorkspaceContext],
+              pageContext: String? = nil,
               progress: @escaping (BrainDumpPlannerEvent) -> Void) async throws -> String? {
         guard var session = store.session(sessionID) else {
             throw BrainDumpToolError.badInput("Session not found.")
@@ -46,6 +47,7 @@ final class BrainDumpPlanner {
                 .map { $0.name },
             tags: actionItems.labels.map { $0.name },
             openTasks: Array(openTasks),
+            pageContext: pageContext,
             focusMinutes: AppSettings.shared.brainDumpDefaultFocusMinutes,
             workdayStartHour: AppSettings.shared.brainDumpWorkdayStartHour,
             workdayEndHour: AppSettings.shared.brainDumpWorkdayEndHour
@@ -119,7 +121,8 @@ final class BrainDumpPlanRunner: ObservableObject {
     func run(sessionID: String,
              store: BrainDumpStore,
              actionItems: ActionItemStore,
-             contexts: [WorkspaceContext]) {
+             contexts: [WorkspaceContext],
+             pageContext: String? = nil) {
         guard !isRunning else { return }
         isRunning = true
         reset()
@@ -131,6 +134,7 @@ final class BrainDumpPlanRunner: ObservableObject {
                     store: store,
                     actionItems: actionItems,
                     contexts: contexts,
+                    pageContext: pageContext,
                     progress: { [weak self] event in
                         self?.events.append(event)
                     }

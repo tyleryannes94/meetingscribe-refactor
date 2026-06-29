@@ -1421,6 +1421,45 @@ final class ActionItemStore: ObservableObject {
         }
     }
 
+    // MARK: - Related tasks (symmetric "see also" links)
+
+    /// Symmetrically link two tasks as related (idempotent). Kept in sync on
+    /// both records so either task's detail shows the other.
+    func relate(_ a: String, _ b: String) {
+        guard a != b, itemIndex[a] != nil, itemIndex[b] != nil else { return }
+        addRelated(a, b)
+        addRelated(b, a)
+    }
+
+    /// Remove a symmetric related link from both tasks.
+    func unrelate(_ a: String, _ b: String) {
+        removeRelated(a, b)
+        removeRelated(b, a)
+    }
+
+    private func addRelated(_ id: String, _ other: String) {
+        update(id) {
+            var ids = $0.relatedIDs ?? []
+            if !ids.contains(other) { ids.append(other) }
+            $0.relatedIDs = ids.isEmpty ? nil : ids
+        }
+    }
+
+    private func removeRelated(_ id: String, _ other: String) {
+        update(id) {
+            let ids = ($0.relatedIDs ?? []).filter { $0 != other }
+            $0.relatedIDs = ids.isEmpty ? nil : ids
+        }
+    }
+
+    /// The live related tasks for an item, in declared order (skips any that
+    /// were deleted).
+    func related(for item: ActionItem) -> [ActionItem] {
+        (item.relatedIDs ?? []).compactMap { rid in
+            itemIndex[rid].map { items[$0] }
+        }.filter { $0.deletedAt == nil }
+    }
+
     /// A task is blocked when it has at least one blocker that still exists and
     /// isn't completed.
     func isBlocked(_ item: ActionItem) -> Bool {
