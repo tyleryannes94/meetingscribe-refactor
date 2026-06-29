@@ -25,7 +25,6 @@ struct BrainDumpEmptyState: View {
                 Label("Start a brain dump", systemImage: "plus.circle.fill")
             }
             .buttonStyle(MSPrimaryButtonStyle())
-            .controlSize(.large)
             VStack(alignment: .leading, spacing: 6) {
                 exampleRow("brain.head.profile", "\"Need to finish the Q3 deck by Friday, follow up with Sam about the contract…\"")
                 exampleRow("link", "Paste a URL — the planner reads it and folds the key points into your plan.")

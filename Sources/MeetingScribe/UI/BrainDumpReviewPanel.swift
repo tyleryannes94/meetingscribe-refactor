@@ -232,9 +232,9 @@ private struct TaskDraftCard: View {
         } else if case .pending = draft.state {
             HStack(spacing: 6) {
                 Button { accept() } label: { Label("Accept", systemImage: "checkmark") }
-                    .buttonStyle(MSPrimaryButtonStyle()).controlSize(.small)
+                    .buttonStyle(MSPrimaryButtonStyle())
                 Button { beginEdit() } label: { Label("Edit", systemImage: "pencil") }
-                    .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small)
+                    .buttonStyle(MSSecondaryButtonStyle())
                 Button { store.setDraftState(sessionID, draft.id, .rejected) } label: {
                     Label("Reject", systemImage: "xmark").font(NDS.tiny)
                 }
@@ -392,9 +392,9 @@ private struct CalendarBlockDraftCard: View {
         } else if case .pending = draft.state {
             HStack(spacing: 6) {
                 Button { Task { await accept() } } label: { Label("Accept", systemImage: "checkmark") }
-                    .buttonStyle(MSPrimaryButtonStyle()).controlSize(.small)
+                    .buttonStyle(MSPrimaryButtonStyle())
                 Button { beginEdit() } label: { Label("Edit", systemImage: "pencil") }
-                    .buttonStyle(MSSecondaryButtonStyle()).controlSize(.small)
+                    .buttonStyle(MSSecondaryButtonStyle())
                 Button { store.setDraftState(sessionID, draft.id, .rejected) } label: {
                     Label("Reject", systemImage: "xmark").font(NDS.tiny)
                 }
