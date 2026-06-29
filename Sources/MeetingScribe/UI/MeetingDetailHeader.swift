@@ -43,8 +43,9 @@ extension UnifiedMeetingDetail {
                                     }
                                 }
                             }
-                            if unaddedAttendeeCount(m) > 0 {
-                                MSInlineButton("Add \(unaddedAttendeeCount(m)) to People",
+                            let unadded = unaddedAttendeeCount(m)
+                            if unadded > 0 {
+                                MSInlineButton("Add \(unadded) to People",
                                                systemImage: "person.crop.circle.badge.plus") {
                                     addAllAttendeesToPeople(m)
                                 }
@@ -684,11 +685,11 @@ extension UnifiedMeetingDetail {
     /// most-significant resolved attendee (by shared past-meeting count).
     func sharedHistoryLine(for meeting: Meeting?) -> String? {
         guard let m = meeting else { return nil }
-        let people = PeopleStore.shared.people
+        let store = PeopleStore.shared
         var best: (name: String, count: Int, last: Meeting?)?
         for raw in m.attendees {
-            guard let pid = PersonResolver.resolve(raw, in: people),
-                  let person = people.first(where: { $0.id == pid }) else { continue }
+            guard let pid = store.resolvePersonID(raw),
+                  let person = store.person(by: pid) else { continue }
             let shared = manager.pastMeetings.filter {
                 $0.id != m.id && person.meetingMentions.contains($0.id)
             }
@@ -709,7 +710,7 @@ extension UnifiedMeetingDetail {
     // MARK: - Add all attendees to People (TM-9)
 
     private func attendeeExists(_ a: String) -> Bool {
-        PersonResolver.resolve(a, in: PeopleStore.shared.people) != nil
+        PeopleStore.shared.resolvePersonID(a) != nil
     }
 
     func unaddedAttendeeCount(_ m: Meeting) -> Int {
@@ -890,7 +891,7 @@ private struct AttendeeChip: View {
     private var email: String { identity.email }
 
     private var existingPerson: Person? {
-        guard let id = PersonResolver.resolve(identity: identity, in: people.people) else { return nil }
+        guard let id = people.resolvePersonID(identity: identity) else { return nil }
         return people.person(by: id)
     }
 

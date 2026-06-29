@@ -26,10 +26,11 @@ struct MeetingsView: View {
         return (manager.pastMeetings + calendar.upcoming + calendar.rangeEvents).first { $0.id == id }
     }
     @State private var search: String = ""
-    // Default to upcoming-first and remember the user's last choice across
-    // visits (was a transient `.all` @State that reset every time the tab
-    // was rebuilt). Scope is a String-backed enum so @AppStorage can persist it.
-    @AppStorage("meetings.scope") private var scope: Scope = .upcoming
+    // Default to "All" so the user immediately sees today's calls (upcoming +
+    // recorded) without first tapping a pill. The user's last choice still
+    // persists across visits. Scope is a String-backed enum so @AppStorage can
+    // store it; the `.v2` key resets everyone to the new All default once.
+    @AppStorage("meetings.scope.v2") private var scope: Scope = .all
     // List vs Week view inside the Meetings tab. Week mode is wired to
     // `selectedMeeting`, not inline expand.
     @State private var listMode: ListMode = .list
@@ -95,41 +96,108 @@ struct MeetingsView: View {
     // MARK: - Prototype list pane (centred single column)
 
     private var protoListPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                Color.clear.frame(height: NDS.splitPaneTopInset)
-                // Header: big Bricolage title + meta line.
-                Text("Meetings")
-                    .scaledFont(30, weight: .heavy, relativeTo: .largeTitle, kind: .display)
-                    .tracking(-0.8)
-                    .foregroundStyle(NDS.textPrimary)
-                Text("\(todayCount) today · \(past.count) recorded")
-                    .scaledFont(13.5).foregroundStyle(NDS.textSecondary)
-                    .padding(.top, 3)
-                // Filter chips (All / Upcoming / Past).
-                FlowLayout(spacing: 6) {
-                    ForEach(Scope.allCases) { s in
-                        MSFilterChip(label: s.label, active: scope == s, tint: NDS.accent) {
-                            scope = s
+        VStack(spacing: 0) {
+            // Fixed header so search, the List/Calendar toggle, and the scope
+            // tabs stay put while the list scrolls underneath.
+            protoHeader
+            Divider().overlay(NDS.divider)
+            if listMode == .week {
+                weekView
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 22) {
+                        ForEach(sortedGroups, id: \.0) { title, items in
+                            if !items.isEmpty {
+                                protoGroup(title: title, items: items)
+                            }
                         }
+                        if sortedGroups.allSatisfy({ $0.1.isEmpty }) { emptyState }
                     }
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 24)
+                    .frame(maxWidth: 1000, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .padding(.top, 20)
-                // Time-grouped rows.
-                LazyVStack(alignment: .leading, spacing: 22) {
-                    ForEach(sortedGroups, id: \.0) { title, items in
-                        if !items.isEmpty {
-                            protoGroup(title: title, items: items)
-                        }
-                    }
-                    if sortedGroups.allSatisfy({ $0.1.isEmpty }) { emptyState }
-                }
-                .padding(.top, 22)
             }
-            .padding(.horizontal, 36)
-            .padding(.vertical, 30)
-            .frame(maxWidth: 1000, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    /// Fixed top section of the Meetings list: big title + counts, a
+    /// List/Calendar view toggle, an always-visible search bar, and the large
+    /// All / Upcoming / Past scope tabs.
+    private var protoHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Color.clear.frame(height: NDS.splitPaneTopInset)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Meetings")
+                        .scaledFont(30, weight: .heavy, relativeTo: .largeTitle, kind: .display)
+                        .tracking(-0.8)
+                        .foregroundStyle(NDS.textPrimary)
+                    Text("\(todayCount) today · \(past.count) recorded")
+                        .scaledFont(13.5).foregroundStyle(NDS.textSecondary)
+                }
+                Spacer(minLength: 0)
+                // List ↔ Calendar (week) view toggle.
+                Picker("", selection: $listMode) {
+                    ForEach(ListMode.allCases) { m in
+                        Label(m.label, systemImage: m.systemImage).tag(m)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+            protoSearchBar
+            protoScopeTabs
+        }
+        .padding(.horizontal, 36)
+        .padding(.top, 30)
+        .padding(.bottom, 16)
+        .frame(maxWidth: 1000, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// Always-visible search field (filters title + attendees via `matches`).
+    private var protoSearchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .scaledFont(13).foregroundStyle(NDS.textTertiary)
+            TextField("Search meetings…", text: $search)
+                .textFieldStyle(.plain)
+                .scaledFont(14)
+            if !search.isEmpty {
+                Button { search = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .scaledFont(13).foregroundStyle(NDS.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(NDS.hairline, lineWidth: 1))
+    }
+
+    /// Large, full-width All / Upcoming / Past tabs (replaces the tiny chips).
+    private var protoScopeTabs: some View {
+        HStack(spacing: 8) {
+            ForEach(Scope.allCases) { s in
+                Button { scope = s } label: {
+                    Text(s.label)
+                        .scaledFont(15, weight: .semibold)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(scope == s ? NDS.accent : NDS.fieldBg,
+                                    in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .foregroundStyle(scope == s ? NDS.onAccent : NDS.textSecondary)
+                        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .strokeBorder(scope == s ? Color.clear : NDS.hairline, lineWidth: 1))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

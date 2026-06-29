@@ -187,12 +187,13 @@ struct UnifiedMeetingDetail: View {
         .onAppear {
             reload()
             attachChatIfNeeded()
-            if let m = meeting {
-                chatSession.setContext(chatContext(for: m), label: m.displayTitle)
-            }
         }
         .onChange(of: meeting?.id) { _, _ in
             reload()
+        }
+        // Build + push the chat context OFF the synchronous open path so the
+        // meeting paints instantly; re-runs when the selected meeting changes.
+        .task(id: meeting?.id) {
             if let m = meeting {
                 chatSession.setContext(chatContext(for: m), label: m.displayTitle)
             }

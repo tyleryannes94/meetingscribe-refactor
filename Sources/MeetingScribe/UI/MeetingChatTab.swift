@@ -27,11 +27,11 @@ extension UnifiedMeetingDetail {
         // P1-10: inject what the vault already knows about the resolved
         // attendees so "what should I ask Jane?" answers from the relationship
         // graph, not just this transcript. All local — no privacy cost.
-        let people = PeopleStore.shared.people
+        let store = PeopleStore.shared
         var blocks: [String] = []
         for raw in m.attendees {
-            guard let id = PersonResolver.resolve(raw, in: people),
-                  let p = people.first(where: { $0.id == id }) else { continue }
+            guard let id = store.resolvePersonID(raw),
+                  let p = store.person(by: id) else { continue }
             var b = "  • \(p.displayName)"
             let rc = [p.role, p.company].filter { !$0.isEmpty }.joined(separator: " at ")
             if !rc.isEmpty { b += " (\(rc))" }

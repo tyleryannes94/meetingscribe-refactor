@@ -57,7 +57,7 @@ struct MeetingPeopleRail: View {
     private func rowFor(_ raw: String) -> some View {
         let id = PersonResolver.parse(raw)
         let name = id.hasName ? id.name : PersonResolver.localPart(of: id.email)
-        if let pid = PersonResolver.resolve(identity: id, in: people.people),
+        if let pid = people.resolvePersonID(identity: id),
            let person = people.person(by: pid) {
             MeetingPersonRow(person: person, meeting: meeting)
         } else {

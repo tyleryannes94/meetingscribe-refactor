@@ -34,7 +34,7 @@ final class PeopleStore: ObservableObject {
     static let possibleMatchThreshold = 0.6 // ≥ (and < auto) → "is this X?" suggestion
 
     @Published private(set) var people: [Person] = [] {
-        didSet { rebuildPersonIndex() }
+        didSet { rebuildPersonIndex(); rebuildResolveIndex() }
     }
     @Published private(set) var encounters: [Encounter] = [] {
         didSet { rebuildEncounterCounts() }
@@ -48,6 +48,58 @@ final class PeopleStore: ObservableObject {
 
     private func rebuildPersonIndex() {
         personIndex = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    // Resolve indexes (perf): attendee string → personID in O(1). Meeting-open
+    // paths (header attendee chips, shared-history line, the "Who's here" rail,
+    // and the chat context builder) all resolved every attendee with a linear
+    // `people.first(where:)` scan — ~5 scans/attendee/open over a people graph
+    // that can hold thousands of records. These mirror `PersonResolver.resolve`'s
+    // conservative email-first → exact-name → alias precedence, index-backed.
+    private var emailToPersonID: [String: String] = [:]
+    private var nameToPersonID: [String: String] = [:]
+    private var aliasToPersonID: [String: String] = [:]
+
+    private func rebuildResolveIndex() {
+        var email: [String: String] = [:]
+        var name: [String: String] = [:]
+        var alias: [String: String] = [:]
+        // First person in array order wins on collision — matches the
+        // `first(where:)` semantics of the linear resolve it replaces.
+        for p in people {
+            for e in p.emails {
+                let k = PersonMatching.normalizeEmail(e)
+                if !k.isEmpty, email[k] == nil { email[k] = p.id }
+            }
+            let n = PersonMatching.normalizeName(p.displayName)
+            if !n.isEmpty, name[n] == nil { name[n] = p.id }
+            for a in p.aliases {
+                let k = PersonMatching.normalizeName(a)
+                if !k.isEmpty, alias[k] == nil { alias[k] = p.id }
+            }
+        }
+        emailToPersonID = email
+        nameToPersonID = name
+        aliasToPersonID = alias
+    }
+
+    /// O(1) attendee → personID resolution. Same conservative precedence as
+    /// `PersonResolver.resolve` (email, then exact normalized name, then alias;
+    /// never substring) but index-backed instead of a per-call array scan.
+    func resolvePersonID(_ raw: String) -> String? {
+        resolvePersonID(identity: PersonResolver.parse(raw))
+    }
+
+    func resolvePersonID(identity id: AttendeeIdentity) -> String? {
+        if id.hasEmail, let pid = emailToPersonID[PersonMatching.normalizeEmail(id.email)] {
+            return pid
+        }
+        if id.hasName {
+            let target = PersonMatching.normalizeName(id.name)
+            if let pid = nameToPersonID[target] { return pid }
+            if let pid = aliasToPersonID[target] { return pid }
+        }
+        return nil
     }
     private func rebuildEncounterCounts() {
         var counts: [String: Int] = [:]
