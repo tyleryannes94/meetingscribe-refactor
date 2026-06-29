@@ -40,7 +40,21 @@ final class ScreenRecordingsController: ObservableObject {
         self.actionItems = actionItemStore
     }
 
+    /// Coalesces back-to-back tab re-appearances so the synchronous
+    /// `listRecordings()` vault scan runs at most once per 30 s on the appear path.
+    private var listThrottle = RefreshThrottle(interval: 30)
+
+    /// Forced refresh — used after a capture/edit/delete so the list reflects
+    /// the mutation immediately. Re-arms the throttle window.
     func refresh() {
+        _ = listThrottle.shouldRun(force: true)
+        recordings = store.listRecordings()
+    }
+
+    /// onAppear path: re-scan the vault only when the cached snapshot is stale,
+    /// so rapid Recordings tab switches don't re-hit disk on the main thread.
+    func refreshIfStale() {
+        guard listThrottle.shouldRun() else { return }
         recordings = store.listRecordings()
     }
 

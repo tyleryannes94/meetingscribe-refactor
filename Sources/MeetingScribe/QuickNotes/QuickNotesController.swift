@@ -94,7 +94,21 @@ final class QuickNotesController: ObservableObject {
         set { recorder.onLevel = newValue }
     }
 
+    /// Coalesces back-to-back tab re-appearances so the synchronous
+    /// `listNotes()` vault scan runs at most once per 30 s on the appear path.
+    private var listThrottle = RefreshThrottle(interval: 30)
+
+    /// Forced refresh — used after a write (record/import/delete/transcribe) so
+    /// the list reflects the mutation immediately. Re-arms the throttle window.
     func refresh() {
+        _ = listThrottle.shouldRun(force: true)
+        notes = store.listNotes()
+    }
+
+    /// onAppear path: re-scan the vault only when the cached snapshot is stale,
+    /// so rapid Voice-Notes tab switches don't re-hit disk on the main thread.
+    func refreshIfStale() {
+        guard listThrottle.shouldRun() else { return }
         notes = store.listNotes()
     }
 

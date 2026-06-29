@@ -83,7 +83,7 @@ struct QuickNotesView: View {
                 .listStyle(.inset)
             }
         }
-        .onAppear { manager.refreshQuickNotes() }
+        .onAppear { manager.refreshQuickNotesIfStale() }
     }
 
     @ViewBuilder

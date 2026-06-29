@@ -1248,6 +1248,8 @@ final class MeetingManager: ObservableObject {
     var quickNoteErrors: [String: String] { quickNotesController.errors }
 
     func refreshQuickNotes() { quickNotesController.refresh() }
+    /// Throttled appear-path refresh — see `QuickNotesController.refreshIfStale`.
+    func refreshQuickNotesIfStale() { quickNotesController.refreshIfStale() }
     func startQuickNote() async {
         await quickNotesController.startRecording()
     }

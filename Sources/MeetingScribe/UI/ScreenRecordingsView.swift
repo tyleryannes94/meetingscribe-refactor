@@ -31,7 +31,7 @@ struct ScreenRecordingsView: View {
                 .frame(minWidth: 420)
         }
         .background(NDS.bg)
-        .onAppear { recordings.refresh() }
+        .onAppear { recordings.refreshIfStale() }
         .onReceive(NotificationCenter.default.publisher(for: .meetingScribeNewScreenRecording)) { _ in
             Task { await start(.fullScreen) }
         }
