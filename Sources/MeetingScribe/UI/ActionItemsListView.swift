@@ -86,7 +86,7 @@ extension ActionItemsView {
         if addingSection {
             HStack(spacing: 6) {
                 TextField("Section name", text: $newSectionName, onCommit: { commitSection(pid: pid) })
-                    .textFieldStyle(.roundedBorder).frame(width: 220)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 220)
                 Button("Add") { commitSection(pid: pid) }
                 Button("Cancel") { addingSection = false; newSectionName = "" }
             }

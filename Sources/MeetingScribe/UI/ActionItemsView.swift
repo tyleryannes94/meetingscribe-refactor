@@ -319,26 +319,36 @@ struct ActionItemsView: View {
     /// toolbar — so it uses a plain HStack + drag divider, NOT a
     /// NavigationSplitView (which fights the window toolbar's safe area).
     private var paneSplit: some View {
-        HStack(spacing: 0) {
-            ProjectRail(store: store, meetings: manager.pastMeetings)
-                .environmentObject(env)
-                .frame(width: CGFloat(railWidth))
-            // Draggable divider — resizes + persists the sidebar width.
-            Divider().overlay(NDS.divider)
-                .background(Color.clear.frame(width: 6).contentShape(Rectangle()))
-                .gesture(
-                    DragGesture()
-                        .onChanged { v in
-                            let start = railDragStart ?? railWidth
-                            if railDragStart == nil { railDragStart = railWidth }
-                            railWidth = min(360, max(180, start + Double(v.translation.width)))
-                        }
-                        .onEnded { _ in railDragStart = nil }
-                )
-                .onHover { inside in
-                    if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                }
-            detailPane
+        // Responsive split: the sidebar's persisted width is treated as a
+        // *preference*, then clamped to a share of the actually-available width
+        // so a narrow window never lets the rail starve the detail pane (and the
+        // task inspector that opens inside it). This is the "media query" that
+        // keeps content usable at every window size, not just wide ones.
+        GeometryReader { geo in
+            let maxRail = max(168, geo.size.width * 0.42)
+            let effRail = min(CGFloat(railWidth), maxRail)
+            HStack(spacing: 0) {
+                ProjectRail(store: store, meetings: manager.pastMeetings)
+                    .environmentObject(env)
+                    .frame(width: effRail)
+                // Draggable divider — resizes + persists the sidebar width.
+                Divider().overlay(NDS.divider)
+                    .background(Color.clear.frame(width: 6).contentShape(Rectangle()))
+                    .gesture(
+                        DragGesture()
+                            .onChanged { v in
+                                let start = railDragStart ?? railWidth
+                                if railDragStart == nil { railDragStart = railWidth }
+                                railWidth = min(360, max(180, start + Double(v.translation.width)))
+                            }
+                            .onEnded { _ in railDragStart = nil }
+                    )
+                    .onHover { inside in
+                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                    }
+                detailPane
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .background(NDS.bg)
         .onAppear {

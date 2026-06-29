@@ -743,29 +743,34 @@ struct RichMarkdownEditor: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 2) {
-            tbButton("H1", help: "Heading 1") { controller.toggleLinePrefix("# ") }
-            tbButton("H2", help: "Heading 2") { controller.toggleLinePrefix("## ") }
-            tbButton("H3", help: "Heading 3") { controller.toggleLinePrefix("### ") }
-            divider
-            tbIcon("list.bullet", help: "Bullet list") { controller.toggleLinePrefix("- ") }
-            tbIcon("list.number", help: "Numbered list") { controller.toggleLinePrefix("1. ") }
-            tbIcon("checklist", help: "Checkbox") { controller.toggleLinePrefix("- [ ] ") }
-            tbIcon("text.quote", help: "Quote") { controller.toggleLinePrefix("> ") }
-            divider
-            tbIcon("bold", help: "Bold") { controller.wrapSelection("**") }
-            tbIcon("italic", help: "Italic") { controller.wrapSelection("*") }
-            tbIcon("chevron.left.forwardslash.chevron.right", help: "Inline code") { controller.wrapSelection("`") }
-            if mentionsOn {
+        // Horizontally scrollable so the fixed row of format buttons (~350pt of
+        // hard minimums) never forces the editor — and the page column it lives
+        // in — wider than its container. In the narrow task-inspector drawer it
+        // simply scrolls instead of pushing content off the right edge.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                tbButton("H1", help: "Heading 1") { controller.toggleLinePrefix("# ") }
+                tbButton("H2", help: "Heading 2") { controller.toggleLinePrefix("## ") }
+                tbButton("H3", help: "Heading 3") { controller.toggleLinePrefix("### ") }
                 divider
-                tbIcon("at", help: "Link a meeting, note, or project (@)") { controller.presentMentionMenu() }
+                tbIcon("list.bullet", help: "Bullet list") { controller.toggleLinePrefix("- ") }
+                tbIcon("list.number", help: "Numbered list") { controller.toggleLinePrefix("1. ") }
+                tbIcon("checklist", help: "Checkbox") { controller.toggleLinePrefix("- [ ] ") }
+                tbIcon("text.quote", help: "Quote") { controller.toggleLinePrefix("> ") }
+                divider
+                tbIcon("bold", help: "Bold") { controller.wrapSelection("**") }
+                tbIcon("italic", help: "Italic") { controller.wrapSelection("*") }
+                tbIcon("chevron.left.forwardslash.chevron.right", help: "Inline code") { controller.wrapSelection("`") }
+                if mentionsOn {
+                    divider
+                    tbIcon("at", help: "Link a meeting, note, or project (@)") { controller.presentMentionMenu() }
+                }
+                if enableSlashMenu {
+                    templatesMenu
+                }
             }
-            if enableSlashMenu {
-                templatesMenu
-            }
-            Spacer()
+            .padding(.horizontal, 8).padding(.vertical, 5)
         }
-        .padding(.horizontal, 8).padding(.vertical, 5)
         .background(NDS.fieldBg)
     }
 
