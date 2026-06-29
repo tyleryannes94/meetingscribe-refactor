@@ -83,7 +83,7 @@ struct ProjectRail: View {
             Button { creating = true } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "square.and.pencil").scaledFont(12, weight: .semibold)
-                    Text("New page").scaledFont(13, weight: .semibold)
+                    Text("New project").scaledFont(13, weight: .semibold)
                     Spacer()
                 }
                 .foregroundStyle(.white)
@@ -153,13 +153,13 @@ struct ProjectRail: View {
                     }
 
                     HStack {
-                        sectionLabel("Pages")
+                        sectionLabel("Projects")
                         Spacer()
-                        NotionIconButton(systemName: "plus", help: "New top-level page") { creating = true }
+                        NotionIconButton(systemName: "plus", help: "New project") { creating = true }
                             .padding(.trailing, 6)
                     }
                     if store.standaloneTopProjects().isEmpty && !creating {
-                        Text("No pages yet").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                        Text("No projects yet").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                             .padding(.horizontal, 12).padding(.vertical, 2)
                     }
                     ForEach(store.standaloneTopProjects()) { p in

@@ -264,6 +264,17 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — Projects can belong to multiple initiatives (many-to-many).**
+  `Project.initiativeID` (single) gains `initiativeIDs: [String]?` with a computed
+  `allInitiativeIDs` fallback — additive optional field, so the migration is
+  automatic and lossless (verified: existing single-initiative data + 46 tasks
+  intact, no destructive `.bak`). `initiativeID` is kept as the "primary" mirror
+  (= `initiativeIDs.first`) so the ~60 legacy read sites keep working; membership
+  reads (rail nesting, initiative filter/scope, completion/open counts, standalone
+  detection, delete-initiative cleanup) now use `belongs(toInitiative:)`. The
+  project header's initiative picker is now multi-select. **Note:** Project IS the
+  "page" type already (`Project.swift` header) — "Pages→Projects" is mostly UI
+  relabeling, not a data change.
 - **2026-06-29 — Organizer cards show a per-task checklist.** Multi-task
   recommendations (tag N tasks / move N tasks to a project) now list every
   affected task with a checkbox so the user can uncheck the ones that don't fit

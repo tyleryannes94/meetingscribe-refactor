@@ -173,16 +173,29 @@ struct ProjectPageHeader: View {
         let linked = store.meetingIDs(forProject: project.id)
             .compactMap { id in manager.pastMeetings.first { $0.id == id } }
         return HStack(spacing: 10) {
-            // Initiative selector
+            // Initiative selector — multi-select: a project can ladder up to
+            // several initiatives. Tapping one toggles membership; tasks inherit
+            // every initiative the project belongs to.
             Menu {
-                Button("No initiative") { store.setProjectInitiative(project.id, initiativeID: nil) }
-                Divider()
+                let current = Set(project.allInitiativeIDs)
+                if !current.isEmpty {
+                    Button("Clear all initiatives") { store.setProjectInitiatives(project.id, []) }
+                    Divider()
+                }
                 ForEach(store.sortedInitiatives()) { ini in
-                    Button(ini.name) { store.setProjectInitiative(project.id, initiativeID: ini.id) }
+                    let isOn = current.contains(ini.id)
+                    Button {
+                        if isOn { store.removeProjectInitiative(project.id, ini.id) }
+                        else { store.addProjectInitiative(project.id, ini.id) }
+                    } label: {
+                        Label(ini.name, systemImage: isOn ? "checkmark" : "flag")
+                    }
                 }
             } label: {
-                if let iid = project.initiativeID, let ini = store.initiative(id: iid) {
-                    NotionChip(ini.name, color: NDS.brand, systemImage: "flag.fill")
+                let names = project.allInitiativeIDs.compactMap { store.initiative(id: $0)?.name }
+                if let first = names.first {
+                    let extra = names.count > 1 ? " +\(names.count - 1)" : ""
+                    NotionChip(first + extra, color: NDS.brand, systemImage: "flag.fill")
                 } else {
                     HStack(spacing: 4) {
                         Image(systemName: "flag").font(.caption2)

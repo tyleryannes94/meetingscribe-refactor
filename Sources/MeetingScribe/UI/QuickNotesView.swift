@@ -775,7 +775,7 @@ private struct RecommendedTaskRow: View {
             if !actionItems.initiatives.isEmpty {
                 ForEach(actionItems.initiatives) { initiative in
                     let projects = actionItems.projects.filter {
-                        $0.initiativeID == initiative.id && $0.status == .active
+                        $0.belongs(toInitiative: initiative.id) && $0.status == .active
                     }
                     if !projects.isEmpty {
                         Section(initiative.name) {

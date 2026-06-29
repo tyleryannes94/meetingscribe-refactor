@@ -25,7 +25,25 @@ struct Project: Identifiable, Codable, Hashable {
     /// has tasks (back-compat: old projects with tasks show their database).
     var databaseEnabled: Bool?
     /// Parent initiative (top tier of the hierarchy). nil ⇒ standalone project.
+    /// Kept as the "primary" initiative for back-compat; the full set lives in
+    /// `initiativeIDs`. Always mirrors `initiativeIDs.first` once that's set.
     var initiativeID: String?
+    /// All initiatives this project belongs to (a project can ladder up to more
+    /// than one). Additive + optional so existing projects.json decodes; when
+    /// nil it falls back to `initiativeID` (see `allInitiativeIDs`). Lossless,
+    /// automatic migration — no schema bump needed.
+    var initiativeIDs: [String]?
+
+    /// The initiatives this project belongs to, unifying the legacy single
+    /// `initiativeID` and the multi-value `initiativeIDs`. Empty = standalone.
+    var allInitiativeIDs: [String] {
+        if let ids = initiativeIDs { return ids }
+        if let one = initiativeID { return [one] }
+        return []
+    }
+
+    /// True if this project ladders up to the given initiative.
+    func belongs(toInitiative id: String) -> Bool { allInitiativeIDs.contains(id) }
     /// Meetings/calls linked to this project (Meeting.id values).
     var meetingIDs: [String]?
     /// Linear project id this is associated with (for Linear sync).
@@ -69,6 +87,7 @@ struct Project: Identifiable, Codable, Hashable {
          sortIndex: Double? = nil,
          databaseEnabled: Bool? = nil,
          initiativeID: String? = nil,
+         initiativeIDs: [String]? = nil,
          meetingIDs: [String]? = nil,
          linearProjectID: String? = nil,
          targetDate: Date? = nil,
@@ -86,6 +105,7 @@ struct Project: Identifiable, Codable, Hashable {
         self.sortIndex = sortIndex
         self.databaseEnabled = databaseEnabled
         self.initiativeID = initiativeID
+        self.initiativeIDs = initiativeIDs
         self.meetingIDs = meetingIDs
         self.linearProjectID = linearProjectID
         self.targetDate = targetDate

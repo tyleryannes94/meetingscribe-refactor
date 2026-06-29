@@ -1079,7 +1079,7 @@ struct TodayView: View {
                     manager.actionItems.createTask(title: "New task")
                     router.section = .actions
                 }
-                QuickPill(title: "New page", systemImage: "doc.badge.plus",
+                QuickPill(title: "New project", systemImage: "doc.badge.plus",
                           tint: NDS.lilac) {
                     _ = manager.actionItems.createProject(name: "Untitled")
                     router.section = .actions

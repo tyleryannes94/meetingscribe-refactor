@@ -260,7 +260,7 @@ final class ActionItemStore: ObservableObject {
 
     /// (done, total) across all of an initiative's projects (VD-7).
     func completion(forInitiative initiativeID: String) -> (done: Int, total: Int) {
-        let pids = Set(projects.filter { $0.initiativeID == initiativeID }.map { $0.id })
+        let pids = Set(projects.filter { $0.belongs(toInitiative: initiativeID) }.map { $0.id })
         let scoped = items.filter { $0.projectID.map { pids.contains($0) } ?? false }
         return (scoped.filter { $0.status == .completed }.count, scoped.count)
     }
@@ -289,7 +289,7 @@ final class ActionItemStore: ObservableObject {
         // Resolve the initiative scope to its projects here (3-3) so the engine
         // stays pure and store-free.
         if case .initiative(let id) = query.scope {
-            let pids = Set(projects.filter { $0.initiativeID == id }.map { $0.id })
+            let pids = Set(projects.filter { $0.belongs(toInitiative: id) }.map { $0.id })
             q.scope = .anyProjects(pids)
         }
         return TaskQueryEngine.evaluate(q, over: items, now: now)
@@ -864,8 +864,10 @@ final class ActionItemStore: ObservableObject {
     func setInitiativeTargetDate(_ id: String, _ date: Date?) { updateInitiative(id) { $0.targetDate = date } }
     func deleteInitiative(_ id: String) {
         initiatives.removeAll { $0.id == id }
-        for i in projects.indices where projects[i].initiativeID == id {
-            projects[i].initiativeID = nil
+        for i in projects.indices where projects[i].belongs(toInitiative: id) {
+            let remaining = projects[i].allInitiativeIDs.filter { $0 != id }
+            projects[i].initiativeIDs = remaining
+            projects[i].initiativeID = remaining.first
             projects[i].updatedAt = Date()
         }
         saveInitiatives(); saveProjects()
@@ -876,9 +878,10 @@ final class ActionItemStore: ObservableObject {
         initiatives[idx] = copy; saveInitiatives()
     }
 
-    /// Top-level projects (parentID == nil) belonging to an initiative.
+    /// Top-level projects (parentID == nil) belonging to an initiative. A project
+    /// can ladder up to several initiatives, so it appears under each.
     func projects(forInitiative initiativeID: String) -> [Project] {
-        childProjects(of: nil).filter { $0.initiativeID == initiativeID }
+        childProjects(of: nil).filter { $0.belongs(toInitiative: initiativeID) }
     }
     /// Top-level projects with no initiative. Archived pages are hidden by
     /// default (P0-4); pass `includeArchived: true` for "Show archived".
@@ -886,7 +889,7 @@ final class ActionItemStore: ObservableObject {
         // Only archived pages are hidden by default; on-hold/completed still show
         // (5-6 expanded the status set).
         childProjects(of: nil).filter {
-            $0.initiativeID == nil && (includeArchived || $0.status != .archived)
+            $0.allInitiativeIDs.isEmpty && (includeArchived || $0.status != .archived)
         }
     }
 
@@ -894,12 +897,34 @@ final class ActionItemStore: ObservableObject {
     func archivedTopProjects() -> [Project] {
         standaloneTopProjects(includeArchived: true).filter { $0.status == .archived }
     }
+    /// Set a project's single initiative (legacy single-value entry point, e.g.
+    /// drag-to-initiative). Keeps `initiativeIDs` in sync.
     func setProjectInitiative(_ id: String, initiativeID: String?) {
-        updateProject(id) { $0.initiativeID = initiativeID }
+        updateProject(id) {
+            $0.initiativeID = initiativeID
+            $0.initiativeIDs = initiativeID.map { [$0] } ?? []
+        }
+    }
+    /// Replace the full set of initiatives a project belongs to (many-to-many).
+    func setProjectInitiatives(_ id: String, _ ids: [String]) {
+        var unique: [String] = []
+        for i in ids where !unique.contains(i) { unique.append(i) }
+        updateProject(id) {
+            $0.initiativeIDs = unique
+            $0.initiativeID = unique.first   // primary mirror for legacy reads
+        }
+    }
+    func addProjectInitiative(_ id: String, _ initiativeID: String) {
+        guard let p = project(id: id) else { return }
+        setProjectInitiatives(id, p.allInitiativeIDs + [initiativeID])
+    }
+    func removeProjectInitiative(_ id: String, _ initiativeID: String) {
+        guard let p = project(id: id) else { return }
+        setProjectInitiatives(id, p.allInitiativeIDs.filter { $0 != initiativeID })
     }
     /// Open task count across an initiative's projects (and their sub-pages).
     func openCount(forInitiative initiativeID: String) -> Int {
-        let projectIDs = Set(projects.filter { $0.initiativeID == initiativeID }.map { $0.id })
+        let projectIDs = Set(projects.filter { $0.belongs(toInitiative: initiativeID) }.map { $0.id })
         return items.filter { ($0.projectID.map { projectIDs.contains($0) } ?? false) && $0.status != .completed }.count
     }
 
@@ -1641,13 +1666,15 @@ final class ActionItemStore: ObservableObject {
     /// the projects it detached.
     func deleteInitiativeWithUndo(_ id: String) -> (() -> Void)? {
         guard let snapshot = initiatives.first(where: { $0.id == id }) else { return nil }
-        let relinkProjectIDs = projects.filter { $0.initiativeID == id }.map(\.id)
+        let relinkProjectIDs = projects.filter { $0.belongs(toInitiative: id) }.map(\.id)
         deleteInitiative(id)
         return { [weak self] in
             guard let self else { return }
             self.initiatives.append(snapshot)
             self.saveInitiatives()
-            for pid in relinkProjectIDs { self.setProjectInitiative(pid, initiativeID: id) }
+            // Re-add (don't overwrite) so projects that ladder up to several
+            // initiatives keep the others.
+            for pid in relinkProjectIDs { self.addProjectInitiative(pid, id) }
         }
     }
 
