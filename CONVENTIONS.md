@@ -264,6 +264,14 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — "Organize my Tasks" richer + capped at ≤20s.** Added per-task
+  individual suggestions to the instant deterministic pass: **split** compound
+  tasks into subtasks, **infer a due date** from date words in the title, and
+  **theme-based tag/grouping** (single-task tags + grouping tasks that share a
+  theme into a matching project or shared tag). The model phase is now **only
+  run when ≥4 loose tasks stay unclustered**, hard-capped to **12s** with an
+  output-token cap, so a full run finishes in well under 20s. Verified: ~14
+  varied suggestions on screen in ~0.6s, grouping pass done by ~12s.
 - **2026-06-29 — "Organize my Tasks" made fast + always-output.** The feature
   ran an up-to-10-iteration local-model tool loop (600s timeout each) and showed
   only a blocking spinner — minutes-long, often no visible result. Rebuilt as a

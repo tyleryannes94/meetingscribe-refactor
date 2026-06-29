@@ -17,6 +17,9 @@ struct TaskSuggestion: Identifiable, Hashable {
         case assignProject(taskIDs: [String], taskTitles: [String], projectName: String, existingProjectID: String?)
         /// Tag one or more tasks (creating the tag if needed).
         case addTag(taskIDs: [String], taskTitles: [String], tag: String)
+        /// Break one compound task into subtasks (the parent keeps its title;
+        /// each part becomes a checklist subtask).
+        case split(taskID: String, taskTitle: String, parts: [String])
     }
     var kind: Kind
     var reason: String

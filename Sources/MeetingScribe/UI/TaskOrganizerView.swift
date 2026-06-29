@@ -162,13 +162,18 @@ struct TaskOrganizerView: View {
         case .reprioritize:  return "flag.fill"
         case .assignProject: return "folder.fill"
         case .addTag:        return "tag.fill"
+        case .split:         return "scissors"
         }
     }
 
     private func title(_ kind: TaskSuggestion.Kind) -> String {
         switch kind {
-        case let .reschedule(_, t, d):
-            return "Reschedule “\(t)” → \(Self.dateLabel(d))"
+        case let .reschedule(id, t, d):
+            // A task that has no due date yet gets "Set due"; one that already
+            // has a (likely overdue) date gets "Reschedule".
+            let hadDue = store.items.first { $0.id == id }?.dueDate != nil
+            let verb = hadDue ? "Reschedule" : "Set due date for"
+            return "\(verb) “\(t)” → \(Self.dateLabel(d))"
         case let .reprioritize(_, t, p):
             return "Set “\(t)” to \(p.label) priority"
         case let .assignProject(ids, _, name, existing):
@@ -176,6 +181,8 @@ struct TaskOrganizerView: View {
             return "\(verb) \(ids.count) task\(ids.count == 1 ? "" : "s")"
         case let .addTag(ids, _, tag):
             return "Tag \(ids.count) task\(ids.count == 1 ? "" : "s") with #\(tag)"
+        case let .split(_, t, parts):
+            return "Split “\(t)” into \(parts.count) subtasks"
         }
     }
 

@@ -43,6 +43,9 @@ final class OllamaChatClient {
         struct Options: Encodable {
             let temperature: Double
             let num_ctx: Int
+            /// Hard cap on generated tokens. Keeps a structured-output call from
+            /// running away (the JSON we want is small). Omitted when nil.
+            var num_predict: Int? = nil
         }
     }
 
@@ -87,7 +90,8 @@ final class OllamaChatClient {
     func oneShotJSON(system: String,
                      user: String,
                      timeoutSeconds: TimeInterval = 60,
-                     numCtx: Int = 4_096) async throws -> String {
+                     numCtx: Int = 4_096,
+                     maxTokens: Int? = nil) async throws -> String {
         _ = await service.ensureRunning()
         guard await service.isReachable() else { throw ClientError.notReachable }
         let body = ChatRequest(
@@ -98,7 +102,7 @@ final class OllamaChatClient {
             ],
             tools: nil,
             stream: false,
-            options: .init(temperature: 0.2, num_ctx: numCtx),
+            options: .init(temperature: 0.2, num_ctx: numCtx, num_predict: maxTokens),
             format: "json"
         )
         let url = AppSettings.shared.ollamaURL.appendingPathComponent("api/chat")

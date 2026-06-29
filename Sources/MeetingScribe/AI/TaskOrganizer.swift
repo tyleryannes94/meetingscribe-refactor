@@ -41,43 +41,61 @@ final class TaskOrganizer: ObservableObject {
         reset()
         Task { @MainActor [weak self] in
             guard let self else { return }
-            // PHASE 1 — instant, deterministic, no model. Publish immediately so
-            // the user always sees value in well under a second, even if the
-            // local model is slow or unavailable.
+            // PHASE 1 — instant, deterministic, no model. Reschedule, priority,
+            // split, due-dates, and theme tag/grouping are all computed in pure
+            // Swift, so the full set of suggestions is on screen in well under a
+            // second — even if the local model is slow or offline.
             self.suggestions = Self.deterministicSuggestions(store: store)
 
-            // PHASE 2 — optional LLM grouping/tagging over ungrouped tasks. One
-            // structured call, short timeout. A failure here must NEVER erase the
-            // Phase-1 results — it just means no AI groups this round.
-            self.refining = true
-            do {
-                let extra = try await self.refineWithModel(store: store)
-                self.suggestions.append(contentsOf: extra)
-            } catch {
-                // Only surface an error if we have nothing at all to show.
-                if self.suggestions.isEmpty { self.error = Self.friendlyError(error) }
-                self.log.info("organizer LLM phase skipped: \(error.localizedDescription, privacy: .public)")
+            // PHASE 2 — only when several loose tasks remain that the
+            // deterministic themer COULDN'T cluster is the model worth running.
+            // It's a single structured call, hard-capped at 12s, in the
+            // background. A failure/timeout NEVER erases the instant results.
+            let leftover = Self.unclusteredLooseTasks(store: store, given: self.suggestions)
+            if leftover.count >= 4 {
+                self.refining = true
+                do {
+                    let extra = try await self.refineWithModel(tasks: leftover, store: store)
+                    self.suggestions.append(contentsOf: extra)
+                } catch {
+                    if self.suggestions.isEmpty { self.error = Self.friendlyError(error) }
+                    self.log.info("organizer LLM phase skipped: \(error.localizedDescription, privacy: .public)")
+                }
+                self.refining = false
             }
-            self.refining = false
             self.isRunning = false
             self.didRun = true
         }
     }
 
-    /// PHASE 2: ask the local model — in ONE structured-JSON call — to group
-    /// loose (project-less) tasks and propose shared tags. Only the ungrouped
-    /// tasks are sent, so prefill stays tiny and the call is fast.
-    private func refineWithModel(store: ActionItemStore) async throws -> [TaskSuggestion] {
-        let loose = store.items
-            .filter { $0.deletedAt == nil && $0.status != .completed && $0.projectID == nil }
-            .prefix(30)
-        // Nothing loose to group → skip the model entirely (instant).
-        guard loose.count >= 2 else { return [] }
+    /// Loose (project-less) tasks the deterministic pass did NOT already fold
+    /// into a group or tag — the only ones worth spending a model call on.
+    private static func unclusteredLooseTasks(store: ActionItemStore,
+                                              given suggestions: [TaskSuggestion]) -> [ActionItem] {
+        var handled = Set<String>()
+        for s in suggestions {
+            switch s.kind {
+            case let .assignProject(ids, _, _, _): handled.formUnion(ids)
+            case let .addTag(ids, _, _):           handled.formUnion(ids)
+            default: break
+            }
+        }
+        return store.items
+            .filter { $0.deletedAt == nil && $0.status != .completed
+                && $0.projectID == nil && !handled.contains($0.id) }
+            .prefix(18).map { $0 }
+    }
 
+    /// PHASE 2: one structured-JSON call to group whatever the deterministic
+    /// themer couldn't. Hard 12s ceiling + output-token cap so it can never be
+    /// the multi-minute bottleneck it used to be.
+    private func refineWithModel(tasks: [ActionItem], store: ActionItemStore) async throws -> [TaskSuggestion] {
+        guard tasks.count >= 2 else { return [] }
         let raw = try await chatClient.oneShotJSON(
             system: Self.groupingSystemPrompt(store: store),
-            user: Self.groupingInventory(Array(loose), store: store),
-            timeoutSeconds: 45
+            user: Self.groupingInventory(tasks, store: store),
+            timeoutSeconds: 12,
+            maxTokens: 500
         )
         let parsed = Self.parseGrouping(raw, store: store)
         reasoning = parsed.summary
@@ -104,6 +122,8 @@ final class TaskOrganizer: ObservableObject {
             for tid in taskIDs where !(store.items.first { $0.id == tid }?.labelIDs?.contains(label.id) ?? false) {
                 store.toggleLabel(tid, labelID: label.id)
             }
+        case let .split(taskID, _, parts):
+            for p in parts { store.addSubtask(taskID, title: p) }
         }
         suggestions[idx].applied = true
     }
@@ -119,18 +139,18 @@ final class TaskOrganizer: ObservableObject {
 
     // MARK: - Phase 1: instant deterministic suggestions (no model)
 
-    /// Compute the obvious, high-confidence fixes in pure Swift — no LLM, no
-    /// network — so they render instantly. Covers the two highest-value cases:
-    /// rescheduling overdue tasks and correcting priority from clear title cues.
+    /// Compute every high-confidence fix in pure Swift — no LLM, no network — so
+    /// the whole set renders instantly. Covers reschedule, priority, splitting
+    /// compound tasks, inferring a due date from the title, and theme-based
+    /// tagging/grouping (both per-task and across tasks that share a theme).
     static func deterministicSuggestions(store: ActionItemStore) -> [TaskSuggestion] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         let open = store.items.filter { $0.deletedAt == nil && $0.status != .completed }
         var out: [TaskSuggestion] = []
 
-        // 1) Overdue → reschedule. Urgent/high land today; everything else is
-        //    spread across the next few weekdays so we don't pile it all on one
-        //    day. Deterministic and explainable.
+        // 1) Overdue → reschedule. Urgent/high land today; the rest spread across
+        //    the next few weekdays so we don't pile it all on one day.
         let overdue = open
             .filter { if let d = $0.dueDate { return cal.startOfDay(for: d) < today } else { return false } }
             .sorted { rank($0.priority) > rank($1.priority) }
@@ -149,8 +169,7 @@ final class TaskOrganizer: ObservableObject {
 
         // 2) Priority from title cues — conservative: only upgrade when the cue
         //    clearly outranks the current priority, or flag an explicit
-        //    "someday/eventually" task as low. Never fight an explicit higher
-        //    priority the user already set.
+        //    "someday/eventually" task as low.
         for t in open {
             guard let (p, cue) = inferredPriority(from: t.title) else { continue }
             let isUpgrade = rank(p) > rank(t.priority)
@@ -159,11 +178,144 @@ final class TaskOrganizer: ObservableObject {
             out.append(.init(kind: .reprioritize(taskID: t.id, taskTitle: t.title, priority: p),
                              reason: "“\(cue)” in the title → \(p.label) priority"))
         }
-        return out
+
+        // 3) Split compound tasks ("do X and Y, then Z") into subtasks.
+        for t in open {
+            guard let parts = splitParts(t.title), parts.count >= 2 else { continue }
+            out.append(.init(kind: .split(taskID: t.id, taskTitle: t.title, parts: parts),
+                             reason: "Subtasks: " + parts.joined(separator: " · ")))
+        }
+
+        // 4) Due date from a date word in the title, for tasks with none set.
+        for t in open where t.dueDate == nil {
+            guard let (date, word) = inferredDueDate(from: t.title, today: today, cal: cal) else { continue }
+            out.append(.init(kind: .reschedule(taskID: t.id, taskTitle: t.title, newDate: date),
+                             reason: "“\(word)” in the title → give it a due date"))
+        }
+
+        // 5) Theme tag/group over loose (project-less) tasks. Tasks sharing a
+        //    theme are grouped into a matching project (if one exists) or a
+        //    shared tag; a lone themed task gets an individual tag suggestion.
+        let loose = open.filter { $0.projectID == nil }
+        var byTheme: [String: [ActionItem]] = [:]
+        for t in loose { if let th = detectTheme(t.title) { byTheme[th, default: []].append(t) } }
+        for (tag, tasks) in byTheme.sorted(by: { $0.value.count > $1.value.count }) {
+            let need = tasks.filter { t in
+                !(t.labelIDs ?? []).contains { store.label(id: $0)?.name.caseInsensitiveCompare(tag) == .orderedSame }
+            }
+            guard !need.isEmpty else { continue }
+            if need.count >= 2 {
+                if let proj = store.projects.first(where: {
+                    $0.status != .archived && $0.name.range(of: tag, options: .caseInsensitive) != nil
+                }) {
+                    out.append(.init(kind: .assignProject(taskIDs: need.map { $0.id }, taskTitles: need.map { $0.title },
+                                                          projectName: proj.name, existingProjectID: proj.id),
+                                     reason: "\(need.count) loose tasks about \(tag)"))
+                } else {
+                    out.append(.init(kind: .addTag(taskIDs: need.map { $0.id }, taskTitles: need.map { $0.title }, tag: tag),
+                                     reason: "\(need.count) tasks share the “\(tag)” theme"))
+                }
+            } else if let t = need.first, (t.labelIDs ?? []).isEmpty {
+                out.append(.init(kind: .addTag(taskIDs: [t.id], taskTitles: [t.title], tag: tag),
+                                 reason: "“\(tag)” theme in the title"))
+            }
+        }
+
+        // Keep the review list focused.
+        return Array(out.prefix(24))
     }
 
     private static func rank(_ p: ActionItem.Priority) -> Int {
         switch p { case .low: return 0; case .medium: return 1; case .high: return 2; case .urgent: return 3 }
+    }
+
+    // MARK: Split detection
+
+    /// Split a compound task title into parts when it clearly describes several
+    /// actions. Conservative: strong sequence/list separators trigger on a
+    /// 5-word minimum; a plain " and " needs a longer (9+ word) title to avoid
+    /// false positives like "research and development".
+    static func splitParts(_ title: String) -> [String]? {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        let wordCount = trimmed.split(separator: " ").count
+        guard wordCount >= 5 else { return nil }
+        let lower = trimmed.lowercased()
+        let strong = [" and then ", " then ", "; ", " & "]
+        let weak   = [", and ", ", ", " and "]
+        var chosen: String?
+        for s in strong where lower.contains(s) { chosen = s; break }
+        // A plain " and " / ", and " is the easiest to over-trigger on compound
+        // noun phrases ("quality and clarity"), so it needs a clearly long task.
+        if chosen == nil, wordCount >= 10 { for s in weak where lower.contains(s) { chosen = s; break } }
+        guard let sep = chosen else { return nil }
+        let parts = splitCaseInsensitive(trimmed, on: sep)
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " ,;&")) }
+            .filter { $0.split(separator: " ").count >= 2 }
+        guard (2...5).contains(parts.count) else { return nil }
+        return parts.map { $0.prefix(1).uppercased() + $0.dropFirst() }
+    }
+
+    private static func splitCaseInsensitive(_ s: String, on sep: String) -> [String] {
+        var result: [String] = []
+        var rest = Substring(s)
+        while let r = rest.range(of: sep, options: .caseInsensitive) {
+            result.append(String(rest[rest.startIndex..<r.lowerBound]))
+            rest = rest[r.upperBound...]
+        }
+        result.append(String(rest))
+        return result
+    }
+
+    // MARK: Due-date inference
+
+    private static func inferredDueDate(from title: String, today: Date, cal: Calendar) -> (Date, String)? {
+        let t = " " + title.lowercased() + " "
+        if t.contains(" eod ")      { return (today, "EOD") }
+        if t.contains(" today ") || t.contains(" tonight ") { return (today, "today") }
+        if t.contains(" tomorrow ") { return (cal.date(byAdding: .day, value: 1, to: today) ?? today, "tomorrow") }
+        let weekdays: [(String, Int)] = [("sunday", 1), ("monday", 2), ("tuesday", 3), ("wednesday", 4),
+                                         ("thursday", 5), ("friday", 6), ("saturday", 7)]
+        for (name, wd) in weekdays where t.contains(" \(name) ") {
+            return (nextOccurrence(ofWeekday: wd, after: today, cal: cal), name.capitalized)
+        }
+        if t.contains(" next week ") {
+            let wk = cal.date(byAdding: .day, value: 7, to: today) ?? today
+            return (nextOccurrence(ofWeekday: 2, after: wk, cal: cal), "next week")
+        }
+        if t.contains(" this week ") {
+            return (nextWeekday(onOrAfter: cal.date(byAdding: .day, value: 2, to: today) ?? today), "this week")
+        }
+        return nil
+    }
+
+    private static func nextOccurrence(ofWeekday wd: Int, after day: Date, cal: Calendar) -> Date {
+        var d = cal.date(byAdding: .day, value: 1, to: day) ?? day
+        for _ in 0..<8 {
+            if cal.component(.weekday, from: d) == wd { return cal.startOfDay(for: d) }
+            d = cal.date(byAdding: .day, value: 1, to: d) ?? d
+        }
+        return cal.startOfDay(for: day)
+    }
+
+    // MARK: Theme detection
+
+    private struct Theme { let tag: String; let keywords: [String] }
+    private static let themes: [Theme] = [
+        .init(tag: "email", keywords: ["email", "reply", "respond to", "follow up", "follow-up", "inbox"]),
+        .init(tag: "docs", keywords: ["document", "documentation", "write up", "write-up", "readme", "spec ", "notes for"]),
+        .init(tag: "bug", keywords: ["bug", "fix ", "error", "crash", "broken", "regression", "hotfix"]),
+        .init(tag: "meeting", keywords: ["meeting", "schedule a", "sync ", "standup", "stand-up", "1:1", "agenda"]),
+        .init(tag: "review", keywords: ["review", "pull request", " pr ", "feedback", "sign off", "sign-off", "approve"]),
+        .init(tag: "design", keywords: ["design", "mockup", "wireframe", "figma", "prototype"]),
+        .init(tag: "analytics", keywords: ["analytics", "metrics", "dashboard", "benchmark", "tracking", "report on"]),
+        .init(tag: "research", keywords: ["research", "investigate", "evaluate", "explore", "spike", "compare"]),
+        .init(tag: "outreach", keywords: ["reach out", "outreach", "contact ", "intro to", "ping "]),
+        .init(tag: "scoping", keywords: ["scope", "scoping", "planning", "estimate", "roadmap"]),
+    ]
+    private static func detectTheme(_ title: String) -> String? {
+        let t = " " + title.lowercased() + " "
+        for theme in themes { for k in theme.keywords where t.contains(k) { return theme.tag } }
+        return nil
     }
 
     /// The given day if it's a weekday, otherwise the following Monday.
