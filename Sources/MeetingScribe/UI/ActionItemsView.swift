@@ -69,16 +69,12 @@ struct ActionItemsView: View {
     // Tasks pinned into "Today" regardless of due date (5-2).
     @AppStorage(PinnedToday.key) var pinnedTodayCSV = ""
 
-    // Today scratchpad: rapid quick-capture + an AI brain-dump that extracts
-    // tasks and suggests projects.
+    // Today scratchpad: rapid quick-capture. The free-text brain-dump that
+    // used to live in the right column has moved to its own first-class page
+    // (TopLevelSection.brainDump, ⌘6); the right column on Today is now a CTA
+    // that opens it.
     @State var todayQuickAddText = ""
     @FocusState var todayQuickAddFocused: Bool
-    @State var todayBrainDump = ""
-    @State var todayDrafts: [ExtractedTaskDraft] = []
-    @State var todayAnalyzing = false
-    @State var todayPlanning = false
-    @State var todayScratchError: String?
-    @State var todayPlan: String?
 
     // Home dashboard: which tab, and board-vs-list, both persisted.
     @AppStorage("home.tab") var homeTabRaw = HomeTab.tasks.rawValue

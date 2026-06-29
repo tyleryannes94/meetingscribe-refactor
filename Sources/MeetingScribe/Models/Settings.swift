@@ -101,6 +101,29 @@ final class AppSettings {
         /// feature. Stored here (not the Keychain) for simplicity — it grants
         /// no more than a logged-in desktop session already has.
         static let webServerToken = "webServerToken"
+
+        // MARK: - Brain Dump (Planner page)
+        /// Master toggle for any outbound web request from the Brain Dump page
+        /// (URL fetch + web search). Off by default — explicit opt-in keeps the
+        /// local-first promise intact.
+        static let allowBrainDumpWebAccess = "allowBrainDumpWebAccess"
+        /// Which web search provider the planner calls. Currently "tavily" or
+        /// "off". Provider keys live in Keychain.
+        static let webSearchProvider = "webSearchProvider"
+        /// Default duration (minutes) the planner uses when proposing a focus
+        /// block without saying otherwise. Default 25 (a Pomodoro).
+        static let brainDumpDefaultFocusMinutes = "brainDumpDefaultFocusMinutes"
+        /// Start / end of the user's work day (24h). The planner refuses to
+        /// schedule blocks outside this window. Defaults 9 / 18.
+        static let brainDumpWorkdayStartHour = "brainDumpWorkdayStartHour"
+        static let brainDumpWorkdayEndHour = "brainDumpWorkdayEndHour"
+        /// Which session was active when the user last left the page — so a
+        /// relaunch lands on the same brain dump.
+        static let lastBrainDumpSessionID = "lastBrainDumpSessionID"
+        /// When true, every "Plan with AI" run pre-attaches a fresh Linear
+        /// brief if a Linear API key is configured. Off by default — explicit
+        /// "Pull from Linear" gives the user control.
+        static let brainDumpAutoPullLinear = "brainDumpAutoPullLinear"
     }
 
     /// The recommended local model. Qwen 2.5 7B is the strongest small
@@ -848,5 +871,75 @@ final class AppSettings {
     var googleDriveFolderID: String? {
         get { optString(Keys.googleDriveFolderID) }
         set { setOpt(newValue, Keys.googleDriveFolderID) }
+    }
+
+    // MARK: - Brain Dump (Planner page)
+
+    /// Master switch for the Brain Dump page's outbound web access (URL fetch
+    /// + web search). Off by default — the user opts in once via Integrations.
+    var allowBrainDumpWebAccess: Bool {
+        get { defaults.bool(forKey: Keys.allowBrainDumpWebAccess) }
+        set { defaults.set(newValue, forKey: Keys.allowBrainDumpWebAccess) }
+    }
+
+    /// Identifier of the active web-search provider. "tavily" by default;
+    /// "off" disables search even when the toggle above is on. Provider API
+    /// keys live in the Keychain (e.g. `KeychainStore.Account.tavilyAPIKey`).
+    var webSearchProvider: String {
+        get {
+            let v = defaults.string(forKey: Keys.webSearchProvider) ?? "tavily"
+            return ["tavily", "off"].contains(v) ? v : "tavily"
+        }
+        set { defaults.set(newValue, forKey: Keys.webSearchProvider) }
+    }
+
+    /// Tavily API key (web search). Keychain-backed; nil = unconfigured.
+    var tavilyAPIKey: String? {
+        get { KeychainStore.read(.tavilyAPIKey) }
+        set { KeychainStore.write(.tavilyAPIKey, newValue) }
+    }
+
+    /// Default duration in minutes that the Brain Dump planner uses when it
+    /// proposes a focus block without a duration. Default 25 (a Pomodoro).
+    var brainDumpDefaultFocusMinutes: Int {
+        get {
+            let v = defaults.integer(forKey: Keys.brainDumpDefaultFocusMinutes)
+            return v == 0 ? 25 : v
+        }
+        set { defaults.set(newValue, forKey: Keys.brainDumpDefaultFocusMinutes) }
+    }
+
+    /// First hour (24-clock) the planner is allowed to schedule a focus block.
+    /// Default 9. Combined with `brainDumpWorkdayEndHour` to define work hours.
+    var brainDumpWorkdayStartHour: Int {
+        get {
+            let v = defaults.object(forKey: Keys.brainDumpWorkdayStartHour) as? Int
+            return v ?? 9
+        }
+        set { defaults.set(newValue, forKey: Keys.brainDumpWorkdayStartHour) }
+    }
+
+    /// Last hour the planner is allowed to schedule a focus block (exclusive).
+    /// Default 18.
+    var brainDumpWorkdayEndHour: Int {
+        get {
+            let v = defaults.object(forKey: Keys.brainDumpWorkdayEndHour) as? Int
+            return v ?? 18
+        }
+        set { defaults.set(newValue, forKey: Keys.brainDumpWorkdayEndHour) }
+    }
+
+    /// Last opened brain-dump session id. Cleared when the session is deleted.
+    var lastBrainDumpSessionID: String? {
+        get { optString(Keys.lastBrainDumpSessionID) }
+        set { setOpt(newValue, Keys.lastBrainDumpSessionID) }
+    }
+
+    /// Pre-attach today's Linear brief on every "Plan with AI" run. Off by
+    /// default so the user controls when work issues show up in personal
+    /// thinking.
+    var brainDumpAutoPullLinear: Bool {
+        get { defaults.bool(forKey: Keys.brainDumpAutoPullLinear) }
+        set { defaults.set(newValue, forKey: Keys.brainDumpAutoPullLinear) }
     }
 }

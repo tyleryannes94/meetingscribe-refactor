@@ -2,12 +2,14 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// Top-level navigation sections. Collapsed from 7 → 5:
+/// Top-level navigation sections. Collapsed from 7 → 5, then re-grew to 6
+/// with the Brain Dump page:
 /// - Calendar absorbed into Meetings (accessible via the Upcoming tab)
 /// - Integrations moved to Settings (⚙️ gear icon at bottom of rail)
 /// - Notes kept as Voice Notes (distinct enough from Meetings to warrant its own slot)
+/// - Brain Dump promoted from a Today column to its own page (⌘6)
 enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
-    case today, meetings, people, actions, notes, recordings, integrations
+    case today, meetings, people, actions, brainDump, notes, recordings, integrations
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -15,6 +17,7 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
         case .meetings: return "Meetings"
         case .people:   return "People"
         case .actions:  return "Tasks"
+        case .brainDump: return "Brain Dump"
         case .notes:    return "Voice Notes"
         case .recordings: return "Recordings"
         case .integrations: return "Integrations"
@@ -29,6 +32,7 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
         case .meetings: return "bubble.left.and.bubble.right.fill"
         case .people:   return "person.2.fill"
         case .actions:  return "checklist"
+        case .brainDump: return "brain.head.profile.fill"
         case .notes:    return "waveform.badge.plus"
         case .recordings: return "record.circle.fill"
         case .integrations: return "puzzlepiece.extension.fill"
@@ -38,7 +42,7 @@ enum TopLevelSection: String, CaseIterable, Identifiable, Hashable {
     var group: NavGroup {
         switch self {
         case .today, .meetings, .people: return .workspace
-        case .actions, .notes, .recordings, .integrations: return .organize
+        case .actions, .brainDump, .notes, .recordings, .integrations: return .organize
         }
     }
 }
@@ -425,6 +429,7 @@ struct MainWindow: View {
         case .meetings: MeetingsView()
         case .people:   PeopleListView()
         case .actions:  ActionItemsView(store: manager.actionItems)
+        case .brainDump: BrainDumpView()
         case .notes:    QuickNotesView()
         case .recordings: ScreenRecordingsView()
         case .integrations: IntegrationsView()

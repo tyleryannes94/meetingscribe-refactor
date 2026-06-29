@@ -102,9 +102,9 @@ final class ChatSession: ObservableObject {
                         version: Self.anchorCacheVersion)
     }
 
-    func attach(manager: MeetingManager) {
+    func attach(manager: MeetingManager, brainDump: BrainDumpStore) {
         self.manager = manager
-        self.tools = ChatTools(manager: manager)
+        self.tools = ChatTools(manager: manager, brainDump: brainDump)
     }
 
     var systemPrompt: String {

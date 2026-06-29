@@ -32,6 +32,7 @@ public enum KeychainStore {
         case googleRefreshToken
         case anthropicAPIKey      // reserved for re-enabling Anthropic chat path
         case googlePeopleAccounts // Phase C: JSON array of Gmail/People accounts
+        case tavilyAPIKey         // Brain Dump web search provider
     }
 
     // MARK: - Read / write
@@ -81,6 +82,7 @@ public enum KeychainStore {
         case .googleRefreshToken:  return "googleRefreshToken"
         case .anthropicAPIKey:     return "anthropicAPIKey"
         case .googlePeopleAccounts: return "googlePeopleAccounts"
+        case .tavilyAPIKey:        return "tavilyAPIKey"
         }
     }
 

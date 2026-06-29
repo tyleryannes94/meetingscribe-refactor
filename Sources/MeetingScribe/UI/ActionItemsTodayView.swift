@@ -284,152 +284,42 @@ extension ActionItemsView {
         .frame(height: 320)
     }
 
-    // MARK: Right — AI brain dump
+    // MARK: Right — Brain Dump callout
+    //
+    // The free-text brain-dump that used to live here has been promoted to a
+    // first-class page (TopLevelSection.brainDump, ⌘6) with URL ingestion, web
+    // search, calendar suggestions, and session persistence. This narrow
+    // column is now a CTA that opens the page; the rest of the AI surface
+    // lives on the BrainDumpView.
 
     private var todayBrainDumpColumn: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 7) {
-                        Image(systemName: "sparkles").scaledFont(14).foregroundStyle(NDS.brand)
-                        Text("Brain dump").scaledFont(15, weight: .bold)
-                    }
-                    Text("Type or paste everything on your mind. AI turns it into tasks and suggests a project for each.")
-                        .font(NDS.small).foregroundStyle(NDS.textSecondary)
-                }
-
-                brainDumpEditor
-                brainDumpActions
-
-                if todayAnalyzing || todayPlanning {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small) // design-lint:allow
-                        Text(todayAnalyzing ? "Reading your notes…" : "Planning your day…")
-                            .font(NDS.small).foregroundStyle(NDS.textSecondary)
-                    }
-                }
-                if let err = todayScratchError {
-                    Text(err).font(NDS.small).foregroundStyle(NDS.selectColor("red"))
-                }
-                if !todayDrafts.isEmpty { draftsReview }
-                if let plan = todayPlan, !plan.isEmpty { planPanel(plan) }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 7) {
+                Image(systemName: "brain.head.profile.fill")
+                    .scaledFont(14).foregroundStyle(NDS.brand)
+                Text("Brain Dump").scaledFont(15, weight: .bold)
             }
-            .padding(16)
-        }
-    }
+            Text("Dump everything on your mind — thoughts, links, daily briefs — and the planner turns it into tasks and calendar focus blocks.")
+                .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-    private var brainDumpEditor: some View {
-        TextEditor(text: $todayBrainDump)
-            .font(NDS.body)
-            .scrollContentBackground(.hidden)
-            .frame(minHeight: 150, maxHeight: 240)
-            .padding(8)
-            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
-            .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
-            .overlay(alignment: .topLeading) {
-                if todayBrainDump.isEmpty {
-                    Text("e.g. Need to finish the Q3 deck by Friday, call the vendor back, follow up with Sam about the contract, book flights for the offsite…")
-                        .font(NDS.body).foregroundStyle(NDS.textTertiary)
-                        .padding(.horizontal, 13).padding(.vertical, 16)
-                        .allowsHitTesting(false)
-                }
-            }
-    }
-
-    private var brainDumpActions: some View {
-        let disabled = todayBrainDump.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || todayAnalyzing || todayPlanning
-        return HStack(spacing: 8) {
-            Button { analyzeTodayBrainDump() } label: {
-                Label("Extract tasks", systemImage: "wand.and.stars")
+            Button {
+                NotificationCenter.default.post(
+                    name: .meetingScribeNavigate,
+                    object: TopLevelSection.brainDump
+                )
+            } label: {
+                Label("Open Brain Dump", systemImage: "arrow.up.forward.square")
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(MSPrimaryButtonStyle())
-            .disabled(disabled)
+            .keyboardShortcut("6", modifiers: .command)
 
-            Button { planTodayDay() } label: {
-                Label("Top priorities", systemImage: "list.number")
-            }
-            .buttonStyle(MSSecondaryButtonStyle())
-            .disabled(todayAnalyzing || todayPlanning)
-
+            Text("Tip: Press ⌘6 anywhere to jump there.")
+                .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
             Spacer()
-            if !todayBrainDump.isEmpty {
-                Button { todayBrainDump = ""; todayDrafts = []; todayPlan = nil; todayScratchError = nil } label: {
-                    Text("Clear").font(NDS.small)
-                }
-                .buttonStyle(.plain).foregroundStyle(NDS.textTertiary)
-            }
         }
-    }
-
-    private var draftsReview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Text("Suggested tasks").scaledFont(13, weight: .semibold)
-                    .foregroundStyle(.secondary).textCase(.uppercase).tracking(0.6)
-                Text("\(todayDrafts.count)").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
-                Spacer()
-                Button { addAllTodayDrafts() } label: {
-                    Label("Add all", systemImage: "tray.and.arrow.down").font(NDS.small)
-                }
-                .buttonStyle(.plain).foregroundStyle(NDS.brand)
-            }
-            ForEach(todayDrafts) { draft in draftRow(draft) }
-        }
-        .padding(.top, 4)
-    }
-
-    private func draftRow(_ d: ExtractedTaskDraft) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Button { addTodayDraft(d) } label: {
-                Image(systemName: "plus.circle.fill").scaledFont(16).foregroundStyle(NDS.brand)
-            }
-            .buttonStyle(.plain).help("Add this task")
-            VStack(alignment: .leading, spacing: 4) {
-                Text(d.title).font(NDS.body).foregroundStyle(NDS.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 6) {
-                    NotionChip(d.priority.label, color: NDS.priority(d.priority), systemImage: NDS.priorityGlyph(d.priority))
-                    if let pid = d.suggestedProjectID, let p = store.project(id: pid) {
-                        NotionChip(p.name, color: NDS.selectColor(p.name), systemImage: p.icon ?? "doc.text")
-                    } else if let name = d.suggestedProjectName {
-                        NotionChip("\(name)?", color: NDS.textTertiary, systemImage: "questionmark.folder")
-                    }
-                    if let due = d.dueDate {
-                        Text(Self.draftDueString(due)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-            Button { todayDrafts.removeAll { $0.id == d.id } } label: {
-                Image(systemName: "xmark").scaledFont(11).foregroundStyle(NDS.textTertiary)
-            }
-            .buttonStyle(.plain).help("Dismiss")
-        }
-        .padding(10)
-        .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
-        .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius).strokeBorder(NDS.hairline, lineWidth: 0.5))
-    }
-
-    private func planPanel(_ plan: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "target").scaledFont(12).foregroundStyle(NDS.brand)
-                Text("Focus plan").scaledFont(13, weight: .semibold)
-                    .foregroundStyle(.secondary).textCase(.uppercase).tracking(0.6)
-                Spacer()
-                Button { todayPlan = nil } label: {
-                    Image(systemName: "xmark").scaledFont(11).foregroundStyle(NDS.textTertiary)
-                }
-                .buttonStyle(.plain)
-            }
-            Text(LocalizedStringKey(plan)).font(NDS.body).foregroundStyle(NDS.textPrimary)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .background(NDS.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: NDS.rowRadius))
-        .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius).strokeBorder(NDS.brand.opacity(0.25), lineWidth: 1))
+        .padding(16)
     }
 
     // MARK: Actions
@@ -442,67 +332,6 @@ extension ActionItemsView {
         PinnedToday.toggle(t.id, in: &pinnedTodayCSV)
         todayQuickAddText = ""
         Task { @MainActor in todayQuickAddFocused = true }
-    }
-
-    func addTodayDraft(_ d: ExtractedTaskDraft) {
-        let pid = d.suggestedProjectID
-        if let pid, let p = store.project(id: pid), !store.pageHasDatabase(p) {
-            store.setProjectDatabaseEnabled(pid, true)
-        }
-        let t = store.createTask(title: d.title, projectID: pid, priority: d.priority)
-        if let due = d.dueDate { store.setDueDate(t.id, dueDate: due) }
-        PinnedToday.toggle(t.id, in: &pinnedTodayCSV)
-        todayDrafts.removeAll { $0.id == d.id }
-    }
-
-    func addAllTodayDrafts() {
-        for d in todayDrafts { addTodayDraft(d) }
-    }
-
-    func analyzeTodayBrainDump() {
-        let text = todayBrainDump
-        todayScratchError = nil
-        todayPlan = nil
-        todayAnalyzing = true
-        let projects = store.projects
-            .filter { $0.status != .archived }
-            .map { (id: $0.id, name: $0.name) }
-        Task {
-            do {
-                let drafts = try await OllamaService().extractTaskDrafts(from: text, projects: projects)
-                todayDrafts = drafts
-                todayAnalyzing = false
-                if drafts.isEmpty { todayScratchError = "Couldn't find any tasks in that text." }
-            } catch {
-                todayAnalyzing = false
-                todayScratchError = Self.aiErrorMessage(error)
-            }
-        }
-    }
-
-    func planTodayDay() {
-        todayScratchError = nil
-        todayPlanning = true
-        let dump = todayBrainDump
-        let current = todayOpenTasks.map(\.title)
-        Task {
-            do {
-                let plan = try await OllamaService().planTodayPriorities(brainDump: dump, currentTasks: current)
-                todayPlan = plan
-                todayPlanning = false
-            } catch {
-                todayPlanning = false
-                todayScratchError = Self.aiErrorMessage(error)
-            }
-        }
-    }
-
-    static func aiErrorMessage(_ error: Error) -> String {
-        "The on-device AI engine isn't reachable right now. Make sure it's running, then try again."
-    }
-
-    static func draftDueString(_ d: Date) -> String {
-        let f = DateFormatter(); f.dateFormat = "MMM d"; return "Due \(f.string(from: d))"
     }
 
     static func todayDateString() -> String {

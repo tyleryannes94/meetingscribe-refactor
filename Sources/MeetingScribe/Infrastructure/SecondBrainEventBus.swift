@@ -33,6 +33,11 @@ enum SecondBrainEvent: Sendable {
     case personUpdated(personID: String)
     /// A background insight became available for the UI / notifications to show.
     case insightAvailable(type: InsightType, payload: [String: String])
+    /// A Brain Dump session was just created (in-app or via MCP). MainWindow
+    /// listens so it can flash a "new from Claude Code" toast.
+    case brainDumpSessionCreated(sessionID: String)
+    /// A Brain Dump session's body / sources / drafts changed.
+    case brainDumpUpdated(sessionID: String)
 }
 
 /// Process-wide multicast event bus for `SecondBrainEvent`s.

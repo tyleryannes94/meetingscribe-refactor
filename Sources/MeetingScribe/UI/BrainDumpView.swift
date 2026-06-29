@@ -1,0 +1,144 @@
+import SwiftUI
+
+/// Root of the Brain Dump page (TopLevelSection.brainDump, ⌘6).
+///
+/// Three-column shell:
+///   [ composer + activity log | sources panel | review panel ]
+///
+/// Empty when no sessions exist (BrainDumpEmptyState); otherwise renders the
+/// active session. Session picker + "+ New session" + "Plan with AI" live in
+/// the header.
+@available(macOS 14.0, *)
+struct BrainDumpView: View {
+    @EnvironmentObject var store: BrainDumpStore
+    @EnvironmentObject var actionItems: ActionItemStore
+    @EnvironmentObject var router: WorkspaceRouter
+
+    @StateObject private var planRunner = BrainDumpPlanRunner()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().overlay(NDS.divider)
+            if let session = store.activeSession {
+                sessionBody(session)
+            } else if !store.isLoaded {
+                ProgressView().controlSize(.small) // design-lint:allow
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                BrainDumpEmptyState {
+                    _ = store.createSession()
+                }
+            }
+        }
+        .background(NDS.bg)
+        .task(id: router.pendingBrainDumpSessionID) {
+            consumePendingDeepLink()
+        }
+        .onAppear { consumePendingDeepLink() }
+    }
+
+    // MARK: - Header
+
+    @ViewBuilder
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Brain Dump").scaledFont(22, weight: .heavy, kind: .display)
+                Text("Type, paste, search. The planner turns it into tasks and calendar focus blocks.")
+                    .font(NDS.small).foregroundStyle(NDS.textSecondary)
+            }
+            Spacer()
+            if !store.sessions.isEmpty {
+                sessionPicker
+            }
+            Button {
+                _ = store.createSession()
+            } label: {
+                Label("New session", systemImage: "plus")
+            }
+            .buttonStyle(MSSecondaryButtonStyle())
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+    }
+
+    @ViewBuilder
+    private var sessionPicker: some View {
+        Menu {
+            ForEach(store.recentSessions()) { s in
+                Button {
+                    store.activeSessionID = s.id
+                } label: {
+                    HStack {
+                        Text(s.displayTitle)
+                        Spacer()
+                        Text(Self.shortDate(s.updatedAt))
+                            .font(NDS.tiny).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Divider()
+            let archived = store.recentSessions(includingArchived: true)
+                .filter { $0.state == .archived }
+            if !archived.isEmpty {
+                Menu("Archived") {
+                    ForEach(archived) { s in
+                        Button(s.displayTitle) { store.activeSessionID = s.id }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "list.bullet.rectangle")
+                Text(store.activeSession?.displayTitle ?? "Sessions")
+                    .lineLimit(1)
+                    .frame(maxWidth: 200, alignment: .leading)
+                Image(systemName: "chevron.down").scaledFont(10)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+            .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius)
+                .strokeBorder(NDS.hairline, lineWidth: 0.5))
+        }
+        .menuStyle(.borderlessButton)
+    }
+
+    // MARK: - Session body
+
+    @ViewBuilder
+    private func sessionBody(_ session: BrainDumpSession) -> some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                BrainDumpComposerView(session: session, planRunner: planRunner)
+                if !planRunner.events.isEmpty {
+                    Divider().overlay(NDS.divider)
+                    BrainDumpActivityLog(events: planRunner.events)
+                        .frame(maxHeight: 120)
+                }
+            }
+            .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
+            Divider().overlay(NDS.divider)
+            BrainDumpSourcePanel(session: session)
+                .frame(width: 320)
+            Divider().overlay(NDS.divider)
+            BrainDumpReviewPanel(session: session)
+                .frame(width: 360)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func consumePendingDeepLink() {
+        guard let id = router.pendingBrainDumpSessionID else { return }
+        store.activeSessionID = id
+        router.pendingBrainDumpSessionID = nil
+    }
+
+    private static func shortDate(_ d: Date) -> String {
+        let f = DateFormatter()
+        if Calendar.current.isDateInToday(d) { f.dateFormat = "h:mm a" }
+        else { f.dateFormat = "MMM d" }
+        return f.string(from: d)
+    }
+}
