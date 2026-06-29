@@ -370,10 +370,14 @@ private struct TaskDraftCard: View {
             }
         }
 
+        // Brain-dump proposals are AI-recommended: route them through the Triage
+        // inbox (suggested) rather than dropping them straight into a project,
+        // so every AI-created task funnels through one review surface.
         let newTask = actionItems.createTask(
             title: draft.title,
             projectID: draft.suggestedProjectID,
-            priority: draft.priority
+            priority: draft.priority,
+            suggested: true
         )
         if let due = draft.dueDate { actionItems.setDueDate(newTask.id, dueDate: due) }
         applyLabels(to: newTask.id)

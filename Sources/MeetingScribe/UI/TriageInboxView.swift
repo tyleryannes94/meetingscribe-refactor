@@ -91,7 +91,11 @@ private struct MeetingTriageGroup: View {
     @State private var expanded = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Brain-dump / recommender tasks have no source meeting (empty meetingID);
+    /// they share one "Suggested tasks" group instead of "Untitled meeting".
+    private var isSuggestedGroup: Bool { meetingID.isEmpty }
     private var meetingTitle: String {
+        if isSuggestedGroup { return "Suggested tasks" }
         let t = items.first?.meetingTitle ?? ""
         return t.isEmpty ? "Untitled meeting" : t
     }
@@ -120,16 +124,17 @@ private struct MeetingTriageGroup: View {
                     .foregroundStyle(NDS.textTertiary)
             }
             .buttonStyle(.plain)
-            Button { onOpenMeeting(meetingID) } label: {
+            Button { if !isSuggestedGroup { onOpenMeeting(meetingID) } } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "calendar").scaledFont(12).foregroundStyle(NDS.lilac)
+                    Image(systemName: isSuggestedGroup ? "sparkles" : "calendar")
+                        .scaledFont(12).foregroundStyle(NDS.lilac)
                     Text(meetingTitle).scaledFont(14, weight: .bold).foregroundStyle(NDS.textPrimary).lineLimit(1)
-                    if let d = meetingDate {
+                    if !isSuggestedGroup, let d = meetingDate {
                         Text(Self.shortDate(d)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).disabled(isSuggestedGroup)
             .help("Open the source meeting")
             Text("\(items.count)")
                 .font(NDS.tiny.monospacedDigit())

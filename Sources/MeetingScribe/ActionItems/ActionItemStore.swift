@@ -398,14 +398,19 @@ final class ActionItemStore: ObservableObject {
     /// Creates a brand-new manual task (not tied to any meeting). Optionally
     /// pre-assigned to a project / section and given a status.
     @discardableResult
+    /// `suggested: true` marks an AI-proposed task that should land in the Triage
+    /// inbox (not directly in the workspace) until the user accepts it — used by
+    /// the brain-dump planner and other recommenders. Manual creations leave it
+    /// false so they appear everywhere immediately.
     func createTask(title: String,
                     projectID: String? = nil,
                     sectionID: String? = nil,
                     status: ActionItem.Status = .open,
-                    priority: ActionItem.Priority = .medium) -> ActionItem {
+                    priority: ActionItem.Priority = .medium,
+                    suggested: Bool = false) -> ActionItem {
         let now = Date()
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let item = ActionItem(
+        var item = ActionItem(
             id: UUID().uuidString,
             meetingID: "",                 // empty ⇒ isManual
             meetingTitle: "",
@@ -422,13 +427,14 @@ final class ActionItemStore: ObservableObject {
             subtasks: nil,
             sectionID: sectionID,
             sortIndex: nextSortIndex(forStatus: status, projectID: projectID),
-            source: "local",
+            source: suggested ? "suggested" : "local",
             externalID: nil,
             externalURL: nil,
             notionPageID: nil,
             notionURL: nil,
             createdAt: now,
             updatedAt: now)
+        item.suggested = suggested ? true : nil
         items.append(item)
         save()
         TaskChangeLog.shared.record(.create, entity: .task, id: item.id,

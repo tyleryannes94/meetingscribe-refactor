@@ -112,6 +112,14 @@ struct ActionItem: Identifiable, Codable, Hashable {
     /// velocity reporting.
     var estimate: Double? = nil
 
+    /// AI-proposed task (from the brain-dump planner, or any other recommender)
+    /// that hasn't been accepted yet. Like meeting-extracted items, a `suggested`
+    /// task is routed to the Triage inbox ONLY until the user confirms it — it
+    /// never leaks into projects/All-tasks/Today. Optional + defaulted so old
+    /// action_items.json decodes (legacy tasks are not suggested). Cleared
+    /// implicitly on confirm (which stamps `confirmedAt`).
+    var suggested: Bool? = nil
+
     /// Values for the project's user-defined database properties (NP-1), keyed
     /// by PropertyDefinition.id. nil/empty = none set.
     var properties: [String: PropertyValue]? = nil
@@ -129,10 +137,13 @@ struct ActionItem: Identifiable, Codable, Hashable {
     var isManual: Bool { meetingID.isEmpty }
     /// True once confirmed out of triage (or if it never needed triage).
     var isConfirmed: Bool { confirmedAt != nil }
-    /// A meeting-extracted item still awaiting review in the Triage inbox:
-    /// it came from a meeting, hasn't been confirmed, isn't done, isn't trashed.
+    /// An item still awaiting review in the Triage inbox: it was AI-generated
+    /// (extracted from a meeting OR proposed by the brain-dump planner / another
+    /// recommender), hasn't been confirmed, isn't done, isn't trashed. Manual
+    /// tasks are never in triage — they appear in the workspace immediately.
     var needsTriage: Bool {
-        !meetingID.isEmpty && confirmedAt == nil && status != .completed && deletedAt == nil
+        (!meetingID.isEmpty || suggested == true)
+            && confirmedAt == nil && status != .completed && deletedAt == nil
     }
     var subtaskProgress: (done: Int, total: Int) {
         let list = subtaskList
