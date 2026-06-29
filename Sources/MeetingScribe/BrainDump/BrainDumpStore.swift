@@ -77,7 +77,9 @@ final class BrainDumpStore: ObservableObject {
 
     // MARK: - Disk I/O
 
-    private static func loadFromDisk(at url: URL) -> [BrainDumpSession] {
+    /// `nonisolated` so the off-main hydration `Task.detached` can call it
+    /// without hopping back to the MainActor just to read a file.
+    nonisolated private static func loadFromDisk(at url: URL) -> [BrainDumpSession] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         do {
             let data = try Data(contentsOf: url)
