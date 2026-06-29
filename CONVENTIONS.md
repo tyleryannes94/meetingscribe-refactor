@@ -187,6 +187,22 @@ improvement that the assistant can't reach is half-built.**
    introduce a hard cloud dependency for a core path.
 6. Default new AI work to the **latest Claude models** (per environment guidance).
 
+### 4.3 Latency: do the obvious work without the model
+
+Local models are **slow** and flaky at multi-turn tool calling. For any
+"analyze and return results" feature:
+
+- **Compute deterministic results in Swift first and show them instantly** (well
+  under a second). Reach for the model only for genuinely fuzzy judgement. The
+  user should never stare at a spinner with no output.
+- **Prefer ONE structured-JSON call** (`OllamaChatClient.oneShotJSON`, Ollama
+  `format: "json"`) over a multi-iteration tool loop — one round-trip instead of
+  up to N. Send only the data the step needs (small prefill = fast).
+- **Run the model phase in the background with a short timeout**, append results
+  progressively, and make sure a model failure/timeout **never erases** the
+  instant results. Show a slim "still looking…" hint, not a blocking spinner.
+- Reference implementation: `TaskOrganizer` ("Organize my Tasks").
+
 ---
 
 ## 5. Build, verify & ship
@@ -248,6 +264,14 @@ improvement that the assistant can't reach is half-built.**
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — "Organize my Tasks" made fast + always-output.** The feature
+  ran an up-to-10-iteration local-model tool loop (600s timeout each) and showed
+  only a blocking spinner — minutes-long, often no visible result. Rebuilt as a
+  two-phase engine: an **instant deterministic pass** (overdue→reschedule,
+  title-cue→priority, ~0.4s) that always shows value, plus a **single
+  structured-JSON model call** for grouping loose tasks that runs in the
+  background, appends progressively, and can fail without erasing the instant
+  results. Added `OllamaChatClient.oneShotJSON`. Codified as §4.3.
 - **2026-06-29 — Global responsive layout (this session).** Quick-view task
   inspector (and Tasks panes) were cut off on the right unless the window was
   large. Fixed app-wide (PR #365): nav rail collapses to a 56pt icon strip below
