@@ -52,7 +52,7 @@ extension UnifiedMeetingDetail {
 
     func attachChatIfNeeded() {
         guard !chatAttached else { return }
-        chatSession.attach(manager: manager)
+        chatSession.attach(manager: manager, brainDump: brainDump)
         chatAttached = true
     }
 }

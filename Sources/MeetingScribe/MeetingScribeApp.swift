@@ -17,6 +17,7 @@ struct MeetingScribeApp: App {
     @StateObject private var vaultMigrator = VaultMigrationManager()
     @StateObject private var router = WorkspaceRouter()
     @StateObject private var quickEntry = QuickEntryController()
+    @StateObject private var brainDump = BrainDumpStore()
     @State private var calendarTimer: Timer?
     @State private var hotkey = GlobalHotkey()
     @State private var swapHotkey = GlobalHotkey()
@@ -50,6 +51,7 @@ struct MeetingScribeApp: App {
                 .environmentObject(manager.actionItems)
                 .environmentObject(manager.decisions)
                 .environmentObject(router)
+                .environmentObject(brainDump)
                 // Min width matches the 860px chat-rail breakpoint so the
                 // multi-pane screens (nav rail + a 2-pane split) always have room
                 // to lay out; below this the panes can't fit and content used to
@@ -109,7 +111,8 @@ struct MeetingScribeApp: App {
                 }
                 .keyboardShortcut("K", modifiers: [.command])
             }
-            // ⌘1–⌘5: jump to each top-level section (5 sections, Calendar+Integrations removed from nav).
+            // ⌘1–⌘6: jump to each top-level section. Voice Notes stays on ⌘5
+            // for muscle memory; Brain Dump takes ⌘6.
             CommandMenu("Navigate") {
                 Button("Today")       { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.today) }
                     .keyboardShortcut("1", modifiers: .command)
@@ -121,6 +124,8 @@ struct MeetingScribeApp: App {
                     .keyboardShortcut("4", modifiers: .command)
                 Button("Voice Notes") { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.notes) }
                     .keyboardShortcut("5", modifiers: .command)
+                Button("Brain Dump")  { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.brainDump) }
+                    .keyboardShortcut("6", modifiers: .command)
             }
             CommandGroup(after: .newItem) {
                 Button("Start Ad-hoc Meeting Recording") {
@@ -205,7 +210,7 @@ struct MeetingScribeApp: App {
         registerHotkey()
         overlay.attach(to: manager)
         quickEntry.attach(to: manager)
-        chatSession.attach(manager: manager)
+        chatSession.attach(manager: manager, brainDump: brainDump)
         observeSettingsChanges()
 
         // Phone access: wire the embedded web server to the live stores and

@@ -70,10 +70,21 @@ final class WorkspaceRouter: ObservableObject {
     /// `ActionItemsView` which applies it to `TasksEnvironment` and clears it.
     @Published var pendingTasksRoute: String?
 
+    /// One-shot: a Brain Dump session id to surface. Set by deep links / MCP
+    /// arrivals / "View" toasts; consumed by `BrainDumpView` on appear.
+    @Published var pendingBrainDumpSessionID: String?
+
     /// Deep-link into the Tasks tab at a specific rail sentinel (4-7).
     func openTasks(route sentinel: String) {
         pendingTasksRoute = sentinel
         section = .actions
+    }
+
+    /// Open the Brain Dump page, optionally focusing a specific session
+    /// (e.g. one that just arrived via MCP `submit_brain_dump`).
+    func openBrainDump(sessionID: String? = nil) {
+        if let sessionID { pendingBrainDumpSessionID = sessionID }
+        section = .brainDump
     }
 
     /// Clear the mailbox once a destination view has acted on it.

@@ -20,6 +20,12 @@ struct IntegrationsView: View {
     @State private var googleID = AppSettings.shared.googleClientID ?? ""
     @State private var googleSecret = AppSettings.shared.googleClientSecret ?? ""
     @State private var googleFolder = AppSettings.shared.googleDriveFolderName
+    @State private var tavilyKey = AppSettings.shared.tavilyAPIKey ?? ""
+    @State private var allowBrainDumpWeb = AppSettings.shared.allowBrainDumpWebAccess
+    @State private var brainDumpFocusMin = AppSettings.shared.brainDumpDefaultFocusMinutes
+    @State private var brainDumpStartHour = AppSettings.shared.brainDumpWorkdayStartHour
+    @State private var brainDumpEndHour = AppSettings.shared.brainDumpWorkdayEndHour
+    @State private var tavilyStatus: String?
 
     // Test results
     @State private var linearStatus: String?
@@ -55,6 +61,7 @@ struct IntegrationsView: View {
                 ollamaCard
                 calendarCard
                 mcpCard
+                brainDumpCard
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
             .frame(maxWidth: 760, alignment: .leading)
@@ -249,7 +256,81 @@ struct IntegrationsView: View {
         }
     }
 
+    private var brainDumpCard: some View {
+        IntegrationCard(
+            icon: "brain.head.profile.fill",
+            tint: NDS.brand,
+            title: "Brain Dump",
+            explanation: "Configure web access (URL fetch + web search) and the planner's calendar defaults. Keys are stored in your macOS Keychain.",
+            connected: AppSettings.shared.allowBrainDumpWebAccess && !(AppSettings.shared.tavilyAPIKey ?? "").isEmpty,
+            status: tavilyStatus,
+            testing: testing.contains("tavily")
+        ) {
+            Toggle("Allow web access (URL fetch + search)", isOn: $allowBrainDumpWeb)
+                .onChange(of: allowBrainDumpWeb) { newValue in
+                    AppSettings.shared.allowBrainDumpWebAccess = newValue
+                }
+            Text("Off by default. When on, the planner can fetch URLs you paste and run web searches.")
+                .font(.caption2).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().overlay(NDS.divider).padding(.vertical, 4)
+
+            Text("Web search provider").font(NDS.tiny.weight(.semibold))
+                .foregroundStyle(NDS.textSecondary)
+            SecureField("Tavily API key (tvly-…)", text: $tavilyKey).textFieldStyle(.roundedBorder)
+            Text("Tavily is the simplest setup (https://tavily.com — free tier). Other providers can swap in later.")
+                .font(.caption2).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Save") { AppSettings.shared.tavilyAPIKey = trimmedOrNil(tavilyKey) }
+                Button("Test connection") { Task { await testTavily() } }
+                    .disabled(trimmedOrNil(tavilyKey) == nil || !allowBrainDumpWeb)
+                Spacer()
+            }
+
+            Divider().overlay(NDS.divider).padding(.vertical, 4)
+
+            Text("Calendar defaults").font(NDS.tiny.weight(.semibold))
+                .foregroundStyle(NDS.textSecondary)
+            HStack {
+                Stepper("Focus block: \(brainDumpFocusMin) min",
+                        value: $brainDumpFocusMin, in: 10...90, step: 5)
+                    .onChange(of: brainDumpFocusMin) { AppSettings.shared.brainDumpDefaultFocusMinutes = $0 }
+                Spacer()
+            }
+            HStack {
+                Stepper("Work day starts: \(brainDumpStartHour):00",
+                        value: $brainDumpStartHour, in: 4...12)
+                    .onChange(of: brainDumpStartHour) { AppSettings.shared.brainDumpWorkdayStartHour = $0 }
+                Stepper("ends: \(brainDumpEndHour):00",
+                        value: $brainDumpEndHour, in: 14...22)
+                    .onChange(of: brainDumpEndHour) { AppSettings.shared.brainDumpWorkdayEndHour = $0 }
+            }
+        }
+    }
+
     // MARK: - Tests
+
+    private func testTavily() async {
+        testing.insert("tavily"); defer { testing.remove("tavily") }
+        AppSettings.shared.tavilyAPIKey = trimmedOrNil(tavilyKey)
+        guard let key = AppSettings.shared.tavilyAPIKey, !key.isEmpty else {
+            tavilyStatus = "✗ Save the key first."
+            return
+        }
+        guard AppSettings.shared.allowBrainDumpWebAccess else {
+            tavilyStatus = "✗ Turn on \"Allow web access\" first."
+            return
+        }
+        let provider = TavilySearchProvider(apiKey: key)
+        do {
+            let results = try await provider.search("MeetingScribe test ping", limit: 1)
+            tavilyStatus = "✓ Connected — Tavily returned \(results.count) result\(results.count == 1 ? "" : "s")."
+        } catch {
+            tavilyStatus = "✗ " + error.localizedDescription
+        }
+    }
 
     private func testLinear() async {
         testing.insert("linear"); defer { testing.remove("linear") }

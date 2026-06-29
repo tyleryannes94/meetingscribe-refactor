@@ -36,16 +36,17 @@ final class ChatTools {
     private let fileTools: FileChatTools
     private let peopleTools: PeopleChatTools
     private let decisionTools: DecisionChatTools   // 4-C
+    private let brainDumpTools: BrainDumpChatTools
 
     /// Order matters for `run(name:input:)` only as a tiebreaker — tool
     /// names are unique across handlers, so the first non-nil `run` wins
     /// and we never traverse the rest. The catalogs are concatenated in
     /// the same order so `tools` is stable across launches.
     private var handlers: [any ChatToolHandler] {
-        [meetingTools, actionItemTools, integrationTools, fileTools, peopleTools, decisionTools]
+        [meetingTools, actionItemTools, integrationTools, fileTools, peopleTools, decisionTools, brainDumpTools]
     }
 
-    init(manager: MeetingManager) {
+    init(manager: MeetingManager, brainDump: BrainDumpStore) {
         self.manager = manager
         self.meetingTools     = MeetingChatTools(manager: manager)
         self.actionItemTools  = ActionItemChatTools(manager: manager)
@@ -53,6 +54,7 @@ final class ChatTools {
         self.fileTools        = FileChatTools()
         self.peopleTools      = PeopleChatTools(manager: manager)
         self.decisionTools    = DecisionChatTools(manager: manager)
+        self.brainDumpTools   = BrainDumpChatTools(manager: manager, store: brainDump)
     }
 
     // MARK: - Catalog (Anthropic.Tool schemas)
@@ -93,3 +95,4 @@ extension ActionItemChatTools:  ChatToolHandler {}
 extension IntegrationChatTools: ChatToolHandler {}
 extension FileChatTools:        ChatToolHandler {}
 extension PeopleChatTools:      ChatToolHandler {}
+extension BrainDumpChatTools:   ChatToolHandler {}

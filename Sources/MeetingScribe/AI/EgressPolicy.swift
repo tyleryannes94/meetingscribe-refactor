@@ -77,4 +77,30 @@ enum EgressPolicy {
         if AppSettings.shared.allowRemoteOllamaEndpoint { return }
         throw EgressError.remoteEndpointNotApproved(host: url.host ?? url.absoluteString)
     }
+
+    enum BrainDumpEgressError: Error, LocalizedError {
+        case webAccessDisabled
+        var errorDescription: String? {
+            switch self {
+            case .webAccessDisabled:
+                return "Brain Dump web access is off. Turn on \"Allow web access\" in Settings → Integrations → Brain Dump before fetching URLs or running web searches."
+            }
+        }
+    }
+
+    /// Gate for Brain Dump URL fetching and web search. Unlike the Ollama and
+    /// integration paths, the destination is arbitrary, so the allowlist
+    /// approach doesn't fit — instead the user opts in once
+    /// (`AppSettings.allowBrainDumpWebAccess`) and that toggle gates every
+    /// outbound generic-web request. HTTPS-only.
+    static func assertGenericOutboundAllowed(_ url: URL) throws {
+        guard AppSettings.shared.allowBrainDumpWebAccess else {
+            throw BrainDumpEgressError.webAccessDisabled
+        }
+        // HTTP plaintext is never allowed for arbitrary hosts — only Ollama /
+        // local services get the http exemption.
+        if !isLocal(url), (url.scheme ?? "").lowercased() != "https" {
+            throw EgressError.remoteEndpointNotApproved(host: url.host ?? url.absoluteString)
+        }
+    }
 }

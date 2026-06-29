@@ -317,6 +317,184 @@ func writePersonEnvelope(_ payload: [String: Any], to dir: URL) throws {
 
 func signalVaultChanged() { DarwinNotifier.post(DarwinNotifier.vaultChanged) }
 
+// MARK: - Brain Dump sessions (raw-JSON patching)
+
+let brainDumpSchemaVersion = 1
+func brainDumpsURL() -> URL { storageDir.appendingPathComponent("brain_dump_sessions.json") }
+
+/// Load `brain_dump_sessions.json` as raw JSON: (schemaVersion, array-of-record-dicts).
+/// Tolerates the legacy bare-array shape so a hand-written test file still loads.
+func loadBrainDumpsRaw() -> (version: Int, items: [[String: Any]]) {
+    guard let data = try? Data(contentsOf: brainDumpsURL()),
+          let top = try? JSONSerialization.jsonObject(with: data) else {
+        return (brainDumpSchemaVersion, [])
+    }
+    if let dict = top as? [String: Any], let arr = dict["data"] as? [[String: Any]] {
+        return (dict["schemaVersion"] as? Int ?? brainDumpSchemaVersion, arr)
+    }
+    if let arr = top as? [[String: Any]] { return (brainDumpSchemaVersion, arr) }
+    return (brainDumpSchemaVersion, [])
+}
+
+func writeBrainDumpsRaw(_ items: [[String: Any]]) throws {
+    let env: [String: Any] = ["schemaVersion": brainDumpSchemaVersion, "data": items]
+    guard JSONSerialization.isValidJSONObject(env) else {
+        throw MCPWriteError.io("brain_dump_sessions envelope is not valid JSON")
+    }
+    let data = try JSONSerialization.data(withJSONObject: env, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: brainDumpsURL(), options: .atomic)
+}
+
+func tool_submitBrainDump(args: [String: Any]) -> JSONValue {
+    guard let body = (args["body"] as? String) else {
+        return .object(["error": .string("`body` is required")])
+    }
+    let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    let id = UUID().uuidString
+    let now = isoNow()
+    let title: String? = {
+        if let t = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !t.isEmpty { return t }
+        for line in trimmedBody.split(whereSeparator: { $0.isNewline }) {
+            let candidate = line.trimmingCharacters(in: .whitespaces)
+            if !candidate.isEmpty { return String(candidate.prefix(60)) }
+        }
+        return nil
+    }()
+
+    // Build placeholder URL sources for each url passed in. The running app
+    // resolves them via URLFetcher on first open of the session, so the planner
+    // doesn't need to embed remote content into the MCP-side request.
+    var sources: [[String: Any]] = []
+    if let urls = args["urls"] as? [String] {
+        for raw in urls {
+            guard let url = URL(string: raw), url.scheme?.lowercased() == "https" else { continue }
+            sources.append([
+                "kind": "url",
+                "payload": [
+                    "id": UUID().uuidString,
+                    "url": url.absoluteString,
+                    "title": url.host ?? url.absoluteString,
+                    "extractedMarkdown": "",
+                    "fetchedAt": now,
+                    "isLoading": true
+                ]
+            ])
+        }
+    }
+
+    var session: [String: Any] = [
+        "id": id,
+        "createdAt": now,
+        "updatedAt": now,
+        "body": trimmedBody,
+        "sources": sources,
+        "drafts": [],
+        "state": "draft",
+        "linkedProjectIDs": [],
+        "schemaVersion": brainDumpSchemaVersion
+    ]
+    if let title { session["title"] = title }
+    if let origin = args["origin"] as? String, !origin.isEmpty {
+        // Origin isn't a first-class field on BrainDumpSession yet; surface it
+        // in the body header so the user sees where it came from.
+        let header = "_(from \(origin))_\n\n"
+        session["body"] = header + trimmedBody
+    }
+
+    do {
+        var (_, items) = loadBrainDumpsRaw()
+        items.insert(session, at: 0)
+        try writeBrainDumpsRaw(items)
+        signalVaultChanged()
+        return .object([
+            "ok": .bool(true),
+            "session_id": .string(id),
+            "deep_link": .string("meetingscribe://brain-dump/\(id)")
+        ])
+    } catch {
+        return .object(["error": .string("failed to write brain dump: \(error)")])
+    }
+}
+
+func tool_listBrainDumpSessions(args: [String: Any]) -> JSONValue {
+    let limit = (args["limit"] as? Int) ?? 20
+    let stateFilter = (args["state"] as? String)?.lowercased()
+    let (_, raw) = loadBrainDumpsRaw()
+
+    // Newest first by `updatedAt`. Tolerant of items missing the field.
+    let sorted = raw.sorted { (a, b) -> Bool in
+        let ad = (a["updatedAt"] as? String) ?? (a["createdAt"] as? String) ?? ""
+        let bd = (b["updatedAt"] as? String) ?? (b["createdAt"] as? String) ?? ""
+        return ad > bd
+    }
+
+    var rows: [JSONValue] = []
+    for item in sorted {
+        let state = (item["state"] as? String) ?? "draft"
+        if let f = stateFilter, !f.isEmpty, state != f { continue }
+        let sources = (item["sources"] as? [[String: Any]]) ?? []
+        let drafts = (item["drafts"] as? [[String: Any]]) ?? []
+        var pending = 0, accepted = 0
+        for draft in drafts {
+            let payload = (draft["payload"] as? [String: Any]) ?? [:]
+            let stateDict = payload["state"] as? [String: Any]
+            let s = (stateDict?["state"] as? String) ?? "pending"
+            if s == "accepted" { accepted += 1 }
+            if s == "pending"  { pending += 1 }
+        }
+        let title = (item["title"] as? String)
+            ?? Self_firstLine(item["body"] as? String)
+            ?? "Untitled brain dump"
+        rows.append(.object([
+            "id": .string((item["id"] as? String) ?? ""),
+            "title": .string(title),
+            "state": .string(state),
+            "sourceCount": .int(sources.count),
+            "pendingDrafts": .int(pending),
+            "acceptedDrafts": .int(accepted),
+            "updatedAt": .string((item["updatedAt"] as? String) ?? "")
+        ]))
+        if rows.count >= limit { break }
+    }
+    return .object(["count": .int(rows.count), "sessions": .array(rows)])
+}
+
+func tool_getBrainDumpSession(args: [String: Any]) -> JSONValue {
+    guard let id = (args["id"] as? String), !id.isEmpty else {
+        return .object(["error": .string("`id` is required")])
+    }
+    let (_, raw) = loadBrainDumpsRaw()
+    guard let match = raw.first(where: { ($0["id"] as? String) == id }) else {
+        return .object(["error": .string("session not found: \(id)")])
+    }
+    // Round-trip through JSONSerialization → JSONValue so the response carries
+    // the exact stored shape (sources / drafts / state) without re-typing
+    // every field. Failure-mode: bad on-disk JSON returns an error.
+    do {
+        let data = try JSONSerialization.data(withJSONObject: match, options: [.sortedKeys])
+        let value = try JSONDecoder().decode(JSONValue.self, from: data)
+        return value
+    } catch {
+        return .object(["error": .string("failed to encode session: \(error)")])
+    }
+}
+
+private enum Self_firstLineHelper {
+    static func compute(_ body: String?) -> String? {
+        guard let body else { return nil }
+        for line in body.split(whereSeparator: { $0.isNewline }) {
+            let candidate = line.trimmingCharacters(in: .whitespaces)
+            if !candidate.isEmpty { return String(candidate.prefix(60)) }
+        }
+        return nil
+    }
+}
+
+private func Self_firstLine(_ body: String?) -> String? {
+    Self_firstLineHelper.compute(body)
+}
+
 // MARK: - People graph (Phase B/C second brain)
 //
 // Mirrors the in-app PeopleStore's on-disk layout:
@@ -1036,6 +1214,46 @@ let toolList: [JSONValue] = [
             "required": .array(["id"]),
             "properties": .object([
                 "id": .object(["type": "string", "description": "Person UUID, name, email, or phone."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "submit_brain_dump",
+        "description": "Create a new Brain Dump session inside MeetingScribe. The session appears live on the Brain Dump page (TopLevelSection.brainDump) for the user to review and run \"Plan with AI\" against locally. Returns the new session id and a deep link.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["body"]),
+            "properties": .object([
+                "body": .object(["type": "string", "description": "Free-text brain-dump body."]),
+                "title": .object(["type": "string", "description": "Optional title; defaults to the first line of the body."]),
+                "origin": .object(["type": "string", "description": "Short identifier of the agent that submitted this (e.g. \"claude-code\", \"shortcut\")."]),
+                "urls": .object([
+                    "type": "array",
+                    "items": .object(["type": "string"]),
+                    "description": "Optional URLs to attach as loading placeholder sources. The app will fetch and extract them when the user opens the session."
+                ])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "list_brain_dump_sessions",
+        "description": "List Brain Dump sessions stored in the vault, newest first. Returns a slim summary: id, title, state, source count, and pending/accepted draft counts.",
+        "inputSchema": .object([
+            "type": "object",
+            "properties": .object([
+                "limit": .object(["type": "integer", "default": 20]),
+                "state": .object(["type": "string", "description": "Optional filter: draft / planning / reviewing / archived."])
+            ])
+        ])
+    ]),
+    .object([
+        "name": "get_brain_dump_session",
+        "description": "Full session payload for one Brain Dump (body, sources, drafts, state) — useful when an agent wants to inspect what's already in the session before adding to it.",
+        "inputSchema": .object([
+            "type": "object",
+            "required": .array(["id"]),
+            "properties": .object([
+                "id": .object(["type": "string"])
             ])
         ])
     ])
@@ -2207,6 +2425,9 @@ func runTool(name: String, args: [String: Any]) -> JSONValue {
     case "list_waiting_on":       return tool_listWaitingOn(args: args)
     case "get_voice_note_extracts": return tool_getVoiceNoteExtracts(args: args)
     case "get_person_brief":      return tool_getPersonBrief(args: args)
+    case "submit_brain_dump":         return tool_submitBrainDump(args: args)
+    case "list_brain_dump_sessions":  return tool_listBrainDumpSessions(args: args)
+    case "get_brain_dump_session":    return tool_getBrainDumpSession(args: args)
     default: return .object(["error": .string("unknown tool: \(name)")])
     }
 }

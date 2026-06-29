@@ -28,6 +28,7 @@ struct UnifiedMeetingDetail: View {
     /// person view use), so messages persist when you navigate between a
     /// meeting and elsewhere instead of being wiped by a per-view session.
     @EnvironmentObject var chatSession: ChatSession
+    @EnvironmentObject var brainDump: BrainDumpStore
 
     /// Summary disclosure state within the combined Notes canvas (CN-1).
     @State var summaryExpanded = true
