@@ -442,10 +442,12 @@ private struct CalendarBlockDraftCard: View {
     }
 
     private func accept() async {
-        // EventKit permission. If we don't have full access, fall back to
-        // building an ICS payload and copying it to the clipboard.
-        let granted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
-            || (await CalendarStoreActor.shared.requestAccess())
+        // EventKit permission. If we don't have full access, request it.
+        // (Split into two statements — `||` is an autoclosure that can't await.)
+        var granted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        if !granted {
+            granted = await CalendarStoreActor.shared.requestAccess()
+        }
         if granted, let id = await CalendarStoreActor.shared.scheduleFollowUp(
             title: draft.title,
             start: draft.start,

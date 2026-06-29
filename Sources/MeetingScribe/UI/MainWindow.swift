@@ -362,7 +362,7 @@ struct MainWindow: View {
         case .people:
             let drifting = PeopleStore.shared.overdueCheckInCount
             return drifting > 0 ? .count(drifting, NDS.gold) : .none
-        case .today, .notes, .recordings, .integrations:
+        case .today, .brainDump, .notes, .recordings, .integrations:
             return .none
         }
     }
@@ -388,6 +388,7 @@ struct MainWindow: View {
         case .meetings: return "The Meetings list — all past and upcoming meetings/calls."
         case .people:   return "People — your second-brain contacts, searchable by name and event tag."
         case .actions:  return "The Tasks workspace — initiatives, projects (pages), and tasks."
+        case .brainDump: return "Brain Dump — capture thoughts, paste URLs, let the planner turn them into tasks and focus blocks."
         case .notes:    return "Voice Notes — recorded/imported notes with transcripts."
         case .recordings: return "Recordings — screen recordings and screenshots with transcripts."
         case .integrations: return "Integrations — set up, edit, and test every connector the app uses."
