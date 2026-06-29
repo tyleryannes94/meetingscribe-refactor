@@ -358,6 +358,9 @@ struct ActionItemsView: View {
             consumePendingTask()
             consumePendingTasksRoute()
             consumePendingBrainDump()
+            // Auto-tag (B): ensure #meeting on meeting tasks + theme tags on the
+            // rest whenever the workspace opens. Idempotent + instant.
+            TaskAutoTagger.run(on: store)
         }
     }
 

@@ -712,6 +712,9 @@ struct MainWindow: View {
                 manager.refreshPastMeetings(force: true)
                 manager.refreshQuickNotes()
                 calendar.refreshUpcoming(force: true)
+                // Scheduled auto-tag pass (B): #meeting on meeting tasks + theme
+                // tags on everything else. Idempotent; no-ops once caught up.
+                TaskAutoTagger.run(on: manager.actionItems)
             }
         }
         // The Today view auto-stays on .today during recording — the live

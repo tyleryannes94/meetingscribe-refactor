@@ -213,7 +213,7 @@ final class TaskOrganizer: ObservableObject {
         //    shared tag; a lone themed task gets an individual tag suggestion.
         let loose = open.filter { $0.projectID == nil }
         var byTheme: [String: [ActionItem]] = [:]
-        for t in loose { if let th = detectTheme(t.title) { byTheme[th, default: []].append(t) } }
+        for t in loose { if let th = TaskAutoTagger.theme(for: t.title) { byTheme[th, default: []].append(t) } }
         for (tag, tasks) in byTheme.sorted(by: { $0.value.count > $1.value.count }) {
             let need = tasks.filter { t in
                 !(t.labelIDs ?? []).contains { store.label(id: $0)?.name.caseInsensitiveCompare(tag) == .orderedSame }
@@ -312,26 +312,7 @@ final class TaskOrganizer: ObservableObject {
         return cal.startOfDay(for: day)
     }
 
-    // MARK: Theme detection
-
-    private struct Theme { let tag: String; let keywords: [String] }
-    private static let themes: [Theme] = [
-        .init(tag: "email", keywords: ["email", "reply", "respond to", "follow up", "follow-up", "inbox"]),
-        .init(tag: "docs", keywords: ["document", "documentation", "write up", "write-up", "readme", "spec ", "notes for"]),
-        .init(tag: "bug", keywords: ["bug", "fix ", "error", "crash", "broken", "regression", "hotfix"]),
-        .init(tag: "meeting", keywords: ["meeting", "schedule a", "sync ", "standup", "stand-up", "1:1", "agenda"]),
-        .init(tag: "review", keywords: ["review", "pull request", " pr ", "feedback", "sign off", "sign-off", "approve"]),
-        .init(tag: "design", keywords: ["design", "mockup", "wireframe", "figma", "prototype"]),
-        .init(tag: "analytics", keywords: ["analytics", "metrics", "dashboard", "benchmark", "tracking", "report on"]),
-        .init(tag: "research", keywords: ["research", "investigate", "evaluate", "explore", "spike", "compare"]),
-        .init(tag: "outreach", keywords: ["reach out", "outreach", "contact ", "intro to", "ping "]),
-        .init(tag: "scoping", keywords: ["scope", "scoping", "planning", "estimate", "roadmap"]),
-    ]
-    private static func detectTheme(_ title: String) -> String? {
-        let t = " " + title.lowercased() + " "
-        for theme in themes { for k in theme.keywords where t.contains(k) { return theme.tag } }
-        return nil
-    }
+    // Theme detection is shared with the auto-tagger — see `TaskAutoTagger`.
 
     /// The given day if it's a weekday, otherwise the following Monday.
     private static func nextWeekday(onOrAfter day: Date) -> Date {

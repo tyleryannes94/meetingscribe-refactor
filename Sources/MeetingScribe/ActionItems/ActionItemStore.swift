@@ -802,6 +802,50 @@ final class ActionItemStore: ObservableObject {
         }
     }
 
+    /// Find a label by name (case-insensitive) or create it.
+    @discardableResult
+    func ensureLabel(named name: String, colorHex: String? = nil) -> TaskLabel {
+        if let l = labels.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) { return l }
+        return createLabel(name: name, colorHex: colorHex)
+    }
+
+    /// Auto-tag pass (B): give every meeting-sourced task the `meetingTag`, and
+    /// apply a theme tag (resolved by `theme(title)`) to any open task whose
+    /// title matches one it doesn't already carry. Idempotent — applies only
+    /// missing tags — and writes once. Returns the number of tags applied.
+    @discardableResult
+    func autoTag(meetingTag: String, theme: (String) -> String?) -> Int {
+        var idByName: [String: String] = [:]
+        func labelID(_ name: String) -> String {
+            let key = name.lowercased()
+            if let id = idByName[key] { return id }
+            let id = ensureLabel(named: name).id   // may append to `labels`
+            idByName[key] = id
+            return id
+        }
+        var applied = 0
+        for i in items.indices {
+            guard items[i].deletedAt == nil, items[i].status != .completed else { continue }
+            var ids = items[i].labelIDs ?? []
+            let before = ids.count
+            if !items[i].meetingID.isEmpty {
+                let mid = labelID(meetingTag)
+                if !ids.contains(mid) { ids.append(mid) }
+            }
+            if let t = theme(items[i].title) {
+                let tid = labelID(t)
+                if !ids.contains(tid) { ids.append(tid) }
+            }
+            if ids.count != before {
+                items[i].labelIDs = ids
+                items[i].updatedAt = Date()
+                applied += ids.count - before
+            }
+        }
+        if applied > 0 { save() }
+        return applied
+    }
+
     // MARK: - Sections
 
     func sections(forProject projectID: String) -> [ProjectSection] {

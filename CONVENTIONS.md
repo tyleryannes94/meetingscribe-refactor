@@ -264,6 +264,13 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — Auto-tagging (B) + AI-tasks-to-Triage (C3).** New
+  `TaskAutoTagger` (shared theme list with the organizer) runs on Tasks-open and
+  hourly: every meeting-sourced task gets `#meeting` (its meeting backlink
+  already rides on `meetingID`), and any task whose title matches a theme gets
+  that tag — idempotent, local, instant (`ActionItemStore.autoTag`). C3: AI-
+  proposed tasks (`ActionItem.suggested`) route to the Triage inbox until
+  confirmed, never leaking into projects/views; manual tasks are unaffected.
 - **2026-06-29 — Projects can belong to multiple initiatives (many-to-many).**
   `Project.initiativeID` (single) gains `initiativeIDs: [String]?` with a computed
   `allInitiativeIDs` fallback — additive optional field, so the migration is
