@@ -1,5 +1,12 @@
 # MeetingScribe — Working Preferences
 
+> **READ `CONVENTIONS.md` BEFORE STARTING ANY TASK**, and **append to it after
+> finishing** (new requirements, design/AI/layout decisions, recurring requests).
+> It holds the hard product/engineering rules — responsive sizing (nothing cut
+> off at any window size, desktop *and* mobile), the NDS design system, the
+> title-bar padding rule, and the requirement to keep AI/chat tools in sync with
+> new AI features. Add, never delete unless obsolete.
+
 ## Repo
 
 - GitHub: https://github.com/tyleryannes94/meetingscribe-refactor (private)
