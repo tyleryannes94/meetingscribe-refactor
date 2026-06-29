@@ -93,7 +93,8 @@ struct TaskPageView: View {
                         .padding(.top, 18)
                 }
                 .notionPageColumn(horizontalPadding: compact ? 18 : NDS.pagePadding,
-                                  verticalPadding: compact ? 16 : 28)
+                                  verticalPadding: compact ? 16 : 28,
+                                  alignment: compact ? .leading : .center)
             }
             .background(NDS.bg)
             .onAppear { load(item) }
@@ -511,7 +512,9 @@ struct TaskPageView: View {
                 let n = newLabel.trimmingCharacters(in: .whitespaces)
                 if !n.isEmpty { let l = store.createLabel(name: n); store.toggleLabel(itemID, labelID: l.id); newLabel = "" }
             })
-            .textFieldStyle(.plain).font(NDS.small).frame(width: 90)
+            // Flexible so the labels row never forces the inspector wider than its
+            // container (shrinks in the narrow drawer, comfortable on the page).
+            .textFieldStyle(.plain).font(NDS.small).frame(minWidth: 44, maxWidth: 110)
         }
     }
 

@@ -434,10 +434,14 @@ struct NotionPropertyRow<Content: View>: View {
         HStack(alignment: .top, spacing: 8) {
             HStack(spacing: 7) {
                 Image(systemName: icon).scaledFont(12)
-                Text(label).font(NDS.body)
+                Text(label).font(NDS.body).lineLimit(1).truncationMode(.tail)
             }
             .foregroundStyle(NDS.textSecondary)
-            .frame(width: 132, alignment: .leading)
+            // Flexible label gutter: prefers 132pt on roomy pages but shrinks to
+            // ~72pt in the narrow task-inspector drawer instead of forcing the
+            // whole property block wider than its container (which clipped the
+            // page on both sides when centered).
+            .frame(minWidth: 72, idealWidth: 132, maxWidth: 132, alignment: .leading)
             .padding(.top, 3)
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -656,11 +660,18 @@ extension View {
     /// column. Pass `horizontalPadding` to tighten the gutters when the same
     /// page view is rendered in a narrow container (e.g. the 380pt task
     /// inspector drawer), where the full 56pt gutter would crush the content.
+    /// `alignment` controls how the capped column sits in the available width.
+    /// Defaults to `.center` (Notion's roomy centered reading column). Narrow
+    /// hosts — chiefly the task inspector drawer — pass `.leading` so that if
+    /// content is ever wider than the pane, it clips only on the trailing edge
+    /// instead of being centered and cut on BOTH sides (which used to lop the
+    /// title off the left when the window was small).
     func notionPageColumn(horizontalPadding: CGFloat = NDS.pagePadding,
-                          verticalPadding: CGFloat = 28) -> some View {
+                          verticalPadding: CGFloat = 28,
+                          alignment: Alignment = .center) -> some View {
         self
             .frame(maxWidth: NDS.contentMaxWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: alignment)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
     }

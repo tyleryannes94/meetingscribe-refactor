@@ -52,11 +52,13 @@ struct MeetingScribeApp: App {
                 .environmentObject(manager.decisions)
                 .environmentObject(router)
                 .environmentObject(brainDump)
-                // Min width matches the 860px chat-rail breakpoint so the
-                // multi-pane screens (nav rail + a 2-pane split) always have room
-                // to lay out; below this the panes can't fit and content used to
-                // overflow under the rail (now also clipped in MainWindow).
-                .frame(minWidth: 860, minHeight: 560)
+                // The window can now shrink far smaller because the layout is
+                // responsive: below ~880pt the left nav rail collapses to an icon
+                // strip (MainWindow), the Tasks sidebar is clamped to a share of
+                // its pane, and the task inspector sizes to its container. So this
+                // floor only needs to keep two panes minimally usable, not fit the
+                // full labelled three-column layout.
+                .frame(minWidth: 480, minHeight: 480)
                 // Deep links: meetingscribe://<kind>/<id> from MCP, Shortcuts,
                 // Spotlight, or another app. The scheme is registered in
                 // Resources/Info.plist (CFBundleURLTypes). Routes through the

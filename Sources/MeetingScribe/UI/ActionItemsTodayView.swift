@@ -29,17 +29,43 @@ extension ActionItemsView {
             todayScratchHeader
             todayUpNextStrip
             Divider().overlay(NDS.divider)
-            HStack(spacing: 0) {
-                todayCaptureColumn
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Divider().overlay(NDS.divider)
-                todayBrainDumpColumn
-                    .frame(width: 420)
-            }
-            .frame(maxHeight: .infinity)
+            todayColumns
             Divider().overlay(NDS.divider)
             todayBoardSection
         }
+    }
+
+    /// Capture + Brain-Dump columns, responsive to the pane width: side-by-side
+    /// with a clamped (not fixed) right column when there's room, stacked
+    /// vertically when the pane is too narrow to show both — so neither column
+    /// is ever pushed off the right edge.
+    @ViewBuilder
+    private var todayColumns: some View {
+        GeometryReader { geo in
+            let narrow = geo.size.width < 680
+            if narrow {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        todayCaptureColumn
+                            .frame(maxWidth: .infinity)
+                        Divider().overlay(NDS.divider)
+                        todayBrainDumpColumn
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            } else {
+                HStack(spacing: 0) {
+                    todayCaptureColumn
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Divider().overlay(NDS.divider)
+                    todayBrainDumpColumn
+                        // Clamp, don't fix: prefers ~420 but shrinks with the pane.
+                        .frame(minWidth: 300, idealWidth: 420, maxWidth: 420,
+                               maxHeight: .infinity)
+                }
+            }
+        }
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: Header

@@ -164,9 +164,10 @@ struct MainWindow: View {
 
     // MARK: - Left navigation rail
 
-    private var navRail: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Brand: coral→lilac gradient mark tile + Bricolage wordmark
+    private func navRail(collapsed: Bool) -> some View {
+        VStack(alignment: collapsed ? .center : .leading, spacing: 0) {
+            // Brand: coral→lilac gradient mark tile + Bricolage wordmark. When
+            // collapsed only the mark tile shows.
             HStack(spacing: 10) {
                 Image(systemName: "waveform")
                     .scaledFont(14, weight: .bold)
@@ -175,57 +176,85 @@ struct MainWindow: View {
                     .background(NDS.brandMarkGradient,
                                 in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                     .shadow(color: NDS.accent.opacity(0.30), radius: 7, y: 4)
-                Text("MeetingScribe")
-                    .scaledFont(15.5, weight: .bold, relativeTo: .headline, kind: .display)
-                    .tracking(-0.3)
-                Spacer()
+                if !collapsed {
+                    Text("MeetingScribe")
+                        .scaledFont(15.5, weight: .bold, relativeTo: .headline, kind: .display)
+                        .tracking(-0.3)
+                    Spacer()
+                }
             }
-            .padding(.horizontal, NDS.spaceLG).padding(.top, NDS.spaceLG).padding(.bottom, NDS.spaceSM)
+            .padding(.horizontal, collapsed ? 0 : NDS.spaceLG)
+            .padding(.top, NDS.spaceLG).padding(.bottom, NDS.spaceSM)
 
-            navGroupLabel(NavGroup.workspace.rawValue)
+            if collapsed {
+                Spacer().frame(height: 8)
+            } else {
+                navGroupLabel(NavGroup.workspace.rawValue)
+            }
             ForEach(TopLevelSection.allCases.filter { $0.group == .workspace }) { s in
-                navItem(s)
+                navItem(s, collapsed: collapsed)
             }
 
-            Spacer().frame(height: 4)
+            Spacer().frame(height: collapsed ? 10 : 4)
 
-            navGroupLabel(NavGroup.organize.rawValue)
+            if collapsed {
+                Divider().overlay(NDS.divider).padding(.horizontal, 12).padding(.bottom, 6)
+            } else {
+                navGroupLabel(NavGroup.organize.rawValue)
+            }
             ForEach(TopLevelSection.allCases.filter { $0.group == .organize }) { s in
-                navItem(s)
+                navItem(s, collapsed: collapsed)
             }
 
             Spacer()
-            Divider().overlay(NDS.divider).padding(.horizontal, NDS.spaceLG).padding(.bottom, NDS.spaceSM)
+            Divider().overlay(NDS.divider)
+                .padding(.horizontal, collapsed ? 12 : NDS.spaceLG).padding(.bottom, NDS.spaceSM)
 
-            // Bottom row: search + settings. The Light/Dark toggle was removed
-            // (C3-4) — the app follows the system appearance like a native Mac app.
-            HStack(spacing: 6) {
-                Spacer(minLength: 0)
-                Button { showSearch = true } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "magnifyingglass").scaledFont(11)
-                        Text("⌘K").font(NDS.tiny)
+            // Bottom row: search + settings. Stacks vertically when collapsed so
+            // both still fit in the narrow strip.
+            Group {
+                if collapsed {
+                    VStack(spacing: 8) {
+                        Button { showSearch = true } label: {
+                            Image(systemName: "magnifyingglass").scaledFont(12)
+                                .foregroundStyle(NDS.textSecondary)
+                                .frame(width: NDS.buttonIconSide, height: NDS.buttonIconSide)
+                                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(NDS.hairline, lineWidth: 1))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Search everything (⌘K)")
+                        SettingsGearButton()
                     }
-                    .foregroundStyle(NDS.textSecondary)
-                    .padding(.horizontal, 8).padding(.vertical, 5)
-                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(NDS.hairline, lineWidth: 1))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Search everything (⌘K)")
+                    .padding(.bottom, NDS.spaceMD)
+                } else {
+                    HStack(spacing: 6) {
+                        Spacer(minLength: 0)
+                        Button { showSearch = true } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "magnifyingglass").scaledFont(11)
+                                Text("⌘K").font(NDS.tiny)
+                            }
+                            .foregroundStyle(NDS.textSecondary)
+                            .padding(.horizontal, 8).padding(.vertical, 5)
+                            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(NDS.hairline, lineWidth: 1))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Search everything (⌘K)")
 
-                // Settings gear (replaces the old Integrations nav item).
-                // Uses SwiftUI's SettingsLink — the supported way to open the
-                // Settings scene. The previous `NSApp.sendAction(Selector(
-                // ("showSettingsWindow:")))` hack silently no-ops on some macOS
-                // versions / when the app isn't frontmost, which is why this
-                // button "didn't trigger".
-                SettingsGearButton()
+                        // Settings gear (replaces the old Integrations nav item).
+                        // Uses SwiftUI's SettingsLink — the supported way to open
+                        // the Settings scene.
+                        SettingsGearButton()
+                    }
+                    .padding(.horizontal, NDS.spaceLG).padding(.bottom, NDS.spaceMD)
+                }
             }
-            .padding(.horizontal, NDS.spaceLG).padding(.bottom, NDS.spaceMD)
         }
-        .frame(width: 240)  // increased from 216
+        .frame(width: collapsed ? 56 : 240)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(NDS.sidebarBg)
     }
@@ -367,9 +396,9 @@ struct MainWindow: View {
             .padding(.bottom, 4)
     }
 
-    private func navItem(_ s: TopLevelSection) -> some View {
+    private func navItem(_ s: TopLevelSection, collapsed: Bool = false) -> some View {
         NavRailItem(section: s, selected: section == s,
-                    badge: railBadge(for: s)) { section = s }
+                    badge: railBadge(for: s), collapsed: collapsed) { section = s }
     }
 
     /// State-bearing rail (D1-1): a glanceable count/pulse per section so users
@@ -485,13 +514,22 @@ struct MainWindow: View {
             // all three panes comfortably. The user's toggle preference is
             // preserved — the rail returns when there's room again.
             let showChat = chatVisible && geo.size.width >= 860
+            // GLOBAL responsive rail: below this width the left nav collapses to
+            // an icon-only strip so EVERY tab — not any one page — gets back the
+            // ~184pt the labelled rail would otherwise eat. This is the app-wide
+            // "media query" that keeps content (and the Tasks inspector inside
+            // it) uncut at small window sizes.
+            let railCollapsed = geo.size.width < 880
             HStack(spacing: 0) {
-                navRail
+                navRail(collapsed: railCollapsed)
                 Divider().overlay(NDS.divider)
                 // Clip + minWidth:0 so the widest kept-alive tab can't inflate
-                // the middle pane's minimum and push the nav rail off-screen.
+                // the middle pane's minimum and push the nav rail off-screen, or
+                // overflow a fixed-width sub-pane (e.g. the Tasks inspector
+                // drawer) past the right edge on a resized/narrow window.
                 tabContent
                     .frame(minWidth: 0, maxWidth: .infinity)
+                    .clipped()
                     .bloomAmbientGlow()   // subtle coral corner light (Bloom)
                     // In-app meeting recording dock (§2A) — never a hover overlay.
                     .overlay(alignment: .bottomTrailing) {
@@ -515,6 +553,7 @@ struct MainWindow: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .animation(.easeOut(duration: 0.18), value: showChat)
+            .animation(.easeOut(duration: 0.18), value: railCollapsed)
             .overlay(ToastOverlay())   // undo toasts (D4-3)
             .overlay(searchPalette)    // floating ⌘K command palette (C3-2)
         }
@@ -781,6 +820,7 @@ private struct NavRailItem: View {
     let section: TopLevelSection
     let selected: Bool
     var badge: Badge = .none
+    var collapsed: Bool = false
     let action: () -> Void
 
     /// A glanceable rail indicator (D1-1).
@@ -798,33 +838,67 @@ private struct NavRailItem: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            if collapsed {
+                // Icon-only: centered glyph with a small corner dot when the
+                // section has a badge (count/pulse), so the strip stays glanceable.
                 Image(systemName: section.systemImage)
-                    .scaledFont(13, weight: selected ? .bold : .regular)
+                    .scaledFont(14, weight: selected ? .bold : .regular)
                     .foregroundStyle(selected ? NDS.lilac : NDS.textSecondary)
-                    .frame(width: 16)
-                Text(section.label)
-                    .scaledFont(13.5, weight: selected ? .bold : .medium)
-                    .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
-                Spacer(minLength: 0)
-                badgeView
+                    .frame(width: 38, height: 32)
+                    .background(
+                        selected ? NDS.rowSelected : (isHovered ? NDS.rowHover : .clear),
+                        in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    )
+                    .overlay(alignment: .topTrailing) { collapsedBadgeDot }
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: section.systemImage)
+                        .scaledFont(13, weight: selected ? .bold : .regular)
+                        .foregroundStyle(selected ? NDS.lilac : NDS.textSecondary)
+                        .frame(width: 16)
+                    Text(section.label)
+                        .scaledFont(13.5, weight: selected ? .bold : .medium)
+                        .foregroundStyle(selected ? NDS.textPrimary : NDS.textSecondary)
+                    Spacer(minLength: 0)
+                    badgeView
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(
+                    // Comp: active = lilac-soft pill; hover (unselected) = a lighter wash
+                    // so the two states read differently.
+                    selected ? NDS.rowSelected : (isHovered ? NDS.rowHover : .clear),
+                    in: Capsule()
+                )
+                .contentShape(Capsule())
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(
-                // Comp: active = lilac-soft pill; hover (unselected) = a lighter wash
-                // so the two states read differently.
-                selected ? NDS.rowSelected : (isHovered ? NDS.rowHover : .clear),
-                in: Capsule()
-            )
-            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 1)
+        .padding(.horizontal, collapsed ? 0 : 9)
+        .padding(.vertical, collapsed ? 2 : 1)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
+        .help(collapsed ? section.label : "")
         .accessibilityLabel(section.label)
         .accessibilityValue(badgeAccessibility)
+    }
+
+    /// A small colored dot shown on the collapsed icon when the section carries
+    /// a count/pulse badge (the full pill doesn't fit in the 56pt strip).
+    @ViewBuilder
+    private var collapsedBadgeDot: some View {
+        switch badge {
+        case .none:
+            EmptyView()
+        case .count(_, let color):
+            Circle().fill(color).frame(width: 7, height: 7)
+                .overlay(Circle().strokeBorder(NDS.sidebarBg, lineWidth: 1.5))
+                .offset(x: 2, y: -2)
+        case .pulse:
+            Circle().fill(NDS.brand).frame(width: 7, height: 7)
+                .overlay(Circle().strokeBorder(NDS.sidebarBg, lineWidth: 1.5))
+                .offset(x: 2, y: -2)
+        }
     }
 
     @ViewBuilder

@@ -14,15 +14,24 @@ extension ActionItemsView {
                           pageContext: brainDumpPageContext)
         } else {
             // Drive BOTH widths off the real container size so the inspector
-            // drawer can never overflow the right edge — the prior plain-HStack
-            // version let the list/board's intrinsic min-width push the drawer
-            // off-screen on normal windows. The drawer takes a clamped share of
-            // the width and the content gets exactly the remainder (and clips
-            // its own overflow rather than forcing the HStack wider).
+            // drawer can never overflow the right edge. The pane this lives in is
+            // the *third* column of the split view, so it can be far narrower than
+            // the window (≈430pt even on a wide window, and much less when the
+            // user shrinks things). The drawer takes a share of that width but is
+            // hard-capped to the container: it must never be wider than `geo`, or
+            // its trailing edge (the inspector title) spills off-screen — which
+            // was the "only works when the app is big" clipping. On panes too
+            // small to show both comfortably it takes (almost) the whole width and
+            // the list collapses behind it rather than being pushed off-screen.
             GeometryReader { geo in
                 let editing = vm.editingID != nil
                     && store.items.contains { $0.id == vm.editingID }
-                let drawerW = editing ? min(380, max(260, geo.size.width * 0.42)) : 0
+                let ideal = geo.size.width * 0.44
+                // Clamp to [220, 380] for comfort, then to the container so it can
+                // never exceed it. min(geo*0.96, …) always leaves a sliver of list.
+                let drawerW = editing
+                    ? min(geo.size.width * 0.96, min(380, max(220, ideal)))
+                    : 0
                 HStack(spacing: 0) {
                     detailContent
                         .frame(width: max(0, geo.size.width - drawerW),
@@ -31,8 +40,11 @@ extension ActionItemsView {
                     if editing {
                         propertyDrawer
                             .frame(width: drawerW, height: geo.size.height)
+                            .clipped()
                     }
                 }
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
             }
         }
     }
@@ -126,22 +138,29 @@ extension ActionItemsView {
                 Divider().overlay(NDS.divider)
                 VStack(spacing: 0) {
                     // Comp inspector chrome: "TASK INSPECTOR" eyebrow + Full view.
-                    HStack {
+                    // Icon-only controls + a truncating eyebrow so the row never
+                    // overflows the narrow drawer (down to ~200pt).
+                    HStack(spacing: 8) {
                         NotionEyebrow(text: "Task inspector")
-                        Spacer()
+                            .lineLimit(1)
+                            .layoutPriority(0)
+                        Spacer(minLength: 4)
                         Button {
                             env.selectedTaskID = eid
                             vm.editingID = nil
                         } label: {
-                            Label("Full view", systemImage: "arrow.up.left.and.arrow.down.right")
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
                                 .font(NDS.small)
-                                .lineLimit(1)
                         }
                         .buttonStyle(.plain).foregroundStyle(NDS.accent)
+                        .help("Open full view")
+                        .layoutPriority(1)
                         Button { vm.editingID = nil } label: {
                             Image(systemName: "xmark").foregroundStyle(NDS.textSecondary)
                         }
                         .buttonStyle(.plain)
+                        .help("Close inspector")
+                        .layoutPriority(1)
                     }
                     .padding(10)
                     Divider().overlay(NDS.divider)
