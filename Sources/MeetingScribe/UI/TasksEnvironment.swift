@@ -25,6 +25,11 @@ final class TasksEnvironment: ObservableObject {
     /// Scopes the sidebar initiative tree and the main task list live.
     @Published var activeContextID: String?
 
+    /// Overlay: when true the Tasks pane shows the embedded Brain Dump surface
+    /// (its own page *within* Tasks, no longer a top-level nav item). Cleared by
+    /// `go(_:)` so navigating anywhere in the sidebar dismisses it.
+    @Published var showingBrainDump = false
+
     /// Default landing is the Today smart view (1-3) — not the old aimless
     /// "All tasks" — so opening Tasks leads with what's due now.
     init(selectedProjectID: String? = ActionItemsView.todaySentinel) {
@@ -34,6 +39,7 @@ final class TasksEnvironment: ObservableObject {
     /// Navigate to a typed route (3-6 breadcrumbs, 3-8 history). Clears the
     /// other selection fields so the route is unambiguous.
     func go(_ route: TasksRoute) {
+        showingBrainDump = false
         selectedTaskID = nil; selectedMeetingID = nil
         selectedInitiativeID = nil; selectedProjectID = nil
         switch route {

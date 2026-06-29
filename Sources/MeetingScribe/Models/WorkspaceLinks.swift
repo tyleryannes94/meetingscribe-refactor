@@ -127,4 +127,7 @@ extension Notification.Name {
     /// ⌘1–⌘6 keyboard shortcuts — object is a TopLevelSection value
     /// that MainWindow observes and switches to.
     static let meetingScribeNavigate = Notification.Name("MeetingScribeNavigate")
+    /// ⌘6 / Today CTA — open the Brain Dump surface (now embedded in the Tasks
+    /// tab). MainWindow observes it and calls `router.openBrainDump()`.
+    static let meetingScribeOpenBrainDump = Notification.Name("MeetingScribeOpenBrainDump")
 }

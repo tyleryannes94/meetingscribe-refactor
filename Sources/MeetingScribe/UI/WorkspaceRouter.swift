@@ -74,17 +74,25 @@ final class WorkspaceRouter: ObservableObject {
     /// arrivals / "View" toasts; consumed by `BrainDumpView` on appear.
     @Published var pendingBrainDumpSessionID: String?
 
+    /// One-shot: request to show the Brain Dump surface embedded in the Tasks
+    /// tab (Brain Dump is no longer its own top-level page). Set by `openBrainDump`,
+    /// the ⌘6 shortcut, and the Today CTA; consumed by `ActionItemsView`, which
+    /// flips `TasksEnvironment.showingBrainDump` and clears this.
+    @Published var pendingOpenBrainDump = false
+
     /// Deep-link into the Tasks tab at a specific rail sentinel (4-7).
     func openTasks(route sentinel: String) {
         pendingTasksRoute = sentinel
         section = .actions
     }
 
-    /// Open the Brain Dump page, optionally focusing a specific session
-    /// (e.g. one that just arrived via MCP `submit_brain_dump`).
+    /// Open the Brain Dump surface (now embedded in the Tasks tab), optionally
+    /// focusing a specific session (e.g. one that just arrived via MCP
+    /// `submit_brain_dump`).
     func openBrainDump(sessionID: String? = nil) {
         if let sessionID { pendingBrainDumpSessionID = sessionID }
-        section = .brainDump
+        pendingOpenBrainDump = true
+        section = .actions
     }
 
     /// Clear the mailbox once a destination view has acted on it.

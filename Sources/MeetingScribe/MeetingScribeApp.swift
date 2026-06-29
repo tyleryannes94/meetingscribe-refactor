@@ -111,8 +111,8 @@ struct MeetingScribeApp: App {
                 }
                 .keyboardShortcut("K", modifiers: [.command])
             }
-            // ⌘1–⌘6: jump to each top-level section. Voice Notes stays on ⌘5
-            // for muscle memory; Brain Dump takes ⌘6.
+            // ⌘1–⌘5: jump to each top-level section. ⌘6 opens Brain Dump, now a
+            // surface inside the Tasks tab rather than its own page.
             CommandMenu("Navigate") {
                 Button("Today")       { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.today) }
                     .keyboardShortcut("1", modifiers: .command)
@@ -124,7 +124,7 @@ struct MeetingScribeApp: App {
                     .keyboardShortcut("4", modifiers: .command)
                 Button("Voice Notes") { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.notes) }
                     .keyboardShortcut("5", modifiers: .command)
-                Button("Brain Dump")  { NotificationCenter.default.post(name: .meetingScribeNavigate, object: TopLevelSection.brainDump) }
+                Button("Brain Dump")  { NotificationCenter.default.post(name: .meetingScribeOpenBrainDump, object: nil) }
                     .keyboardShortcut("6", modifiers: .command)
             }
             CommandGroup(after: .newItem) {

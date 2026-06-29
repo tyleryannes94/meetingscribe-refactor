@@ -9,7 +9,11 @@ struct ActionItemsView: View {
     @EnvironmentObject var manager: MeetingManager
     @EnvironmentObject var router: WorkspaceRouter
     @EnvironmentObject var calendar: CalendarService
+    @EnvironmentObject var brainDump: BrainDumpStore
     @ObservedObject var store: ActionItemStore
+
+    /// Quick brain-dump capture on the Tasks home dashboard (BD merge).
+    @State var brainDumpCapture = ""
 
     /// Single owner of filter / sort / view / group state and the canonical
     /// filter implementation (A0-1). Replaces ~11 parallel `@State` vars and a
@@ -251,6 +255,7 @@ struct ActionItemsView: View {
         paneSplit
             .onChange(of: router.pendingTaskID) { _, _ in consumePendingTask() }
             .onChange(of: router.pendingTasksRoute) { _, _ in consumePendingTasksRoute() }
+            .onChange(of: router.pendingOpenBrainDump) { _, _ in consumePendingBrainDump() }
             .onChange(of: env.selectedProjectID) { _, _ in
                 env.selectedTaskID = nil
                 restoreViewPrefsForRoute()
@@ -339,7 +344,16 @@ struct ActionItemsView: View {
             restoreSceneSelection()
             consumePendingTask()
             consumePendingTasksRoute()
+            consumePendingBrainDump()
         }
+    }
+
+    /// Show the embedded Brain Dump surface when a router mailbox requested it
+    /// (deep link / ⌘6 / Today CTA / MCP arrival). Clears the one-shot flag.
+    func consumePendingBrainDump() {
+        guard router.pendingOpenBrainDump else { return }
+        env.showingBrainDump = true
+        router.pendingOpenBrainDump = false
     }
 
     /// Opens a task deep-linked from outside the Tasks tab (e.g. the home-page

@@ -14,6 +14,11 @@ struct BrainDumpView: View {
     @EnvironmentObject var actionItems: ActionItemStore
     @EnvironmentObject var router: WorkspaceRouter
 
+    /// When embedded inside Tasks, returns to the task list. Brain Dump is now a
+    /// page *within* Tasks (no longer a top-level nav item), so the header shows
+    /// a "Tasks" back chip whenever this is set.
+    var onExit: (() -> Void)? = nil
+
     @StateObject private var planRunner = BrainDumpPlanRunner()
 
     var body: some View {
@@ -35,7 +40,10 @@ struct BrainDumpView: View {
         .task(id: router.pendingBrainDumpSessionID) {
             consumePendingDeepLink()
         }
-        .onAppear { consumePendingDeepLink() }
+        .task(id: store.pendingPlanSessionID) {
+            consumePendingPlan()
+        }
+        .onAppear { consumePendingDeepLink(); consumePendingPlan() }
     }
 
     // MARK: - Header
@@ -43,6 +51,12 @@ struct BrainDumpView: View {
     @ViewBuilder
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
+            if let onExit {
+                Button(action: onExit) {
+                    Label("Tasks", systemImage: "chevron.left").font(NDS.small)
+                }
+                .buttonStyle(.plain).foregroundStyle(NDS.accent)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Brain Dump").scaledFont(22, weight: .heavy, kind: .display)
                 Text("Type, paste, search. The planner turns it into tasks and calendar focus blocks.")
@@ -133,6 +147,16 @@ struct BrainDumpView: View {
         guard let id = router.pendingBrainDumpSessionID else { return }
         store.activeSessionID = id
         router.pendingBrainDumpSessionID = nil
+    }
+
+    /// Auto-run the planner on a session the Tasks dashboard's quick capture
+    /// just created (so "Plan with AI" there flows straight into proposals).
+    private func consumePendingPlan() {
+        guard let id = store.pendingPlanSessionID else { return }
+        store.activeSessionID = id
+        store.pendingPlanSessionID = nil
+        planRunner.run(sessionID: id, store: store,
+                       actionItems: actionItems, contexts: actionItems.contexts)
     }
 
     private static func shortDate(_ d: Date) -> String {

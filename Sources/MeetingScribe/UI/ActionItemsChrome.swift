@@ -13,9 +13,52 @@ extension ActionItemsView {
         VStack(spacing: 0) {
             homeHeader
             Divider().overlay(NDS.divider)
+            brainDumpCaptureSection
             homeContent
         }
         .background(NDS.bg)
+    }
+
+    /// Inline Brain Dump capture on the Tasks home (BD merge): jot or dictate a
+    /// brain dump and hand it straight to the planner, which proposes organized
+    /// tasks (priority, project, tags, dedup) you review in the embedded surface.
+    private var brainDumpCaptureSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: "brain.head.profile.fill").scaledFont(13).foregroundStyle(NDS.brand)
+                Text("Brain Dump").scaledFont(13, weight: .bold)
+                Spacer()
+                Button("Open") { env.showingBrainDump = true }
+                    .buttonStyle(.plain).font(NDS.small).foregroundStyle(NDS.accent)
+            }
+            HStack(alignment: .top, spacing: 8) {
+                TextField("Dump everything on your mind — the planner turns it into organized tasks…",
+                          text: $brainDumpCapture, axis: .vertical)
+                    .textFieldStyle(.plain).font(NDS.body)
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
+                    .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
+                Button { planBrainDumpCapture() } label: {
+                    Label("Plan with AI", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
+                .disabled(brainDumpCapture.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(NDS.brand.opacity(0.035))
+    }
+
+    /// Create a session seeded with the captured text, open the embedded Brain
+    /// Dump surface, and ask it to auto-run the planner.
+    private func planBrainDumpCapture() {
+        let text = brainDumpCapture.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let session = brainDump.createSession(body: text)
+        brainDump.pendingPlanSessionID = session.id
+        brainDumpCapture = ""
+        env.showingBrainDump = true
     }
 
     private var homeHeader: some View {

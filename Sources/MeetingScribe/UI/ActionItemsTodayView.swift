@@ -305,16 +305,12 @@ extension ActionItemsView {
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {
-                NotificationCenter.default.post(
-                    name: .meetingScribeNavigate,
-                    object: TopLevelSection.brainDump
-                )
+                NotificationCenter.default.post(name: .meetingScribeOpenBrainDump, object: nil)
             } label: {
                 Label("Open Brain Dump", systemImage: "arrow.up.forward.square")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(MSPrimaryButtonStyle())
-            .keyboardShortcut("6", modifiers: .command)
 
             Text("Tip: Press ⌘6 anywhere to jump there.")
                 .font(NDS.tiny).foregroundStyle(NDS.textTertiary)

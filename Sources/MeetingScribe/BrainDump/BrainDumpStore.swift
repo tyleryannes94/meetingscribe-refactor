@@ -33,6 +33,12 @@ final class BrainDumpStore: ObservableObject {
     /// fraction of a second after launch.
     @Published private(set) var isLoaded = false
 
+    /// One-shot: a session the embedded `BrainDumpView` should auto-run the
+    /// planner on as soon as it appears. Set by the Tasks dashboard's quick
+    /// brain-dump capture so "Plan" there flows straight into proposals;
+    /// consumed and cleared by `BrainDumpView`.
+    @Published var pendingPlanSessionID: String?
+
     private var fileURL: URL {
         AppSettings.shared.storageDir.appendingPathComponent("brain_dump_sessions.json")
     }

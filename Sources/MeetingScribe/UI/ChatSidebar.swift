@@ -32,9 +32,9 @@ struct ChatSidebar: View {
             ])
         case .actions:
             return ("Ask about Tasks", [
+                "Brain dump: turn my notes into organized tasks.",
                 "What should I work on today?",
-                "What is overdue?",
-                "Draft a status update."
+                "What is overdue?"
             ])
         case .notes:
             return ("Ask about this note", [

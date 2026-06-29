@@ -7,17 +7,23 @@ extension ActionItemsView {
 
     @ViewBuilder
     var detailPane: some View {
-        // Real HStack split (not overlay) so the drawer participates in
-        // layout: main content shrinks to make room, the drawer never
-        // overflows the pane, and the whole thing re-balances when the
-        // window resizes either direction. The previous overlay + fixed
-        // 360pt frame clipped past the pane on narrow windows; the
-        // GeometryReader-driven attempt was reading unexpected sizes
-        // on wide windows and rendering the drawer far wider than 360.
-        HStack(spacing: 0) {
-            detailContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            propertyDrawer
+        // Brain Dump is now a page *within* Tasks (no longer a top-level nav
+        // item) — when toggled on it takes over the detail pane.
+        if env.showingBrainDump {
+            BrainDumpView(onExit: { env.showingBrainDump = false })
+        } else {
+            // Real HStack split (not overlay) so the drawer participates in
+            // layout: main content shrinks to make room, the drawer never
+            // overflows the pane, and the whole thing re-balances when the
+            // window resizes either direction. The previous overlay + fixed
+            // 360pt frame clipped past the pane on narrow windows; the
+            // GeometryReader-driven attempt was reading unexpected sizes
+            // on wide windows and rendering the drawer far wider than 360.
+            HStack(spacing: 0) {
+                detailContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                propertyDrawer
+            }
         }
     }
 

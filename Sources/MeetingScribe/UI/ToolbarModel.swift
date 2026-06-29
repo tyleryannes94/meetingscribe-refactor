@@ -76,9 +76,6 @@ enum ToolbarModel {
             return [.button(search),
                     ghost(.filter, "Filter", "line.3.horizontal.decrease"), .divider,
                     primary(.newTask, "New task", "plus")]
-        case .brainDump:
-            return [.button(search), .divider,
-                    primary(.newTask, "New session", "plus")]
         case .notes:
             return [.button(search), .divider,
                     primary(.newVoiceNote, "New voice note", "mic")]
