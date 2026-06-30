@@ -264,6 +264,20 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-30 — Fix recurring app crash on recording start (MicRecorder tap SIGABRT).**
+  `AVAudioNode.installTapOnBus` signals failure by *throwing an Objective-C
+  NSException*, which Swift `do/catch` cannot intercept → `objc_terminate` →
+  SIGABRT (the whole app dies mid-meeting). The format guards already in
+  `MicRecorder` weren't enough; the exception still fires on a hardware-format
+  race (AirPods/route change, HAL input mid-switch). Fix: new `ObjCSupport` C/ObjC
+  target exposing `MSRunCatchingExceptions(block)` (a `@try/@catch` shim → NSError);
+  both MicRecorders (MeetingScribe + ScribeCore) wrap the tap install in it and
+  throw a catchable Swift error on failure. The initial `start()` now retries up
+  to 3× with a 0.2s settle delay, so a transient failure recovers instead of
+  silently dropping the mic. **Convention:** any AppKit/AVFoundation call that can
+  throw an ObjC exception (installTap, some CoreAudio/AVAsset calls) MUST be
+  wrapped in `MSRunCatchingExceptions` — never let one reach the runtime, it's an
+  uncatchable crash, not a Swift error.
 - **2026-06-30 — Live-recording presence: nav-rail indicator + floating pill + status.**
   While a meeting records, a persistent indicator now lives in the LEFT NAV RAIL
   on every page (`RecordingNavIndicator`, expanded + icon-collapsed forms) with

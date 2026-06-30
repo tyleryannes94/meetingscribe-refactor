@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import OSLog
+import ObjCSupport
 
 /// Captures the default microphone via AVAudioEngine.
 ///
@@ -84,29 +85,41 @@ final class MicRecorder {
                                         counters: counters)
         }
 
-        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            // Cheap work that has to run on the audio thread:
-            //   1. RMS for the level meter
-            //   2. Pass the source buffer into the chunked transcribe writer
-            //      (it deep-copies internally before queueing).
-            let level = AudioBufferAnalysis.rms(buffer)
-            self.counters.recordSample(level: level, sawSound: level > 0.003)
-            self.chunkWriter?.append(buffer)
+        // `installTap` can throw an Objective-C NSException (hardware-format race
+        // on a route change, HAL input in a bad state) that SIGABRTs the app.
+        // Wrap it so the failure is a catchable Swift error instead of a crash.
+        input.removeTap(onBus: 0)
+        if let exc = MSRunCatchingExceptions({
+            input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+                guard let self else { return }
+                // Cheap work that has to run on the audio thread:
+                //   1. RMS for the level meter
+                //   2. Pass the source buffer into the chunked transcribe writer
+                //      (it deep-copies internally before queueing).
+                let level = AudioBufferAnalysis.rms(buffer)
+                self.counters.recordSample(level: level, sawSound: level > 0.003)
+                self.chunkWriter?.append(buffer)
 
-            // Disk I/O moves OFF the audio thread. Deep-copy the buffer so
-            // we own the bytes regardless of when AVAudioEngine reuses the
-            // source buffer.
-            guard let copy = MicRecorder.copy(buffer: buffer) else { return }
-            self.writeQueue.async { [weak self] in
-                guard let self, let file = self.file else { return }
-                do { try file.write(from: copy) }
-                catch {
-                    self.log.error("Mic m4a write failed: \(error.localizedDescription, privacy: .public)")
-                    self.counters.setLastError("Mic write failed: \(error.localizedDescription)")
-                    self.onHealthChange?(self)
+                // Disk I/O moves OFF the audio thread. Deep-copy the buffer so
+                // we own the bytes regardless of when AVAudioEngine reuses the
+                // source buffer.
+                guard let copy = MicRecorder.copy(buffer: buffer) else { return }
+                self.writeQueue.async { [weak self] in
+                    guard let self, let file = self.file else { return }
+                    do { try file.write(from: copy) }
+                    catch {
+                        self.log.error("Mic m4a write failed: \(error.localizedDescription, privacy: .public)")
+                        self.counters.setLastError("Mic write failed: \(error.localizedDescription)")
+                        self.onHealthChange?(self)
+                    }
                 }
             }
+        }) {
+            input.removeTap(onBus: 0)
+            log.error("installTap raised: \(exc.localizedDescription, privacy: .public)")
+            throw NSError(domain: "ScribeCore.Mic", code: 13, userInfo: [
+                NSLocalizedDescriptionKey: "Microphone tap could not start (\(exc.localizedDescription))."
+            ])
         }
 
         try engine.start()

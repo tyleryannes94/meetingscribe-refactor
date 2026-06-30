@@ -44,18 +44,26 @@ let package = Package(
             path: "Sources/VaultKit",
             swiftSettings: commonSwiftSettings
         ),
+        // Tiny Objective-C shim: lets Swift catch NSExceptions thrown by AppKit/
+        // AVFoundation calls (e.g. installTapOnBus) that would otherwise SIGABRT.
+        .target(
+            name: "ObjCSupport",
+            path: "Sources/ObjCSupport",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "MeetingScribe",
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle"),
-                "VaultKit"
+                "VaultKit",
+                "ObjCSupport"
             ],
             path: "Sources/MeetingScribe",
             swiftSettings: commonSwiftSettings
         ),
         .executableTarget(
             name: "ScribeCore",
-            dependencies: ["VaultKit"],
+            dependencies: ["VaultKit", "ObjCSupport"],
             path: "Sources/ScribeCore",
             exclude: [
                 "PersonExtractionController.swift",

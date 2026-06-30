@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import OSLog
+import ObjCSupport
 
 /// Captures the default microphone via AVAudioEngine.
 ///
@@ -49,7 +50,27 @@ final class MicRecorder {
         self.chunkWriter = chunkWriter
         try? FileManager.default.removeItem(at: outputURL)
 
-        try startEngine(outputURL: outputURL)
+        // The mic tap can fail transiently on first start (device mid-switch,
+        // AirPods settling, a momentary 0-Hz format). Now that the tap install
+        // throws a catchable error instead of crashing, retry a couple of times
+        // with a short settle delay before giving up — so a recording actually
+        // gets its mic instead of silently going system-audio-only.
+        var startError: Error?
+        for attempt in 0..<3 {
+            do {
+                try startEngine(outputURL: outputURL)
+                startError = nil
+                break
+            } catch {
+                startError = error
+                log.error("Mic start attempt \(attempt + 1) failed: \(error.localizedDescription, privacy: .public)")
+                engine?.inputNode.removeTap(onBus: 0)
+                engine?.stop()
+                engine = nil
+                if attempt < 2 { Thread.sleep(forTimeInterval: 0.2) }
+            }
+        }
+        if let startError { throw startError }
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: nil,
@@ -123,29 +144,44 @@ final class MicRecorder {
         // Idempotent: remove any prior tap before installing so a reused input
         // node can never hit "a tap is already installed on bus 0".
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            // Cheap work that has to run on the audio thread:
-            //   1. RMS for the level meter
-            //   2. Pass the source buffer into the chunked transcribe writer
-            //      (it deep-copies internally before queueing).
-            let level = AudioBufferAnalysis.rms(buffer)
-            self.counters.recordSample(level: level, sawSound: level > 0.003)
-            self.chunkWriter?.append(buffer)
+        // `installTap` can STILL throw an Objective-C NSException even with a
+        // valid-looking format — a hardware-format race during an AirPods/route
+        // change, or a HAL input in a bad state — and that exception SIGABRTs the
+        // whole app (it can't be caught by Swift do/catch). Wrap it so a tap
+        // failure becomes a recoverable Swift error: the caller tears down and
+        // retries instead of crashing mid-meeting.
+        if let exc = MSRunCatchingExceptions({
+            input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+                guard let self else { return }
+                // Cheap work that has to run on the audio thread:
+                //   1. RMS for the level meter
+                //   2. Pass the source buffer into the chunked transcribe writer
+                //      (it deep-copies internally before queueing).
+                let level = AudioBufferAnalysis.rms(buffer)
+                self.counters.recordSample(level: level, sawSound: level > 0.003)
+                self.chunkWriter?.append(buffer)
 
-            // Disk I/O moves OFF the audio thread. Deep-copy the buffer so
-            // we own the bytes regardless of when AVAudioEngine reuses the
-            // source buffer.
-            guard let copy = MicRecorder.copy(buffer: buffer) else { return }
-            self.writeQueue.async { [weak self] in
-                guard let self, let file = self.file else { return }
-                do { try file.write(from: copy) }
-                catch {
-                    self.log.error("Mic m4a write failed: \(error.localizedDescription, privacy: .public)")
-                    self.counters.setLastError("Mic write failed: \(error.localizedDescription)")
-                    self.onHealthChange?(self)
+                // Disk I/O moves OFF the audio thread. Deep-copy the buffer so
+                // we own the bytes regardless of when AVAudioEngine reuses the
+                // source buffer.
+                guard let copy = MicRecorder.copy(buffer: buffer) else { return }
+                self.writeQueue.async { [weak self] in
+                    guard let self, let file = self.file else { return }
+                    do { try file.write(from: copy) }
+                    catch {
+                        self.log.error("Mic m4a write failed: \(error.localizedDescription, privacy: .public)")
+                        self.counters.setLastError("Mic write failed: \(error.localizedDescription)")
+                        self.onHealthChange?(self)
+                    }
                 }
             }
+        }) {
+            input.removeTap(onBus: 0)
+            log.error("installTap raised: \(exc.localizedDescription, privacy: .public)")
+            throw NSError(domain: "MeetingScribe.Mic", code: 13, userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Microphone tap could not start (\(exc.localizedDescription)). The input device may be mid-switch — retrying."
+            ])
         }
 
         try engine.start()
