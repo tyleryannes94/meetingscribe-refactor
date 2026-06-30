@@ -1061,13 +1061,14 @@ final class PeopleStore: ObservableObject {
     /// Runs the merge in memory, then batches disk deletes/writes off-main.
     @discardableResult
     func deduplicate() -> (merged: Int, removed: Int) {
-        // 1. Group by identity key.
-        var groups: [String: [Person]] = [:]
-        for p in people { groups[Self.identityKey(p), default: []].append(p) }
+        // 1. Group transitively: any two people who share a contact id, a
+        //    normalized name, a phone (≥7 digits), or an email land together
+        //    ("same phone OR same name" — the user's rule).
+        let groups = duplicateGroupsIndices().map { $0.map { people[$0] } }
 
         var keepers: [String: Person] = [:]     // keeperID -> merged record
         var loserToKeeper: [String: String] = [:]
-        for (_, members) in groups where members.count > 1 {
+        for members in groups {
             // Keep the most-complete record (tie-break: earliest createdAt).
             var keeper = members.max {
                 let a = Self.completeness($0), b = Self.completeness($1)
@@ -1131,19 +1132,42 @@ final class PeopleStore: ObservableObject {
     /// How many duplicate records would be removed (for a confirm prompt) —
     /// cheap, in-memory, no writes.
     func duplicateCount() -> Int {
-        var groups: [String: Int] = [:]
-        for p in people { groups[Self.identityKey(p), default: 0] += 1 }
-        return groups.values.reduce(0) { $0 + max(0, $1 - 1) }
+        duplicateGroupsIndices().reduce(0) { $0 + ($1.count - 1) }
     }
 
-    private static func identityKey(_ p: Person) -> String {
-        if let cid = p.contactIdentifier?.trimmingCharacters(in: .whitespaces), !cid.isEmpty {
-            return "cid:\(cid)"
+    /// Indices of `people`, grouped so any two that share a `contactIdentifier`,
+    /// a normalized name, a phone (≥7 digits), or an email land in the same group
+    /// — transitively (union-find). This is the "same phone OR same name" rule;
+    /// only groups with 2+ members are returned.
+    private func duplicateGroupsIndices() -> [[Int]] {
+        guard people.count > 1 else { return [] }
+        var parent = Array(0..<people.count)
+        func find(_ i: Int) -> Int {
+            var r = i
+            while parent[r] != r { parent[r] = parent[parent[r]]; r = parent[r] }
+            return r
         }
-        let name = PersonMatching.normalizeName(p.displayName)
-        let email = p.emails.map(PersonMatching.normalizeEmail).filter { !$0.isEmpty }.sorted().first ?? ""
-        let phone = p.phones.map(PersonMatching.normalizePhone).filter { $0.count >= 7 }.sorted().first ?? ""
-        return "n:\(name)|e:\(email)|p:\(phone)"
+        func union(_ a: Int, _ b: Int) { let ra = find(a), rb = find(b); if ra != rb { parent[rb] = ra } }
+        var cidOwner: [String: Int] = [:], nameOwner: [String: Int] = [:]
+        var phoneOwner: [String: Int] = [:], emailOwner: [String: Int] = [:]
+        for (i, p) in people.enumerated() {
+            if let cid = p.contactIdentifier?.trimmingCharacters(in: .whitespaces), !cid.isEmpty {
+                if let j = cidOwner[cid] { union(i, j) } else { cidOwner[cid] = i }
+            }
+            let n = PersonMatching.normalizeName(p.displayName)
+            if !n.isEmpty { if let j = nameOwner[n] { union(i, j) } else { nameOwner[n] = i } }
+            for ph in p.phones {
+                let k = PersonMatching.normalizePhone(ph); guard k.count >= 7 else { continue }
+                if let j = phoneOwner[k] { union(i, j) } else { phoneOwner[k] = i }
+            }
+            for e in p.emails {
+                let k = PersonMatching.normalizeEmail(e); guard !k.isEmpty else { continue }
+                if let j = emailOwner[k] { union(i, j) } else { emailOwner[k] = i }
+            }
+        }
+        var byRoot: [Int: [Int]] = [:]
+        for i in people.indices { byRoot[find(i), default: []].append(i) }
+        return byRoot.values.filter { $0.count > 1 }
     }
 
     /// Higher = richer record (used to choose the keeper).
@@ -1172,6 +1196,8 @@ final class PeopleStore: ObservableObject {
         k.importSources.formUnion(other.importSources)
         k.memories += other.memories
         k.photoRelativePaths += other.photoRelativePaths
+        k.talkingPoints = Array(NSOrderedSet(array: k.talkingPoints + other.talkingPoints).array as? [String] ?? k.talkingPoints)
+        k.specialDates += other.specialDates
         for rel in other.relationships where !k.relationships.contains(where: { $0.toPersonID == rel.toPersonID }) {
             k.relationships.append(rel)
         }

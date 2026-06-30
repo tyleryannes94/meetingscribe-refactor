@@ -264,6 +264,19 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — Duplicate-fix maintenance job (people + meetings).** People are
+  merged when they share a contact identifier, a normalized name, a phone (≥7
+  digits, via `PersonMatching.normalizePhone`), or an email — grouped
+  transitively with union-find (`PeopleStore.duplicateGroupsIndices`), then merged
+  field-by-field (richest record wins; talking points / special dates unioned).
+  Meetings are merged when they share a normalized title **and** the same start
+  minute (`MeetingManager.duplicateMeetingGroups`); the richest copy
+  (`meetingRichness`: segments, real end date, user title, notes, imported) is
+  kept and the rest are moved to `root/_DuplicateMeetingsTrash` via
+  `MeetingStore.archiveDuplicate` (never hard-deleted). Exposed as a manual
+  Settings → Privacy & data → **Maintenance** button ("Fix duplicate people &
+  meetings"). Convention: dedup is non-destructive — archive, don't delete, and
+  always merge into the richest survivor so no field is lost.
 - **2026-06-29 — Polish batch: tag colors, From-meetings view, responsive tabs.**
   (1) Auto-tags carry stable semantic colors (`TaskAutoTagger.tagColors`). (2)
   New "From meetings" rail smart view = confirmed meeting-originated tasks in

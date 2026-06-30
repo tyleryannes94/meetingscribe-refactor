@@ -1285,6 +1285,57 @@ final class MeetingManager: ObservableObject {
     func deleteQuickNote(_ note: QuickNote) { quickNotesController.delete(note) }
     func quickNoteAudioURL(_ note: QuickNote) -> URL { quickNotesController.audioURL(note) }
 
+    // MARK: - De-duplicate meetings
+
+    /// Meetings that share a normalized title AND the same start minute are
+    /// duplicates (e.g. a calendar event recorded twice, or a re-import). Groups
+    /// of 2+ such meetings.
+    private func duplicateMeetingGroups() -> [[Meeting]] {
+        var groups: [String: [Meeting]] = [:]
+        for m in pastMeetings {
+            let name = m.displayTitle.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            let minute = Int(m.startDate.timeIntervalSince1970 / 60)
+            groups["\(name)|\(minute)", default: []].append(m)
+        }
+        return groups.values.filter { $0.count > 1 }
+    }
+
+    /// How many duplicate meetings would be removed (for the confirm/summary).
+    func duplicateMeetingCount() -> Int {
+        duplicateMeetingGroups().reduce(0) { $0 + ($1.count - 1) }
+    }
+
+    /// Higher = keep this copy (more recorded content / a real duration / a
+    /// user-given title wins).
+    private func meetingRichness(_ m: Meeting) -> Int {
+        var s = m.segmentCount * 4
+        if m.endDate > m.startDate { s += 2 }
+        if m.userTitle?.isEmpty == false { s += 2 }
+        if m.notes?.isEmpty == false { s += 1 }
+        if m.isImported { s += 1 }
+        return s
+    }
+
+    /// Collapse each duplicate group to its richest copy; the rest are archived
+    /// (moved to a recoverable trash folder) and dropped from the list. Returns
+    /// the number removed.
+    @discardableResult
+    func deduplicateMeetings() -> Int {
+        let groups = duplicateMeetingGroups()
+        guard !groups.isEmpty else { return 0 }
+        var removed = 0
+        for group in groups {
+            guard let keeper = group.max(by: { meetingRichness($0) < meetingRichness($1) }) else { continue }
+            for m in group where m.id != keeper.id {
+                store.archiveDuplicate(m)
+                removed += 1
+            }
+        }
+        if removed > 0 { refreshPastMeetings(force: true) }
+        return removed
+    }
+
     // MARK: - Import a meeting from external audio
 
     func importMeeting(from url: URL) async {

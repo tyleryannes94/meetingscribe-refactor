@@ -7,6 +7,10 @@ struct SettingsView: View {
     @EnvironmentObject private var updater: UpdaterController
     @EnvironmentObject private var calendar: CalendarService
     @EnvironmentObject private var actionItems: ActionItemStore
+    @EnvironmentObject private var manager: MeetingManager
+    // "Fix duplicates" maintenance job state.
+    @State private var fixingDuplicates = false
+    @State private var dedupeResult: String?
 
     @State private var storageDir: String = AppSettings.shared.storageDir.path
     @State private var whisperBinary: String = AppSettings.shared.whisperBinary
@@ -464,6 +468,23 @@ struct SettingsView: View {
                 Text("Only transcribes speech, so silent/non-speech stretches can't be hallucinated into repeated nonsense. Downloads a small model the first time.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
+            Section("Maintenance") {
+                HStack {
+                    Button {
+                        runDuplicateFix()
+                    } label: {
+                        Label(fixingDuplicates ? "Fixing…" : "Fix duplicate people & meetings",
+                              systemImage: "person.2.slash")
+                    }
+                    .disabled(fixingDuplicates)
+                    if fixingDuplicates { ProgressView().controlSize(.small) }
+                }
+                if let dedupeResult {
+                    Text(dedupeResult).font(.caption).foregroundStyle(.secondary)
+                }
+                Text("Merges people who share a phone number or name into one record (combining their info), and collapses meetings with the same name and start time into a single copy. Removed meeting copies are moved to a recoverable “_DuplicateMeetingsTrash” folder — nothing is hard-deleted.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
             Section("People (second brain)") {
                 Toggle("Auto-extract people from meetings", isOn: $autoExtractPeople)
                 Text("After a meeting is summarized, a second on-device Ollama pass lists the people mentioned in the transcript. Strong matches link to existing people automatically; uncertain ones appear as suggestions on the Today tab. Nothing leaves your machine.")
@@ -915,6 +936,28 @@ struct SettingsView: View {
     /// Copies the vault from its current (iCloud) location to fast local storage,
     /// then points the app at the local copy. Non-destructive — the original is
     /// left in place; the user can delete it once they've confirmed the move.
+    /// Run both dedup jobs (people + meetings) and report what changed.
+    private func runDuplicateFix() {
+        guard !fixingDuplicates else { return }
+        fixingDuplicates = true
+        dedupeResult = nil
+        let mgr = manager
+        Task { @MainActor in
+            let people = PeopleStore.shared.deduplicate()   // (merged groups, removed records)
+            let meetingsRemoved = mgr.deduplicateMeetings()
+            var parts: [String] = []
+            if people.removed > 0 {
+                parts.append("merged \(people.removed) duplicate \(people.removed == 1 ? "person" : "people") into \(people.merged) record\(people.merged == 1 ? "" : "s")")
+            }
+            if meetingsRemoved > 0 {
+                parts.append("collapsed \(meetingsRemoved) duplicate meeting\(meetingsRemoved == 1 ? "" : "s")")
+            }
+            dedupeResult = parts.isEmpty ? "No duplicates found — everything's already clean."
+                                         : "Done — " + parts.joined(separator: " · ") + "."
+            fixingDuplicates = false
+        }
+    }
+
     private func migrateToLocalStorage() {
         let src = AppSettings.shared.storageDir
         let dst = VaultStorageManager.localDefaultURL

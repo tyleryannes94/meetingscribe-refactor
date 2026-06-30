@@ -559,6 +559,23 @@ final class MeetingStore {
         invalidateCache(forID: meetingID)
     }
 
+    /// Remove a duplicate meeting: move its folder OUT of the meetings tree into
+    /// a recoverable `_DuplicateMeetingsTrash` folder (so a rescan can't bring it
+    /// back and nothing is hard-deleted), then drop it from the index. Safe to
+    /// call for the loser of a dedup group.
+    func archiveDuplicate(_ meeting: Meeting) {
+        let dir = directory(for: meeting, primaryTag: nil)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: dir.path) {
+            let trash = root.appendingPathComponent("_DuplicateMeetingsTrash", isDirectory: true)
+            try? fm.createDirectory(at: trash, withIntermediateDirectories: true)
+            let dest = trash.appendingPathComponent("\(meeting.id)-\(dir.lastPathComponent)", isDirectory: true)
+            try? fm.removeItem(at: dest)          // clear any prior archive of the same id
+            try? fm.moveItem(at: dir, to: dest)
+        }
+        removeFromIndex(meetingID: meeting.id)
+    }
+
     private func readIndexFromDisk() -> [Meeting]? {
         guard let data = try? Data(contentsOf: indexURL) else { return nil }
         let dec = SharedCoders.decoder()
