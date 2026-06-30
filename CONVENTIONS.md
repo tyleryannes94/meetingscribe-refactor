@@ -264,6 +264,25 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — Incremental (every-5-min) transcription on the ScribeCore path.**
+  The default recording path is the out-of-process **ScribeCore** daemon, which
+  captures audio into rolling 5-minute chunk WAVs but does NO transcription and
+  only sends lifecycle Darwin signals. So `LiveTranscriber` sat idle for the whole
+  meeting, the live transcript was empty at stop, and the pipeline always ran a
+  full-file whisper batch pass — the long "still processing a 30-min file" wait.
+  Fix: `ChunkStreamBridge` (new, `Transcription/`) polls `<meetingDir>/chunks/` on
+  the main actor and feeds each *closed* chunk (chunk N is final once N+1 exists;
+  the trailing partial is swept at stop) into `LiveTranscriber.enqueueChunk` — the
+  same per-chunk transcription the direct path gets via callbacks, gated by the
+  same `ResourceGovernor.shouldRunLiveTranscription`. `MeetingManager` starts the
+  bridge when ScribeCore is the active path, tracks `recordingStartedAt`, and now
+  passes the REAL `recordedDuration`/coverage into `finalize` so `needsBatchRepair`
+  is skipped when live coverage is complete. `LiveTranscriber.onTranscriptUpdated`
+  persists the partial transcript to disk after every chunk (both paths), so a
+  meeting is visibly transcribed as it runs and finalize is near-instant.
+  **Convention:** transcription is owned by the app and decoupled from the capture
+  process — whoever writes the 5-min chunks, the app transcribes them live; never
+  let a long recording reach stop with an empty live transcript.
 - **2026-06-29 — Duplicate-fix maintenance job (people + meetings).** People are
   merged when they share a contact identifier, a normalized name, a phone (≥7
   digits, via `PersonMatching.normalizePhone`), or an email — grouped

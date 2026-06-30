@@ -107,6 +107,17 @@ final class MeetingManager: ObservableObject {
     /// Used to skip the full 5-second wait if the daemon is already up.
     private var scribeCoreReady = false
 
+    /// Streams the daemon's on-disk 5-minute chunks into `liveTranscriber`
+    /// during recording, so a meeting is transcribed as it runs instead of in
+    /// one batch pass at stop. Non-nil only while a ScribeCore recording with
+    /// live transcription enabled is in progress.
+    private var chunkStreamBridge: ChunkStreamBridge?
+
+    /// Wall-clock start of the active recording, used to compute the recorded
+    /// duration at stop on the ScribeCore path (where the audio result carries
+    /// no duration). Set when recording actually begins, cleared at stop.
+    private var recordingStartedAt: Date?
+
     private let refreshSubject = PassthroughSubject<Bool, Never>()
     private var refreshCancellable: AnyCancellable?
 
@@ -127,6 +138,13 @@ final class MeetingManager: ObservableObject {
         audio.onHealth = { [weak self] h in
             Task { @MainActor in self?.recordingMonitor.setHealth(h) }
         }
+        // Persist the partial transcript to disk as each 5-minute chunk lands,
+        // so opening a meeting mid-recording shows progress and — more
+        // importantly — the transcript is already complete when the user stops,
+        // making finalize near-instant instead of a full-file whisper pass.
+        liveTranscriber.onTranscriptUpdated = { [weak self] in
+            self?.persistLiveTranscriptIfRecording()
+        }
         // 5 min of silence on BOTH mic and system → auto-stop.
         audio.onSilenceAutoStop = { [weak self] in
             self?.log.info("Auto-stopping due to silence on both audio sources.")
@@ -140,6 +158,7 @@ final class MeetingManager: ObservableObject {
         DarwinNotifier.observe(DarwinNotifier.recordingStarted) { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, case .starting = self.state else { return }
+                self.recordingStartedAt = Date()
                 self.state = .recording(meeting: self.activeMeeting, startedAt: Date())
                 self.lastError = nil
             }
@@ -149,6 +168,13 @@ final class MeetingManager: ObservableObject {
                 guard let self, case .stopping = self.state else { return }
                 let meeting = self.activeMeeting ?? Self.adhocMeeting()
                 let primary = self.tagStore.primaryTag(for: meeting)
+                let recordedDuration = self.recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+                self.recordingStartedAt = nil
+                // Final sweep: submit the trailing chunk(s) the daemon just
+                // closed, then drain whisper before we render. stop() enqueues
+                // synchronously so flush() sees the tail in `pendingCount`.
+                self.chunkStreamBridge?.stop()
+                self.chunkStreamBridge = nil
                 await self.liveTranscriber.flush()
                 let live = self.liveTranscriber.renderMarkdown()
                 try? self.store.writeTranscript(live, for: meeting, primaryTag: primary)
@@ -176,7 +202,7 @@ final class MeetingManager: ObservableObject {
                     micURL: nil,
                     systemURL: nil,
                     health: MeetingHealthDTO(status: .ok, warnings: [],
-                                             recordedSeconds: 0,
+                                             recordedSeconds: recordedDuration,
                                              micBytes: 0, systemBytes: 0))
                 Task.detached(priority: .userInitiated) { [weak self] in
                     guard let self else { return }
@@ -186,7 +212,7 @@ final class MeetingManager: ObservableObject {
                         liveTranscript: live,
                         liveDroppedChunks: liveDropped,
                         liveCoverageSeconds: liveCoverage,
-                        recordedDuration: 0
+                        recordedDuration: recordedDuration
                     ) { [weak self] in
                         Task { @MainActor in
                             if self?.activeMeeting == nil { self?.liveTranscriber.reset() }
@@ -278,6 +304,23 @@ final class MeetingManager: ObservableObject {
             let scribeCoreSucceeded = await tryStartViaScribeCore()
             usingScribeCore = scribeCoreSucceeded
 
+            if scribeCoreSucceeded {
+                // ScribeCore records out-of-process and only signals lifecycle
+                // events — it never transcribes. Bridge its on-disk 5-minute
+                // chunks into liveTranscriber so the meeting is transcribed as it
+                // runs (the same per-chunk behavior the direct path gets via
+                // callbacks), gated by the same power/thermal governor.
+                if ResourceGovernor.shared.shouldRunLiveTranscription {
+                    let chunksDir = store.directory(for: m, primaryTag: primary)
+                        .appendingPathComponent("chunks", isDirectory: true)
+                    let bridge = ChunkStreamBridge(chunksDir: chunksDir, transcriber: liveTranscriber)
+                    bridge.start()
+                    chunkStreamBridge = bridge
+                } else {
+                    AppLog.info("transcription", "Live transcription deferred to batch — \(ResourceGovernor.shared.statusDescription)")
+                }
+            }
+
             if !scribeCoreSucceeded {
                 // Fallback: direct AudioRecorder path.
                 // Power/thermal governor (E2-2/E2-3): when on battery/low-power or
@@ -298,6 +341,7 @@ final class MeetingManager: ObservableObject {
                 try await audio.start(in: dir, segment: m.segmentCount,
                                       micOverride: m.captureMic, systemOverride: m.captureSystem)
                 AudioRecovery.markRecordingStarted(in: dir)
+                recordingStartedAt = Date()
                 // Use the resolved meeting `m` (which is `activeMeeting`), not the
                 // `meeting` parameter — that param is nil for ad-hoc recordings, so
                 // publishing it left `.recording(meeting:)` empty on the direct path
@@ -502,6 +546,9 @@ final class MeetingManager: ObservableObject {
     }
 
     func cancelRecording() async {
+        chunkStreamBridge?.stop()
+        chunkStreamBridge = nil
+        recordingStartedAt = nil
         if case .recording = state { _ = await audio.stop() }
         if let m = activeMeeting {
             AudioRecovery.clearRecordingMarker(in: store.directory(for: m, primaryTag: tagStore.primaryTag(for: m)))
@@ -509,6 +556,25 @@ final class MeetingManager: ObservableObject {
         activeMeeting = nil
         state = .idle
         recordingMonitor.resetToIdle()
+    }
+
+    /// Write the partial live transcript to disk for the in-progress meeting.
+    /// Invoked by `liveTranscriber.onTranscriptUpdated` as each ~5-minute chunk
+    /// is transcribed, so the meeting is visibly transcribed while recording and
+    /// the finished transcript is ready the moment the user stops. No-op when no
+    /// meeting is active or nothing has transcribed yet.
+    private func persistLiveTranscriptIfRecording() {
+        guard let m = activeMeeting else { return }
+        let live = liveTranscriber.renderMarkdown()
+        guard live.trimmingCharacters(in: .whitespacesAndNewlines) != "# Transcript" else { return }
+        let primary = tagStore.primaryTag(for: m)
+        do {
+            try store.writeTranscript(live, for: m, primaryTag: primary)
+            bodyCache.invalidate(m.id)
+        } catch {
+            // Non-fatal: the authoritative write happens at stop. Don't surface.
+            log.error("Live transcript persist failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // MARK: - Past meetings

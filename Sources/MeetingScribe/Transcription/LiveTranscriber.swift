@@ -47,47 +47,60 @@ final class LiveTranscriber: ObservableObject {
     /// would notice the live pane was stale.
     private let maxPending = 16
 
+    /// Optional hook fired on the main actor after each chunk's text is folded
+    /// into `segments`. The owner uses it to persist the partial transcript to
+    /// disk as the meeting runs, so a long recording is visibly transcribed
+    /// every ~5 minutes instead of only at stop.
+    var onTranscriptUpdated: (() -> Void)?
+
     // Per-source serialization is now achieved by chaining Task.detached
-    // calls via `lastMicTask` / `lastSystemTask` (see `submitChunk` + `chain`).
+    // calls via `lastMicTask` / `lastSystemTask` (see `enqueueChunk` + `chain`).
     // The two sources run in parallel; within a source, chunks are ordered.
 
-    /// Queue a chunk for transcription. Safe to call from any thread.
+    /// Queue a chunk for transcription. Safe to call from any thread — used by
+    /// the in-process `AudioRecorder` callbacks, which fire on the capture queue.
     nonisolated func submitChunk(url: URL, speaker: String, startSec: Double, endSec: Double) {
-        // Everything that touches MainActor-isolated state (the pending
-        // counters AND the per-source `lastMicTask` / `lastSystemTask`
-        // chains) runs in one MainActor hop.
+        // Hop to the main actor, where all the pending-counter / task-chain
+        // state lives, then enqueue.
         Task { @MainActor in
-            // Backpressure: if we're already behind, drop this chunk. The
-            // batch pass after stop will recover its content from the merged
-            // audio, so we don't lose anything user-facing — only the live
-            // preview misses a window.
-            if self.pendingCount >= self.maxPending {
-                self.droppedChunkCount += 1
-                self.lastError = "Live transcription falling behind by \(self.pendingCount) chunks. Dropped \(self.droppedChunkCount) live previews; full transcript will be generated at stop."
-                AppLog.warn("LiveTranscriber", "Dropped chunk (backpressure)",
-                            ["pending": "\(self.pendingCount)",
-                             "speaker": speaker,
-                             "audio": url.path])
-                try? FileManager.default.removeItem(at: url)
-                return
-            }
-            self.pendingCount += 1
-            self.isProcessing = true
+            self.enqueueChunk(url: url, speaker: speaker, startSec: startSec, endSec: endSec)
+        }
+    }
 
-            // Per-source serialization: chain the new chunk onto whatever
-            // task is already running for this source. Cross-source chunks
-            // run in parallel.
-            let priority: TaskPriority = .userInitiated
-            if speaker == "Me" {
-                self.lastMicTask = Self.chain(after: self.lastMicTask, priority: priority) { [weak self] in
-                    await self?.processChunk(url: url, speaker: speaker,
-                                             startSec: startSec, endSec: endSec)
-                }
-            } else {
-                self.lastSystemTask = Self.chain(after: self.lastSystemTask, priority: priority) { [weak self] in
-                    await self?.processChunk(url: url, speaker: speaker,
-                                             startSec: startSec, endSec: endSec)
-                }
+    /// Main-actor entry point for callers already on the main actor — namely the
+    /// `ChunkStreamBridge` that feeds chunks written by the out-of-process
+    /// ScribeCore daemon. Enqueuing synchronously (no `Task` hop) guarantees the
+    /// submission is reflected in `pendingCount` before a caller awaits
+    /// `flush()`, so the final-sweep tail chunk can't be lost.
+    func enqueueChunk(url: URL, speaker: String, startSec: Double, endSec: Double) {
+        // Backpressure: if we're already behind, drop this chunk. The batch pass
+        // after stop will recover its content from the merged audio, so we don't
+        // lose anything user-facing — only the live preview misses a window.
+        if self.pendingCount >= self.maxPending {
+            self.droppedChunkCount += 1
+            self.lastError = "Live transcription falling behind by \(self.pendingCount) chunks. Dropped \(self.droppedChunkCount) live previews; full transcript will be generated at stop."
+            AppLog.warn("LiveTranscriber", "Dropped chunk (backpressure)",
+                        ["pending": "\(self.pendingCount)",
+                         "speaker": speaker,
+                         "audio": url.path])
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        self.pendingCount += 1
+        self.isProcessing = true
+
+        // Per-source serialization: chain the new chunk onto whatever task is
+        // already running for this source. Cross-source chunks run in parallel.
+        let priority: TaskPriority = .userInitiated
+        if speaker == "Me" {
+            self.lastMicTask = Self.chain(after: self.lastMicTask, priority: priority) { [weak self] in
+                await self?.processChunk(url: url, speaker: speaker,
+                                         startSec: startSec, endSec: endSec)
+            }
+        } else {
+            self.lastSystemTask = Self.chain(after: self.lastSystemTask, priority: priority) { [weak self] in
+                await self?.processChunk(url: url, speaker: speaker,
+                                         startSec: startSec, endSec: endSec)
             }
         }
     }
@@ -127,6 +140,7 @@ final class LiveTranscriber: ObservableObject {
                 self.segments.append(seg)
                 self.segments.sort { $0.startSec < $1.startSec }
                 self.lastError = nil
+                self.onTranscriptUpdated?()
             }
         } catch let e as WhisperRunner.RunnerError {
             let msg = Self.summarizeRunnerError(e)
