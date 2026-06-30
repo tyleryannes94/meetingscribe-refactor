@@ -101,6 +101,12 @@ struct MeetingRecordDock: View {
                     .help("Stop recording")
                 }
 
+                if let p = manager.silencePrompt {
+                    SilenceContinueBanner(prompt: p,
+                                          onKeep: { manager.keepRecordingDespiteSilence() },
+                                          onStop: { Task { await manager.stopRecording() } })
+                }
+
                 captureLine
             }
             .padding(12)

@@ -234,6 +234,23 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(req)
     }
 
+    /// End-of-meeting silence (you likely left the call): the scheduled time has
+    /// passed and there's been no audio. Surfaced as an OS notification too, since
+    /// the user may have walked away from the app. Tapping opens the meeting,
+    /// where the in-app prompt offers Keep recording / Stop now.
+    func notifySilenceContinuePrompt(meeting: Meeting) {
+        let content = UNMutableNotificationContent()
+        content.title = "Still recording: \(meeting.displayTitle)"
+        content.body = "No audio since the meeting ended. It will auto-stop soon — open to keep recording or stop now."
+        content.sound = .default
+        content.userInfo[deepLinkKey] = "meetingscribe://meeting/\(meeting.id)"
+        let req = UNNotificationRequest(
+            identifier: "silence-prompt-\(meeting.id)",
+            content: content,
+            trigger: nil)
+        UNUserNotificationCenter.current().add(req)
+    }
+
     /// Failure parity (U4-4): the transcript saved but the summary didn't.
     /// Success notifies, so silence on failure reads as "nothing happened" and
     /// the user discovers the gap days later mid-prep. Tell them now, and deep

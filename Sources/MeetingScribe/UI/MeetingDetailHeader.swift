@@ -249,6 +249,13 @@ extension UnifiedMeetingDetail {
     }
 
     /// One context-aware primary button. Only the most likely next action.
+    /// True while any recording is in progress (used to hide "Continue recording"
+    /// when capture is already active).
+    private var isRecordingNow: Bool {
+        if case .recording = manager.state { return true }
+        return false
+    }
+
     @ViewBuilder
     private var primaryCTA: some View {
         switch mode {
@@ -268,28 +275,46 @@ extension UnifiedMeetingDetail {
                     ProgressView().controlSize(.small)
                     Text("Processing…").scaledFont(12).foregroundStyle(NDS.textSecondary)
                 }
-            } else if manager.hasAudio(for: m) && transcript.isEmpty {
-                Button { manager.transcribeNow(meeting: m) } label: {
-                    Label("Transcribe Now", systemImage: "text.bubble")
+            } else {
+                HStack(spacing: 8) {
+                    if manager.hasAudio(for: m) && transcript.isEmpty {
+                        Button { manager.transcribeNow(meeting: m) } label: {
+                            Label("Transcribe Now", systemImage: "text.bubble")
+                        }
+                        .buttonStyle(MSPrimaryButtonStyle())
+                    } else if manager.hasAudio(for: m) {
+                        // A transcript exists but the audio is still here — always
+                        // offer a visible retry (re-runs transcription + summary).
+                        Button { manager.transcribeNow(meeting: m) } label: {
+                            Label("Re-transcribe", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(MSSecondaryButtonStyle())
+                        .help("Re-run transcription and summary on this meeting's audio.")
+                    } else if m.conferenceURL != nil {
+                        Button {
+                            Task { await manager.switchToRecording(m) }
+                        } label: {
+                            Label("Record Again", systemImage: "video.fill")
+                        }
+                        .buttonStyle(MSSecondaryButtonStyle())
+                    }
+
+                    // Manual "continue recording": append a SECOND audio session to
+                    // this meeting. The new segment is merged with the existing
+                    // audio and the transcript + summary + action items are
+                    // regenerated to include it. Shown whenever this meeting has
+                    // audio and nothing else is currently recording — a safety net
+                    // if a call was stopped early (incl. by the silence auto-stop).
+                    if manager.hasAudio(for: m), !isRecordingNow {
+                        Button {
+                            Task { await manager.continueRecording(for: m) }
+                        } label: {
+                            Label("Continue recording", systemImage: "mic.badge.plus")
+                        }
+                        .buttonStyle(MSPrimaryButtonStyle())
+                        .help("Record more audio and append it to this meeting's transcript, summary, and action items.")
+                    }
                 }
-                .buttonStyle(MSPrimaryButtonStyle())
-            } else if manager.hasAudio(for: m) {
-                // A transcript exists but the audio is still here — always offer
-                // a visible retry (re-runs transcription + summary on the
-                // recorded audio). Previously this was only reachable, mislabeled,
-                // from the overflow menu.
-                Button { manager.transcribeNow(meeting: m) } label: {
-                    Label("Re-transcribe", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(MSSecondaryButtonStyle())
-                .help("Re-run transcription and summary on this meeting's audio.")
-            } else if m.conferenceURL != nil {
-                Button {
-                    Task { await manager.switchToRecording(m) }
-                } label: {
-                    Label("Record Again", systemImage: "video.fill")
-                }
-                .buttonStyle(MSSecondaryButtonStyle())
             }
 
         case .upcoming(let m):

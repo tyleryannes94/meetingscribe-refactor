@@ -55,6 +55,12 @@ final class AudioRecorder {
         /// buffer arrives. Drives the live waveform/bars indicator.
         var micLevel: Float = 0
         var systemLevel: Float = 0
+        /// Seconds since each source last carried actual *sound* (RMS above the
+        /// silence threshold), not just since the last sample arrived. Drives the
+        /// end-of-meeting "you left the call" silence detection. A source that has
+        /// never made a sound reports the full elapsed recording time.
+        var micSecondsSinceLastSound: Double = 0
+        var systemSecondsSinceLastSound: Double = 0
         /// True if either source has been stalled longer than 10s.
         var isStalled: Bool {
             micSecondsSinceLastSample > 10 || systemSecondsSinceLastSample > 10
@@ -329,6 +335,11 @@ final class AudioRecorder {
         let now = Date()
         let micSnap = mic.counters.snapshot()
         let sysSnap = system.counters.snapshot()
+        // Seconds since real sound: since the last RMS-above-threshold sample, or
+        // — if a source has never made a sound — since the recording started.
+        let elapsed = startTime.map { now.timeIntervalSince($0) } ?? 0
+        let micSinceSound = micSnap.lastSoundAt.map { now.timeIntervalSince($0) } ?? elapsed
+        let sysSinceSound = sysSnap.lastSoundAt.map { now.timeIntervalSince($0) } ?? elapsed
         let health = Health(
             micSamples: micSnap.samplesAppended,
             systemSamples: sysSnap.samplesAppended,
@@ -338,7 +349,9 @@ final class AudioRecorder {
             systemRestarts: sysSnap.restartCount,
             lastError: micSnap.lastError ?? sysSnap.lastError,
             micLevel: micSnap.currentLevel,
-            systemLevel: sysSnap.currentLevel
+            systemLevel: sysSnap.currentLevel,
+            micSecondsSinceLastSound: micSinceSound,
+            systemSecondsSinceLastSound: sysSinceSound
         )
         DispatchQueue.main.async { [weak self] in self?.onHealth?(health) }
     }

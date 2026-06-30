@@ -451,6 +451,11 @@ struct MeetingScribeApp: App {
         notifications.onRecordImpromptu = { source in
             Task { @MainActor in manager.startImpromptu(source: source) }
         }
+        // End-of-meeting silence: also raise an OS notification so the user sees
+        // the "keep recording?" prompt even if they've left the app.
+        manager.onSilencePromptArmed = { [weak notifications] meeting in
+            notifications?.notifySilenceContinuePrompt(meeting: meeting)
+        }
     }
 
     private func wireDetector() {

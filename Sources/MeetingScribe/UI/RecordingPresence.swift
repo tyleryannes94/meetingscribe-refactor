@@ -101,6 +101,55 @@ struct LiveTranscribeBadge: View {
     }
 }
 
+/// "You left the call?" prompt — shown when the scheduled meeting time has
+/// passed and both mic + system audio have gone silent. Offers Keep recording
+/// (override the auto-stop) or Stop now, with a live countdown to the automatic
+/// stop. `compact` drops to a single button row for the floating pill.
+@available(macOS 14.0, *)
+struct SilenceContinueBanner: View {
+    let prompt: MeetingManager.SilenceContinuePrompt
+    var compact: Bool = false
+    let onKeep: () -> Void
+    let onStop: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "moon.zzz.fill").scaledFont(11, weight: .semibold)
+                    .foregroundStyle(NDS.gold)
+                Text("No audio since the meeting ended — keep recording?")
+                    .scaledFont(11.5, weight: .semibold)
+                    .foregroundStyle(NDS.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                let remain = max(0, Int(prompt.autoStopAt.timeIntervalSince(ctx.date)))
+                Text("Auto-stops in \(remain / 60):\(String(format: "%02d", remain % 60))")
+                    .scaledFont(10.5, weight: .medium).monospacedDigit()
+                    .foregroundStyle(NDS.textTertiary)
+            }
+            HStack(spacing: 6) {
+                Button(action: onKeep) {
+                    Label("Keep recording", systemImage: "record.circle")
+                        .scaledFont(11.5, weight: .semibold)
+                        .frame(maxWidth: compact ? nil : .infinity)
+                }
+                .buttonStyle(MSPrimaryButtonStyle())
+                Button(action: onStop) {
+                    Label("Stop now", systemImage: "stop.fill").scaledFont(11.5, weight: .semibold)
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+            }
+        }
+        .padding(9)
+        .background(NDS.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(NDS.gold.opacity(0.45), lineWidth: 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No audio since the meeting ended. Keep recording, or stop now.")
+    }
+}
+
 /// Persistent recording indicator that lives in the left nav rail so the live
 /// meeting is reachable from EVERY page while recording (redesign request:
 /// "persistent in the navbar regardless of the page you go to"). Offers exactly
@@ -151,6 +200,12 @@ struct RecordingNavIndicator: View {
                     .foregroundStyle(NDS.textPrimary).lineLimit(1)
             }
             LiveTranscribeBadge(transcriber: transcriber, startedAt: startedAt)
+
+            if let p = manager.silencePrompt {
+                SilenceContinueBanner(prompt: p,
+                                      onKeep: { manager.keepRecordingDespiteSilence() },
+                                      onStop: { Task { await manager.stopRecording() } })
+            }
 
             HStack(spacing: 6) {
                 Button(action: onOpen) {

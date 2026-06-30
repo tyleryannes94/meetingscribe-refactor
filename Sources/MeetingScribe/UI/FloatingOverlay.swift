@@ -26,6 +26,10 @@ final class FloatingOverlayController: ObservableObject {
     }
 
     @Published private(set) var state: State = .hidden
+    /// Mirror of `MeetingManager.silencePrompt` so the floating pill (which
+    /// observes this controller, not the manager) can show the keep-recording
+    /// banner when a meeting goes silent past its end while the window is closed.
+    @Published private(set) var meetingSilencePrompt: MeetingManager.SilenceContinuePrompt?
     /// QuickNote ids whose task-mode extraction has landed. Mirrors
     /// `QuickNotesController.notesWithTasks` so the floating DonePill view
     /// re-renders (it observes this controller, not the sub-controller).
@@ -90,6 +94,13 @@ final class FloatingOverlayController: ObservableObject {
         }
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in self?.reevaluateMeetingPill() }
+            .store(in: &cancellables)
+
+        // Mirror the manager's end-of-meeting silence prompt so the floating pill
+        // can surface the "keep recording?" banner when the window is closed.
+        manager.$silencePrompt
+            .removeDuplicates()
+            .sink { [weak self] p in self?.meetingSilencePrompt = p }
             .store(in: &cancellables)
 
         // Task-mode voice notes: surface a toast with a See Tasks shortcut
@@ -624,6 +635,12 @@ private struct MeetingRecordingPill: View {
                 .buttonStyle(.plain)
                 .help("Stop recording")
                 PillDismiss(help: "Hide overlay (recording continues)", action: controller.cancelOverlay)
+            }
+
+            if let p = controller.meetingSilencePrompt {
+                SilenceContinueBanner(prompt: p,
+                                      onKeep: { controller.manager?.keepRecordingDespiteSilence() },
+                                      onStop: { controller.stopRecording() })
             }
 
             if showNote {

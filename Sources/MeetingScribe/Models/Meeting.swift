@@ -130,15 +130,16 @@ struct Meeting: Identifiable, Codable, Hashable {
         return now >= startDate.addingTimeInterval(-60) && now <= endDate
     }
 
-    /// Window during which we keep offering "Join & record": from 1 minute
+    /// Window during which we keep offering "Join & record": from 10 minutes
     /// before the scheduled start through 45 minutes after the scheduled end.
     /// `isLive` ends exactly at `endDate`, which made the affordance vanish the
     /// moment a call ran long or nominally ended — forcing the user to join by
-    /// hand and click record again. This wider window keeps one-tap join/record
-    /// available before, during, and well after the meeting.
+    /// hand and click record again. The 10-minute lead means the button is there
+    /// *before* the call (so you can arm it early), and the +45 tail keeps it
+    /// available throughout and after — including when you join late.
     var isJoinableWindow: Bool {
         let now = Date()
-        return now >= startDate.addingTimeInterval(-60) && now <= endDate.addingTimeInterval(45 * 60)
+        return now >= startDate.addingTimeInterval(-10 * 60) && now <= endDate.addingTimeInterval(45 * 60)
     }
 
     /// Effective source — user override wins, otherwise derived from the

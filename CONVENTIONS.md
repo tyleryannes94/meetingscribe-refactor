@@ -264,6 +264,25 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-30 — Auto-record polish: wider join window + end-of-meeting silence prompt + manual continue.**
+  (1) `Meeting.isJoinableWindow` lead widened 1min → 10min before start (still +45min
+  after end), so "Join & record" is available *before* the call and throughout —
+  including late joins. (2) **End-of-meeting silence prompt + auto-stop:** once the
+  scheduled `endDate` passes AND both mic + system audio go silent (≥20s), the UI
+  shows a "keep recording?" prompt (`SilenceContinueBanner` in the dock, nav
+  indicator, and floating pill) plus an OS notification; the recording auto-stops
+  ~2 min after silence began unless the user picks **Keep recording** (override).
+  After an override, a fresh silence period re-prompts. Driven by
+  `MeetingManager.evaluateEndOfMeetingSilence` off the 0.1s `onHealth` tick, using
+  new `Health.micSecondsSinceLastSound`/`systemSecondsSinceLastSound` (RMS>0.003
+  via `lastSoundAt`). The legacy 5-min hard silence backstop (`onSilenceAutoStop`)
+  is now suppressed while the override is active. (3) **Manual "Continue recording"**
+  is a visible CTA in `MeetingDetailHeader` for past meetings with audio (was only
+  in the overflow as "Add New Recording") → `continueRecording(for:)` appends a 2nd
+  segment; `mergeSegments` + Transcribe-Now regenerate transcript + summary +
+  action items to include it. **Convention:** silence policy is meeting-end-aware
+  and prompt-first — never silently kill a recording the user might still want;
+  always offer Keep recording and a manual way to resume/append.
 - **2026-06-30 — Fix recurring app crash on recording start (MicRecorder tap SIGABRT).**
   `AVAudioNode.installTapOnBus` signals failure by *throwing an Objective-C
   NSException*, which Swift `do/catch` cannot intercept → `objc_terminate` →

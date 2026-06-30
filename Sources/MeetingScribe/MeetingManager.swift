@@ -30,6 +30,34 @@ final class MeetingManager: ObservableObject {
     @Published private(set) var activeMeeting: Meeting?
     @Published private(set) var pastMeetings: [Meeting] = []
     @Published private(set) var lastStoppedMeetingID: String?
+
+    /// When non-nil, the scheduled meeting time has passed and both mic + system
+    /// audio have gone silent (you likely left the call) — the UI shows a "keep
+    /// recording?" prompt with a countdown to auto-stop. Cleared when the user
+    /// chooses, when audio resumes, or when recording ends.
+    @Published private(set) var silencePrompt: SilenceContinuePrompt?
+
+    /// A pending end-of-meeting silence prompt: which meeting, and when the
+    /// recording auto-stops if the user doesn't act.
+    struct SilenceContinuePrompt: Equatable {
+        let meetingID: String
+        let meetingTitle: String
+        let autoStopAt: Date
+    }
+
+    /// Set when the user picks "keep recording" on the silence prompt: suppresses
+    /// both the end-of-meeting auto-stop AND the hard silence backstop until audio
+    /// resumes, at which point a fresh silence can re-prompt.
+    private var silenceOverrideActive = false
+    /// Silence (post scheduled end) must persist this long before we prompt, so a
+    /// brief pause never triggers it.
+    private let postEndSilenceConfirmSeconds: TimeInterval = 20
+    /// Auto-stop this long after silence began (≈ "2 minutes after the call ends").
+    private let postEndAutoStopGraceSeconds: TimeInterval = 120
+
+    /// Fired when the silence prompt first arms, so the app can also raise an OS
+    /// notification (the user may have walked away from the screen). Wired in App.
+    var onSilencePromptArmed: ((Meeting) -> Void)?
     /// Meetings found at launch with a stale `.recording.inprogress` marker —
     /// i.e. recordings interrupted by a crash. Surfaced as a "Recover" banner.
     @Published private(set) var interruptedMeetingIDs: Set<String> = []
@@ -136,7 +164,10 @@ final class MeetingManager: ObservableObject {
             self?.recordingMonitor.pushVoiceLevel(level)
         }
         audio.onHealth = { [weak self] h in
-            Task { @MainActor in self?.recordingMonitor.setHealth(h) }
+            Task { @MainActor in
+                self?.recordingMonitor.setHealth(h)
+                self?.evaluateEndOfMeetingSilence(h)
+            }
         }
         // Persist the partial transcript to disk as each 5-minute chunk lands,
         // so opening a meeting mid-recording shows progress and — more
@@ -145,10 +176,16 @@ final class MeetingManager: ObservableObject {
         liveTranscriber.onTranscriptUpdated = { [weak self] in
             self?.persistLiveTranscriptIfRecording()
         }
-        // 5 min of silence on BOTH mic and system → auto-stop.
+        // 5 min of silence on BOTH mic and system → auto-stop (a hard backstop for
+        // "started recording and walked away"). Suppressed once the user has
+        // explicitly chosen to keep recording through silence (the end-of-meeting
+        // prompt's override) so we never override their explicit choice.
         audio.onSilenceAutoStop = { [weak self] in
-            self?.log.info("Auto-stopping due to silence on both audio sources.")
-            Task { @MainActor in await self?.stopRecording() }
+            Task { @MainActor in
+                guard let self, !self.silenceOverrideActive else { return }
+                self.log.info("Auto-stopping due to silence on both audio sources.")
+                await self.stopRecording()
+            }
         }
         // Failsafe: detect recordings interrupted by a crash on the previous run
         // and flag them for recovery. Deferred so it runs after init completes.
@@ -464,6 +501,8 @@ final class MeetingManager: ObservableObject {
     func stopRecording() async {
         guard case let .recording(_, startedAt) = state else { return }
         state = .stopping
+        silencePrompt = nil
+        silenceOverrideActive = false
         Task { await ActivityLog.shared.log(.recordStop) }  // 1C funnel
 
         if usingScribeCore {
@@ -553,6 +592,8 @@ final class MeetingManager: ObservableObject {
         chunkStreamBridge?.stop()
         chunkStreamBridge = nil
         recordingStartedAt = nil
+        silencePrompt = nil
+        silenceOverrideActive = false
         if case .recording = state { _ = await audio.stop() }
         if let m = activeMeeting {
             AudioRecovery.clearRecordingMarker(in: store.directory(for: m, primaryTag: tagStore.primaryTag(for: m)))
@@ -1222,6 +1263,57 @@ final class MeetingManager: ObservableObject {
         let cached = bodyCache.cached(meeting.id)
         if !cached.isEmpty { return cached.notes }
         return store.readUserNotes(for: meeting, primaryTag: tagStore.primaryTag(for: meeting))
+    }
+
+    // MARK: - End-of-meeting silence prompt / auto-stop
+
+    /// Runs on every audio-health tick. Once the scheduled meeting end has passed
+    /// and both mic + system audio have been silent for a confirm window, raise
+    /// the "keep recording?" prompt and arm a 2-minute auto-stop. If audio
+    /// resumes, the prompt clears and a later silence can re-arm it. If the user
+    /// chose "keep recording", everything stays suppressed until audio resumes.
+    private func evaluateEndOfMeetingSilence(_ h: AudioRecorder.Health) {
+        guard case .recording = state, let m = activeMeeting else {
+            if silencePrompt != nil { silencePrompt = nil }
+            silenceOverrideActive = false
+            return
+        }
+        let now = Date()
+        let silentFor = min(h.micSecondsSinceLastSound, h.systemSecondsSinceLastSound)
+        let bothSilent = silentFor >= postEndSilenceConfirmSeconds
+
+        // Audio is flowing → clear any prompt and re-arm (a future silence can
+        // prompt again, per "trigger the prompt again on the next silence").
+        guard bothSilent else {
+            if silencePrompt != nil { silencePrompt = nil }
+            silenceOverrideActive = false
+            return
+        }
+        // Silent — but only act once the meeting's scheduled time is over.
+        guard now >= m.endDate else { return }
+        // User already said "keep going" — respect it until audio resumes.
+        guard !silenceOverrideActive else { return }
+
+        if silencePrompt?.meetingID != m.id {
+            let silenceStarted = now.addingTimeInterval(-silentFor)
+            let autoStopAt = silenceStarted.addingTimeInterval(postEndAutoStopGraceSeconds)
+            silencePrompt = SilenceContinuePrompt(meetingID: m.id,
+                                                  meetingTitle: m.displayTitle,
+                                                  autoStopAt: autoStopAt)
+            onSilencePromptArmed?(m)
+        }
+        if let p = silencePrompt, now >= p.autoStopAt {
+            log.info("Auto-stopping: silence persisted ~2 min past the meeting end.")
+            silencePrompt = nil
+            Task { await stopRecording() }
+        }
+    }
+
+    /// "Keep recording" on the silence prompt: dismiss it and suppress auto-stop
+    /// until audio resumes (so a later silence can prompt again).
+    func keepRecordingDespiteSilence() {
+        silenceOverrideActive = true
+        silencePrompt = nil
     }
 
     /// Append a timestamped bullet to the live meeting's notes — the shared
