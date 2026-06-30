@@ -26,6 +26,7 @@ enum TasksRoute: Hashable {
     case savedView(String)
     case recurring
     case myTasks
+    case fromMeetings
 
     /// The `selectedProjectID` sentinel/value this route corresponds to, for the
     /// list-context routes that are encoded there. Returns `nil` for "All tasks"
@@ -42,6 +43,7 @@ enum TasksRoute: Hashable {
         case .today:       return ActionItemsView.todaySentinel
         case .recurring:   return ActionItemsView.recurringSentinel
         case .myTasks:     return ActionItemsView.myTasksSentinel
+        case .fromMeetings: return ActionItemsView.fromMeetingsSentinel
         case .allTasks, .initiative, .meeting, .task: return nil
         }
     }

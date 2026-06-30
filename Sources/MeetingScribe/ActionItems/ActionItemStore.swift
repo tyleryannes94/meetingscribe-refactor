@@ -814,12 +814,14 @@ final class ActionItemStore: ObservableObject {
     /// title matches one it doesn't already carry. Idempotent — applies only
     /// missing tags — and writes once. Returns the number of tags applied.
     @discardableResult
-    func autoTag(meetingTag: String, theme: (String) -> String?) -> Int {
+    func autoTag(meetingTag: String,
+                 theme: (String) -> String?,
+                 color: (String) -> String? = { _ in nil }) -> Int {
         var idByName: [String: String] = [:]
         func labelID(_ name: String) -> String {
             let key = name.lowercased()
             if let id = idByName[key] { return id }
-            let id = ensureLabel(named: name).id   // may append to `labels`
+            let id = ensureLabel(named: name, colorHex: color(name)).id   // may append to `labels`
             idByName[key] = id
             return id
         }

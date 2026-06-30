@@ -65,6 +65,7 @@ final class TasksEnvironment: ObservableObject {
         case ActionItemsView.waitingSentinel:   return .waitingOn
         case ActionItemsView.recurringSentinel: return .recurring
         case ActionItemsView.myTasksSentinel:   return .myTasks
+        case ActionItemsView.fromMeetingsSentinel: return .fromMeetings
         default:
             if pid.hasPrefix(ActionItemsView.personSentinelPrefix) {
                 return .person(String(pid.dropFirst(ActionItemsView.personSentinelPrefix.count)))

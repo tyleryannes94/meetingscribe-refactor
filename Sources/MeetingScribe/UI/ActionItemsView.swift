@@ -145,6 +145,10 @@ struct ActionItemsView: View {
     static let recurringSentinel = "__recurring__"
     /// My Tasks (5-2): the current user's tasks bucketed by date.
     static let myTasksSentinel = "__mytasks__"
+    /// From meetings: confirmed action items that originated from a meeting — a
+    /// list-form "where did my AI/meeting tasks go" view (complements Triage,
+    /// which only holds the un-reviewed ones).
+    static let fromMeetingsSentinel = "__from_meetings__"
     /// T12 / 04 §4.3: review queue for tasks whose `owner` text didn't resolve
     /// to a Person — fix the link inline, or add the person.
     static let unassignedOwnersSentinel = "__unassigned_owners__"

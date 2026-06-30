@@ -106,6 +106,37 @@ extension ActionItemsView {
         }
     }
 
+    /// Confirmed action items that came from a meeting — list-form companion to
+    /// the Triage inbox (which only holds the not-yet-reviewed ones). Each row
+    /// keeps its `#meeting` tag + meeting backlink.
+    @ViewBuilder
+    var fromMeetingsPane: some View {
+        let tasks = store.items
+            .filter { !$0.meetingID.isEmpty && !$0.needsTriage && $0.deletedAt == nil }
+            .sorted { sort($0, $1) }
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.bubble.right.fill").scaledFont(16).foregroundStyle(NDS.brand)
+                Text("From meetings").scaledFont(22, weight: .bold, kind: .display)
+                Spacer()
+                stat(label: "Tasks", value: tasks.count, color: NDS.brand)
+            }
+            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
+            Divider().overlay(NDS.divider)
+            if tasks.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "bubble.left.and.bubble.right").scaledFont(36).foregroundStyle(NDS.textTertiary)
+                    Text("No meeting tasks yet").font(.headline)
+                    Text("Action items accepted from your meetings show here, tagged #meeting and linked back to the call.")
+                        .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity).padding(40)
+            } else {
+                ScrollView { LazyVStack(spacing: 8) { ForEach(tasks) { row(for: $0) } }.padding(16) }
+            }
+        }
+    }
+
     func commitSaveView() {
         let name = newViewName.trimmingCharacters(in: .whitespacesAndNewlines)
         savingView = false

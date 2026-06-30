@@ -79,6 +79,8 @@ extension ActionItemsView {
             recurringPane
         case .myTasks:
             myTasksPane
+        case .fromMeetings:
+            fromMeetingsPane
         case .meeting(let mid) where manager.pastMeetings.contains(where: { $0.id == mid }):
             Color.clear.onAppear {
                 if let m = manager.pastMeetings.first(where: { $0.id == mid }) {

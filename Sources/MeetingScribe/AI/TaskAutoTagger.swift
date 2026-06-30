@@ -33,10 +33,29 @@ enum TaskAutoTagger {
         return nil
     }
 
+    /// A stable, semantic colour for each known tag, so auto-tags read at a
+    /// glance in any list (and a freshly auto-created label never looks random).
+    /// Falls back to nil for unknown tags (the label palette picks one).
+    static let tagColors: [String: String] = [
+        meetingTag:  "#9B51E0",  // purple
+        "bug":       "#EB5757",  // red
+        "analytics": "#2F80ED",  // blue
+        "docs":      "#27AE60",  // green
+        "email":     "#F2C94C",  // yellow
+        "review":    "#F2994A",  // orange
+        "design":    "#BB6BD9",  // light purple
+        "research":  "#2D9CDB",  // teal-blue
+        "outreach":  "#EB5B8C",  // pink
+        "scoping":   "#828282",  // gray
+    ]
+    static func color(forTag tag: String) -> String? { tagColors[tag.lowercased()] }
+
     /// Run a full auto-tag pass over the store. Returns the number of tags added.
     @MainActor
     @discardableResult
     static func run(on store: ActionItemStore) -> Int {
-        store.autoTag(meetingTag: meetingTag, theme: { theme(for: $0) })
+        store.autoTag(meetingTag: meetingTag,
+                      theme: { theme(for: $0) },
+                      color: { color(forTag: $0) })
     }
 }

@@ -120,6 +120,14 @@ struct ProjectRail: View {
                         railItem(title: "Recurring", icon: "repeat",
                                  count: recurringCount, id: ActionItemsView.recurringSentinel)
                     }
+                    // From meetings: confirmed meeting-originated action items.
+                    let fromMeetingsCount = store.items.filter {
+                        !$0.meetingID.isEmpty && !$0.needsTriage && $0.deletedAt == nil && $0.status != .completed
+                    }.count
+                    if fromMeetingsCount > 0 {
+                        railItem(title: "From meetings", icon: "bubble.left.and.bubble.right.fill",
+                                 count: fromMeetingsCount, id: ActionItemsView.fromMeetingsSentinel)
+                    }
 
                     // Waiting-on lifecycle (P2-6).
                     waitingSection
