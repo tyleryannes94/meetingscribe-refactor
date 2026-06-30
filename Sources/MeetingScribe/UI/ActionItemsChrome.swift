@@ -402,9 +402,21 @@ extension ActionItemsView {
     /// the selected meeting. On a narrow pane it collapses to just the list and
     /// tapping opens the full meeting — the same responsive side-view pattern as
     /// the task inspector, so it never breaks visually.
+    /// Recent meetings for the Home dashboard, with the live recording (esp. a
+    /// brand-new ad-hoc one, which lives only in `activeMeeting` until finalize)
+    /// pinned to the top — otherwise it can't be clicked into at all.
+    private var homeRecentMeetings: [Meeting] {
+        var recent = Array(manager.pastMeetings.prefix(40))
+        if case .recording = manager.state, let live = manager.activeMeeting,
+           !recent.contains(where: { $0.id == live.id }) {
+            recent.insert(live, at: 0)
+        }
+        return recent
+    }
+
     @ViewBuilder
     private var homeMeetingsList: some View {
-        let recent = Array(manager.pastMeetings.prefix(40))
+        let recent = homeRecentMeetings
         if recent.isEmpty {
             dashEmpty("No meetings yet.")
         } else {
@@ -441,11 +453,19 @@ extension ActionItemsView {
                         if narrow { env.selectedTaskID = nil; env.selectedProjectID = nil; env.selectedMeetingID = m.id }
                         else { homeSelectedMeetingID = m.id }
                     } label: {
+                        let isLive = { if case .recording = manager.state { return m.id == manager.activeMeeting?.id }; return false }()
                         HStack(spacing: 9) {
-                            Image(systemName: "doc.text").foregroundStyle(isSel ? NDS.lilac : NDS.textSecondary)
+                            Image(systemName: isLive ? "record.circle" : "doc.text")
+                                .foregroundStyle(isLive ? NDS.danger : (isSel ? NDS.lilac : NDS.textSecondary))
                             Text(m.displayTitle).font(NDS.body).lineLimit(1)
                                 .foregroundStyle(isSel ? NDS.textPrimary : NDS.textSecondary).help(m.displayTitle)
                             Spacer(minLength: 4)
+                            if isLive {
+                                Text("NOW").scaledFont(9, weight: .heavy)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(NDS.danger, in: Capsule())
+                            }
                             let open = store.items(for: m.id).filter { $0.status != .completed }.count
                             if open > 0 { Text("\(open)").font(NDS.tiny).monospacedDigit().foregroundStyle(NDS.textTertiary) }
                             Text(Self.dashDate(m.startDate)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)

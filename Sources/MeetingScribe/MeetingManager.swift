@@ -292,6 +292,10 @@ final class MeetingManager: ObservableObject {
             liveTranscriber.reset()
             let primary = tagStore.primaryTag(for: m)
             try store.writeMeeting(m, primaryTag: primary)
+            // Surface the just-created meeting (esp. an ad-hoc recording) in the
+            // lists right away — otherwise it's stuck in `activeMeeting` only and
+            // can't be clicked into until the next refresh.
+            refreshPastMeetings(force: true)
 
             // Carry the pre-meeting brief into this recording's notes so it's
             // visible (Notes tab) during and after the call, not just on the
@@ -1218,6 +1222,26 @@ final class MeetingManager: ObservableObject {
         let cached = bodyCache.cached(meeting.id)
         if !cached.isEmpty { return cached.notes }
         return store.readUserNotes(for: meeting, primaryTag: tagStore.primaryTag(for: meeting))
+    }
+
+    /// Append a timestamped bullet to the live meeting's notes — the shared
+    /// "add note" action behind the recording dock, nav-rail indicator, and the
+    /// floating pill. The timestamp is relative to the recording start. Returns a
+    /// short confirmation ("Noted at 4:12") or nil if no meeting is active.
+    @discardableResult
+    func appendLiveNote(_ text: String) -> String? {
+        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, let m = activeMeeting else { return nil }
+        var stamp = ""
+        if case .recording(_, let startedAt) = state {
+            let s = max(0, Int(Date().timeIntervalSince(startedAt)))
+            stamp = s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
+                              : String(format: "%d:%02d", s / 60, s % 60)
+        }
+        let existing = userNotes(for: m)
+        let bullet = stamp.isEmpty ? "- \(raw)" : "- [\(stamp)] \(raw)"
+        saveUserNotes(existing.isEmpty ? bullet : existing + "\n" + bullet, for: m)
+        return stamp.isEmpty ? "Noted" : "Noted at \(stamp)"
     }
 
     func saveUserNotes(_ text: String, for meeting: Meeting) {

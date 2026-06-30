@@ -212,6 +212,7 @@ struct MeetingScribeApp: App {
         AmbientMeetingDetector.shared.startIfEnabled()
         registerHotkey()
         overlay.attach(to: manager)
+        wireOpenLiveMeeting()
         quickEntry.attach(to: manager)
         chatSession.attach(manager: manager, brainDump: brainDump)
         observeSettingsChanges()
@@ -419,6 +420,24 @@ struct MeetingScribeApp: App {
                 .first { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix(">") }
                 ?? ""
             notifications?.notifyTranscriptionComplete(meeting: meeting, summarySnippet: snippet)
+        }
+    }
+
+    /// Handle "Open" from the floating meeting pill. Lives at the app level
+    /// because the main window's view tree is torn down while it's closed, so an
+    /// in-window observer would miss the event. Reopens + activates the window and
+    /// routes the persistent router to the live meeting.
+    private func wireOpenLiveMeeting() {
+        NotificationCenter.default.addObserver(
+            forName: .meetingScribeOpenLiveMeeting, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                for w in NSApp.windows where w.title == "MeetingScribe" {
+                    w.makeKeyAndOrderFront(nil)
+                }
+                NSApp.activate(ignoringOtherApps: true)
+                if let m = manager.activeMeeting { router.openMeeting(m) }
+            }
         }
     }
 

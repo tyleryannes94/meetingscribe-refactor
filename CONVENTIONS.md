@@ -264,6 +264,29 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-30 — Live-recording presence: nav-rail indicator + floating pill + status.**
+  While a meeting records, a persistent indicator now lives in the LEFT NAV RAIL
+  on every page (`RecordingNavIndicator`, expanded + icon-collapsed forms) with
+  exactly two actions — **Open** (jump into the meeting) and **Add note** (inline
+  field → `MeetingManager.appendLiveNote`, a shared timestamped-bullet helper) —
+  plus a live transcription status. When the main window is CLOSED/minimized the
+  same presence appears as a floating pill (the previously-disabled
+  `.meetingRecording` HUD in `FloatingOverlay`, re-enabled and gated on
+  `isMainWindowVisible()`, with Open/Add-note/Stop). "Open" from the closed-window
+  pill is handled app-level (`wireOpenLiveMeeting` in `MeetingScribeApp`) because
+  the window's view tree is gone while closed. **Ad-hoc click fix:** the Home
+  meetings list (`ActionItemsChrome.homeRecentMeetings`) and `MeetingManager`
+  now include the live `activeMeeting` (pinned top, "NOW" badge) + refresh on
+  record start — previously a brand-new ad-hoc recording lived only in
+  `activeMeeting` and couldn't be clicked into. **Live status** (`LiveCaptureStatus`
+  / `LiveTranscribeBadge`): warmup countdown → "Transcribing live · M:SS" →
+  "Transcribed live", read from the LiveTranscriber's own published progress.
+  **Convention / lesson:** do NOT derive a "no audio / check your mic" warning
+  from `AudioRecorder.Health.micSamples`/`systemSamples` — those counters read
+  zero on the live path even while the mic is capturing (verified: a recording
+  with a 412KB/102s mic file still reported zero samples), so the warning
+  false-positives. A trustworthy no-audio signal needs the actual captured byte
+  count, not the health snapshot.
 - **2026-06-29 — Incremental (every-5-min) transcription on the ScribeCore path.**
   The default recording path is the out-of-process **ScribeCore** daemon, which
   captures audio into rolling 5-minute chunk WAVs but does NO transcription and

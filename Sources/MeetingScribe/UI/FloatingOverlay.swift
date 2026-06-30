@@ -64,11 +64,32 @@ final class FloatingOverlayController: ObservableObject {
             .sink { [weak self] notes in self?.handleNotesChange(notes) }
             .store(in: &cancellables)
 
-        // Meeting recording — promote the same floating HUD to full meetings so
-        // stopping isn't buried behind a Zoom window. (D4-1)
+        // Meeting recording — show the floating HUD ONLY while the main window is
+        // closed/minimized, so the live meeting (stop, open, add note) is always
+        // reachable. When the window is open the persistent nav-rail indicator
+        // covers it instead.
         manager.$state
             .removeDuplicates()
-            .sink { [weak self] s in self?.handleMeetingState(s) }
+            .sink { [weak self] _ in self?.reevaluateMeetingPill() }
+            .store(in: &cancellables)
+
+        // The pill's visibility also depends on the main window opening/closing,
+        // which doesn't change `manager.state`. Re-check on those window events.
+        for name in [NSWindow.willCloseNotification,
+                     NSWindow.didBecomeKeyNotification,
+                     NSWindow.didMiniaturizeNotification,
+                     NSWindow.didDeminiaturizeNotification] {
+            NotificationCenter.default.publisher(for: name)
+                .sink { [weak self] _ in
+                    // willClose fires before isVisible flips — defer a beat.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        self?.reevaluateMeetingPill()
+                    }
+                }
+                .store(in: &cancellables)
+        }
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in self?.reevaluateMeetingPill() }
             .store(in: &cancellables)
 
         // Task-mode voice notes: surface a toast with a See Tasks shortcut
@@ -94,12 +115,48 @@ final class FloatingOverlayController: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func handleMeetingState(_ s: RecordingState) {
-        // §2: meeting recording is surfaced IN-APP (MeetingRecordDock), never as
-        // a floating system hover overlay — the hover is reserved for voice
-        // notes. So we no longer promote meetings to the HUD; we only
-        // defensively clear any stale meeting HUD that might be showing.
-        if case .meetingRecording = state { transition(to: .hidden) }
+    /// Show the floating meeting pill when a meeting is recording AND the main
+    /// window isn't on screen; hide it otherwise. Only touches the `.hidden` /
+    /// `.meetingRecording` states so it never fights an active voice-note HUD.
+    private func reevaluateMeetingPill() {
+        switch state {
+        case .hidden, .meetingRecording: break
+        default: return
+        }
+        let startedAt: Date? = {
+            if case .recording(_, let at) = manager?.state { return at }
+            return nil
+        }()
+        if let startedAt, !isMainWindowVisible() {
+            if case .meetingRecording = state { /* already showing */ }
+            else { transition(to: .meetingRecording(startedAt: startedAt)) }
+        } else if case .meetingRecording = state {
+            transition(to: .hidden)
+        }
+    }
+
+    /// The main window is "on screen" when a titled, non-panel, non-minimized
+    /// window titled "MeetingScribe" is visible (the Settings window is titled
+    /// "MeetingScribe Settings", so it doesn't count).
+    private func isMainWindowVisible() -> Bool {
+        NSApp.windows.contains { w in
+            w.isVisible && !w.isMiniaturized &&
+            w.styleMask.contains(.titled) && !(w is NSPanel) &&
+            w.title == "MeetingScribe"
+        }
+    }
+
+    /// Bring the app + main window forward and open the live meeting. Handled at
+    /// the app level (the main window's view may be torn down while closed).
+    func openLiveMeeting() {
+        NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .meetingScribeOpenLiveMeeting, object: nil)
+        transition(to: .hidden)
+    }
+
+    @discardableResult
+    func addLiveNote(_ text: String) -> String? {
+        manager?.appendLiveNote(text)
     }
 
     /// Map the sub-controller's RecordState to the legacy QuickRecordState
@@ -281,7 +338,8 @@ struct FloatingOverlayView: View {
     /// never truncate — that's the GC-1 fix.
     private var pillWidth: CGFloat {
         switch controller.state {
-        case .recording, .meetingRecording: return 410
+        case .recording:                    return 410
+        case .meetingRecording:             return 540
         case .transcribing:                 return 372
         case .done(let note, _):            return controller.taskReadyNoteIDs.contains(note.id) ? 540 : 466
         case .error:                        return 380
@@ -523,39 +581,80 @@ private struct MeetingRecordingPill: View {
     let startedAt: Date
     @ObservedObject var controller: FloatingOverlayController
     @State private var now = Date()
+    @State private var showNote = false
+    @State private var note = ""
+    @State private var noteFlash: String?
+    @FocusState private var noteFocused: Bool
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        HStack(spacing: 11) {
-            PillGrip()
-            PillBadge(fill: NDS.danger.opacity(0.16)) { RecPulseDot() }
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Recording meeting")
-                    .scaledFont(14, weight: .bold).foregroundStyle(NDS.textPrimary)
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 11) {
+                PillGrip()
+                PillBadge(fill: NDS.danger.opacity(0.16)) { RecPulseDot() }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(controller.manager?.activeMeeting?.displayTitle ?? "Recording meeting")
+                        .scaledFont(14, weight: .bold).foregroundStyle(NDS.textPrimary)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text("Recording · \(elapsedString())")
+                            .scaledFont(12, weight: .semibold).monospacedDigit()
+                            .foregroundStyle(NDS.gold)
+                        if let live = controller.manager?.liveTranscriber {
+                            Text("·").foregroundStyle(NDS.textTertiary)
+                            LiveTranscribeBadge(transcriber: live, startedAt: startedAt)
+                        }
+                    }
                     .lineLimit(1)
-                Text("Recording · \(elapsedString())")
-                    .scaledFont(12, weight: .semibold).monospacedDigit()
-                    .foregroundStyle(NDS.gold)
-                    .lineLimit(1).truncationMode(.tail)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                PillActionButton(label: "Note", systemImage: "note.text.badge.plus", kind: .neutral) {
+                    showNote.toggle(); if showNote { noteFocused = true }
+                }
+                PillActionButton(label: "Open", systemImage: "arrow.up.right",
+                                 kind: .lilac, action: controller.openLiveMeeting)
+                Button(action: controller.stopRecording) {
+                    Image(systemName: "stop.fill")
+                        .scaledFont(15, weight: .bold).foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(NDS.danger, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .shadow(color: NDS.danger.opacity(0.4), radius: 8, y: 4)
+                }
+                .buttonStyle(.plain)
+                .help("Stop recording")
+                PillDismiss(help: "Hide overlay (recording continues)", action: controller.cancelOverlay)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(1)
-            AudioLevelMeter(micLevel: controller.manager?.recordingMonitor.recordingHealth.micLevel ?? 0,
-                            systemLevel: 0,
-                            bars: 16, height: 26)
-                .fixedSize()
-            Button(action: controller.stopRecording) {
-                Image(systemName: "stop.fill")
-                    .scaledFont(15, weight: .bold).foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(NDS.danger, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .shadow(color: NDS.danger.opacity(0.4), radius: 8, y: 4)
+
+            if showNote {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle").foregroundStyle(NDS.textTertiary)
+                    TextField("Add a note to this meeting…", text: $note)
+                        .textFieldStyle(.plain).scaledFont(12.5)
+                        .foregroundStyle(NDS.textPrimary)
+                        .focused($noteFocused)
+                        .onSubmit(submitNote)
+                    if let flash = noteFlash {
+                        Text(flash).font(NDS.tiny).foregroundStyle(NDS.mint)
+                    }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 7)
+                .background(NDS.surface2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(NDS.hairline, lineWidth: 1))
             }
-            .buttonStyle(.plain)
-            .help("Stop recording")
-            PillDismiss(help: "Hide overlay (recording continues)", action: controller.cancelOverlay)
         }
         .onReceive(timer) { now = $0 }
+    }
+
+    private func submitNote() {
+        let stamp = controller.addLiveNote(note)
+        note = ""
+        withAnimation { noteFlash = stamp ?? "Saved" }
+        let token = noteFlash
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+            if noteFlash == token { withAnimation { noteFlash = nil; showNote = false } }
+        }
     }
 
     private func elapsedString() -> String {
@@ -671,6 +770,11 @@ extension Notification.Name {
     /// = QuickNote.id. MainWindow listens and switches to Notes tab +
     /// selects that note.
     static let meetingScribeOpenVoiceNote = Notification.Name("MeetingScribeOpenVoiceNote")
+
+    /// Posted by the floating meeting pill's "Open" button. Handled at the app
+    /// level (the main window may be closed): reopen + activate the window and
+    /// route to the live meeting.
+    static let meetingScribeOpenLiveMeeting = Notification.Name("MeetingScribeOpenLiveMeeting")
 
     /// Posted by `QuickNotesController` after a task-mode voice note finishes
     /// extracting tasks. userInfo: id (QuickNote.id), count (Int), title (String).

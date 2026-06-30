@@ -207,6 +207,23 @@ struct MainWindow: View {
             }
 
             Spacer()
+
+            // Persistent live-recording indicator — present on EVERY page while a
+            // meeting records, with jump-in + add-note actions and a live
+            // transcription status. (Floating pill covers the window-closed case.)
+            if let startedAt = meetingRecordingStartedAt {
+                RecordingNavIndicator(
+                    startedAt: startedAt,
+                    collapsed: collapsed,
+                    onOpen: {
+                        section = .meetings
+                        if let m = manager.activeMeeting { router.openMeeting(m) }
+                    },
+                    transcriber: manager.liveTranscriber
+                )
+                .transition(.opacity)
+            }
+
             Divider().overlay(NDS.divider)
                 .padding(.horizontal, collapsed ? 12 : NDS.spaceLG).padding(.bottom, NDS.spaceSM)
 
