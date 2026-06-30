@@ -24,12 +24,10 @@ struct ScreenRecordingsView: View {
     @State private var urlText = ""
 
     var body: some View {
-        HSplitView {
-            sidebar
-                .frame(minWidth: 260, idealWidth: 300, maxWidth: 380)
-            detail
-                .frame(minWidth: 420)
-        }
+        ResponsiveMasterDetail(showingDetail: selection != nil,
+                               onBack: { selection = nil }, backLabel: "Recordings",
+                               sidebarMin: 260, sidebarIdeal: 300, sidebarMax: 380, detailMin: 420,
+                               sidebar: { sidebar }, detail: { detail })
         .background(NDS.bg)
         .onAppear { recordings.refreshIfStale() }
         .onReceive(NotificationCenter.default.publisher(for: .meetingScribeNewScreenRecording)) { _ in

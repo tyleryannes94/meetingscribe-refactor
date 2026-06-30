@@ -17,10 +17,10 @@ struct QuickNotesView: View {
     @State private var pendingFocusTasksID: String?
 
     var body: some View {
-        HSplitView {
-            sidebar.frame(minWidth: 240, idealWidth: 320, maxWidth: 360)
-            detail.frame(minWidth: 380)
-        }
+        ResponsiveMasterDetail(showingDetail: selection != nil,
+                               onBack: { selection = nil }, backLabel: "Voice Notes",
+                               sidebarMax: 360,
+                               sidebar: { sidebar }, detail: { detail })
         // FloatingOverlay's "Go to Recording" button → select that note here.
         .onReceive(NotificationCenter.default.publisher(for: .meetingScribeOpenVoiceNote)) { notif in
             if let id = notif.userInfo?["id"] as? String {

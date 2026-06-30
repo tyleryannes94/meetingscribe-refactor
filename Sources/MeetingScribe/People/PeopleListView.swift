@@ -175,12 +175,13 @@ struct PeopleListView: View {
                     onOpenProfile: { id in graphMode = false; selection = id }
                 )
             } else {
-                HSplitView {
-                    // L7: wider sidebar so the richer rows (overdue pill + task
-                    // chip) don't truncate role/company.
-                    sidebar.frame(minWidth: 280, idealWidth: 340, maxWidth: 420)
-                    detail.frame(minWidth: 380)
-                }
+                // L7: wider sidebar so the richer rows (overdue pill + task chip)
+                // don't truncate role/company. Collapses to one column on narrow
+                // panes so it never breaks once the window can shrink past ~620pt.
+                ResponsiveMasterDetail(showingDetail: selection != nil,
+                                       onBack: { selection = nil }, backLabel: "People",
+                                       sidebarMin: 280, sidebarIdeal: 340, sidebarMax: 420, detailMin: 380,
+                                       sidebar: { sidebar }, detail: { detail })
             }
         }
         .task { people.rebuildIndexIfNeeded() }   // builds the FTS5 index for search
