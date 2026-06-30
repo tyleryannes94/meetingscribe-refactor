@@ -828,11 +828,17 @@ final class ActionItemStore: ObservableObject {
             guard items[i].deletedAt == nil, items[i].status != .completed else { continue }
             var ids = items[i].labelIDs ?? []
             let before = ids.count
-            if !items[i].meetingID.isEmpty {
+            let fromMeeting = !items[i].meetingID.isEmpty
+            // #meeting on every meeting-sourced task (always).
+            if fromMeeting {
                 let mid = labelID(meetingTag)
                 if !ids.contains(mid) { ids.append(mid) }
             }
-            if let t = theme(items[i].title) {
+            // Theme tags only on AI-derived tasks (meeting-extracted or
+            // brain-dump/suggested). Manual tasks stay clean — the user tags
+            // those, or the organizer proposes a tag for explicit acceptance.
+            let aiDerived = fromMeeting || (items[i].suggested == true)
+            if aiDerived, let t = theme(items[i].title) {
                 let tid = labelID(t)
                 if !ids.contains(tid) { ids.append(tid) }
             }

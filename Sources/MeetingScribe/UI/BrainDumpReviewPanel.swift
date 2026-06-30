@@ -370,14 +370,15 @@ private struct TaskDraftCard: View {
             }
         }
 
-        // Brain-dump proposals are AI-recommended: route them through the Triage
-        // inbox (suggested) rather than dropping them straight into a project,
-        // so every AI-created task funnels through one review surface.
+        // This review panel IS the acceptance step for brain-dump proposals —
+        // the user has already seen, edited, deduped, and assigned each draft
+        // here. A second Triage pass would be redundant, so accepted drafts go
+        // straight to the workspace. (Triage stays the funnel for un-reviewed
+        // AI output, i.e. meeting-extracted action items.)
         let newTask = actionItems.createTask(
             title: draft.title,
             projectID: draft.suggestedProjectID,
-            priority: draft.priority,
-            suggested: true
+            priority: draft.priority
         )
         if let due = draft.dueDate { actionItems.setDueDate(newTask.id, dueDate: due) }
         applyLabels(to: newTask.id)
