@@ -264,6 +264,15 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — Polish batch: tag colors, From-meetings view, responsive tabs.**
+  (1) Auto-tags carry stable semantic colors (`TaskAutoTagger.tagColors`). (2)
+  New "From meetings" rail smart view = confirmed meeting-originated tasks in
+  list form (companion to Triage). (3) `ResponsiveMasterDetail` wraps the
+  People / Recordings / Voice Notes `HSplitView`s so they collapse to one column
+  below 640pt instead of breaking once the window can shrink past their combined
+  minimums — reuse this for any future two-column tab. (4) Refinements: brain-dump
+  accepts go to the workspace (the review panel is the review); theme auto-tags
+  apply to AI-derived tasks only, leaving manual tasks clean.
 - **2026-06-29 — Projects & Meetings home tabs are master-detail browsers (D).**
   Replaced the horizontal, side-scrolling project board with a left project nav
   (open counts + quick "New project") → right detail showing the selected
