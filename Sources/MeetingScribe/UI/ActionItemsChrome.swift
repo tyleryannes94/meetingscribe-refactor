@@ -215,20 +215,134 @@ extension ActionItemsView {
         env.selectedTaskID = nil; env.selectedMeetingID = nil; env.selectedProjectID = pid
     }
 
+    /// Projects home tab: a master-detail browser instead of a horizontal
+    /// board you have to side-scroll. Left = a navigable list of every project
+    /// (with open counts) + quick-add; right = the selected project's tasks.
+    /// Collapses to just the list on a narrow pane (tapping opens the full
+    /// project page), so it never breaks or needs horizontal scrolling.
     @ViewBuilder
     private var homeProjectsBoard: some View {
         if homeProjects.isEmpty {
             homeProjectsEmpty
         } else {
-            ScrollView([.horizontal, .vertical]) {
-                HStack(alignment: .top, spacing: 14) {
-                    ForEach(homeProjects) { p in
-                        InitiativeProjectColumn(parent: self, store: store, project: p,
-                                                onOpen: { openHomeProject($0) })
+            GeometryReader { geo in
+                let narrow = geo.size.width < 640
+                let selected = resolvedHomeProjectID
+                HStack(spacing: 0) {
+                    homeProjectsNav(selected: selected, narrow: narrow)
+                        .frame(width: narrow ? geo.size.width : 248)
+                    if !narrow {
+                        Divider().overlay(NDS.divider)
+                        Group {
+                            if let pid = selected, let p = homeProjects.first(where: { $0.id == pid }) {
+                                homeProjectDetail(p)
+                            } else {
+                                Text("Select a project")
+                                    .font(NDS.small).foregroundStyle(NDS.textTertiary)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                .padding(16)
+                .frame(width: geo.size.width, height: geo.size.height)
             }
+        }
+    }
+
+    /// The effective selected project for the browser (persisted choice, else
+    /// the first project).
+    private var resolvedHomeProjectID: String? {
+        if !homeSelectedProjectID.isEmpty,
+           homeProjects.contains(where: { $0.id == homeSelectedProjectID }) {
+            return homeSelectedProjectID
+        }
+        return homeProjects.first?.id
+    }
+
+    /// Left nav: one selectable row per project (icon, name, open count) plus a
+    /// quick "New project" affordance at the bottom.
+    private func homeProjectsNav(selected: String?, narrow: Bool) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(homeProjects) { p in
+                    let isSel = !narrow && p.id == selected
+                    let count = initiativeProjectColumnItems(p.id).count
+                    Button {
+                        // Wide: select into the detail pane. Narrow: open the
+                        // full project page (no room for inline detail).
+                        if narrow { openHomeProject(p.id) }
+                        else { homeSelectedProjectID = p.id }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: p.icon ?? "doc.text").scaledFont(12)
+                                .foregroundStyle(isSel ? NDS.lilac : NDS.textSecondary).frame(width: 16)
+                            Text(p.name).font(NDS.small)
+                                .foregroundStyle(isSel ? NDS.textPrimary : NDS.textSecondary)
+                                .lineLimit(1).truncationMode(.tail)
+                            Spacer(minLength: 4)
+                            if count > 0 {
+                                Text("\(count)").font(NDS.tiny).monospacedDigit()
+                                    .foregroundStyle(NDS.textTertiary)
+                            }
+                            if narrow {
+                                Image(systemName: "chevron.right").scaledFont(9).foregroundStyle(NDS.textTertiary)
+                            }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .background(isSel ? NDS.rowSelected : .clear,
+                                    in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    let p = store.createProject(name: "Untitled")
+                    homeSelectedProjectID = p.id
+                    if narrow { openHomeProject(p.id) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus").scaledFont(12).frame(width: 16)
+                        Text("New project").font(NDS.small)
+                    }
+                    .foregroundStyle(NDS.accent)
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(10)
+        }
+    }
+
+    /// Right detail: the selected project's open tasks + quick-add + an "open
+    /// full page" affordance.
+    private func homeProjectDetail(_ p: Project) -> some View {
+        let items = initiativeProjectColumnItems(p.id)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: p.icon ?? "doc.text").scaledFont(15).foregroundStyle(NDS.lilac)
+                    Text(p.name).scaledFont(17, weight: .bold)
+                    Spacer()
+                    Button { openHomeProject(p.id) } label: {
+                        Label("Open", systemImage: "arrow.up.right.square").font(NDS.small)
+                    }
+                    .buttonStyle(.plain).foregroundStyle(NDS.accent)
+                }
+                if items.isEmpty {
+                    Text("No open tasks").font(NDS.small).foregroundStyle(NDS.textTertiary).padding(.vertical, 4)
+                } else {
+                    ForEach(items) { item in
+                        row(for: item)
+                            .taskQuickActions(item: item, store: store) { env.selectedTaskID = item.id }
+                    }
+                }
+                QuickAddTaskField(placeholder: "Add to \(p.name)", projectID: p.id,
+                                  sectionID: nil, status: .open)
+                    .environmentObject(store).padding(.top, 4)
+            }
+            .padding(16)
         }
     }
 
@@ -283,26 +397,93 @@ extension ActionItemsView {
 
     // MARK: Home — meetings
 
+    /// Meetings home tab: a master-detail browser. Left = the meeting list;
+    /// right = an adaptive preview (open action items + open-meeting button) for
+    /// the selected meeting. On a narrow pane it collapses to just the list and
+    /// tapping opens the full meeting — the same responsive side-view pattern as
+    /// the task inspector, so it never breaks visually.
+    @ViewBuilder
     private var homeMeetingsList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 4) {
-                let recent = manager.pastMeetings
-                if recent.isEmpty { dashEmpty("No meetings yet.") }
-                else {
-                    ForEach(recent.prefix(40)) { m in
-                        Button { env.selectedTaskID = nil; env.selectedProjectID = nil; env.selectedMeetingID = m.id } label: {
-                            HStack(spacing: 9) {
-                                Image(systemName: "doc.text").foregroundStyle(NDS.textSecondary)
-                                Text(m.displayTitle).font(NDS.body).lineLimit(1).help(m.displayTitle)
-                                Spacer()
-                                let open = store.items(for: m.id).filter { $0.status != .completed }.count
-                                if open > 0 { Text("\(open) open").font(NDS.tiny).foregroundStyle(NDS.textTertiary) }
-                                Text(Self.dashDate(m.startDate)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+        let recent = Array(manager.pastMeetings.prefix(40))
+        if recent.isEmpty {
+            dashEmpty("No meetings yet.")
+        } else {
+            GeometryReader { geo in
+                let narrow = geo.size.width < 640
+                let sel = homeSelectedMeetingID ?? recent.first?.id
+                HStack(spacing: 0) {
+                    homeMeetingsNav(recent, selected: sel, narrow: narrow)
+                        .frame(width: narrow ? geo.size.width : 280)
+                    if !narrow {
+                        Divider().overlay(NDS.divider)
+                        Group {
+                            if let mid = sel, let m = recent.first(where: { $0.id == mid }) {
+                                homeMeetingPreview(m)
+                            } else {
+                                Text("Select a meeting").font(NDS.small).foregroundStyle(NDS.textTertiary)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
-                            .padding(.horizontal, 10).padding(.vertical, 7)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+            }
+        }
+    }
+
+    private func homeMeetingsNav(_ recent: [Meeting], selected: String?, narrow: Bool) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(recent) { m in
+                    let isSel = !narrow && m.id == selected
+                    Button {
+                        if narrow { env.selectedTaskID = nil; env.selectedProjectID = nil; env.selectedMeetingID = m.id }
+                        else { homeSelectedMeetingID = m.id }
+                    } label: {
+                        HStack(spacing: 9) {
+                            Image(systemName: "doc.text").foregroundStyle(isSel ? NDS.lilac : NDS.textSecondary)
+                            Text(m.displayTitle).font(NDS.body).lineLimit(1)
+                                .foregroundStyle(isSel ? NDS.textPrimary : NDS.textSecondary).help(m.displayTitle)
+                            Spacer(minLength: 4)
+                            let open = store.items(for: m.id).filter { $0.status != .completed }.count
+                            if open > 0 { Text("\(open)").font(NDS.tiny).monospacedDigit().foregroundStyle(NDS.textTertiary) }
+                            Text(Self.dashDate(m.startDate)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            if narrow { Image(systemName: "chevron.right").scaledFont(9).foregroundStyle(NDS.textTertiary) }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .background(isSel ? NDS.rowSelected : .clear, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(10)
+        }
+    }
+
+    private func homeMeetingPreview(_ m: Meeting) -> some View {
+        let tasks = store.items(for: m.id).filter { $0.status != .completed }
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.text").scaledFont(15).foregroundStyle(NDS.lilac)
+                    Text(m.displayTitle).scaledFont(17, weight: .bold).lineLimit(2)
+                    Spacer()
+                    Button { env.selectedTaskID = nil; env.selectedProjectID = nil; env.selectedMeetingID = m.id } label: {
+                        Label("Open", systemImage: "arrow.up.right.square").font(NDS.small)
+                    }
+                    .buttonStyle(.plain).foregroundStyle(NDS.accent)
+                }
+                Text(Self.dashDate(m.startDate)).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                Divider().overlay(NDS.divider).padding(.vertical, 4)
+                Text("Action items").font(NDS.small.weight(.semibold)).foregroundStyle(NDS.textSecondary)
+                if tasks.isEmpty {
+                    Text("No open action items").font(NDS.small).foregroundStyle(NDS.textTertiary).padding(.vertical, 4)
+                } else {
+                    ForEach(tasks) { item in
+                        row(for: item)
+                            .taskQuickActions(item: item, store: store) { env.selectedTaskID = item.id }
                     }
                 }
             }

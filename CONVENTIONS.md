@@ -264,6 +264,14 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-06-29 — Projects & Meetings home tabs are master-detail browsers (D).**
+  Replaced the horizontal, side-scrolling project board with a left project nav
+  (open counts + quick "New project") → right detail showing the selected
+  project's tasks + quick-add. Same treatment for the Meetings home tab (list →
+  adaptive preview with the meeting's action items + Open). Both use a
+  `GeometryReader` breakpoint (<640pt → list-only, tap opens the full page), so
+  they never need horizontal scrolling and never break visually — the same
+  responsive side-view pattern as the task inspector.
 - **2026-06-29 — Auto-tagging (B) + AI-tasks-to-Triage (C3).** New
   `TaskAutoTagger` (shared theme list with the organizer) runs on Tasks-open and
   hourly: every meeting-sourced task gets `#meeting` (its meeting backlink

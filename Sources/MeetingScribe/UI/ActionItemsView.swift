@@ -86,6 +86,11 @@ struct ActionItemsView: View {
     // Home dashboard: which tab, and board-vs-list, both persisted.
     @AppStorage("home.tab") var homeTabRaw = HomeTab.tasks.rawValue
     @AppStorage("home.view") var homeViewBoard = true
+    // Projects home tab: the project selected in the master-detail browser
+    // (left nav → right detail), persisted so it sticks across visits.
+    @AppStorage("home.projects.selected") var homeSelectedProjectID = ""
+    // Meetings home tab: the meeting selected in its master-detail browser.
+    @State var homeSelectedMeetingID: String?
 
     enum HomeTab: String, CaseIterable, Identifiable {
         case tasks, projects, meetings
