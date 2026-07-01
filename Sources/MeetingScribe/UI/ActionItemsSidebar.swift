@@ -128,6 +128,10 @@ struct ProjectRail: View {
                         railItem(title: "From meetings", icon: "bubble.left.and.bubble.right.fill",
                                  count: fromMeetingsCount, id: ActionItemsView.fromMeetingsSentinel)
                     }
+                    // Brain Dump — a first-class page in Tasks (compose + AI
+                    // recommendations), not just a button. Selecting it opens the
+                    // Brain Dump surface in the detail pane.
+                    brainDumpRailItem
 
                     // Waiting-on lifecycle (P2-6).
                     waitingSection
@@ -444,9 +448,27 @@ struct ProjectRail: View {
         return f.string(from: d)
     }
 
+    /// The Brain Dump destination row. Unlike the task smart views it doesn't
+    /// select a task query — it flips the detail pane to the Brain Dump surface.
+    private var brainDumpRailItem: some View {
+        SidebarRow(selected: env.showingBrainDump) {
+            env.showingBrainDump = true
+        } content: {
+            HStack(spacing: 8) {
+                Image(systemName: "brain.head.profile").scaledFont(13)
+                    .foregroundStyle(env.showingBrainDump ? NDS.textPrimary : NDS.textSecondary)
+                    .frame(width: 16)
+                Text("Brain Dump").lineLimit(1).font(NDS.body)
+                Spacer()
+            }
+        }
+    }
+
     private func railItem(title: String, icon: String, count: Int, id: String?) -> some View {
-        let selected = env.selectedMeetingID == nil && env.selectedInitiativeID == nil && env.selectedProjectID == id
+        let selected = !env.showingBrainDump && env.selectedMeetingID == nil
+            && env.selectedInitiativeID == nil && env.selectedProjectID == id
         return SidebarRow(selected: selected) {
+            env.showingBrainDump = false
             env.selectedMeetingID = nil
             env.selectedInitiativeID = nil
             env.selectedProjectID = id

@@ -146,8 +146,19 @@ struct BrainDumpView: View {
             }
             .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
             Divider().overlay(NDS.divider)
-            BrainDumpReviewPanel(session: session)
-                .frame(width: 380)
+            // Right column: the "Organize my Tasks" recommendations (persisted,
+            // shared with the modal) sit above this session's brain-dump review,
+            // so all AI recommendations live in one place.
+            VStack(spacing: 0) {
+                ScrollView {
+                    OrganizerRecommendationsPanel(organizer: .shared, store: actionItems)
+                        .padding(10)
+                }
+                .frame(maxHeight: 300)
+                Divider().overlay(NDS.divider)
+                BrainDumpReviewPanel(session: session)
+            }
+            .frame(width: 380)
         }
     }
 

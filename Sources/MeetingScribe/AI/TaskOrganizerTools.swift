@@ -72,3 +72,83 @@ struct TaskSuggestion: Identifiable, Hashable {
         }
     }
 }
+
+// MARK: - Codable (persist the last run so results survive modal close + restart)
+
+extension TaskSuggestion: Codable {
+    enum CodingKeys: String, CodingKey { case id, kind, reason, applied, dismissed, deselectedTaskIDs }
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.kind = try c.decode(Kind.self, forKey: .kind)
+        self.reason = try c.decode(String.self, forKey: .reason)
+        self.applied = try c.decodeIfPresent(Bool.self, forKey: .applied) ?? false
+        self.dismissed = try c.decodeIfPresent(Bool.self, forKey: .dismissed) ?? false
+        self.deselectedTaskIDs = try c.decodeIfPresent(Set<String>.self, forKey: .deselectedTaskIDs) ?? []
+    }
+    func encode(to e: Encoder) throws {
+        var c = e.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(kind, forKey: .kind)
+        try c.encode(reason, forKey: .reason); try c.encode(applied, forKey: .applied)
+        try c.encode(dismissed, forKey: .dismissed); try c.encode(deselectedTaskIDs, forKey: .deselectedTaskIDs)
+    }
+}
+
+extension TaskSuggestion.Kind: Codable {
+    private enum K: String, Codable { case reschedule, reprioritize, assignProject, addTag, split, setProjectDeadline }
+    private enum CK: String, CodingKey { case t, taskID, taskTitle, newDate, priority, taskIDs, taskTitles, projectName, existingProjectID, tag, parts, projectID, date }
+    func encode(to e: Encoder) throws {
+        var c = e.container(keyedBy: CK.self)
+        switch self {
+        case let .reschedule(id, title, d):
+            try c.encode(K.reschedule, forKey: .t); try c.encode(id, forKey: .taskID)
+            try c.encode(title, forKey: .taskTitle); try c.encode(d, forKey: .newDate)
+        case let .reprioritize(id, title, p):
+            try c.encode(K.reprioritize, forKey: .t); try c.encode(id, forKey: .taskID)
+            try c.encode(title, forKey: .taskTitle); try c.encode(p, forKey: .priority)
+        case let .assignProject(ids, titles, name, existing):
+            try c.encode(K.assignProject, forKey: .t); try c.encode(ids, forKey: .taskIDs)
+            try c.encode(titles, forKey: .taskTitles); try c.encode(name, forKey: .projectName)
+            try c.encodeIfPresent(existing, forKey: .existingProjectID)
+        case let .addTag(ids, titles, tag):
+            try c.encode(K.addTag, forKey: .t); try c.encode(ids, forKey: .taskIDs)
+            try c.encode(titles, forKey: .taskTitles); try c.encode(tag, forKey: .tag)
+        case let .split(id, title, parts):
+            try c.encode(K.split, forKey: .t); try c.encode(id, forKey: .taskID)
+            try c.encode(title, forKey: .taskTitle); try c.encode(parts, forKey: .parts)
+        case let .setProjectDeadline(pid, name, d):
+            try c.encode(K.setProjectDeadline, forKey: .t); try c.encode(pid, forKey: .projectID)
+            try c.encode(name, forKey: .projectName); try c.encode(d, forKey: .date)
+        }
+    }
+    init(from dec: Decoder) throws {
+        let c = try dec.container(keyedBy: CK.self)
+        switch try c.decode(K.self, forKey: .t) {
+        case .reschedule:
+            self = .reschedule(taskID: try c.decode(String.self, forKey: .taskID),
+                               taskTitle: try c.decode(String.self, forKey: .taskTitle),
+                               newDate: try c.decode(Date.self, forKey: .newDate))
+        case .reprioritize:
+            self = .reprioritize(taskID: try c.decode(String.self, forKey: .taskID),
+                                 taskTitle: try c.decode(String.self, forKey: .taskTitle),
+                                 priority: try c.decode(ActionItem.Priority.self, forKey: .priority))
+        case .assignProject:
+            self = .assignProject(taskIDs: try c.decode([String].self, forKey: .taskIDs),
+                                  taskTitles: try c.decode([String].self, forKey: .taskTitles),
+                                  projectName: try c.decode(String.self, forKey: .projectName),
+                                  existingProjectID: try c.decodeIfPresent(String.self, forKey: .existingProjectID))
+        case .addTag:
+            self = .addTag(taskIDs: try c.decode([String].self, forKey: .taskIDs),
+                           taskTitles: try c.decode([String].self, forKey: .taskTitles),
+                           tag: try c.decode(String.self, forKey: .tag))
+        case .split:
+            self = .split(taskID: try c.decode(String.self, forKey: .taskID),
+                          taskTitle: try c.decode(String.self, forKey: .taskTitle),
+                          parts: try c.decode([String].self, forKey: .parts))
+        case .setProjectDeadline:
+            self = .setProjectDeadline(projectID: try c.decode(String.self, forKey: .projectID),
+                                       projectName: try c.decode(String.self, forKey: .projectName),
+                                       date: try c.decode(Date.self, forKey: .date))
+        }
+    }
+}

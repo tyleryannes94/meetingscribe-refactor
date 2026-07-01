@@ -12,10 +12,14 @@ import OSLog
 /// Local-only: runs against the same Ollama chat client as everything else.
 @MainActor
 final class TaskOrganizer: ObservableObject {
+    /// Shared instance so the review modal AND the Brain Dump recommendations
+    /// section show the same (persisted) results — a run isn't tied to one sheet.
+    static let shared = TaskOrganizer()
+
     private let log = Logger(subsystem: "com.tyleryannes.MeetingScribe", category: "TaskOrganizer")
     private let chatClient = OllamaChatClient()
 
-    @Published private(set) var suggestions: [TaskSuggestion] = []
+    @Published private(set) var suggestions: [TaskSuggestion] = [] { didSet { persist() } }
     /// A run is in flight. With the two-phase design this is true only while the
     /// optional LLM grouping pass is still working — the instant deterministic
     /// suggestions are already published by then.
@@ -31,8 +35,31 @@ final class TaskOrganizer: ObservableObject {
     /// yet" from "analyzed, nothing to fix").
     @Published private(set) var didRun = false
 
+    init() { loadPersisted() }
+
     func reset() {
         suggestions = []; reasoning = nil; error = nil; didRun = false; refining = false
+    }
+
+    // MARK: - Persistence (results survive modal close + app restart)
+
+    private static var persistURL: URL {
+        AppSettings.shared.storageDir.appendingPathComponent("task_organizer_suggestions.json")
+    }
+
+    private func persist() {
+        // Keep pending + applied (so the UI shows what was done); drop dismissed.
+        let keep = suggestions.filter { !$0.dismissed }
+        guard let data = try? JSONEncoder().encode(keep) else { return }
+        try? data.write(to: Self.persistURL, options: .atomic)
+    }
+
+    private func loadPersisted() {
+        guard let data = try? Data(contentsOf: Self.persistURL),
+              let loaded = try? JSONDecoder().decode([TaskSuggestion].self, from: data),
+              !loaded.isEmpty else { return }
+        suggestions = loaded
+        didRun = true   // so opening the modal shows these instead of auto-re-running
     }
 
     func run(store: ActionItemStore) {

@@ -14,21 +14,29 @@ import SwiftUI
 final class TasksEnvironment: ObservableObject {
     /// "__home__" = dashboard; nil = All tasks; "__none__" = No project;
     /// "__triage__"/"__waiting__"/"__person__…" = smart buckets; else a project id.
-    @Published var selectedProjectID: String?
+    /// Selecting any of these exits the Brain Dump page (they're mutually
+    /// exclusive tabs in the Tasks pane).
+    @Published var selectedProjectID: String? { didSet { if selectedProjectID != nil { showingBrainDump = false } } }
     /// When set, the right pane routes to that meeting (and then clears).
-    @Published var selectedMeetingID: String?
+    @Published var selectedMeetingID: String? { didSet { if selectedMeetingID != nil { showingBrainDump = false } } }
     /// When set, the right pane shows that initiative's page.
-    @Published var selectedInitiativeID: String?
+    @Published var selectedInitiativeID: String? { didSet { if selectedInitiativeID != nil { showingBrainDump = false } } }
     /// When set, the right pane shows that task as a full page (overlay).
-    @Published var selectedTaskID: String?
+    @Published var selectedTaskID: String? { didSet { if selectedTaskID != nil { showingBrainDump = false } } }
     /// Active workspace context filter (1-2). nil = "All" (span every context).
     /// Scopes the sidebar initiative tree and the main task list live.
     @Published var activeContextID: String?
 
-    /// Overlay: when true the Tasks pane shows the embedded Brain Dump surface
-    /// (its own page *within* Tasks, no longer a top-level nav item). Cleared by
-    /// `go(_:)` so navigating anywhere in the sidebar dismisses it.
-    @Published var showingBrainDump = false
+    /// When true the Tasks pane shows the embedded Brain Dump surface (a
+    /// first-class page *within* Tasks). Entering it clears the task selection so
+    /// no other sidebar row stays highlighted; any task selection exits it.
+    @Published var showingBrainDump = false {
+        didSet {
+            if showingBrainDump {
+                selectedTaskID = nil; selectedMeetingID = nil; selectedInitiativeID = nil
+            }
+        }
+    }
 
     /// Default landing is the Today smart view (1-3) — not the old aimless
     /// "All tasks" — so opening Tasks leads with what's due now.
