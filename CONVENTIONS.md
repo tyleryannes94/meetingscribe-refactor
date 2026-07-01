@@ -264,6 +264,27 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
+- **2026-07-01 — Organize-my-Tasks rebuilt + folded into Brain Dump as the recommendations hub.**
+  The organizer's LLM pass only grouped loose tasks — never proposed due dates or
+  priorities. Rebuilt (`TaskOrganizer`): a smart pass reasons over
+  attention-needing tasks (current priority/due/project/age) and proposes concrete
+  **due dates, priorities, project assignments, splits, and project deadlines**,
+  with a Swift **workload-balancer** (spreads dates, ≤4/day) and before→after diffs.
+  **Hard-won local-model lessons (write these down):** (1) keep the prompt COMPACT
+  and numbered — a verbose multi-section prompt makes qwen2.5:7b emit malformed /
+  looping JSON and skip tasks; (2) use short `t1..tN` handles, not 36-char UUIDs;
+  (3) force it — "assign a due date to EVERY task, never null/skip"; (4) give it a
+  generous timeout — a 7B model dating ~15 tasks takes ~40s, and the old 25s cap
+  silently surfaced as a bogus "Ollama isn't running"; (5) `oneShotJSON` masks any
+  URLSession error (incl. timeout) as `.notReachable` — beware. Also: wait for the
+  async store load before analyzing so an early open isn't empty. **Persistence +
+  Brain Dump integration:** `TaskSuggestion` is now Codable; `TaskOrganizer.shared`
+  is a disk-backed singleton (results survive modal close + restart). Added a
+  first-class **Brain Dump page in the Tasks sidebar** (mutually exclusive with
+  task smart views via `TasksEnvironment` didSet), and surfaced the organizer
+  recommendations there (`OrganizerRecommendationsPanel`) so all AI recs live in
+  one persistent place. **Convention:** long AI-recommendation surfaces persist to
+  disk and share one store — don't tie results to an ephemeral modal.
 - **2026-07-01 — Brain Dump: shared rich editor, simpler layout, task-update recs, new-session flow.**
   (1) **Unified editor:** the composer now uses the SAME `RichMarkdownEditor`
   (live markdown + "/" block menu + formatting toolbar) as Meeting Notes, Tasks,
