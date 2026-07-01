@@ -629,7 +629,9 @@ struct ActionItemRow: View {
             }
             HStack(spacing: 6) {
                 Image(systemName: "plus.circle").foregroundStyle(.secondary).font(.caption)
-                TextField("Add subtask…", text: $newSubtask, onCommit: addSubtask)
+                // Only `.onSubmit` — the deprecated `onCommit:` ALSO fires on
+                // Enter, so having both created two subtasks per return press.
+                TextField("Add subtask…", text: $newSubtask)
                     .textFieldStyle(.plain).font(.caption)
                     .onSubmit(addSubtask)
             }

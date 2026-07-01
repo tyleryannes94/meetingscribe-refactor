@@ -186,6 +186,8 @@ struct HomeTasksBoard: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Pin to natural height so sparse columns don't stretch cards tall.
+        .fixedSize(horizontal: false, vertical: true)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
         .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius)
             .strokeBorder(NDS.hairline, lineWidth: 0.5))

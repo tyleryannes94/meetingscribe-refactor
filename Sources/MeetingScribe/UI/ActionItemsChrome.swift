@@ -763,7 +763,7 @@ extension ActionItemsView {
                 .popover(isPresented: $savingView, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Save current filter as a view").font(NDS.small).foregroundStyle(NDS.textSecondary)
-                        TextField("View name", text: $newViewName, onCommit: commitSaveView)
+                        TextField("View name", text: $newViewName)
                             .textFieldStyle(.roundedBorder).frame(width: 220).onSubmit(commitSaveView)
                         HStack {
                             Spacer()

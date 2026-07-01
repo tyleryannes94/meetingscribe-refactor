@@ -134,7 +134,7 @@ extension ActionItemsView {
             .buttonStyle(.plain).frame(width: Col.check)
             // Inline-editable title (5-8): double-click to edit.
             if tableEditingTitleID == item.id {
-                TextField("Title", text: $tableTitleDraft, onCommit: commitTableTitle)
+                TextField("Title", text: $tableTitleDraft)
                     .textFieldStyle(.plain).font(.callout)
                     .onSubmit(commitTableTitle)
                     .frame(maxWidth: .infinity, alignment: .leading)

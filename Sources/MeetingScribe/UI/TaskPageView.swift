@@ -754,7 +754,9 @@ struct TaskPageView: View {
                 }
                 HStack(spacing: 8) {
                     Image(systemName: "plus").scaledFont(11).foregroundStyle(NDS.textTertiary)
-                    TextField("Add subtask…", text: $newSubtask, onCommit: addSubtask)
+                    // Only `.onSubmit` — the deprecated `onCommit:` ALSO fires on
+                    // Enter, so having both created two subtasks per return press.
+                    TextField("Add subtask…", text: $newSubtask)
                         .textFieldStyle(.plain).font(NDS.body)
                         .focused($subtaskFocused)
                         .onSubmit(addSubtask)

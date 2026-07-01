@@ -876,7 +876,7 @@ struct InitiativeNode: View {
                 .buttonStyle(.plain)
                 .popover(isPresented: $showIconPicker, arrowEdge: .bottom) { iconPicker }
                 if renaming {
-                    TextField("Name", text: $nameDraft, onCommit: commitRename)
+                    TextField("Name", text: $nameDraft)
                         .textFieldStyle(.roundedBorder).font(NDS.body).frame(maxWidth: 150)
                         .onSubmit(commitRename)
                 } else {

@@ -157,6 +157,11 @@ extension ActionItemsView {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Pin to natural height. Without this the card is vertically greedy, so a
+        // column with only a few cards stretches each one to fill the space —
+        // producing tall, mostly-empty cards (looked like a "subtasks make cards
+        // huge" bug, but it was just sparse columns distributing height).
+        .fixedSize(horizontal: false, vertical: true)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.rowRadius))
         .overlay(RoundedRectangle(cornerRadius: NDS.rowRadius)
             .strokeBorder(NDS.hairline, lineWidth: 0.5))
