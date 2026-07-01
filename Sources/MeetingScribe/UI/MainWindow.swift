@@ -61,6 +61,10 @@ struct MainWindow: View {
     /// App-wide background-refresh hint. Drives a subtle top hairline while data
     /// revalidates in place — content is always shown instantly underneath.
     @ObservedObject private var refreshIndicator = RefreshIndicator.shared
+    /// "Organize my Tasks" runs in the background; this drives the app-wide
+    /// progress pill and the review modal (which now opens only on completion or
+    /// when the user taps the pill).
+    @ObservedObject private var organizer = TaskOrganizer.shared
     /// The selected top-level section now lives in `WorkspaceRouter` (D1-1) so
     /// search, deep links, and backlinks all drive one navigation surface. This
     /// computed accessor keeps the existing `section` / `section = …` call sites
@@ -559,6 +563,11 @@ struct MainWindow: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                     }
+                    // Persistent "Organize my Tasks" progress pill — lets the AI
+                    // pass run in the background without a blocking modal.
+                    .overlay(alignment: .bottom) {
+                        OrganizerStatusPill(organizer: organizer)
+                    }
                     .animation(NDS.motion(NDS.springStandard, reduce: reduceMotion),
                                value: meetingRecordingStartedAt != nil)
                 if showChat {
@@ -573,6 +582,12 @@ struct MainWindow: View {
             .animation(.easeOut(duration: 0.18), value: railCollapsed)
             .overlay(ToastOverlay())   // undo toasts (D4-3)
             .overlay(searchPalette)    // floating ⌘K command palette (C3-2)
+        }
+        // "Organize my Tasks" review — presented app-wide (only on completion or
+        // a pill tap), so it never blocks work while the job runs.
+        .sheet(isPresented: $organizer.isPresentingResults) {
+            TaskOrganizerView(organizer: organizer, store: manager.actionItems,
+                              onClose: { organizer.isPresentingResults = false })
         }
         .tint(NDS.brand)
         // No forced color scheme (C3-4): follow the system appearance.

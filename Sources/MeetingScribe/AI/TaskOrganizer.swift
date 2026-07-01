@@ -35,6 +35,20 @@ final class TaskOrganizer: ObservableObject {
     /// yet" from "analyzed, nothing to fix").
     @Published private(set) var didRun = false
 
+    /// Drives the review modal app-wide. The modal is NOT shown while the job
+    /// runs (that would block the user / make them feel they must wait) — it opens
+    /// only when the job finishes, or when the user taps the persistent progress
+    /// pill to watch/see results.
+    @Published var isPresentingResults = false
+    /// When the current run was launched by the main "Organize" button, pop the
+    /// results modal automatically on completion. Runs triggered inline (Brain
+    /// Dump) leave it false and just update the inline panel.
+    private var presentWhenDone = false
+
+    /// Pending (not applied, not dismissed) proposals — what the progress pill and
+    /// modal count.
+    var pendingCount: Int { suggestions.filter { !$0.applied && !$0.dismissed }.count }
+
     init() { loadPersisted() }
 
     func reset() {
@@ -62,8 +76,13 @@ final class TaskOrganizer: ObservableObject {
         didRun = true   // so opening the modal shows these instead of auto-re-running
     }
 
-    func run(store: ActionItemStore) {
-        guard !isRunning else { return }
+    func run(store: ActionItemStore, presentWhenDone: Bool = false) {
+        guard !isRunning else {
+            // Already running — a second tap just shows the live progress.
+            if presentWhenDone { isPresentingResults = true }
+            return
+        }
+        self.presentWhenDone = presentWhenDone
         isRunning = true
         reset()
         Task { @MainActor [weak self] in
@@ -105,6 +124,12 @@ final class TaskOrganizer: ObservableObject {
             }
             self.isRunning = false
             self.didRun = true
+            // The job is done — now (and only now) surface the modal, if this run
+            // was launched from the main "Organize" button.
+            if self.presentWhenDone {
+                self.presentWhenDone = false
+                self.isPresentingResults = true
+            }
         }
     }
 

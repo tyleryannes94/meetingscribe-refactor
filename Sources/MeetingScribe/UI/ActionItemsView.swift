@@ -17,7 +17,6 @@ struct ActionItemsView: View {
     /// "Organize my Tasks" AI review sheet (Today page). Shared instance so its
     /// (persisted) results also show in the Brain Dump recommendations section.
     @ObservedObject var taskOrganizer = TaskOrganizer.shared
-    @State var showOrganizer = false
 
     /// Single owner of filter / sort / view / group state and the canonical
     /// filter implementation (A0-1). Replaces ~11 parallel `@State` vars and a

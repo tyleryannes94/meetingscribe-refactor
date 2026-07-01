@@ -351,21 +351,21 @@ extension ActionItemsView {
                 .font(NDS.small).foregroundStyle(NDS.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
-                taskOrganizer.reset()
-                showOrganizer = true
+                // Runs in the BACKGROUND — the review modal opens only when the
+                // job finishes (or when the user taps the progress pill). No
+                // blocking wait; the user can keep working.
+                taskOrganizer.run(store: store, presentWhenDone: true)
             } label: {
-                Label("Organize my Tasks", systemImage: "wand.and.stars")
+                Label(taskOrganizer.isRunning ? "Organizing…" : "Organize my Tasks",
+                      systemImage: taskOrganizer.isRunning ? "hourglass" : "wand.and.stars")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(MSSecondaryButtonStyle())
+            .disabled(taskOrganizer.isRunning)
 
             Spacer()
         }
         .padding(16)
-        .sheet(isPresented: $showOrganizer) {
-            TaskOrganizerView(organizer: taskOrganizer, store: store,
-                              onClose: { showOrganizer = false })
-        }
     }
 
     // MARK: Actions
