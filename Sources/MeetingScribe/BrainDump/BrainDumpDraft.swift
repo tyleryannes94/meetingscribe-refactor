@@ -101,10 +101,16 @@ enum DraftState: Codable, Hashable {
 ///                   duplicate created).
 ///   - `.related`  — distinct but connected; accepting creates the new task AND
 ///                   cross-links both tasks' notes.
+///   - `.update`   — the SAME existing task, but the brain dump adds new
+///                   information (a due date, higher priority, a project, more
+///                   detail). Accepting applies the draft's fields to that task
+///                   instead of creating anything new. The draft's non-nil
+///                   fields (priority / dueDate / project / labels / notes) are
+///                   the proposed changes.
 /// Optional on `TaskDraft` (nil ⇒ a plain new task), so older persisted drafts
 /// decode unchanged.
 struct TaskRelation: Codable, Hashable {
-    enum Kind: String, Codable { case subtask, merge, related }
+    enum Kind: String, Codable { case subtask, merge, related, update }
     var kind: Kind
     var existingTaskID: String
     var existingTaskTitle: String

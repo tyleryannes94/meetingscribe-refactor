@@ -27,9 +27,7 @@ struct BrainDumpComposerView: View {
     @State private var debouncer = PassthroughSubject<String, Never>()
     @State private var titleDebouncer = PassthroughSubject<String, Never>()
     @State private var cancellables = Set<AnyCancellable>()
-    @State private var showSearchSheet = false
-    @State private var showURLSheet = false
-    @FocusState private var bodyFocused: Bool
+    @State private var showSourcesSheet = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,17 +40,11 @@ struct BrainDumpComposerView: View {
         .background(NDS.bg)
         .onAppear { hydrateBuffers() }
         .onChange(of: session.id) { _ in hydrateBuffers() }
-        .sheet(isPresented: $showSearchSheet) {
-            BrainDumpSearchSheet { query in
-                showSearchSheet = false
-                runWebSearch(query)
-            }
-        }
-        .sheet(isPresented: $showURLSheet) {
-            BrainDumpAttachURLSheet { url in
-                showURLSheet = false
-                attachURL(url)
-            }
+        .sheet(isPresented: $showSourcesSheet) {
+            BrainDumpSourcesSheet(session: session,
+                                  onAttachURL: attachURL,
+                                  onSearch: runWebSearch,
+                                  onPullLinear: pullLinearBrief)
         }
     }
 
@@ -68,29 +60,25 @@ struct BrainDumpComposerView: View {
 
     // MARK: - Editor
 
+    /// The SAME rich markdown editor used by Meeting Notes, Tasks, Projects, and
+    /// Initiatives (`RichMarkdownEditor`) — one component across the app: live
+    /// markdown styling, a "/" block menu, and a formatting toolbar. Autosave and
+    /// URL auto-attach behavior are unchanged (they hang off `bufferText`).
     private var editor: some View {
-        ZStack(alignment: .topLeading) {
-            TextEditor(text: $bufferText)
-                .font(NDS.body)
-                .focused($bodyFocused)
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .onChange(of: bufferText) { newValue in
-                    debouncer.send(newValue)
-                    detectURLs(in: newValue)
-                }
-                // Dictation into the brain dump always pastes the polished
-                // transcript — it's piped straight to the local planner.
-                .dictationPrefersPolished(id: "brainDump.composer", focused: bodyFocused)
-
-            if bufferText.isEmpty {
-                Text("Dump everything on your mind — thoughts, links, follow-ups, the messy week. Paste a URL and the planner will read it.\n\nThe planner turns this into tasks and 25-minute focus blocks you can accept.")
-                    .font(NDS.body).foregroundStyle(NDS.textTertiary)
-                    .padding(.horizontal, 22).padding(.vertical, 20)
-                    .allowsHitTesting(false)
-                    .frame(maxWidth: 540, alignment: .topLeading)
-            }
+        RichMarkdownEditor(
+            text: $bufferText,
+            placeholder: "Dump everything on your mind — thoughts, links, follow-ups, the messy week. Paste a URL and the planner reads it. Type / for headings, lists, and to-dos.",
+            enableSlashMenu: true,
+            enableMentions: false
+        )
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .onChange(of: bufferText) { newValue in
+            debouncer.send(newValue)
+            detectURLs(in: newValue)
         }
+        // Dictation into the brain dump always pastes the polished transcript —
+        // it's piped straight to the local planner.
+        .dictationPrefersPolished(id: "brainDump.composer", focused: true)
         .frame(maxHeight: .infinity)
     }
 
@@ -114,36 +102,19 @@ struct BrainDumpComposerView: View {
             }
             .buttonStyle(MSPrimaryButtonStyle())
             .disabled(!canPlan)
-            .help("Run the local planner — it'll fetch any URLs you pasted, propose tasks, and suggest focus blocks.")
-
-            Button { showURLSheet = true } label: {
-                Label("Attach URL", systemImage: "link.badge.plus")
-            }
-            .buttonStyle(MSSecondaryButtonStyle())
-
-            Button { showSearchSheet = true } label: {
-                Label("Search the web", systemImage: "magnifyingglass.circle")
-            }
-            .buttonStyle(MSSecondaryButtonStyle())
-            .disabled(!AppSettings.shared.allowBrainDumpWebAccess)
+            .help("Run the local planner — it'll fetch any URLs you added, propose tasks, and suggest focus blocks.")
 
             Spacer()
 
-            Button { pullLinearBrief() } label: {
-                Label("Pull Linear", systemImage: "tray.and.arrow.down")
+            // Sources are no longer a whole column — one button opens a modal to
+            // add (URL / web search / Linear) and review attached sources.
+            Button { showSourcesSheet = true } label: {
+                Label(session.sources.isEmpty ? "Sources"
+                                              : "Sources (\(session.sources.count))",
+                      systemImage: "paperclip")
             }
             .buttonStyle(MSSecondaryButtonStyle())
-            .disabled(AppSettings.shared.linearAPIKey?.isEmpty ?? true)
-
-            Button {
-                let stub = BrainDumpSource.slackBrief(SlackBriefStub())
-                store.attachSource(session.id, stub)
-            } label: {
-                Label("Slack (soon)", systemImage: "bubble.left.and.bubble.right.fill")
-            }
-            .buttonStyle(MSSecondaryButtonStyle())
-            .disabled(true)
-            .help("Slack daily brief — coming soon")
+            .help("Attach URLs, web searches, or a Linear brief — and review what's attached.")
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(NDS.fieldBg.opacity(0.4))
@@ -269,6 +240,79 @@ struct BrainDumpComposerView: View {
                 let empty = LinearBriefSource(issues: [])
                 store.attachSource(session.id, .linearBrief(empty))
             }
+        }
+    }
+}
+
+// MARK: - Sources sheet
+
+/// Everything about a session's sources in one modal (replaces the old middle
+/// "Sources" column): add via URL / web search / Linear, and review + remove
+/// what's attached. Opened from the composer's "Sources (N)" button.
+@available(macOS 14.0, *)
+struct BrainDumpSourcesSheet: View {
+    let session: BrainDumpSession
+    let onAttachURL: (URL) -> Void
+    let onSearch: (String) -> Void
+    let onPullLinear: () -> Void
+
+    @EnvironmentObject var store: BrainDumpStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var showURL = false
+    @State private var showSearch = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sources").scaledFont(18, weight: .bold)
+                    Text("Pages, searches, and briefs the planner reads alongside your notes.")
+                        .font(NDS.small).foregroundStyle(NDS.textSecondary)
+                }
+                Spacer()
+                Button("Done") { dismiss() }.buttonStyle(MSSecondaryButtonStyle())
+            }
+            .padding(16)
+            Divider().overlay(NDS.divider)
+
+            HStack(spacing: 8) {
+                Button { showURL = true } label: {
+                    Label("Attach URL", systemImage: "link.badge.plus")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+                Button { showSearch = true } label: {
+                    Label("Search the web", systemImage: "magnifyingglass.circle")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+                .disabled(!AppSettings.shared.allowBrainDumpWebAccess)
+                Button { onPullLinear() } label: {
+                    Label("Pull Linear", systemImage: "tray.and.arrow.down")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+                .disabled(AppSettings.shared.linearAPIKey?.isEmpty ?? true)
+                Button {
+                    store.attachSource(session.id, .slackBrief(SlackBriefStub()))
+                } label: {
+                    Label("Slack (soon)", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+                .buttonStyle(MSSecondaryButtonStyle())
+                .disabled(true)
+                .help("Slack daily brief — coming soon")
+                Spacer()
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            Divider().overlay(NDS.divider)
+
+            BrainDumpSourcePanel(session: session)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: 620, height: 640)
+        .background(NDS.bg)
+        .sheet(isPresented: $showURL) {
+            BrainDumpAttachURLSheet { url in showURL = false; onAttachURL(url) }
+        }
+        .sheet(isPresented: $showSearch) {
+            BrainDumpSearchSheet { query in showSearch = false; onSearch(query) }
         }
     }
 }

@@ -299,6 +299,7 @@ private struct TaskDraftCard: View {
         case .subtask: return "arrow.turn.down.right"
         case .merge:   return "arrow.triangle.merge"
         case .related: return "link"
+        case .update:  return "pencil.circle"
         }
     }
 
@@ -307,6 +308,7 @@ private struct TaskDraftCard: View {
         case .subtask: return "Add as subtask of"
         case .merge:   return "Merge into"
         case .related: return "Link to"
+        case .update:  return "Update"
         }
     }
 
@@ -315,6 +317,7 @@ private struct TaskDraftCard: View {
         case .subtask: return "Add subtask"
         case .merge:   return "Merge"
         case .related: return "Add & link"
+        case .update:  return "Apply update"
         case nil:      return "Accept"
         }
     }
@@ -324,6 +327,7 @@ private struct TaskDraftCard: View {
         case .subtask: return "arrow.turn.down.right"
         case .merge:   return "arrow.triangle.merge"
         case .related: return "link"
+        case .update:  return "pencil.circle"
         case nil:      return "checkmark"
         }
     }
@@ -365,6 +369,11 @@ private struct TaskDraftCard: View {
                 mergeIntoExisting(relation.existingTaskID)
                 store.setDraftState(sessionID, draft.id, .accepted(externalID: relation.existingTaskID))
                 return
+            case .update:
+                // Apply the proposed field changes to the existing task — no new task.
+                applyUpdate(to: relation.existingTaskID)
+                store.setDraftState(sessionID, draft.id, .accepted(externalID: relation.existingTaskID))
+                return
             case .related:
                 break // fall through: create the task, then cross-link below.
             }
@@ -402,6 +411,31 @@ private struct TaskDraftCard: View {
             let label = actionItems.labels.first { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
                 ?? actionItems.createLabel(name: trimmed)
             actionItems.toggleLabel(taskID, labelID: label.id)
+        }
+    }
+
+    /// Apply the draft's proposed field changes to an EXISTING task (the update
+    /// relation). Only the fields the planner set are changed; priority is only
+    /// ever raised via an update, never silently downgraded.
+    private func applyUpdate(to taskID: String) {
+        guard let existing = actionItems.items.first(where: { $0.id == taskID }) else { return }
+        if let due = draft.dueDate { actionItems.setDueDate(taskID, dueDate: due) }
+        if let pid = draft.suggestedProjectID { actionItems.setProject(taskID, projectID: pid) }
+        if priorityRank(draft.priority) > priorityRank(existing.priority) {
+            actionItems.setPriority(taskID, priority: draft.priority)
+        }
+        applyLabels(to: taskID)   // additive — never removes existing tags
+        if let n = draft.notes, !n.isEmpty {
+            actionItems.setNotes(taskID, notes: appendLine(to: existingNotes(taskID), "• \(n)"))
+        }
+    }
+
+    private func priorityRank(_ p: ActionItem.Priority) -> Int {
+        switch p {
+        case .low:    return 0
+        case .medium: return 1
+        case .high:   return 2
+        case .urgent: return 3
         }
     }
 

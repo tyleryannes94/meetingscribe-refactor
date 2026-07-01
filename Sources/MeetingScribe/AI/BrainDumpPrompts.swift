@@ -104,13 +104,14 @@ enum BrainDumpPrompts {
         - Assign the best-fit existing project by name (or null if none fits). The project implies its initiative.
         - Recommend 0-3 tags — reuse the existing tags above when they fit.
 
-        DEDUP AGAINST EXISTING TASKS
+        DEDUP AND UPDATE AGAINST EXISTING TASKS
         Before proposing a task, check the EXISTING OPEN TASKS list (and/or call find_similar_tasks). Then:
-        - If it's essentially the same work as an existing task → propose_task with relate_to_task_id + relation="merge" (folds your detail into that task; no duplicate).
+        - If the brain dump adds NEW INFORMATION to a task that already exists — a due date, a higher priority, a project, or more detail — but it's the SAME work → propose_task with relate_to_task_id + relation="update". Set ONLY the fields that should change (e.g. due_date and priority); accepting applies them to the existing task. Do NOT create a duplicate. Prefer this over "merge" whenever the change is a real field update (date/priority/project/tags), not just a note.
+        - If it's essentially the same work and you're only adding a note/detail → relation="merge" (folds your detail into that task's notes; no duplicate).
         - If it's a smaller step of an existing task → relation="subtask".
         - If it's distinct but clearly connected → relation="related" (creates the task and links them).
         - Otherwise propose a fresh task (no relate_to_task_id).
-        Always include a one-clause relation_reason when you set a relation.
+        Always include a one-clause relation_reason when you set a relation. Actively look for updates — a brain dump is often the user revisiting work they already logged.
 
         OUTPUT CONTRACT
         Do not write prose to the user during the loop — call tools. When you've proposed every task and block, write one short paragraph explaining the sequencing (why this order, what to do first). That paragraph is the only natural-language output the user sees.

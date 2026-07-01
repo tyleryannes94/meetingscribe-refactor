@@ -68,15 +68,18 @@ struct BrainDumpView: View {
                     .font(NDS.small).foregroundStyle(NDS.textSecondary)
             }
             Spacer()
+            // Starting fresh is the primary action; past sessions stay one click
+            // away in the picker beside it.
             if !store.sessions.isEmpty {
                 sessionPicker
             }
             Button {
                 _ = store.createSession()
             } label: {
-                Label("New session", systemImage: "plus")
+                Label("New brain dump", systemImage: "plus")
             }
-            .buttonStyle(MSSecondaryButtonStyle())
+            .buttonStyle(MSPrimaryButtonStyle())
+            .help("Start a fresh brain dump. Your past sessions stay in the picker.")
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
@@ -85,15 +88,18 @@ struct BrainDumpView: View {
     @ViewBuilder
     private var sessionPicker: some View {
         Menu {
-            ForEach(store.recentSessions()) { s in
-                Button {
-                    store.activeSessionID = s.id
-                } label: {
-                    HStack {
-                        Text(s.displayTitle)
-                        Spacer()
-                        Text(Self.shortDate(s.updatedAt))
-                            .font(NDS.tiny).foregroundStyle(.secondary)
+            Section("Recent brain dumps") {
+                ForEach(store.recentSessions()) { s in
+                    Button {
+                        store.activeSessionID = s.id
+                    } label: {
+                        HStack {
+                            if s.id == store.activeSessionID { Image(systemName: "checkmark") }
+                            Text(s.displayTitle)
+                            Spacer()
+                            Text(Self.shortDate(s.updatedAt))
+                                .font(NDS.tiny).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -109,10 +115,9 @@ struct BrainDumpView: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "list.bullet.rectangle")
-                Text(store.activeSession?.displayTitle ?? "Sessions")
-                    .lineLimit(1)
-                    .frame(maxWidth: 200, alignment: .leading)
+                Image(systemName: "clock.arrow.circlepath")
+                Text("Past sessions")
+                Text("(\(store.sessions.count))").foregroundStyle(.secondary)
                 Image(systemName: "chevron.down").scaledFont(10)
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
@@ -127,6 +132,9 @@ struct BrainDumpView: View {
 
     @ViewBuilder
     private func sessionBody(_ session: BrainDumpSession) -> some View {
+        // Two columns now (composer + review). Sources moved into a modal opened
+        // from the composer toolbar, so the page reads as "write ▸ review" instead
+        // of three competing panels.
         HStack(spacing: 0) {
             VStack(spacing: 0) {
                 BrainDumpComposerView(session: session, planRunner: planRunner, pageContext: pageContext)
@@ -138,11 +146,8 @@ struct BrainDumpView: View {
             }
             .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
             Divider().overlay(NDS.divider)
-            BrainDumpSourcePanel(session: session)
-                .frame(width: 320)
-            Divider().overlay(NDS.divider)
             BrainDumpReviewPanel(session: session)
-                .frame(width: 360)
+                .frame(width: 380)
         }
     }
 

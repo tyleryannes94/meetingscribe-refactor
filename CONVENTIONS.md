@@ -264,7 +264,21 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
 > Append a dated entry whenever you add a convention or act on a recurring user
 > request. Newest at the top. **Add, don't rewrite history.**
 
-- **2026-06-30 — Auto-record polish: wider join window + end-of-meeting silence prompt + manual continue.**
+- **2026-07-01 — Brain Dump: shared rich editor, simpler layout, task-update recs, new-session flow.**
+  (1) **Unified editor:** the composer now uses the SAME `RichMarkdownEditor`
+  (live markdown + "/" block menu + formatting toolbar) as Meeting Notes, Tasks,
+  Projects, and Initiatives — the plain `TextEditor` is gone. **Convention:** any
+  long-form text input in the app uses `RichMarkdownEditor`, not a bare
+  `TextEditor`. (2) **Layout:** dropped the middle "Sources" column — sources are
+  now a `Sources (N)` button opening `BrainDumpSourcesSheet` (add via URL / web
+  search / Linear + review/remove). The page is two columns (compose ▸ review).
+  (3) **Task updates:** new `TaskRelation.Kind.update` — the planner can now
+  recommend UPDATING an existing task (due date / priority-raise / project / tags
+  / notes) instead of only new-task/subtask/merge/related. Wired end-to-end
+  (prompt + `propose_task` schema → decode → review card "Update '<task>'" →
+  `applyUpdate` via ActionItemStore setters; priority only ever *raised*, labels
+  additive). (4) **Sessions:** "＋ New brain dump" is now the primary header
+  action; past sessions live in a "Past sessions (N)" picker beside it.
   (1) `Meeting.isJoinableWindow` lead widened 1min → 10min before start (still +45min
   after end), so "Join & record" is available *before* the call and throughout —
   including late joins. (2) **End-of-meeting silence prompt + auto-stop:** once the

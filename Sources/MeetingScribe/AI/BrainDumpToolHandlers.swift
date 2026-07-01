@@ -85,7 +85,7 @@ final class BrainDumpToolHandlers {
                         "project_name": .object(["type": .string("string"), "description": .string("Must match an existing project name exactly, or null.")]),
                         "tags": .object(["type": .string("array"), "items": .object(["type": .string("string")]), "description": .string("0-3 short tag names. Prefer existing tags listed in the system prompt; you may also coin a new short tag.")]),
                         "relate_to_task_id": .object(["type": .string("string"), "description": .string("Id of an EXISTING task (from find_similar_tasks) this item relates to, or null for a brand-new task.")]),
-                        "relation": .object(["type": .string("string"), "description": .string("subtask | merge | related — required when relate_to_task_id is set. subtask = a step of that task; merge = same work (folds into it, no new task); related = distinct but linked.")]),
+                        "relation": .object(["type": .string("string"), "description": .string("update | subtask | merge | related — required when relate_to_task_id is set. update = same task but change its fields (set only the changed due_date/priority/project/tags/notes; no new task); subtask = a step of that task; merge = same work, fold detail into its notes; related = distinct but linked.")]),
                         "relation_reason": .object(["type": .string("string"), "description": .string("One short clause explaining the link, shown to the user.")]),
                         "source_urls": .object(["type": .string("array"), "items": .object(["type": .string("string")])]),
                         "notes": .object(["type": .string("string")])
