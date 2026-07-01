@@ -62,11 +62,7 @@ struct BrainDumpView: View {
                 }
                 .buttonStyle(.plain).foregroundStyle(NDS.accent)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Brain Dump").scaledFont(22, weight: .heavy, kind: .display)
-                Text("Type, paste, search. The planner turns it into tasks and calendar focus blocks.")
-                    .font(NDS.small).foregroundStyle(NDS.textSecondary)
-            }
+            Text("Brain Dump").scaledFont(22, weight: .heavy, kind: .display)
             Spacer()
             // Starting fresh is the primary action; past sessions stay one click
             // away in the picker beside it.
@@ -146,19 +142,11 @@ struct BrainDumpView: View {
             }
             .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
             Divider().overlay(NDS.divider)
-            // Right column: the "Organize my Tasks" recommendations (persisted,
-            // shared with the modal) sit above this session's brain-dump review,
-            // so all AI recommendations live in one place.
-            VStack(spacing: 0) {
-                ScrollView {
-                    OrganizerRecommendationsPanel(organizer: .shared, store: actionItems)
-                        .padding(10)
-                }
-                .frame(maxHeight: 300)
-                Divider().overlay(NDS.divider)
-                BrainDumpReviewPanel(session: session)
-            }
-            .frame(width: 380)
+            // Right column: ONE unified review scroll (Task tune-ups · New tasks ·
+            // Calendar blocks). Organizer recs are folded in as its first section,
+            // so there's no second stacked panel or nested scroll.
+            BrainDumpReviewPanel(session: session)
+                .frame(width: 400)
         }
     }
 

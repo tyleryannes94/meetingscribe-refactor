@@ -8,10 +8,24 @@ import SwiftUI
 struct OrganizerRecommendationsPanel: View {
     @ObservedObject var organizer: TaskOrganizer
     @ObservedObject var store: ActionItemStore
+    /// When embedded as a section inside the Brain Dump review, render just the
+    /// cards — no header, background, or empty-state chrome (the host provides a
+    /// section title + count, so a second header would just be noise).
+    var embedded: Bool = false
 
     private var pending: [TaskSuggestion] { organizer.suggestions.filter { !$0.applied && !$0.dismissed } }
 
     var body: some View {
+        if embedded {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(pending) { s in card(s) }
+            }
+        } else {
+            fullPanel
+        }
+    }
+
+    private var fullPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
             if organizer.refining {

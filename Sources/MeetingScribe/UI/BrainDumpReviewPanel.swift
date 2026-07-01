@@ -10,15 +10,20 @@ import EventKit
 struct BrainDumpReviewPanel: View {
     @EnvironmentObject var store: BrainDumpStore
     @EnvironmentObject var actionItems: ActionItemStore
+    /// The Organize-my-Tasks recommendations show as the first section here, so
+    /// every AI recommendation lives in one scrollable review — no second panel.
+    @ObservedObject private var organizer = TaskOrganizer.shared
     let session: BrainDumpSession
 
     @State private var calendarError: String?
+
+    private var tuneUpCount: Int { organizer.pendingCount }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().overlay(NDS.divider)
-            if session.drafts.isEmpty {
+            if session.drafts.isEmpty && tuneUpCount == 0 {
                 empty
             } else {
                 body(grouped: session.drafts)
@@ -33,8 +38,8 @@ struct BrainDumpReviewPanel: View {
             Text("Review").scaledFont(13, weight: .semibold).textCase(.uppercase).tracking(0.6)
                 .foregroundStyle(.secondary)
             Spacer()
-            if !session.drafts.isEmpty {
-                let pending = session.pendingDrafts.count
+            let pending = session.pendingDrafts.count + tuneUpCount
+            if pending > 0 {
                 Text("\(pending) pending")
                     .font(NDS.tiny.monospacedDigit()).foregroundStyle(NDS.textTertiary)
             }
@@ -66,7 +71,15 @@ struct BrainDumpReviewPanel: View {
                     if case let .calendarBlock(b) = d { return b } else { return nil }
                 }
 
-                section(title: "Tasks", count: taskDrafts.count) {
+                // Organize-my-Tasks recommendations, folded in as the first
+                // section so all AI review is one list (only when there are any).
+                if tuneUpCount > 0 {
+                    section(title: "Task tune-ups", count: tuneUpCount) {
+                        OrganizerRecommendationsPanel(organizer: organizer, store: actionItems, embedded: true)
+                    }
+                }
+
+                section(title: "New tasks", count: taskDrafts.count) {
                     ForEach(taskDrafts) { draft in
                         TaskDraftCard(
                             draft: draft,
