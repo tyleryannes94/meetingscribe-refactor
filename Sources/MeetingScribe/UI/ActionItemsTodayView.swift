@@ -2,14 +2,14 @@ import SwiftUI
 
 @available(macOS 14.0, *)
 extension ActionItemsView {
-    // MARK: - Today scratchpad (1-3)
+    // MARK: - Today (1-3)
     //
-    // Today is the home view you land on when opening Tasks. It's a daily
-    // scratchpad built for momentum: a left "quick capture" column for ripping
-    // off tasks in rapid succession (anything you add is pinned to today so it
-    // doesn't vanish), and a right "brain dump" column where the local AI turns
-    // free-text into tasks — suggesting a project, priority, and due date — or
-    // sketches a focus plan for the day.
+    // The daily landing page, rebuilt as ONE clean column instead of a greeting +
+    // up-next + two side-by-side columns + a separate cramped board. It's now:
+    // header (greeting + stats + Organize + a list/board toggle) ▸ up-next
+    // meetings ▸ quick-add ▸ one full-height task area (list or board). Brain Dump
+    // and Organize are first-class elsewhere (sidebar tab + background pill), so
+    // they no longer need a competing right column here.
 
     /// Narrows a task list to the active workspace context (1-2). nil context
     /// ("All") passes everything through.
@@ -26,68 +26,50 @@ extension ActionItemsView {
     @ViewBuilder
     var todayPane: some View {
         VStack(spacing: 0) {
-            todayScratchHeader
+            todayHeader
             todayUpNextStrip
             Divider().overlay(NDS.divider)
-            todayColumns
-            Divider().overlay(NDS.divider)
-            todayBoardSection
-        }
-    }
-
-    /// Capture + Brain-Dump columns, responsive to the pane width: side-by-side
-    /// with a clamped (not fixed) right column when there's room, stacked
-    /// vertically when the pane is too narrow to show both — so neither column
-    /// is ever pushed off the right edge.
-    @ViewBuilder
-    private var todayColumns: some View {
-        GeometryReader { geo in
-            let narrow = geo.size.width < 680
-            if narrow {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        todayCaptureColumn
-                            .frame(maxWidth: .infinity)
-                        Divider().overlay(NDS.divider)
-                        todayBrainDumpColumn
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-            } else {
-                HStack(spacing: 0) {
-                    todayCaptureColumn
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Divider().overlay(NDS.divider)
-                    todayBrainDumpColumn
-                        // Clamp, don't fix: prefers ~420 but shrinks with the pane.
-                        .frame(minWidth: 300, idealWidth: 420, maxWidth: 420,
-                               maxHeight: .infinity)
-                }
+            todayQuickAddRow
+            Group {
+                if todayViewIsBoard { todayBoard } else { todayList }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxHeight: .infinity)
     }
 
     // MARK: Header
 
-    private var todayScratchHeader: some View {
+    private var todayHeader: some View {
         let open = todayOpenTasks.count
         let overdue = contextFiltered(store.overdueTasks).count
         let meetingsToday = todayUpcomingMeetings.count
         let dueToday = contextFiltered(store.myDayTasks).count
-        return HStack(alignment: .center) {
+        return HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                // Comp greeting: big Bricolage display title that changes by time
-                // of day, with a meta line summarizing the day.
-                Text(Self.greeting()).scaledFont(31, weight: .heavy, kind: .display)
+                Text(Self.greeting()).scaledFont(28, weight: .heavy, kind: .display)
                 Text(Self.todaySubtitle(meetings: meetingsToday, due: dueToday))
-                    .font(NDS.body).foregroundStyle(NDS.textSecondary)
+                    .font(NDS.body).foregroundStyle(NDS.textSecondary).lineLimit(1)
             }
-            Spacer()
-            HStack(spacing: 6) {
-                if overdue > 0 { stat(label: "Overdue", value: overdue, color: NDS.selectColor("red")) }
-                stat(label: "Open", value: open, color: NDS.brand)
+            Spacer(minLength: 8)
+            if overdue > 0 { stat(label: "Overdue", value: overdue, color: NDS.selectColor("red")) }
+            stat(label: "Open", value: open, color: NDS.brand)
+            // Organize runs in the background (results land in the pill / modal),
+            // so it's a compact action here rather than a whole card.
+            Button {
+                taskOrganizer.run(store: store, presentWhenDone: true)
+            } label: {
+                Label(taskOrganizer.isRunning ? "Organizing…" : "Organize",
+                      systemImage: taskOrganizer.isRunning ? "hourglass" : "wand.and.stars")
             }
+            .buttonStyle(MSSecondaryButtonStyle())
+            .disabled(taskOrganizer.isRunning)
+            .help("Let AI review your tasks and suggest due dates, priorities, and fixes.")
+            Picker("", selection: $todayViewIsBoard) {
+                Image(systemName: "list.bullet").tag(false)
+                Image(systemName: "rectangle.split.3x1").tag(true)
+            }
+            .pickerStyle(.segmented).labelsHidden().frame(width: 88)
+            .help("List or board")
         }
         .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 14)
     }
@@ -176,35 +158,25 @@ extension ActionItemsView {
             .sorted { sort($0, $1) }
     }
 
-    // MARK: Left — quick capture
+    // MARK: Quick add + task list
 
-    private var todayCaptureColumn: some View {
+    /// The one main task area (list mode). Full width; right-click a row for
+    /// quick edits, single click opens the inspector.
+    @ViewBuilder
+    private var todayList: some View {
         let items = todayOpenTasks
-        return VStack(spacing: 0) {
-            todayQuickAddRow
-            if items.isEmpty {
-                todayCaptureEmpty
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            Text("All tasks")
-                                .scaledFont(13, weight: .semibold).foregroundStyle(.secondary)
-                                .textCase(.uppercase).tracking(0.6)
-                            Text("\(items.count)").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
-                            Spacer()
-                        }
-                        .padding(.bottom, 2)
-                        // Right-click any row to set priority / due / labels / project
-                        // without opening it; a single click opens the editor drawer.
-                        ForEach(items) { item in
-                            row(for: item)
-                                .draggable(item.id)
-                                .taskQuickActions(item: item, store: store) { env.selectedTaskID = item.id }
-                        }
+        if items.isEmpty {
+            todayCaptureEmpty
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach(items) { item in
+                        row(for: item)
+                            .draggable(item.id)
+                            .taskQuickActions(item: item, store: store) { env.selectedTaskID = item.id }
                     }
-                    .padding(16)
                 }
+                .padding(.horizontal, 16).padding(.vertical, 12)
             }
         }
     }
@@ -221,14 +193,14 @@ extension ActionItemsView {
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(NDS.fieldBg, in: RoundedRectangle(cornerRadius: NDS.radius))
         .overlay(RoundedRectangle(cornerRadius: NDS.radius).strokeBorder(NDS.hairline, lineWidth: 1))
-        .padding(.horizontal, 16).padding(.top, 12)
+        .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     private var todayCaptureEmpty: some View {
         VStack(spacing: 10) {
             Image(systemName: "checkmark.circle").scaledFont(34).foregroundStyle(NDS.selectColor("green"))
             Text("Nothing on deck yet").scaledFont(15, weight: .semibold)
-            Text("Jot tasks above as they come to mind, or brain-dump on the right and let AI sort them.")
+            Text("Jot tasks above as they come to mind, or open Brain Dump and let AI sort them.")
                 .font(NDS.small).foregroundStyle(NDS.textSecondary).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -281,91 +253,26 @@ extension ActionItemsView {
         store.setSortIndex(id, sortIndex: newIndex)
     }
 
-    private var todayBoardSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 7) {
-                Image(systemName: "rectangle.split.3x1").scaledFont(13).foregroundStyle(NDS.brand)
-                Text("Board").scaledFont(14, weight: .bold)
-                Text("Drag to organize").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                Spacer()
-            }
-            .padding(.horizontal, 16).padding(.vertical, 8)
-            ScrollView([.horizontal, .vertical]) {
-                HStack(alignment: .top, spacing: 14) {
-                    ForEach(ActionItem.Status.allCases) { status in
-                        StatusBoardColumn(parent: self, store: store, status: status,
-                                          items: todayBoardColumnItems(status),
-                                          onDrop: { id, beforeID in
-                                              dropTodayCard(id, toStatus: status, beforeID: beforeID)
-                                          },
-                                          onAdd: {
-                                              let t = store.createTask(title: "New task", projectID: nil, status: status)
-                                              PinnedToday.toggle(t.id, in: &pinnedTodayCSV)
-                                              env.selectedTaskID = t.id
-                                          })
-                    }
+    /// The one main task area (board mode). Fills the pane — no cramped fixed
+    /// height, no competing side column.
+    private var todayBoard: some View {
+        ScrollView([.horizontal, .vertical]) {
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(ActionItem.Status.allCases) { status in
+                    StatusBoardColumn(parent: self, store: store, status: status,
+                                      items: todayBoardColumnItems(status),
+                                      onDrop: { id, beforeID in
+                                          dropTodayCard(id, toStatus: status, beforeID: beforeID)
+                                      },
+                                      onAdd: {
+                                          let t = store.createTask(title: "New task", projectID: nil, status: status)
+                                          PinnedToday.toggle(t.id, in: &pinnedTodayCSV)
+                                          env.selectedTaskID = t.id
+                                      })
                 }
-                .padding(.horizontal, 16).padding(.bottom, 16)
             }
+            .padding(16)
         }
-        .frame(height: 320)
-    }
-
-    // MARK: Right — Brain Dump callout
-    //
-    // The free-text brain-dump that used to live here has been promoted to a
-    // first-class page (TopLevelSection.brainDump, ⌘6) with URL ingestion, web
-    // search, calendar suggestions, and session persistence. This narrow
-    // column is now a CTA that opens the page; the rest of the AI surface
-    // lives on the BrainDumpView.
-
-    private var todayBrainDumpColumn: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 7) {
-                Image(systemName: "brain.head.profile.fill")
-                    .scaledFont(14).foregroundStyle(NDS.brand)
-                Text("Brain Dump").scaledFont(15, weight: .bold)
-            }
-            Text("Dump everything on your mind — thoughts, links, daily briefs — and the planner turns it into tasks and calendar focus blocks.")
-                .font(NDS.small).foregroundStyle(NDS.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                NotificationCenter.default.post(name: .meetingScribeOpenBrainDump, object: nil)
-            } label: {
-                Label("Open Brain Dump", systemImage: "arrow.up.forward.square")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(MSPrimaryButtonStyle())
-
-            Text("Tip: Press ⌘6 anywhere to jump there.")
-                .font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-
-            Divider().overlay(NDS.divider).padding(.vertical, 4)
-
-            HStack(spacing: 7) {
-                Image(systemName: "wand.and.stars").scaledFont(14).foregroundStyle(NDS.brand)
-                Text("Organize my Tasks").scaledFont(15, weight: .bold)
-            }
-            Text("Let AI review your current tasks and suggest fixes — reschedule overdue, fix priorities, group loose tasks into projects — applied only on your sign-off.")
-                .font(NDS.small).foregroundStyle(NDS.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button {
-                // Runs in the BACKGROUND — the review modal opens only when the
-                // job finishes (or when the user taps the progress pill). No
-                // blocking wait; the user can keep working.
-                taskOrganizer.run(store: store, presentWhenDone: true)
-            } label: {
-                Label(taskOrganizer.isRunning ? "Organizing…" : "Organize my Tasks",
-                      systemImage: taskOrganizer.isRunning ? "hourglass" : "wand.and.stars")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(MSSecondaryButtonStyle())
-            .disabled(taskOrganizer.isRunning)
-
-            Spacer()
-        }
-        .padding(16)
     }
 
     // MARK: Actions
