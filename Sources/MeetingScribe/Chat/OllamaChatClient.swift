@@ -91,7 +91,8 @@ final class OllamaChatClient {
                      user: String,
                      timeoutSeconds: TimeInterval = 60,
                      numCtx: Int = 4_096,
-                     maxTokens: Int? = nil) async throws -> String {
+                     maxTokens: Int? = nil,
+                     temperature: Double = 0.2) async throws -> String {
         _ = await service.ensureRunning()
         guard await service.isReachable() else { throw ClientError.notReachable }
         let body = ChatRequest(
@@ -102,7 +103,7 @@ final class OllamaChatClient {
             ],
             tools: nil,
             stream: false,
-            options: .init(temperature: 0.2, num_ctx: numCtx, num_predict: maxTokens),
+            options: .init(temperature: temperature, num_ctx: numCtx, num_predict: maxTokens),
             format: "json"
         )
         let url = AppSettings.shared.ollamaURL.appendingPathComponent("api/chat")

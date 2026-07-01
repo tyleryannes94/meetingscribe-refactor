@@ -20,6 +20,8 @@ struct TaskSuggestion: Identifiable, Hashable {
         /// Break one compound task into subtasks (the parent keeps its title;
         /// each part becomes a checklist subtask).
         case split(taskID: String, taskTitle: String, parts: [String])
+        /// Give a project a target/deadline date (it has open work but no date).
+        case setProjectDeadline(projectID: String, projectName: String, date: Date)
     }
     var kind: Kind
     var reason: String
@@ -53,6 +55,20 @@ struct TaskSuggestion: Identifiable, Hashable {
         case let .reschedule(id, _, _):        return [id]
         case let .reprioritize(id, _, _):      return [id]
         case let .split(id, _, _):             return [id]
+        case let .setProjectDeadline(pid, _, _): return [pid]
+        }
+    }
+
+    /// A stable identity for this proposal (kind + target), used to remember what
+    /// the user has already dismissed so re-runs don't re-suggest the same thing.
+    var rejectionSignature: String {
+        switch kind {
+        case let .reschedule(id, _, _):        return "reschedule:\(id)"
+        case let .reprioritize(id, _, p):      return "reprioritize:\(id):\(p.rawValue)"
+        case let .assignProject(ids, _, _, _): return "project:\(ids.sorted().joined(separator: ","))"
+        case let .addTag(ids, _, tag):         return "tag:\(tag):\(ids.sorted().joined(separator: ","))"
+        case let .split(id, _, _):             return "split:\(id)"
+        case let .setProjectDeadline(pid, _, _): return "projdeadline:\(pid)"
         }
     }
 }

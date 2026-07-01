@@ -41,25 +41,38 @@ final class TaskOrganizer: ObservableObject {
         reset()
         Task { @MainActor [weak self] in
             guard let self else { return }
-            // PHASE 1 — instant, deterministic, no model. Reschedule, priority,
-            // split, due-dates, and theme tag/grouping are all computed in pure
-            // Swift, so the full set of suggestions is on screen in well under a
-            // second — even if the local model is slow or offline.
-            self.suggestions = Self.deterministicSuggestions(store: store)
+            // The store loads its items asynchronously at launch. If the organizer
+            // is opened in that window it would analyze an empty set and report
+            // "nothing to fix". Give the load up to ~3s to land first.
+            var waited = 0
+            while store.items.isEmpty && waited < 20 {
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                waited += 1
+            }
 
-            // PHASE 2 — only when several loose tasks remain that the
-            // deterministic themer COULDN'T cluster is the model worth running.
-            // It's a single structured call, hard-capped at 12s, in the
-            // background. A failure/timeout NEVER erases the instant results.
-            let leftover = Self.unclusteredLooseTasks(store: store, given: self.suggestions)
-            if leftover.count >= 4 {
+            // PHASE 1 — instant, deterministic, no model. High-confidence fixes
+            // (reschedule overdue, priority from cues, split, due-from-title,
+            // theme grouping) render in under a second, model or no model.
+            var all = Self.deterministicSuggestions(store: store)
+            all = self.dropRejected(all)
+            self.suggestions = Self.balanceWorkload(all, store: store)
+
+            // PHASE 2 — the SMART pass. Reasons over the tasks that would benefit
+            // most from a change (no due date, mis-prioritized, loose) with full
+            // context — current priority/due/project/age and project deadlines —
+            // and proposes concrete due dates, priorities, project assignments,
+            // splits, and project deadlines. Single structured call, background,
+            // bounded; a failure never erases the instant results.
+            let candidates = Self.candidateTasks(store: store, given: self.suggestions)
+            if candidates.count >= 2 {
                 self.refining = true
                 do {
-                    let extra = try await self.refineWithModel(tasks: leftover, store: store)
-                    self.suggestions.append(contentsOf: extra)
+                    let extra = try await self.smartPass(candidates: candidates, store: store)
+                    let merged = self.mergeDeduped(self.suggestions, adding: self.dropRejected(extra))
+                    self.suggestions = Self.balanceWorkload(merged, store: store)
                 } catch {
                     if self.suggestions.isEmpty { self.error = Self.friendlyError(error) }
-                    self.log.info("organizer LLM phase skipped: \(error.localizedDescription, privacy: .public)")
+                    self.log.info("organizer smart pass skipped: \(error.localizedDescription, privacy: .public)")
                 }
                 self.refining = false
             }
@@ -68,38 +81,70 @@ final class TaskOrganizer: ObservableObject {
         }
     }
 
-    /// Loose (project-less) tasks the deterministic pass did NOT already fold
-    /// into a group or tag — the only ones worth spending a model call on.
-    private static func unclusteredLooseTasks(store: ActionItemStore,
-                                              given suggestions: [TaskSuggestion]) -> [ActionItem] {
+    /// Tasks worth spending a model call on: anything the deterministic pass
+    /// didn't already fully handle that would benefit from a due date, a priority
+    /// fix, or a project. Prioritized so the (capped) list leads with the tasks
+    /// where a change matters most: no due date, then loose, then the rest.
+    private static func candidateTasks(store: ActionItemStore,
+                                       given suggestions: [TaskSuggestion]) -> [ActionItem] {
+        // Tasks already given a concrete single-task fix this run — don't ask the
+        // model to re-decide them (avoids churn + duplicate proposals).
         var handled = Set<String>()
         for s in suggestions {
             switch s.kind {
             case let .assignProject(ids, _, _, _): handled.formUnion(ids)
             case let .addTag(ids, _, _):           handled.formUnion(ids)
+            case let .reschedule(id, _, _):        handled.insert(id)
+            case let .split(id, _, _):             handled.insert(id)
             default: break
             }
         }
-        return store.items
-            .filter { $0.deletedAt == nil && $0.status != .completed
-                && $0.projectID == nil && !handled.contains($0.id) }
-            .prefix(18).map { $0 }
+        let open = store.items.filter {
+            $0.deletedAt == nil && $0.status != .completed && !handled.contains($0.id)
+        }
+        // Rank: no due date first (highest value), then loose, then the rest.
+        func score(_ t: ActionItem) -> Int {
+            var s = 0
+            if t.dueDate == nil { s += 4 }
+            if t.projectID == nil { s += 2 }
+            if t.priority == .high || t.priority == .urgent { s += 1 }
+            return s
+        }
+        return open.filter { score($0) > 0 }
+            .sorted { score($0) > score($1) }
+            .prefix(20).map { $0 }
     }
 
-    /// PHASE 2: one structured-JSON call to group whatever the deterministic
-    /// themer couldn't. Hard 12s ceiling + output-token cap so it can never be
-    /// the multi-minute bottleneck it used to be.
-    private func refineWithModel(tasks: [ActionItem], store: ActionItemStore) async throws -> [TaskSuggestion] {
-        guard tasks.count >= 2 else { return [] }
+    /// PHASE 2: one structured-JSON call proposing due dates / priorities /
+    /// projects / splits / project deadlines.
+    private func smartPass(candidates: [ActionItem], store: ActionItemStore) async throws -> [TaskSuggestion] {
+        // Generous ceiling: a local 7B model generating dates + reasons for ~15
+        // tasks legitimately takes 20–40s. This runs in the background behind the
+        // instant deterministic results, so a longer wait is fine — and a too-tight
+        // 25s cap was silently timing the whole smart pass out (surfaced as a
+        // bogus "Ollama isn't running").
         let raw = try await chatClient.oneShotJSON(
-            system: Self.groupingSystemPrompt(store: store),
-            user: Self.groupingInventory(tasks, store: store),
-            timeoutSeconds: 12,
-            maxTokens: 500
+            system: Self.smartSystemPrompt(store: store),
+            user: Self.smartInventory(candidates, store: store),
+            timeoutSeconds: 90,
+            maxTokens: 1600,
+            temperature: 0.35
         )
-        let parsed = Self.parseGrouping(raw, store: store)
+        let parsed = Self.parseSmart(raw, candidates: candidates, store: store)
         reasoning = parsed.summary
         return parsed.suggestions
+    }
+
+    /// Merge model suggestions into the existing set, skipping any that duplicate
+    /// a task+kind already proposed (deterministic wins).
+    private func mergeDeduped(_ base: [TaskSuggestion], adding extra: [TaskSuggestion]) -> [TaskSuggestion] {
+        var seen = Set(base.map { $0.rejectionSignature })
+        var out = base
+        for s in extra where !seen.contains(s.rejectionSignature) {
+            seen.insert(s.rejectionSignature)
+            out.append(s)
+        }
+        return out
     }
 
     // MARK: - Apply / dismiss (user signoff)
@@ -122,16 +167,19 @@ final class TaskOrganizer: ObservableObject {
         guard let idx = suggestions.firstIndex(where: { $0.id == suggestion.id }),
               !suggestions[idx].applied else { return }
         let active = suggestions[idx].activeTaskIDs
-        guard !active.isEmpty else { return }
         switch suggestion.kind {
         case let .reschedule(taskID, _, newDate):
             store.setDueDate(taskID, dueDate: newDate)
         case let .reprioritize(taskID, _, priority):
             store.setPriority(taskID, priority: priority)
+        case let .setProjectDeadline(projectID, _, date):
+            store.setProjectTargetDate(projectID, date)
         case let .assignProject(_, _, projectName, existingID):
+            guard !active.isEmpty else { return }
             let pid = existingID ?? store.createProject(name: projectName).id
             for tid in active { store.setProject(tid, projectID: pid) }
         case let .addTag(_, _, tag):
+            guard !active.isEmpty else { return }
             let label = store.labels.first { $0.name.caseInsensitiveCompare(tag) == .orderedSame }
                 ?? store.createLabel(name: tag)
             for tid in active where !(store.items.first { $0.id == tid }?.labelIDs?.contains(label.id) ?? false) {
@@ -150,6 +198,29 @@ final class TaskOrganizer: ObservableObject {
     func dismiss(_ suggestion: TaskSuggestion) {
         guard let idx = suggestions.firstIndex(where: { $0.id == suggestion.id }) else { return }
         suggestions[idx].dismissed = true
+        // Remember it so a future run doesn't re-propose the exact same change —
+        // a top annoyance of these features is re-suggesting what you rejected.
+        Self.rememberRejection(suggestion.rejectionSignature)
+    }
+
+    // MARK: - Rejection memory (don't re-suggest what the user dismissed)
+
+    private static let rejectionsKey = "taskOrganizer.rejectedSignatures"
+
+    private static func rejectedSignatures() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: rejectionsKey) ?? [])
+    }
+
+    private static func rememberRejection(_ sig: String) {
+        var set = rejectedSignatures()
+        set.insert(sig)
+        // Cap so it can't grow unbounded across months of use.
+        UserDefaults.standard.set(Array(set.suffix(400)), forKey: rejectionsKey)
+    }
+
+    private func dropRejected(_ suggestions: [TaskSuggestion]) -> [TaskSuggestion] {
+        let rejected = Self.rejectedSignatures()
+        return suggestions.filter { !rejected.contains($0.rejectionSignature) }
     }
 
     // MARK: - Phase 1: instant deterministic suggestions (no model)
@@ -345,72 +416,190 @@ final class TaskOrganizer: ObservableObject {
         return nil
     }
 
-    // MARK: - Phase 2: grouping/tagging prompt + JSON parse
+    // MARK: - Phase 2: smart prompt + JSON parse
 
-    private static func groupingSystemPrompt(store: ActionItemStore) -> String {
-        let projects = store.projects.filter { $0.status != .archived }.map { $0.name }
-        let projectList = projects.isEmpty ? "(none yet)" : projects.joined(separator: ", ")
+    private static func smartSystemPrompt(store: ActionItemStore) -> String {
+        // Kept deliberately COMPACT and numbered. A verbose, multi-section prompt
+        // makes the local 7B model emit malformed / looping JSON and skip tasks;
+        // this tight shape reliably dates every task with valid JSON.
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today) ?? today
+        let dfFull = DateFormatter(); dfFull.dateFormat = "yyyy-MM-dd (EEEE)"
+        let dfISO = DateFormatter(); dfISO.dateFormat = "yyyy-MM-dd"
+
+        let projNames = store.projects.filter { $0.status != .archived }.map { $0.name }
+        let projList = projNames.isEmpty ? "(none)" : projNames.joined(separator: ", ")
+        let dateless = store.projects
+            .filter { $0.status != .archived && $0.targetDate == nil && store.openCount(forProject: $0.id) > 0 }
+            .map { $0.name }
         let tags = store.labels.map { $0.name }
-        let tagList = tags.isEmpty ? "(none yet)" : tags.joined(separator: ", ")
+        let tagList = tags.isEmpty ? "(none)" : tags.joined(separator: ", ")
         return """
-        You organize \(AppSettings.shared.userName)'s loose tasks. You are given tasks that have NO project. Group ones that clearly belong together and suggest a shared tag for obvious themes. Prefer existing names.
-
-        Existing projects: \(projectList)
-        Existing tags: \(tagList)
-
-        Reply with ONLY this JSON (no prose):
-        {
-          "groups": [{ "task_ids": ["id1","id2"], "project": "Short Name", "reason": "one clause" }],
-          "tags":   [{ "task_ids": ["id1","id2"], "tag": "shorttag", "reason": "one clause" }],
-          "summary": "one short sentence"
-        }
-        Rules: only group 2+ tasks that genuinely belong together; skip tasks that don't fit anywhere; at most 5 groups and 5 tags; use exact ids from the list; "project"/"tag" reuse an existing name when one fits.
+        You are a task planner. Today is \(dfFull.string(from: today)). Do all of the below and reply with ONE JSON object only, no prose.
+        1) For EVERY task, set "due" as YYYY-MM-DD — a weekday, not before \(dfISO.string(from: tomorrow)). Do not skip any task. urgent/high → next 1–3 days; medium → this week or next; low → 1–2 weeks. Vary the days; don't put them all on one date.
+        2) Set "priority" (low/medium/high/urgent) only when the current one is clearly wrong — differentiate, don't make everything high.
+        3) Set "project" to an EXISTING project name only if the task clearly fits. Projects: \(projList).
+        4) In "splits", give a task id + 2–5 subtask titles only if it's really several steps.
+        5) In "projects", set a "target_date" for a project that has open work but no deadline\(dateless.isEmpty ? "" : " (e.g. \(dateless.joined(separator: ", ")))").
+        Existing tags: \(tagList). Refer to each task by its handle (t1, t2, …). Shape:
+        {"tasks":[{"id":"t1","due":"YYYY-MM-DD","priority":"high","project":"Name","reason":"why"}],"splits":[{"id":"t2","parts":["Step a","Step b"],"reason":"why"}],"projects":[{"name":"Name","target_date":"YYYY-MM-DD","reason":"why"}],"summary":"one sentence"}
         """
     }
 
-    private static func groupingInventory(_ tasks: [ActionItem], store: ActionItemStore) -> String {
-        var lines = ["LOOSE TASKS (id · title):"]
-        for t in tasks { lines.append("- (\(t.id)) \(t.title)") }
+    private static func smartInventory(_ tasks: [ActionItem], store: ActionItemStore) -> String {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        // Short positional handles (t1, t2, …) instead of 36-char UUIDs: small
+        // models copy those reliably, and it keeps the prompt short.
+        var lines = ["TASKS (handle · title [priority, due, project, age]):"]
+        for (i, t) in tasks.enumerated() {
+            let due = t.dueDate.map { df.string(from: $0) } ?? "none"
+            let proj = t.projectID.flatMap { store.project(id: $0)?.name } ?? "none"
+            let age = cal.dateComponents([.day], from: cal.startOfDay(for: t.createdAt), to: today).day ?? 0
+            lines.append("- t\(i + 1) · \(t.title) [pri=\(t.priority.rawValue), due=\(due), project=\(proj), age=\(age)d]")
+        }
         return lines.joined(separator: "\n")
     }
 
-    /// Parse the structured grouping reply into suggestions. Tolerant: ignores
-    /// malformed entries, validates every id against the store, and drops groups
-    /// of fewer than two real tasks.
-    private static func parseGrouping(_ raw: String, store: ActionItemStore)
+    /// Parse the smart reply into suggestions. Tolerant: validates ids/dates,
+    /// only emits a change when it actually differs from the task's current
+    /// value, and never overrides a good future due date the user already set
+    /// (only fills empty or fixes overdue dates).
+    private static func parseSmart(_ raw: String, candidates: [ActionItem], store: ActionItemStore)
         -> (suggestions: [TaskSuggestion], summary: String?) {
         guard let data = raw.data(using: .utf8),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else { return ([], nil) }
-        func realIDs(_ any: Any?) -> ([String], [String]) {
-            guard let arr = any as? [Any] else { return ([], []) }
-            let ids = arr.compactMap { $0 as? String }
-                .filter { id in store.items.contains { $0.id == id && $0.deletedAt == nil } }
-            let titles = ids.compactMap { id in store.items.first { $0.id == id }?.title }
-            return (ids, titles)
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        // Resolve a model reference back to a real task: a positional handle
+        // (t1, t2, …) or, defensively, a full task id.
+        let byHandle = Dictionary(uniqueKeysWithValues:
+            candidates.enumerated().map { ("t\($0.offset + 1)", $0.element) })
+        func resolve(_ any: Any?) -> ActionItem? {
+            guard let ref = (any as? String)?.trimmingCharacters(in: .whitespaces) else { return nil }
+            if let t = byHandle[ref.lowercased()] { return t }
+            return store.items.first { $0.id == ref && $0.deletedAt == nil }
         }
         var out: [TaskSuggestion] = []
-        for g in (root["groups"] as? [[String: Any]] ?? []).prefix(5) {
-            let (ids, titles) = realIDs(g["task_ids"])
-            guard ids.count >= 2,
-                  let name = (g["project"] as? String)?.trimmingCharacters(in: .whitespaces),
-                  !name.isEmpty else { continue }
-            let existing = store.projects.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
-            out.append(.init(kind: .assignProject(taskIDs: ids, taskTitles: titles,
-                                                  projectName: existing?.name ?? name,
-                                                  existingProjectID: existing?.id),
-                             reason: (g["reason"] as? String) ?? ""))
+
+        for entry in (root["tasks"] as? [[String: Any]] ?? []).prefix(24) {
+            guard let task = resolve(entry["id"]) else { continue }
+            let id = task.id
+            let reason = (entry["reason"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+
+            // Due date — only fill an empty date or fix an overdue one.
+            if let raw = entry["due"] as? String, let date = sanitizeDueDate(parseDate(raw), cal: cal) {
+                let isOverdue = task.dueDate.map { cal.startOfDay(for: $0) < today } ?? false
+                if task.dueDate == nil || isOverdue,
+                   task.dueDate.map({ cal.startOfDay(for: $0) }) != date {
+                    out.append(.init(kind: .reschedule(taskID: id, taskTitle: task.title, newDate: date),
+                                     reason: reason.isEmpty ? "Give it a due date" : reason))
+                }
+            }
+            // Priority — only when it changes.
+            if let pRaw = (entry["priority"] as? String)?.lowercased(),
+               let p = ActionItem.Priority(rawValue: pRaw), p != task.priority {
+                out.append(.init(kind: .reprioritize(taskID: id, taskTitle: task.title, priority: p),
+                                 reason: reason.isEmpty ? "\(p.label) priority fits better" : reason))
+            }
+            // Project — only for loose tasks, into an existing project.
+            if task.projectID == nil,
+               let pn = (entry["project"] as? String)?.trimmingCharacters(in: .whitespaces), !pn.isEmpty,
+               let proj = store.projects.first(where: { $0.name.caseInsensitiveCompare(pn) == .orderedSame }) {
+                out.append(.init(kind: .assignProject(taskIDs: [id], taskTitles: [task.title],
+                                                      projectName: proj.name, existingProjectID: proj.id),
+                                 reason: reason.isEmpty ? "Fits “\(proj.name)”" : reason))
+            }
         }
-        for tg in (root["tags"] as? [[String: Any]] ?? []).prefix(5) {
-            let (ids, titles) = realIDs(tg["task_ids"])
-            guard ids.count >= 2,
-                  let tag = (tg["tag"] as? String)?.trimmingCharacters(in: .whitespaces),
-                  !tag.isEmpty else { continue }
-            out.append(.init(kind: .addTag(taskIDs: ids, taskTitles: titles, tag: tag),
-                             reason: (tg["reason"] as? String) ?? ""))
+
+        for s in (root["splits"] as? [[String: Any]] ?? []).prefix(6) {
+            guard let task = resolve(s["id"]),
+                  (task.subtasks ?? []).isEmpty,
+                  let partsAny = s["parts"] as? [Any] else { continue }
+            let parts = partsAny.compactMap { ($0 as? String)?.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            guard (2...5).contains(parts.count) else { continue }
+            out.append(.init(kind: .split(taskID: task.id, taskTitle: task.title, parts: parts),
+                             reason: (s["reason"] as? String) ?? "Break into steps"))
         }
+
+        for p in (root["projects"] as? [[String: Any]] ?? []).prefix(5) {
+            guard let name = (p["name"] as? String)?.trimmingCharacters(in: .whitespaces),
+                  let proj = store.projects.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }),
+                  proj.targetDate == nil,
+                  let date = sanitizeDueDate(parseDate((p["target_date"] as? String) ?? ""), cal: cal) else { continue }
+            out.append(.init(kind: .setProjectDeadline(projectID: proj.id, projectName: proj.name, date: date),
+                             reason: (p["reason"] as? String) ?? "Give the project a deadline"))
+        }
+
         let summary = (root["summary"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (out, (summary?.isEmpty == false) ? summary : nil)
+    }
+
+    // MARK: - Workload balancing + date helpers
+
+    /// Spread reschedule suggestions so no single day gets overloaded. Seeds the
+    /// per-day tally with existing due tasks (minus the ones being rescheduled),
+    /// then bumps any proposed date whose day is already full to the next weekday
+    /// with room. This is the deterministic guarantee that the plan is realistic,
+    /// independent of what the model proposed.
+    private static func balanceWorkload(_ suggestions: [TaskSuggestion], store: ActionItemStore) -> [TaskSuggestion] {
+        let cal = Calendar.current
+        let cap = 4  // max tasks landing on any one day
+        // Seed with existing due dates, excluding tasks we're about to move.
+        let moving = Set(suggestions.compactMap { s -> String? in
+            if case let .reschedule(id, _, _) = s.kind { return id } else { return nil }
+        })
+        var perDay: [Date: Int] = [:]
+        for t in store.items where t.deletedAt == nil && t.status != .completed && !moving.contains(t.id) {
+            if let d = t.dueDate { perDay[cal.startOfDay(for: d), default: 0] += 1 }
+        }
+        // Apply in date order so earlier dates fill first (keeps urgency).
+        let order = suggestions.enumerated().sorted { a, b in
+            let da = rescheduleDate(a.element) ?? .distantFuture
+            let db = rescheduleDate(b.element) ?? .distantFuture
+            return da < db
+        }
+        var result = suggestions
+        for (idx, s) in order {
+            guard case let .reschedule(id, title, date) = s.kind else { continue }
+            var day = cal.startOfDay(for: date)
+            var guardN = 0
+            while (perDay[day] ?? 0) >= cap && guardN < 30 {
+                day = nextWeekday(onOrAfter: cal.date(byAdding: .day, value: 1, to: day) ?? day)
+                guardN += 1
+            }
+            perDay[day, default: 0] += 1
+            if day != cal.startOfDay(for: date) {
+                result[idx].kind = .reschedule(taskID: id, taskTitle: title, newDate: day)
+            }
+        }
+        return result
+    }
+
+    private static func rescheduleDate(_ s: TaskSuggestion) -> Date? {
+        if case let .reschedule(_, _, d) = s.kind { return d }
+        return nil
+    }
+
+    /// Parse a "YYYY-MM-DD" model date into a local start-of-day Date.
+    private static func parseDate(_ s: String) -> Date? {
+        let f = DateFormatter()
+        f.calendar = Calendar.current
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: s.trimmingCharacters(in: .whitespaces)).map { Calendar.current.startOfDay(for: $0) }
+    }
+
+    /// Clamp a proposed date to a sane weekday no earlier than tomorrow.
+    private static func sanitizeDueDate(_ date: Date?, cal: Calendar) -> Date? {
+        guard let date else { return nil }
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: Date())) ?? date
+        let floored = max(cal.startOfDay(for: date), tomorrow)
+        return nextWeekday(onOrAfter: floored)
     }
 
     private static func friendlyError(_ error: Error) -> String {

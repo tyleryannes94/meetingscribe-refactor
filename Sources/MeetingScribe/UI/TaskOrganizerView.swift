@@ -11,6 +11,47 @@ struct TaskOrganizerView: View {
 
     private var pending: [TaskSuggestion] { organizer.suggestions.filter { !$0.applied && !$0.dismissed } }
 
+    /// "8 suggestions: 3 dates · 2 priorities · 2 projects · 1 split" — a
+    /// scannable summary header (research: users trust a typed breakdown far more
+    /// than "we changed 8 things").
+    private var summaryLine: String {
+        let p = pending
+        guard !p.isEmpty else { return "" }
+        func count(_ pred: (TaskSuggestion.Kind) -> Bool) -> Int { p.filter { pred($0.kind) }.count }
+        let dates = count { if case .reschedule = $0 { return true }; return false }
+        let pris  = count { if case .reprioritize = $0 { return true }; return false }
+        let projs = count { if case .assignProject = $0 { return true }; if case .setProjectDeadline = $0 { return true }; return false }
+        let tags  = count { if case .addTag = $0 { return true }; return false }
+        let splits = count { if case .split = $0 { return true }; return false }
+        var parts: [String] = []
+        if dates > 0 { parts.append("\(dates) date\(dates == 1 ? "" : "s")") }
+        if pris > 0 { parts.append("\(pris) priorit\(pris == 1 ? "y" : "ies")") }
+        if projs > 0 { parts.append("\(projs) project\(projs == 1 ? "" : "s")") }
+        if tags > 0 { parts.append("\(tags) tag\(tags == 1 ? "" : "s")") }
+        if splits > 0 { parts.append("\(splits) split\(splits == 1 ? "" : "s")") }
+        return "\(p.count) suggestion\(p.count == 1 ? "" : "s"): " + parts.joined(separator: " · ")
+    }
+
+    /// Suggestions grouped into ordered, titled categories for the review list.
+    private var groupedSuggestions: [(String, [TaskSuggestion])] {
+        func cat(_ k: TaskSuggestion.Kind) -> String {
+            switch k {
+            case .reschedule:         return "Due dates"
+            case .reprioritize:       return "Priorities"
+            case .assignProject, .setProjectDeadline: return "Projects"
+            case .addTag:             return "Tags"
+            case .split:              return "Split up"
+            }
+        }
+        let order = ["Due dates", "Priorities", "Projects", "Tags", "Split up"]
+        var buckets: [String: [TaskSuggestion]] = [:]
+        for s in organizer.suggestions { buckets[cat(s.kind), default: []].append(s) }
+        return order.compactMap { key in
+            guard let items = buckets[key], !items.isEmpty else { return nil }
+            return (key, items)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -46,11 +87,21 @@ struct TaskOrganizerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if organizer.refining { refiningBanner }
+                    if !summaryLine.isEmpty {
+                        Text(summaryLine).font(NDS.small.weight(.semibold)).foregroundStyle(NDS.textSecondary)
+                    }
                     if let reasoning = organizer.reasoning, !reasoning.isEmpty {
-                        Text(reasoning).font(NDS.small).foregroundStyle(NDS.textSecondary)
+                        Text(reasoning).font(NDS.tiny).foregroundStyle(NDS.textTertiary)
                             .padding(.bottom, 2)
                     }
-                    ForEach(organizer.suggestions) { s in suggestionCard(s) }
+                    // Grouped by category so the review reads as "3 dates, 2
+                    // priorities, …" rather than one undifferentiated blob.
+                    ForEach(groupedSuggestions, id: \.0) { group in
+                        Text(group.0.uppercased())
+                            .font(NDS.tiny.weight(.bold)).foregroundStyle(NDS.textTertiary)
+                            .padding(.top, 4)
+                        ForEach(group.1) { s in suggestionCard(s) }
+                    }
                 }
                 .padding(14)
             }
@@ -197,6 +248,7 @@ struct TaskOrganizerView: View {
         case .assignProject: return "folder.fill"
         case .addTag:        return "tag.fill"
         case .split:         return "scissors"
+        case .setProjectDeadline: return "flag.checkered"
         }
     }
 
@@ -206,13 +258,21 @@ struct TaskOrganizerView: View {
         let n = s.activeTaskIDs.count
         switch s.kind {
         case let .reschedule(id, t, d):
-            // A task that has no due date yet gets "Set due"; one that already
-            // has a (likely overdue) date gets "Reschedule".
-            let hadDue = store.items.first { $0.id == id }?.dueDate != nil
-            let verb = hadDue ? "Reschedule" : "Set due date for"
-            return "\(verb) “\(t)” → \(Self.dateLabel(d))"
-        case let .reprioritize(_, t, p):
-            return "Set “\(t)” to \(p.label) priority"
+            // Show a before→after diff so the change is scannable: a dateless
+            // task reads "no date → Fri", an overdue one "overdue Mon → Fri".
+            let cur = store.items.first { $0.id == id }?.dueDate
+            let from: String = {
+                guard let cur else { return "no date" }
+                let overdue = Calendar.current.startOfDay(for: cur) < Calendar.current.startOfDay(for: Date())
+                return (overdue ? "overdue " : "") + Self.dateLabel(cur)
+            }()
+            return "“\(t)” — \(from) → \(Self.dateLabel(d))"
+        case let .reprioritize(id, t, p):
+            let cur = store.items.first { $0.id == id }?.priority
+            let from = cur?.label ?? "—"
+            return "“\(t)” priority — \(from) → \(p.label)"
+        case let .setProjectDeadline(_, name, d):
+            return "Give “\(name)” a deadline → \(Self.dateLabel(d))"
         case let .assignProject(_, titles, name, existing):
             if titles.count == 1, let only = titles.first {
                 let verb = existing == nil ? "Create project “\(name)” and move" : "Move to “\(name)”"
