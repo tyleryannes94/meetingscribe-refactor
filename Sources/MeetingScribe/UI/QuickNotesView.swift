@@ -277,6 +277,10 @@ struct QuickNoteDetail: View {
     @State private var rawCopied = false
     @State private var polishedCopied = false
     @State private var promptCopied = false
+    /// Which transcript view is shown. Replaces three cramped side-by-side
+    /// editor panes with one full-width editor + a segmented switch.
+    @State private var noteTab: NoteTab = .polished
+    private enum NoteTab: Hashable { case polished, raw, prompt }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -409,58 +413,71 @@ struct QuickNoteDetail: View {
         }
     }
 
-    // MARK: - Side-by-side editors
+    // MARK: - Transcript editor (segmented: Polished / Raw / AI Prompt)
 
     private var sideBySide: some View {
-        HSplitView {
-            pane(
-                title: "Polished",
-                subtitle: "Cleaned-up version (auto-generated)",
-                icon: "sparkles",
-                accent: .purple,
-                text: $polishedDraft,
-                isInFlight: manager.isPolishingQuickNote(note),
-                inFlightText: "Polishing transcript…",
-                emptyPlaceholder: emptyPolishedPlaceholder,
-                copied: $polishedCopied,
-                onCopy: { copy(polishedDraft, into: $polishedCopied) },
-                onRerun: { manager.repolishQuickNote(note) },
-                rerunLabel: "Re-polish",
-                rerunDisabled: rawDraft.isEmpty || manager.isPolishingQuickNote(note),
-                onChange: { schedulePolishedSave() }
-            )
-            pane(
-                title: "Raw",
-                subtitle: "Original whisper output",
-                icon: "text.alignleft",
-                accent: .blue,
-                text: $rawDraft,
-                isInFlight: manager.isTranscribingQuickNote(note),
-                inFlightText: "Transcribing…",
-                emptyPlaceholder: emptyRawPlaceholder,
-                copied: $rawCopied,
-                onCopy: { copy(rawDraft, into: $rawCopied) },
-                onRerun: { manager.reTranscribeQuickNote(note) },
-                rerunLabel: "Re-transcribe",
-                rerunDisabled: manager.isTranscribingQuickNote(note),
-                onChange: { scheduleRawSave() }
-            )
-            pane(
-                title: "AI Prompt",
-                subtitle: "TCREI-structured prompt (optional)",
-                icon: "wand.and.stars",
-                accent: .green,
-                text: $promptDraft,
-                isInFlight: manager.isStructuringQuickNotePrompt(note),
-                inFlightText: "Structuring prompt…",
-                emptyPlaceholder: emptyPromptPlaceholder,
-                copied: $promptCopied,
-                onCopy: { copy(promptDraft, into: $promptCopied) },
-                onRerun: { manager.regenerateQuickNotePrompt(note) },
-                rerunLabel: promptDraft.isEmpty ? "Generate" : "Regenerate",
-                rerunDisabled: rawDraft.isEmpty || manager.isStructuringQuickNotePrompt(note),
-                onChange: { schedulePromptSave() }
-            )
+        VStack(spacing: 0) {
+            Picker("", selection: $noteTab) {
+                Text("Polished").tag(NoteTab.polished)
+                Text("Raw").tag(NoteTab.raw)
+                Text("AI Prompt").tag(NoteTab.prompt)
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            Divider().opacity(0.5)
+            Group {
+                switch noteTab {
+                case .polished:
+                    pane(
+                        title: "Polished",
+                        subtitle: "Cleaned-up version (auto-generated)",
+                        icon: "sparkles", accent: .purple,
+                        text: $polishedDraft,
+                        isInFlight: manager.isPolishingQuickNote(note),
+                        inFlightText: "Polishing transcript…",
+                        emptyPlaceholder: emptyPolishedPlaceholder,
+                        copied: $polishedCopied,
+                        onCopy: { copy(polishedDraft, into: $polishedCopied) },
+                        onRerun: { manager.repolishQuickNote(note) },
+                        rerunLabel: "Re-polish",
+                        rerunDisabled: rawDraft.isEmpty || manager.isPolishingQuickNote(note),
+                        onChange: { schedulePolishedSave() }
+                    )
+                case .raw:
+                    pane(
+                        title: "Raw",
+                        subtitle: "Original whisper output",
+                        icon: "text.alignleft", accent: .blue,
+                        text: $rawDraft,
+                        isInFlight: manager.isTranscribingQuickNote(note),
+                        inFlightText: "Transcribing…",
+                        emptyPlaceholder: emptyRawPlaceholder,
+                        copied: $rawCopied,
+                        onCopy: { copy(rawDraft, into: $rawCopied) },
+                        onRerun: { manager.reTranscribeQuickNote(note) },
+                        rerunLabel: "Re-transcribe",
+                        rerunDisabled: manager.isTranscribingQuickNote(note),
+                        onChange: { scheduleRawSave() }
+                    )
+                case .prompt:
+                    pane(
+                        title: "AI Prompt",
+                        subtitle: "TCREI-structured prompt (optional)",
+                        icon: "wand.and.stars", accent: .green,
+                        text: $promptDraft,
+                        isInFlight: manager.isStructuringQuickNotePrompt(note),
+                        inFlightText: "Structuring prompt…",
+                        emptyPlaceholder: emptyPromptPlaceholder,
+                        copied: $promptCopied,
+                        onCopy: { copy(promptDraft, into: $promptCopied) },
+                        onRerun: { manager.regenerateQuickNotePrompt(note) },
+                        rerunLabel: promptDraft.isEmpty ? "Generate" : "Regenerate",
+                        rerunDisabled: rawDraft.isEmpty || manager.isStructuringQuickNotePrompt(note),
+                        onChange: { schedulePromptSave() }
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

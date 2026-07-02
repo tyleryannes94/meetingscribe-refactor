@@ -272,6 +272,10 @@ private struct ScreenRecordingDetail: View {
     @State private var saveTimer: Timer?
     @State private var player: AVPlayer?
     @State private var summary = ""
+    /// Show one of Summary / Transcript at a time under the video, instead of two
+    /// stacked cards competing for the same scroll.
+    @State private var recTab: RecTab = .summary
+    private enum RecTab: Hashable { case summary, transcript }
 
     var body: some View {
         ScrollView {
@@ -281,8 +285,15 @@ private struct ScreenRecordingDetail: View {
                     .frame(minHeight: 280, idealHeight: 380)
                     .clipShape(RoundedRectangle(cornerRadius: NDS.cardRadius))
                     .overlay(RoundedRectangle(cornerRadius: NDS.cardRadius).stroke(NDS.hairline, lineWidth: 1))
-                analysisCard
-                transcriptCard
+                Picker("", selection: $recTab) {
+                    Text("AI Summary").tag(RecTab.summary)
+                    Text("Transcript").tag(RecTab.transcript)
+                }
+                .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 320)
+                switch recTab {
+                case .summary:    analysisCard
+                case .transcript: transcriptCard
+                }
             }
             .padding(20)
             .frame(maxWidth: 900, alignment: .leading)

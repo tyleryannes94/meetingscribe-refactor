@@ -352,9 +352,8 @@ struct MeetingsView: View {
             .labelsHidden()
             .padding(.horizontal, 12)
 
-            // Scope + filter chips
-            scopeRow
-            filterRow
+            // Scope + saved views + ad-hoc filters, all in one scroll.
+            filterBar
         }
         .sheet(isPresented: $showSaveSheet) {
             SaveViewSheet(
@@ -368,7 +367,10 @@ struct MeetingsView: View {
         }
     }
 
-    private var scopeRow: some View {
+    /// One horizontal filter bar: scope tabs and saved views on the left, ad-hoc
+    /// tag/source/recording filters after a divider, save-view at the end — a
+    /// single scroll instead of two stacked rows the user had to scan separately.
+    private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(Scope.allCases) { s in
@@ -392,11 +394,27 @@ struct MeetingsView: View {
                         }
                     }
                 }
+
+                Divider().frame(height: 16).overlay(NDS.divider)
+                tagFilterMenu
+                sourceFilterMenu
+                MSFilterChip(label: "Has recording", active: filterRecordingOnly) {
+                    filterRecordingOnly.toggle(); activeSavedViewID = nil
+                }
+                if hasActiveFilters {
+                    Button { clearFilters() } label: {
+                        Text("Clear").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
+                            .padding(.horizontal, 8).padding(.vertical, 5)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Divider().frame(height: 16).overlay(NDS.divider)
                 saveViewButton
             }
             .padding(.horizontal, 12)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 6)
     }
 
     private var saveViewButton: some View {
@@ -414,27 +432,6 @@ struct MeetingsView: View {
         .disabled(!hasActiveFilters)
         .opacity(hasActiveFilters ? 1 : 0.45)
         .help("Save the current filters as a one-click tab")
-    }
-
-    private var filterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                tagFilterMenu
-                sourceFilterMenu
-                MSFilterChip(label: "Has recording", active: filterRecordingOnly) {
-                    filterRecordingOnly.toggle(); activeSavedViewID = nil
-                }
-                if hasActiveFilters {
-                    Button { clearFilters() } label: {
-                        Text("Clear").font(NDS.tiny).foregroundStyle(NDS.textTertiary)
-                            .padding(.horizontal, 8).padding(.vertical, 5)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 12)
-        }
-        .padding(.bottom, 6)
     }
 
     private var tagFilterMenu: some View {
