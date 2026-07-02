@@ -86,7 +86,7 @@ struct OrganizerRecommendationsPanel: View {
             }
             Spacer(minLength: 6)
             Button("Apply") { organizer.apply(s, store: store) }
-                .buttonStyle(MSPrimaryButtonStyle()).controlSize(.small)
+                .buttonStyle(MSPrimaryButtonStyle())
                 .disabled(s.activeTaskIDs.isEmpty)
             Button { organizer.dismiss(s) } label: {
                 Image(systemName: "xmark").scaledFont(10).foregroundStyle(NDS.textTertiary)

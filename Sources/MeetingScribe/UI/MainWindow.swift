@@ -236,6 +236,7 @@ struct MainWindow: View {
             Group {
                 if collapsed {
                     VStack(spacing: 8) {
+                        chatToggleButton(collapsed: true)
                         Button { showSearch = true } label: {
                             Image(systemName: "magnifyingglass").scaledFont(12)
                                 .foregroundStyle(NDS.textSecondary)
@@ -251,6 +252,7 @@ struct MainWindow: View {
                     .padding(.bottom, NDS.spaceMD)
                 } else {
                     HStack(spacing: 6) {
+                        chatToggleButton(collapsed: false)
                         Spacer(minLength: 0)
                         Button { showSearch = true } label: {
                             HStack(spacing: 4) {
@@ -278,6 +280,38 @@ struct MainWindow: View {
         .frame(width: collapsed ? 56 : 240)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(NDS.sidebarBg)
+    }
+
+    /// Assistant toggle — lives in the nav-rail footer so it has a permanent,
+    /// discoverable home instead of shifting position among the page-tailored
+    /// toolbar buttons on the right.
+    @ViewBuilder
+    private func chatToggleButton(collapsed: Bool) -> some View {
+        let icon = chatVisible ? "sidebar.right" : "bubble.left.and.bubble.right"
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { chatVisible.toggle() }
+        } label: {
+            if collapsed {
+                Image(systemName: icon).scaledFont(12)
+                    .foregroundStyle(chatVisible ? NDS.lilac : NDS.textSecondary)
+                    .frame(width: NDS.buttonIconSide, height: NDS.buttonIconSide)
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(chatVisible ? NDS.lilac.opacity(0.5) : NDS.hairline, lineWidth: 1))
+                    .contentShape(Rectangle())
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: icon).scaledFont(11)
+                    Text("Assistant").font(NDS.tiny)
+                }
+                .foregroundStyle(chatVisible ? NDS.lilac : NDS.textSecondary)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(chatVisible ? NDS.lilac.opacity(0.5) : NDS.hairline, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+        }
+        .buttonStyle(.plain)
+        .help(chatVisible ? "Hide assistant" : "Show assistant")
     }
 
     /// When a meeting is actively recording, the time it started (drives the
@@ -637,18 +671,14 @@ struct MainWindow: View {
             // Page-tailored, named toolbar (§1). Per-page button sets come from
             // ToolbarModel; the less-common controls (import audio, join & record,
             // refresh, finalizing status) live in the overflow ⋯ menu so the bar
-            // stays clean. The chat toggle stays unlabelled at the far right.
+            // stays clean. The Assistant toggle now lives in the nav-rail footer
+            // (chatToggleButton) so it keeps a fixed, discoverable position.
             ToolbarItemGroup(placement: .primaryAction) {
                 ForEach(ToolbarModel.items(for: section,
                                            isRecordingMeeting: meetingRecordingStartedAt != nil)) { item in
                     toolbarItemView(item)
                 }
                 overflowMenu
-                Button { withAnimation(.easeOut(duration: 0.15)) { chatVisible.toggle() } } label: {
-                    Label("Assistant", systemImage: chatVisible ? "sidebar.right" : "bubble.left.and.bubble.right")
-                }
-                .tint(chatVisible ? NDS.lilac : nil)
-                .help(chatVisible ? "Hide assistant" : "Show assistant")
             }
         }
         .sheet(isPresented: $showNewMeeting) {

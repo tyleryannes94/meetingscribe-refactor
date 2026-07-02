@@ -281,9 +281,10 @@ struct UnifiedMeetingDetail: View {
     enum SectionAnchor: Hashable { case outcomes, summary, transcript }
 
     @ViewBuilder var canvasBody: some View {
-        HStack(spacing: 0) {
+        // Horizontal tab bar on top (was a 150pt vertical rail that stole width
+        // from the transcript/content on narrow windows).
+        VStack(spacing: 0) {
             meetingTabRail
-                .padding(.top, NDS.spaceSM)
             Divider()
             meetingTabPane
         }
@@ -317,25 +318,27 @@ struct UnifiedMeetingDetail: View {
             case .upcoming: return [.brief, .notes]
             }
         }()
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(tabs, id: \.rawValue) { tab in
-                meetingTabButton(tab)
+        // Horizontal tab bar; scrolls if the window is too narrow to fit every
+        // tab so nothing is ever clipped.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(tabs, id: \.rawValue) { tab in
+                    meetingTabButton(tab)
+                }
             }
-            Spacer()
+            .padding(.horizontal, NDS.spaceMD)
+            .padding(.vertical, NDS.spaceSM)
         }
-        .frame(width: 150)
     }
 
     @ViewBuilder private func meetingTabButton(_ tab: MeetingTab) -> some View {
         let isActive = activeTab == tab
         Button { withAnimation(.easeOut(duration: 0.12)) { activeTab = tab } } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: tab.icon)
                     .scaledFont(12, weight: isActive ? .semibold : .regular)
-                    .frame(width: 16, alignment: .center)
                 Text(tab.label)
                     .font(isActive ? .callout.weight(.semibold) : .callout)
-                Spacer()
                 // Actions tab badge: count of items still needing triage (comp).
                 if tab == .outcomes, let m = meeting {
                     let count = manager.actionItems.items(for: m.id).filter { $0.needsTriage }.count
@@ -348,14 +351,14 @@ struct UnifiedMeetingDetail: View {
                     }
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
+            .padding(.horizontal, 12).padding(.vertical, 7)
             .background(isActive ? NDS.accentSoft : Color.clear)
             .foregroundStyle(isActive ? NDS.accent : NDS.textSecondary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 6)
+        .fixedSize()
     }
 
     @ViewBuilder private var meetingTabPane: some View {

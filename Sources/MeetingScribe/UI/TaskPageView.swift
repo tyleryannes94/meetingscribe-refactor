@@ -81,13 +81,20 @@ struct TaskPageView: View {
                     if !item.isManual {
                         provenanceStrip(item).padding(.top, 12)
                     }
-                    properties(item)
-                        .padding(.top, 14)
+                    // Content-first: the Notes you came to read/write get the
+                    // prime slot right under the title. The ~15 property rows
+                    // move into a collapsible section below.
+                    bodyEditor
+                        .padding(.top, 16)
+                    MSSection("Properties", systemImage: "slider.horizontal.3",
+                              persistenceKey: "taskPage.properties",
+                              defaultExpanded: true) {
+                        properties(item)
+                    }
+                    .padding(.top, 18)
                     Divider().overlay(NDS.divider).padding(.vertical, 18)
                     subtasks(item)
                     DecisionLogSection(anchor: .task(item.id), compact: true)
-                        .padding(.top, 18)
-                    bodyEditor
                         .padding(.top, 18)
                     activitySection(item)
                         .padding(.top, 18)

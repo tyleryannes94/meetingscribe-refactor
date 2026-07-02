@@ -94,14 +94,15 @@ struct SettingsView: View {
     /// Settings categories (comp: a left category rail rather than top tabs).
     /// Same content as before — the technical bits stay in an Advanced basement.
     enum SettingsCategory: String, CaseIterable, Identifiable {
-        case general, recording, notifications, privacy, connections, automation, advanced
+        case general, recording, notifications, privacy, data, connections, automation, advanced
         var id: String { rawValue }
         var label: String {
             switch self {
             case .general: return "General"
             case .recording: return "Recording"
             case .notifications: return "Notifications"
-            case .privacy: return "Privacy & data"
+            case .privacy: return "Privacy"
+            case .data: return "Data & storage"
             case .connections: return "Connections"
             case .automation: return "Automation"
             case .advanced: return "Advanced"
@@ -113,6 +114,7 @@ struct SettingsView: View {
             case .recording: return "mic"
             case .notifications: return "bell"
             case .privacy: return "lock.shield"
+            case .data: return "externaldrive"
             case .connections: return "link"
             case .automation: return "bolt.horizontal"
             case .advanced: return "wrench.and.screwdriver"
@@ -184,6 +186,7 @@ struct SettingsView: View {
         case .recording:     recordingTab
         case .notifications: notificationsTab
         case .privacy:       privacyTab
+        case .data:          dataTab
         case .connections:   connectionsTab
         case .automation:    WebhookSettingsView()   // 6-F / 6-E
         case .advanced:      advancedTab
@@ -403,9 +406,47 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    // MARK: - Privacy & data
+    // MARK: - Privacy
 
     @ViewBuilder private var privacyTab: some View {
+        Form {
+            Section("Microphone & transcription") {
+                Toggle("Prefer AirPods / Bluetooth mic", isOn: $preferBluetoothMic)
+                    .onChange(of: preferBluetoothMic) { _, v in AppSettings.shared.preferBluetoothMic = v }
+                Text("When AirPods or another Bluetooth mic is connected, record from it and never fall back to the Mac's built-in mic.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Toggle("Speech detection (VAD) before transcription", isOn: $whisperVADEnabled)
+                    .onChange(of: whisperVADEnabled) { _, v in AppSettings.shared.whisperVADEnabled = v }
+                Text("Only transcribes speech, so silent/non-speech stretches can't be hallucinated into repeated nonsense. Downloads a small model the first time.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Section("People (second brain)") {
+                Toggle("Auto-extract people from meetings", isOn: $autoExtractPeople)
+                Text("After a meeting is summarized, a second on-device Ollama pass lists the people mentioned in the transcript. Strong matches link to existing people automatically; uncertain ones appear as suggestions on the Today tab. Nothing leaves your machine.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Capture others' action items as “delegated / waiting-on”", isOn: $captureDelegated)
+                Text("By default, meeting extraction keeps only action items that are yours. Enable this to also capture items owned by other participants, tagged so a “Delegated” view can track what you're waiting on.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Usage metrics") {
+                Toggle("Collect local usage metrics", isOn: $collectMetrics)
+                    .onChange(of: collectMetrics) { _, v in AppSettings.shared.collectMetrics = v }
+                Text("Off by default. Counts stay on this Mac (UserDefaults) and are NEVER uploaded — there's no network code for them. Lets you see how much you use MeetingScribe.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                if collectMetrics {
+                    ForEach(MetricsStore.shared.snapshot(), id: \.0) { event, count in
+                        HStack { Text(event.label); Spacer(); Text("\(count)").foregroundStyle(.secondary).monospacedDigit() }
+                            .font(.caption)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Data & storage
+
+    @ViewBuilder private var dataTab: some View {
         Form {
             Section("Storage") {
                 HStack {
@@ -458,16 +499,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Microphone & transcription") {
-                Toggle("Prefer AirPods / Bluetooth mic", isOn: $preferBluetoothMic)
-                    .onChange(of: preferBluetoothMic) { _, v in AppSettings.shared.preferBluetoothMic = v }
-                Text("When AirPods or another Bluetooth mic is connected, record from it and never fall back to the Mac's built-in mic.")
-                    .font(.caption2).foregroundStyle(.secondary)
-                Toggle("Speech detection (VAD) before transcription", isOn: $whisperVADEnabled)
-                    .onChange(of: whisperVADEnabled) { _, v in AppSettings.shared.whisperVADEnabled = v }
-                Text("Only transcribes speech, so silent/non-speech stretches can't be hallucinated into repeated nonsense. Downloads a small model the first time.")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
             Section("Maintenance") {
                 HStack {
                     Button {
@@ -485,26 +516,7 @@ struct SettingsView: View {
                 Text("Merges people who share a phone number or name into one record (combining their info), and collapses meetings with the same name and start time into a single copy. Removed meeting copies are moved to a recoverable “_DuplicateMeetingsTrash” folder — nothing is hard-deleted.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
-            Section("People (second brain)") {
-                Toggle("Auto-extract people from meetings", isOn: $autoExtractPeople)
-                Text("After a meeting is summarized, a second on-device Ollama pass lists the people mentioned in the transcript. Strong matches link to existing people automatically; uncertain ones appear as suggestions on the Today tab. Nothing leaves your machine.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("Capture others' action items as “delegated / waiting-on”", isOn: $captureDelegated)
-                Text("By default, meeting extraction keeps only action items that are yours. Enable this to also capture items owned by other participants, tagged so a “Delegated” view can track what you're waiting on.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Usage metrics") {
-                Toggle("Collect local usage metrics", isOn: $collectMetrics)
-                    .onChange(of: collectMetrics) { _, v in AppSettings.shared.collectMetrics = v }
-                Text("Off by default. Counts stay on this Mac (UserDefaults) and are NEVER uploaded — there's no network code for them. Lets you see how much you use MeetingScribe.")
-                    .font(.caption2).foregroundStyle(.secondary)
-                if collectMetrics {
-                    ForEach(MetricsStore.shared.snapshot(), id: \.0) { event, count in
-                        HStack { Text(event.label); Spacer(); Text("\(count)").foregroundStyle(.secondary).monospacedDigit() }
-                            .font(.caption)
-                    }
-                }
-            }
+
             Section("Diagnostics") {
                 HStack {
                     Button {
