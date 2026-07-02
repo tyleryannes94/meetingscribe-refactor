@@ -458,3 +458,22 @@ Local models are **slow** and flaky at multi-turn tool calling. For any
   update-after rule and seeded conventions from prior commits, the NDS design
   system, the chat-tool architecture, design-lint, and the padding/safe-area
   history.
+- **2026-07-01 — App-wide UX declutter (two waves).** User rule: *"too many
+  sections side by side or stacked as separate components makes them hard to use
+  — integrate them, don't remove functionality."* Codified pattern: **collapse
+  competing side-by-side / stacked panes into a segmented tab within one
+  full-width view; never delete the underlying content.** Applied to:
+  - Voice Notes: 3-pane HSplitView (Polished/Raw/AI Prompt) → segmented tab.
+  - Recordings: stacked Summary + Transcript cards → segmented tab.
+  - Meetings list: two horizontal filter rows → one unified `filterBar`.
+  - Meeting detail: 150pt vertical tab rail → horizontal tab bar (reclaims
+    width for transcript); people rail stays collapsible (⌥⌘P).
+  - People detail: 15-section single scroll → Overview / History / Relationships
+    tabs; identity header + insight pinned above; per-section collapse preserved;
+    tab choice persists (`@AppStorage "person.detail.tab"`).
+  - Task detail: **content-first** — Notes move directly under the title; the
+    property rows drop into a collapsible `Properties` section below.
+  - Settings: overloaded "Privacy & data" tab split → "Privacy" +
+    "Data & storage".
+  - Assistant/chat toggle: out of the shifting toolbar `primaryAction` → fixed
+    nav-rail footer (`chatToggleButton`), beside Search/Settings.
